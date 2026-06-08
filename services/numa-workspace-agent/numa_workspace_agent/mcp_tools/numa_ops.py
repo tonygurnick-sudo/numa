@@ -129,30 +129,16 @@ def is_safe_operation(operation: str) -> bool:
 
 
 def _pop_approval_id(action_key: str) -> str:
-    """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
+    """Pop this call's approval entry (id + mode) for ``action_key``.
 
-    The SDK runner stores a JSON dict of action_key → [approval_id, ...] in
-    the env var. Each tool call pops the first entry (FIFO) so parallel calls
-    to the same action each get their own unique ID.
-
-    Falls back to the legacy single-value NUMA_REQUEST_ID env var.
+    Thin delegate to the canonical popper in ``lambda_client`` so the per-call
+    approval mode is pinned identically across every tool module — see that
+    function for why the mode must travel with the id rather than ride a single
+    global.
     """
-    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
-    if raw:
-        try:
-            id_map = json.loads(raw)
-            ids = id_map.get(action_key, [])
-            if ids:
-                approval_id = ids.pop(0)
-                if not ids:
-                    id_map.pop(action_key, None)
-                else:
-                    id_map[action_key] = ids
-                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
-                return approval_id
-        except (json.JSONDecodeError, TypeError):
-            pass
-    return os.environ.get("NUMA_REQUEST_ID", "")
+    from numa_workspace_agent.mcp_tools.lambda_client import pop_approval_id
+
+    return pop_approval_id(action_key)
 
 
 # Maximum inline result size (compact JSON chars). Results exceeding this are

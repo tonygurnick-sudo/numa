@@ -216,12 +216,13 @@
       "never": "Auto-approve all actions"
     },
     "approvalModes": {
-      "label": "Tool Approval Overrides",
-      "help": "Override the user's default approval settings for this agent. Leave as 'Use default' to inherit from user settings.",
+      "label": "Agent approval settings",
+      "help": "Sets approvals specifically for this agent. 'Use default' follows each user's own settings — including their per-integration choices. Picking a specific mode applies it to every item in that row (e.g. all integrations).",
       "useDefault": "Use default",
-      "always": "Always",
-      "nonDestructive": "Writes only",
-      "never": "Auto-approve",
+      "useDefaultNote": "Follows the user's per-integration settings",
+      "always": "Always require approval",
+      "nonDestructive": "Require for writes only",
+      "never": "Auto-approve all",
       "integrations": "Integrations",
       "agents": "Agents",
       "memories": "Memories",

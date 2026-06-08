@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getFlag } from '../utils/featureFlags';
 import { Alert, Button, Form, InputGroup, Modal, Spinner, Tab } from 'react-bootstrap';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
@@ -53,7 +54,12 @@ import { StyledTabs } from '../Components/StyledTabs';
 import { manifestService } from '../Services/manifestService';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
 import { applyLanguagePreference, LANGUAGE_BROWSER_DEFAULT } from '../utils/languagePreference';
-import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
+import {
+  getConnectionConfig,
+  getConnectionDisplayName,
+  getConnectionIcon,
+  getConnectionFallbackIcon,
+} from '../config/integrationsConfig';
 import ProfileAvatar from '../Components/ProfileAvatar';
 import { invalidateProfileBlob } from '../utils/profileImageCache';
 import { RichTextEditor } from '../Components/Ops/Shared/RichTextEditor';
@@ -2186,6 +2192,35 @@ export default function UserProfilePage({
                     )}
                   </tbody>
                 </table>
+
+                {/* TASK-127: surface the integrations whose approval mode the
+                    user has overridden away from the Integrations default
+                    above, each linking to its card on the Integrations page. */}
+                {Object.keys(userDefaults.integrationApprovalModes ?? {}).length > 0 && (
+                  <div className="mt-3 pt-3 border-top">
+                    <div className="fw-semibold small mb-1">{t('userProfile.approval.grid.overriddenTitle')}</div>
+                    <div className="text-muted small mb-2">{t('userProfile.approval.grid.overriddenHelp')}</div>
+                    <ul className="list-unstyled mb-0">
+                      {Object.entries(userDefaults.integrationApprovalModes ?? {}).map(([slug, mode]) => (
+                        <li key={slug} className="d-flex align-items-center gap-2 py-1">
+                          {getConnectionConfig(slug) ? (
+                            <img src={getConnectionIcon(slug)} alt="" width={18} height={18} className="rounded" />
+                          ) : (
+                            <i className={getConnectionFallbackIcon(slug)} aria-hidden="true" />
+                          )}
+                          <span className="fw-medium">{getConnectionDisplayName(slug)}</span>
+                          <span className="badge bg-light text-dark border fw-normal">
+                            {t(`userProfile.approval.modes.${mode}.label`)}
+                          </span>
+                          <Link to={`/integrations#${slug}`} className="ms-auto small text-decoration-none">
+                            {t('userProfile.approval.grid.manageOverride')}
+                            <i className="bi bi-arrow-right-short" aria-hidden="true"></i>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               <div className="text-muted small mt-3 mb-3">

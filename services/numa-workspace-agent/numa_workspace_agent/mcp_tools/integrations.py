@@ -279,6 +279,11 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
     except (json.JSONDecodeError, TypeError):
         allowed_account_ids = []
 
+    # Pop this call's approval entry first — that pins NUMA_APPROVAL_MODE to
+    # this call's mode. Capture it into a local so the post-await timeout check
+    # below isn't exposed to a sibling parallel call mutating the global.
+    request_id = pop_approval_id(action_key)
+    auto_approved = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
     try:
         result = invoke_workspace_tool(
             "pipedream_run_action",
@@ -287,8 +292,8 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                 "configured_props": configured_props,
                 "description": description,
                 "stash_id": stash_id,
-                "request_id": pop_approval_id(action_key),
-                "auto_approved": os.environ.get("NUMA_APPROVAL_MODE") == "auto",
+                "request_id": request_id,
+                "auto_approved": auto_approved,
                 "allowed_account_ids": allowed_account_ids,
             },
         )
@@ -304,7 +309,7 @@ async def run_action(args: dict[str, Any]) -> dict[str, Any]:
                 "content": [{"type": "text", "text": msg}],
             }
         if status == "timeout":
-            if os.environ.get("NUMA_APPROVAL_MODE") == "auto":
+            if auto_approved:
                 logger.warning(
                     "Unexpected approval timeout while auto-approve is enabled",
                     action_key=action_key,
@@ -662,6 +667,10 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
             "isError": True,
         }
 
+    # Pop first (pins this call's NUMA_APPROVAL_MODE), then snapshot it locally
+    # so the post-await timeout check is immune to parallel-call clobbering.
+    request_id = pop_approval_id(f"{integration_slug}-{method}")
+    auto_approved = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
     try:
         result = invoke_workspace_tool(
             "pipedream_proxy_request",
@@ -672,8 +681,8 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                 "description": description,
                 "body": body,
                 "headers": headers,
-                "request_id": pop_approval_id(f"{integration_slug}-{method}"),
-                "auto_approved": os.environ.get("NUMA_APPROVAL_MODE") == "auto",
+                "request_id": request_id,
+                "auto_approved": auto_approved,
             },
         )
 
@@ -688,7 +697,7 @@ async def proxy_request(args: dict[str, Any]) -> dict[str, Any]:
                 ],
             }
         if status == "timeout":
-            if os.environ.get("NUMA_APPROVAL_MODE") == "auto":
+            if auto_approved:
                 logger.warning(
                     "Unexpected approval timeout while auto-approve is enabled",
                     method=method,

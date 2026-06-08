@@ -1986,7 +1986,12 @@ export const AgentCreateModal = ({
                         <thead>
                           <tr>
                             <th style={{ width: '25%' }}></th>
-                            <th className="text-center small">{t('createModal.approvalModes.useDefault')}</th>
+                            <th className="text-center small">
+                              {t('createModal.approvalModes.useDefault')}
+                              <div className="text-muted fw-normal" style={{ fontSize: '0.7rem', lineHeight: 1.2 }}>
+                                {t('createModal.approvalModes.useDefaultNote')}
+                              </div>
+                            </th>
                             <th className="text-center small">{t('createModal.approvalModes.always')}</th>
                             <th className="text-center small">{t('createModal.approvalModes.nonDestructive')}</th>
                             <th className="text-center small">{t('createModal.approvalModes.never')}</th>

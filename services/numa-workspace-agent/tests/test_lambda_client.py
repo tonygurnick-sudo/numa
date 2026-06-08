@@ -18,6 +18,8 @@ from numa_workspace_agent.mcp_tools.lambda_client import (
     RESULTS_DIR,
     extract_status,
     invoke_workspace_tool,
+    is_auto_approved,
+    pop_approval_id,
     save_result,
 )
 
@@ -556,3 +558,77 @@ class TestSaveResultS3PresignedBinary:
         assert downloaded.exists()
         assert downloaded.read_bytes() == payload
         assert str(downloaded) in preview
+
+
+# ---------------------------------------------------------------------------
+# pop_approval_id() — per-call approval id + mode (parallel-batch safety)
+# ---------------------------------------------------------------------------
+
+
+class TestPopApprovalId:
+    """pop_approval_id() must carry each call's approval *mode*, not a global.
+
+    Regression guard: the SDK runner used to set a single NUMA_APPROVAL_MODE for
+    every tool_use block in a parallel batch up front, so the last write won. An
+    auto-approved call (e.g. Slack) could inherit a sibling's "manual" mode (e.g.
+    Gmail) and hang waiting for an approval that was never required. The mode now
+    travels with the id in the FIFO map and is pinned at pop time.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("NUMA_REQUEST_ID_MAP", raising=False)
+        monkeypatch.delenv("NUMA_REQUEST_ID", raising=False)
+        monkeypatch.delenv("NUMA_APPROVAL_MODE", raising=False)
+
+    def test_mixed_parallel_batch_each_call_keeps_its_own_mode(self, monkeypatch):
+        """Slack(auto) + two Gmail(manual) in one batch must not clobber each other."""
+        monkeypatch.setenv(
+            "NUMA_REQUEST_ID_MAP",
+            json.dumps(
+                {
+                    "slack-find-message": [{"id": "slk1", "mode": "auto"}],
+                    "gmail-find-email": [
+                        {"id": "gm1", "mode": "manual"},
+                        {"id": "gm2", "mode": "manual"},
+                    ],
+                }
+            ),
+        )
+        # Stale global as left by the old up-front clobber (last write was manual).
+        monkeypatch.setenv("NUMA_APPROVAL_MODE", "manual")
+
+        assert pop_approval_id("slack-find-message") == "slk1"
+        assert is_auto_approved() is True  # Slack stays auto despite stale global
+
+        assert pop_approval_id("gmail-find-email") == "gm1"
+        assert is_auto_approved() is False
+
+        assert pop_approval_id("gmail-find-email") == "gm2"
+        assert is_auto_approved() is False
+
+    def test_fifo_order_within_action_key(self, monkeypatch):
+        """Multiple entries for one action_key pop in FIFO order and drain the key."""
+        monkeypatch.setenv(
+            "NUMA_REQUEST_ID_MAP",
+            json.dumps(
+                {"a-b": [{"id": "1", "mode": "auto"}, {"id": "2", "mode": "manual"}]}
+            ),
+        )
+        assert pop_approval_id("a-b") == "1"
+        assert pop_approval_id("a-b") == "2"
+        # Key drained → falls back to empty.
+        assert pop_approval_id("a-b") == ""
+
+    def test_legacy_bare_string_entry_leaves_mode_untouched(self, monkeypatch):
+        """Older runner builds wrote bare id strings; pop returns them as-is."""
+        monkeypatch.setenv("NUMA_REQUEST_ID_MAP", json.dumps({"x-y": ["legacy-id"]}))
+        monkeypatch.setenv("NUMA_APPROVAL_MODE", "auto")
+        assert pop_approval_id("x-y") == "legacy-id"
+        # Bare-string path must not touch the mode global.
+        assert is_auto_approved() is True
+
+    def test_falls_back_to_single_request_id_when_map_empty(self, monkeypatch):
+        """No map entry for the key → legacy NUMA_REQUEST_ID fallback."""
+        monkeypatch.setenv("NUMA_REQUEST_ID", "solo")
+        assert pop_approval_id("missing") == "solo"
