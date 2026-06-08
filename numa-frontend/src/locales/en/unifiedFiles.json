@@ -21,7 +21,8 @@
     "upload": "Upload",
     "uploadFiles": "Upload Files",
     "settings": "Settings",
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "downloadFolder": "Download folder as zip"
   },
   "folderList": {
     "name": "Name",
@@ -203,11 +204,12 @@
     "moveTooltip": "Move selected items to another folder",
     "download": "Download",
     "downloadTooltip": "Download selected files",
-    "downloadFoldersUnsupported": "Only files can be downloaded — folders will be skipped",
-    "downloadFilesOnly": "Only files can be downloaded — folders were skipped.",
-    "downloadSkippedFolders_one": "{{count}} folder was skipped — bulk download supports files only.",
-    "downloadSkippedFolders_other": "{{count}} folders were skipped — bulk download supports files only.",
+    "downloadWithFolders": "Download selected items — folders download as a zip",
+    "downloadNothing": "Nothing selected to download.",
+    "downloadEmpty": "The selected folders are empty.",
     "downloadError": "Download failed: {{error}}",
+    "rootSelectionWarning": "Whole folders can be downloaded, but move and delete are disabled to protect against wiping a folder.",
+    "partialSelectionWarning": "You’ve unticked items inside a selected folder. Partial selections can be downloaded, but move and delete are disabled.",
     "delete": "Delete",
     "deleteTooltip": "Delete selected items",
     "deleteConfirmCta": "Delete",

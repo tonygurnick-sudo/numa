@@ -87,8 +87,8 @@ export function FilesBulkActionBar({
           disabled={!canDownload || inProgress}
           title={
             folderCount > 0
-              ? t('bulk.downloadFoldersUnsupported', {
-                  defaultValue: 'Only files can be downloaded — folders will be skipped',
+              ? t('bulk.downloadWithFolders', {
+                  defaultValue: 'Download selected items — folders download as a zip',
                 })
               : t('bulk.downloadTooltip', { defaultValue: 'Download selected files' })
           }

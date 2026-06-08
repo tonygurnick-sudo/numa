@@ -28,7 +28,14 @@ import {
   getFileIconColorClass,
 } from '../../utils/fileUtils';
 import type { FileTypeCategory } from '../../utils/fileUtils';
-import { listFoldersInKB, downloadFileFromS3, downloadMultipleFilesAsZip } from '../../utils/s3Utils';
+import {
+  listFoldersInKB,
+  downloadFileFromS3,
+  downloadFolderAsZip,
+  downloadKeysAsZip,
+  listObjectsInFolder,
+  zipPathFromKbKey,
+} from '../../utils/s3Utils';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useToast } from '../../Providers/ToastContext';
 import { useFilePreviewProcessor } from '../../hooks/useFilePreviewProcessor';
@@ -90,6 +97,20 @@ function apiToS3Objects(fileInfos: S3FileInfo[], folderNames: string[], parentPr
     s3Files.push({ Key: `${parentPrefix}${folder}/`, LastModified: new Date(), Size: 0 });
   }
   return s3Files;
+}
+
+/** S3 prefix for a KB's root (where its top-level files/folders live). */
+function kbRootPrefix(kbId: string): string {
+  return `documents/kb-${kbId}/`;
+}
+
+/**
+ * True if a selection key points at a whole KB root (nothing after the KB
+ * segment) rather than a subfolder inside it. Whole-KB selections are allowed
+ * for download but kept out of bulk move/delete so a checkbox can't wipe a KB.
+ */
+function isKbRootKey(key: string): boolean {
+  return /^documents\/(?:kb-[^/]+|company|numa-support)\/$/u.test(key);
 }
 
 export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.Element {
@@ -170,6 +191,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   // Drag-and-drop + multi-select for file moves
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  // Items the user explicitly un-ticked *within* a selected folder. The folder
+  // stays selected (its marker is in selectedKeys); these keys (and anything
+  // beneath them) are carved back out. Lets you "select a folder, then drop a
+  // few items, keep the rest" without exploding the whole folder into the set.
+  const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
   const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
@@ -196,6 +222,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // Bulk actions
   const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
   const [isBulkDownloading, setIsBulkDownloading] = useState(false);
+  // Folder key currently being zipped via its per-row download button (for a
+  // spinner on that row); null when no per-row folder download is in flight.
+  const [downloadingFolderKey, setDownloadingFolderKey] = useState<string | null>(null);
   const [bulkConfirm, setBulkConfirm] = useState<{
     kbId: string;
     fileKeys: string[];
@@ -957,6 +986,26 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     [dataBucket, region, getCredentials]
   );
 
+  /** Download a whole folder (or KB root) as a zip via its per-row button. */
+  const handleDownloadFolder = useCallback(
+    async (folderKey: string, folderName: string) => {
+      if (downloadingFolderKey) return; // one folder zip at a time
+      setDownloadingFolderKey(folderKey);
+      try {
+        await downloadFolderAsZip(folderKey, dataBucket, region, getCredentials, `${folderName}.zip`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showToast({
+          message: t('bulk.downloadError', { defaultValue: 'Download failed: {{error}}', error: msg }),
+          variant: 'error',
+        });
+      } finally {
+        setDownloadingFolderKey(null);
+      }
+    },
+    [downloadingFolderKey, dataBucket, region, getCredentials, showToast, t]
+  );
+
   // ── Upload handlers ────────────────────────────────────────
 
   // Lazy folder loader handed to the destination picker. The picker caches
@@ -1271,6 +1320,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       kbIds,
       sourceKbId: kbIds.size === 1 ? Array.from(kbIds)[0] : null,
       isMixedKb: kbIds.size > 1,
+      // A whole-KB root is in the selection — downloadable, but excluded from
+      // bulk move/delete so a single checkbox can't relocate or wipe a KB.
+      hasRootSelection: folderKeys.some(isKbRootKey),
     };
   }, [selectedKeys, kbIdFromKey]);
 
@@ -1283,15 +1335,78 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const canBulkAct = !!selectionSourceKb && !selectionStats.isMixedKb && canEditKb(selectionSourceKb.kb_id);
 
-  /** Toggle a single row's selection via its checkbox. */
-  const toggleRowSelection = useCallback((key: string) => {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  /** Keys carved out of a selected folder (the key itself or any ancestor exclusion). */
+  const isKeyExcluded = useCallback(
+    (key: string) => excludedKeys.has(key) || [...excludedKeys].some((e) => key.startsWith(e)),
+    [excludedKeys]
+  );
+
+  /** An exclusion is live only while its covering folder is still selected. */
+  const hasActiveExclusions = useMemo(
+    () =>
+      excludedKeys.size > 0 && [...excludedKeys].some((e) => selectionStats.folderKeys.some((fk) => e.startsWith(fk))),
+    [excludedKeys, selectionStats.folderKeys]
+  );
+
+  // Drop exclusions once the selection is cleared so they can't leak into a
+  // later selection.
+  useEffect(() => {
+    if (selectedKeys.size === 0 && excludedKeys.size > 0) setExcludedKeys(new Set());
+  }, [selectedKeys, excludedKeys]);
+
+  /**
+   * Toggle a row's selection. A file/folder toggled at the top level moves in or
+   * out of `selectedKeys`. A row sitting *inside* an already-selected folder
+   * instead flips its exclusion — the folder stays selected and its other items
+   * ride along, so you can "select a folder, untick a few, keep the rest".
+   */
+  const toggleRowSelection = useCallback(
+    (key: string) => {
+      if (selectedKeys.has(key)) {
+        // Directly selected → deselect it and drop any exclusions beneath it.
+        setSelectedKeys((p) => {
+          const n = new Set(p);
+          n.delete(key);
+          return n;
+        });
+        setExcludedKeys((p) => {
+          if (p.size === 0) return p;
+          const n = new Set([...p].filter((e) => !e.startsWith(key)));
+          return n.size === p.size ? p : n;
+        });
+        return;
+      }
+      const coveringFolder = [...selectedKeys].find((fk) => fk.endsWith('/') && key !== fk && key.startsWith(fk));
+      if (coveringFolder) {
+        // Inside a selected folder → flip this item's exclusion.
+        setExcludedKeys((p) => {
+          const n = new Set(p);
+          const excluded = p.has(key) || [...p].some((e) => key.startsWith(e));
+          if (excluded) {
+            for (const e of [...n]) if (e === key || e.startsWith(key)) n.delete(e);
+          } else {
+            for (const e of [...n]) if (e.startsWith(key)) n.delete(e); // prune redundant deeper excludes
+            n.add(key);
+          }
+          return n;
+        });
+        return;
+      }
+      // Brand-new selection.
+      setSelectedKeys((p) => {
+        const n = new Set(p);
+        n.add(key);
+        return n;
+      });
+      setExcludedKeys((p) => {
+        if (!p.has(key)) return p;
+        const n = new Set(p);
+        n.delete(key);
+        return n;
+      });
+    },
+    [selectedKeys]
+  );
 
   // ── Bulk actions ────────────────────────────────────────────
 
@@ -1312,31 +1427,62 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   );
 
   const executeBulkDownload = useCallback(async () => {
-    if (selectionStats.fileKeys.length === 0) {
+    const { fileKeys, folderKeys, kbIds } = selectionStats;
+    // Loose files the user explicitly carved out don't get downloaded.
+    const looseFiles = fileKeys.filter((k) => !isKeyExcluded(k));
+    if (looseFiles.length === 0 && folderKeys.length === 0) {
       showToast({
-        message: t('bulk.downloadFilesOnly', { defaultValue: 'Only files can be downloaded — folders were skipped.' }),
+        message: t('bulk.downloadNothing', { defaultValue: 'Nothing selected to download.' }),
         variant: 'warning',
       });
       return;
     }
     setIsBulkDownloading(true);
     try {
-      if (selectionStats.fileKeys.length === 1) {
-        const onlyKey = selectionStats.fileKeys[0];
+      const folderHasExclusion = (fk: string): boolean => [...excludedKeys].some((e) => e.startsWith(fk));
+      // A single whole, intact folder → structured zip listed straight from S3
+      // (works even if no recursive listing is loaded in the UI).
+      if (folderKeys.length === 1 && looseFiles.length === 0 && !folderHasExclusion(folderKeys[0])) {
+        const folderKey = folderKeys[0];
+        const folderName = folderKey.replace(/\/+$/u, '').split('/').pop() || 'folder';
+        await downloadFolderAsZip(folderKey, dataBucket, region, getCredentials, `${folderName}.zip`);
+        return;
+      }
+      // A single loose file → plain file download.
+      if (looseFiles.length === 1 && folderKeys.length === 0) {
+        const onlyKey = looseFiles[0];
         const filename = onlyKey.split('/').pop() || onlyKey;
         await downloadFileFromS3(onlyKey, dataBucket, region, getCredentials, filename);
-      } else {
-        await downloadMultipleFilesAsZip(selectionStats.fileKeys, dataBucket, region, getCredentials, 'numa-files.zip');
+        return;
       }
-      if (selectionStats.folderKeys.length > 0) {
+      // Mixed / multiple / partially-excluded → expand each selected folder to its
+      // objects, drop excluded items, and zip everything, preserving paths relative
+      // to each item's KB folder. When the selection spans KBs, prefix with the KB
+      // segment so names can't collide.
+      const mixedKb = kbIds.size > 1;
+      const pathFor = (key: string): string => {
+        const rel = zipPathFromKbKey(key);
+        if (!mixedKb) return rel;
+        const seg = key.match(/^documents\/([^/]+)\//u)?.[1] ?? 'files';
+        return `${seg}/${rel}`;
+      };
+      const entries: { key: string; zipPath: string }[] = looseFiles.map((key) => ({ key, zipPath: pathFor(key) }));
+      for (const folderKey of folderKeys) {
+        const objs = await listObjectsInFolder(folderKey, dataBucket, region, getCredentials);
+        for (const objKey of objs) {
+          if (objKey.endsWith('/')) continue; // skip folder markers
+          if (isKeyExcluded(objKey)) continue; // carved out by the user
+          entries.push({ key: objKey, zipPath: pathFor(objKey) });
+        }
+      }
+      if (entries.length === 0) {
         showToast({
-          message: t('bulk.downloadSkippedFolders', {
-            defaultValue: '{{count}} folder(s) were skipped — bulk download supports files only.',
-            count: selectionStats.folderKeys.length,
-          }),
+          message: t('bulk.downloadEmpty', { defaultValue: 'The selected folders are empty.' }),
           variant: 'info',
         });
+        return;
       }
+      await downloadKeysAsZip(entries, dataBucket, region, getCredentials, 'numa-files.zip');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       showToast({
@@ -1346,7 +1492,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     } finally {
       setIsBulkDownloading(false);
     }
-  }, [dataBucket, region, getCredentials, selectionStats, showToast, t]);
+  }, [dataBucket, region, getCredentials, selectionStats, excludedKeys, isKeyExcluded, showToast, t]);
 
   const openBulkDeleteConfirm = useCallback(() => {
     if (!selectionSourceKb) return;
@@ -1917,7 +2063,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     const keys: string[] = [];
     for (const entry of rows) {
       if (entry.special) continue;
-      if (entry.isKbFolder) continue;
+      if (entry.isKbFolder) {
+        // The whole-KB root row is selectable (for download); its key is the
+        // KB's root prefix.
+        if (entry.kb) keys.push(kbRootPrefix(entry.kb.kb_id));
+        continue;
+      }
       const isSubfolder = entry.row.type === 'folder';
       if (isSubfolder) {
         const folderKey = entry.row.id.endsWith('/') ? entry.row.id : `${entry.row.id}/`;
@@ -2531,6 +2682,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     const canEdit = isOwner || isEditor;
                     const isDropTarget = dragOverTarget === row.id;
                     const dropDisabled = !canEdit;
+                    const kbRootKey = kbRootPrefix(kb.kb_id);
+                    const isKbRootSelected = selectedKeys.has(kbRootKey);
+                    const isKbRootIndeterminate =
+                      isKbRootSelected && [...excludedKeys].some((e) => e.startsWith(kbRootKey));
+                    const isKbDownloading = downloadingFolderKey === kbRootKey;
 
                     return (
                       <div
@@ -2540,6 +2696,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                           'finder-row--folder',
                           'finder-grid-6',
                           isExpanded ? 'finder-row--expanded' : '',
+                          isKbRootSelected ? 'finder-row--selected' : '',
                           isDropTarget ? 'finder-row--drop-over' : '',
                           isDragging && dropDisabled ? 'finder-row--viewer-disabled' : '',
                         ]
@@ -2558,6 +2715,17 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                         }}
                       >
                         <div className="finder-row__name-content">
+                          <input
+                            type="checkbox"
+                            className="finder-row__checkbox"
+                            ref={(el) => {
+                              if (el) el.indeterminate = isKbRootIndeterminate;
+                            }}
+                            checked={isKbRootSelected && !isKbRootIndeterminate}
+                            onChange={() => toggleRowSelection(kbRootKey)}
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={t('bulk.selectFolder', { defaultValue: 'Select folder' })}
+                          />
                           <span
                             className="finder-chevron"
                             onClick={(e) => {
@@ -2601,6 +2769,20 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                           })()}
                         </div>
                         <div className="finder-row__actions">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleDownloadFolder(kbRootKey, displayKbName(kb));
+                            }}
+                            disabled={isKbDownloading}
+                            title={t('actions.downloadFolder', { defaultValue: 'Download folder as zip' })}
+                          >
+                            {isKbDownloading ? (
+                              <Spinner animation="border" size="sm" style={{ width: '0.7rem', height: '0.7rem' }} />
+                            ) : (
+                              <i className="bi bi-download" />
+                            )}
+                          </button>
                           {canEdit && (
                             <>
                               <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
@@ -2624,10 +2806,22 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   const isSubfolderLoading = isSubfolder && (kbState?.loadingFolders.has(row.id) ?? false);
                   const rowCanEdit = canEditKb(kbId);
                   const folderSelectionKey = isSubfolder ? (row.id.endsWith('/') ? row.id : `${row.id}/`) : null;
-                  const isFileSelected = !isSubfolder && !!row.originalKey && selectedKeys.has(row.originalKey);
-                  const isFolderSelected = isSubfolder && !!folderSelectionKey && selectedKeys.has(folderSelectionKey);
-                  const isRowSelected = isFileSelected || isFolderSelected;
                   const selectionKey = isSubfolder ? folderSelectionKey : (row.originalKey ?? null);
+                  const isDirectlySelected = !!selectionKey && selectedKeys.has(selectionKey);
+                  // Ticking a folder selects everything inside it (FEAT-216); items
+                  // inside ride along unless explicitly carved back out via exclusions,
+                  // so you can untick a few and keep the rest.
+                  const isCoveredByFolder =
+                    !!selectionKey &&
+                    selectionStats.folderKeys.some((fk) => selectionKey !== fk && selectionKey.startsWith(fk));
+                  const isExcluded = !!selectionKey && isKeyExcluded(selectionKey);
+                  const isRowSelected = isDirectlySelected || (isCoveredByFolder && !isExcluded);
+                  // A selected folder with some of its contents carved out shows a dash.
+                  const isRowIndeterminate =
+                    isSubfolder &&
+                    isRowSelected &&
+                    !!selectionKey &&
+                    [...excludedKeys].some((e) => e !== selectionKey && e.startsWith(selectionKey));
                   const isRowDropTarget = isSubfolder && dragOverTarget === row.id;
 
                   return (
@@ -2715,7 +2909,10 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                           <input
                             type="checkbox"
                             className="finder-row__checkbox"
-                            checked={isRowSelected}
+                            ref={(el) => {
+                              if (el) el.indeterminate = isRowIndeterminate;
+                            }}
+                            checked={isRowSelected && !isRowIndeterminate}
                             onChange={() => toggleRowSelection(selectionKey)}
                             onClick={(e) => e.stopPropagation()}
                             aria-label={
@@ -2775,6 +2972,19 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                           : row.size}
                       </div>
                       <div className="finder-row__actions">
+                        {isSubfolder && folderSelectionKey && (
+                          <button
+                            onClick={() => void handleDownloadFolder(folderSelectionKey, row.displayName || row.name)}
+                            disabled={downloadingFolderKey === folderSelectionKey}
+                            title={t('actions.downloadFolder', { defaultValue: 'Download folder as zip' })}
+                          >
+                            {downloadingFolderKey === folderSelectionKey ? (
+                              <Spinner animation="border" size="sm" style={{ width: '0.7rem', height: '0.7rem' }} />
+                            ) : (
+                              <i className="bi bi-download" />
+                            )}
+                          </button>
+                        )}
                         {!isSubfolder && row.originalKey && (
                           <>
                             <button
@@ -3204,9 +3414,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         selectedCount={selectedKeys.size}
         fileCount={selectionStats.fileKeys.length}
         folderCount={selectionStats.folderKeys.length}
-        canMove={canBulkAct && !isMoving && !isBulkDeleting}
-        canDownload={selectionStats.fileKeys.length > 0 && !isBulkDownloading}
-        canDelete={canBulkAct && !isBulkDeleting}
+        canMove={canBulkAct && !selectionStats.hasRootSelection && !hasActiveExclusions && !isMoving && !isBulkDeleting}
+        canDownload={(selectionStats.fileKeys.length > 0 || selectionStats.folderKeys.length > 0) && !isBulkDownloading}
+        canDelete={canBulkAct && !selectionStats.hasRootSelection && !hasActiveExclusions && !isBulkDeleting}
         inProgress={isMoving || isBulkDeleting || isBulkDownloading}
         onMove={openBulkMove}
         onDownload={() => void executeBulkDownload()}
@@ -3218,11 +3428,21 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                 defaultValue:
                   'Selection spans multiple folders — move and delete are disabled until you narrow it down.',
               })
-            : !canBulkAct && selectionSourceKb && !canEditKb(selectionSourceKb.kb_id)
-              ? t('bulk.readOnlyWarning', {
-                  defaultValue: "You can't change items in a folder you only have view access to.",
+            : selectionStats.hasRootSelection
+              ? t('bulk.rootSelectionWarning', {
+                  defaultValue:
+                    'Whole folders can be downloaded, but move and delete are disabled to protect against wiping a folder.',
                 })
-              : undefined
+              : hasActiveExclusions
+                ? t('bulk.partialSelectionWarning', {
+                    defaultValue:
+                      'You’ve unticked items inside a selected folder. Partial selections can be downloaded, but move and delete are disabled.',
+                  })
+                : !canBulkAct && selectionSourceKb && !canEditKb(selectionSourceKb.kb_id)
+                  ? t('bulk.readOnlyWarning', {
+                      defaultValue: "You can't change items in a folder you only have view access to.",
+                    })
+                  : undefined
         }
       />
     </div>
