@@ -9,6 +9,7 @@
 import { useTranslation } from 'react-i18next';
 import { useS3FileResult, type ToolResultLike } from './helpers';
 import { useAuth } from '../Providers/AuthProvider';
+import { sanitizeRichTextHtml } from '../utils/sanitizeRichText';
 import {
   getOpsPayload,
   getOpsCategory,
@@ -175,7 +176,10 @@ const TicketDetail = ({ ticket }: { ticket: OpsTicket }) => {
       </div>
       <div className="ops-renderer-detail-title">{ticket.title}</div>
       {ticket.description && (
-        <div className="ops-renderer-detail-desc" dangerouslySetInnerHTML={{ __html: ticket.description }} />
+        <div
+          className="ops-renderer-detail-desc"
+          dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(ticket.description) }}
+        />
       )}
       <div className="ops-renderer-detail-fields">
         {ticket.assignee?.name && (
@@ -428,7 +432,10 @@ const CommentList = ({ comments }: { comments: OpsComment[] }) => {
             <span className="ops-renderer-comment-author">{c.authorName || c.authorEmail || 'Unknown'}</span>
             {c.createdAt && <span className="ops-renderer-comment-date">{new Date(c.createdAt).toLocaleString()}</span>}
           </div>
-          <div className="ops-renderer-comment-body" dangerouslySetInnerHTML={{ __html: c.content }} />
+          <div
+            className="ops-renderer-comment-body"
+            dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(c.content) }}
+          />
         </div>
       ))}
     </div>
