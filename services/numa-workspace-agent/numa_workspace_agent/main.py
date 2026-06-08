@@ -2145,7 +2145,9 @@ async def _handle_chat(
     }
     # TASK-127: per-integration approval-mode overrides set by the user on
     # the Integrations page. Empty when no overrides have been configured.
-    integration_approval_modes = resolve_per_integration_approval_modes(user_sub)
+    integration_approval_modes = resolve_per_integration_approval_modes(
+        user_sub, agent_config
+    )
 
     logger.info(
         "Chat request",
@@ -2497,7 +2499,9 @@ async def _handle_sync(
         "integrations", "non_destructive"
     )
     # TASK-127: per-integration overrides from the user's Integrations page.
-    integration_approval_modes_sync = resolve_per_integration_approval_modes(user_sub)
+    integration_approval_modes_sync = resolve_per_integration_approval_modes(
+        user_sub, agent_config
+    )
     logger.info(
         "Resolved approval modes for sync request",
         _name="SYNC_APPROVAL_MODE",
@@ -2823,7 +2827,9 @@ async def _handle_fire_and_forget(
         "integrations", "non_destructive"
     )
     # TASK-127: per-integration overrides from the user's Integrations page.
-    integration_approval_modes_async = resolve_per_integration_approval_modes(user_sub)
+    integration_approval_modes_async = resolve_per_integration_approval_modes(
+        user_sub, agent_config
+    )
     logger.info(
         "Resolved approval modes for fire-and-forget request",
         _name="ASYNC_APPROVAL_MODE",

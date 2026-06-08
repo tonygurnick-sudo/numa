@@ -1457,9 +1457,12 @@ async def stream_claude_sdk(
                             )
 
                             # Generate a per-tool-call approval ID and store in
-                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key -> list of IDs).
-                            # Each parallel tool pops its ID from the list in FIFO order,
-                            # avoiding the race where a single env var gets overwritten.
+                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key -> list of
+                            # {"id", "mode"} entries). Each parallel tool pops its own
+                            # entry in FIFO order, so both the ID *and* the approval
+                            # mode survive a mixed-mode parallel batch — the single
+                            # NUMA_APPROVAL_MODE global below is only a fail-closed
+                            # default; the popper pins the real per-call mode.
                             approval_id = str(uuid_mod.uuid4())
                             try:
                                 _id_map = json.loads(
@@ -1467,7 +1470,12 @@ async def stream_claude_sdk(
                                 )
                             except (json.JSONDecodeError, TypeError):
                                 _id_map = {}
-                            _id_map.setdefault(_approval_key, []).append(approval_id)
+                            _id_map.setdefault(_approval_key, []).append(
+                                {
+                                    "id": approval_id,
+                                    "mode": "auto" if auto_approved else "manual",
+                                }
+                            )
                             os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
 
                             # Use structured props preview for numa_tool, else existing logic
@@ -2241,7 +2249,12 @@ async def run_claude_sdk(
                                 )
                             except (json.JSONDecodeError, TypeError):
                                 _id_map = {}
-                            _id_map.setdefault(_approval_key, []).append(approval_id)
+                            _id_map.setdefault(_approval_key, []).append(
+                                {
+                                    "id": approval_id,
+                                    "mode": "auto" if auto_approved else "manual",
+                                }
+                            )
                             os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
 
                             logger.info(

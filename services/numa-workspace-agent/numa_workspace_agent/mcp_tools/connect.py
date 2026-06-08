@@ -101,27 +101,16 @@ def is_safe_connector_operation(operation: str) -> bool:
 
 
 def _pop_approval_id(action_key: str) -> str:
-    """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
+    """Pop this call's approval entry (id + mode) for ``action_key``.
 
-    Same pattern as integrations.py — the SDK runner stores a JSON dict of
-    action_key → [approval_id, ...] in the env var.
+    Thin delegate to the canonical popper in ``lambda_client`` so the per-call
+    approval mode is pinned identically across every tool module — see that
+    function for why the mode must travel with the id rather than ride a single
+    global.
     """
-    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
-    if raw:
-        try:
-            id_map = json.loads(raw)
-            ids = id_map.get(action_key, [])
-            if ids:
-                approval_id = ids.pop(0)
-                if not ids:
-                    id_map.pop(action_key, None)
-                else:
-                    id_map[action_key] = ids
-                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
-                return approval_id
-        except (json.JSONDecodeError, TypeError):
-            pass
-    return os.environ.get("NUMA_REQUEST_ID", "")
+    from numa_workspace_agent.mcp_tools.lambda_client import pop_approval_id
+
+    return pop_approval_id(action_key)
 
 
 def _await_approval(approval_key: str, description: str = "") -> str:
@@ -133,8 +122,10 @@ def _await_approval(approval_key: str, description: str = "") -> str:
     Returns 'approved', 'denied', or 'timeout'.  Never fails open — if
     anything goes wrong the operation is blocked (fail-closed).
     """
-    is_auto = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
+    # Pop first: the popper pins NUMA_APPROVAL_MODE to this call's mode, so the
+    # auto-approve check must read it *after* popping (not before).
     request_id = _pop_approval_id(approval_key)
+    is_auto = os.environ.get("NUMA_APPROVAL_MODE") == "auto"
 
     if is_auto:
         logger.info("Connector operation auto-approved", action_key=approval_key)
