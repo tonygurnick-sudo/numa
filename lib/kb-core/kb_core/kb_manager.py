@@ -613,6 +613,96 @@ class KnowledgeBaseManager:
             logger.error("Error deleting KB", kb_id=kb_id, error=str(e))
             return False
 
+    def leave_kb(self, kb_id: str, user_id: str) -> Dict[str, Any]:
+        """
+        Remove the calling user from a shared KB they were granted access to.
+
+        Strips the user from the KB's viewers/editors lists and deletes their
+        membership row, so the folder no longer shows up for them. Guards:
+        - Owners can't leave their own folder (they should delete/transfer it).
+        - System / company / root KBs aren't leavable shared folders.
+        - Folders shared with everyone ("*") can't be left (access isn't per-user).
+
+        Returns a dict: {"success": bool, "error": Optional[str], "status": int}.
+        """
+        try:
+            kb = self.get_kb(kb_id)
+            if not kb:
+                return {"success": False, "error": "KB not found", "status": 404}
+
+            # Block leaving non-shared system folders. NB: don't use
+            # is_root_kb_id() here — every regular shared KB also has a uuid4()
+            # id, so that would reject all of them. The personal root KB is
+            # caught by the is_root flag (set when get_kb synthesises it) and by
+            # the owner check below (its created_by is the user's own sub).
+            if (
+                kb.get("is_default")
+                or kb.get("is_root")
+                or kb_id in ("company", "numa-support")
+            ):
+                return {
+                    "success": False,
+                    "error": "This folder can't be left",
+                    "status": 400,
+                }
+
+            if kb.get("created_by") == user_id:
+                return {
+                    "success": False,
+                    "error": "Owners can't leave their own folder — delete it instead",
+                    "status": 400,
+                }
+
+            current_viewers = kb.get("viewers", []) or []
+            current_editors = kb.get("editors", []) or []
+            named_member = user_id in current_viewers or user_id in current_editors
+            shared_with_everyone = "*" in current_viewers or "*" in current_editors
+
+            if not named_member:
+                if shared_with_everyone:
+                    return {
+                        "success": False,
+                        "error": "This folder is shared with everyone and can't be left",
+                        "status": 400,
+                    }
+                # Not a member at all — treat as already-left (idempotent).
+                self.dynamodb.delete_item(
+                    TableName=self.table_name,
+                    Key={
+                        "PK": {"S": self.tenant_pk},
+                        "SK": {"S": f"KBMEM#{kb_id}#USER#{user_id}"},
+                    },
+                )
+                return {"success": True, "status": 200}
+
+            new_viewers = [v for v in current_viewers if v != user_id]
+            new_editors = [e for e in current_editors if e != user_id]
+
+            self.dynamodb.update_item(
+                TableName=self.table_name,
+                Key={"PK": {"S": self.tenant_pk}, "SK": {"S": f"KB#{kb_id}"}},
+                UpdateExpression="SET viewers = :viewers, editors = :editors, updated_at = :updated_at",
+                ExpressionAttributeValues={
+                    ":viewers": {"SS": new_viewers} if new_viewers else {"L": []},
+                    ":editors": {"SS": new_editors} if new_editors else {"L": []},
+                    ":updated_at": {"S": datetime.now(timezone.utc).isoformat()},
+                },
+            )
+
+            self.dynamodb.delete_item(
+                TableName=self.table_name,
+                Key={
+                    "PK": {"S": self.tenant_pk},
+                    "SK": {"S": f"KBMEM#{kb_id}#USER#{user_id}"},
+                },
+            )
+
+            logger.info("User left KB", kb_id=kb_id, user_id=user_id)
+            return {"success": True, "status": 200}
+        except Exception as e:
+            logger.error("Error leaving KB", kb_id=kb_id, user_id=user_id, error=str(e))
+            return {"success": False, "error": "Failed to leave folder", "status": 500}
+
     def update_document_count(self, kb_id: str, count: int) -> bool:
         """
         Update the document count for a KB.

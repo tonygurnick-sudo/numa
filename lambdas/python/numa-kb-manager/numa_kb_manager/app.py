@@ -356,6 +356,32 @@ async def delete_kb(request: Request, kb_id: str) -> Response:
         return JSONResponse({"error": "Internal server error"}, status_code=500)
 
 
+@app.post("/api/kb/{kb_id}/leave")
+async def leave_kb(request: Request, kb_id: str) -> Response:
+    """Remove the calling user from a shared KB they were added to."""
+    guard, user = _guard_request(request)
+    if guard is not None:
+        return guard
+
+    try:
+        user_id = user["sub"]
+        kb_manager = KnowledgeBaseManager()
+        result = kb_manager.leave_kb(kb_id, user_id)
+
+        if not result.get("success"):
+            return JSONResponse(
+                {"error": result.get("error", "Failed to leave folder")},
+                status_code=result.get("status", 400),
+            )
+
+        logger.info("KB left", kb_id=kb_id, user_id=user_id)
+        return JSONResponse({"status": "success"}, status_code=200)
+
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.error("KB leave failed", error=str(exc), exc_info=True)
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+
 # ── KB files (S3 listing + deletion) ──────────────────────────────────────
 
 

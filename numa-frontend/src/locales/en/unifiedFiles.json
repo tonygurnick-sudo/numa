@@ -118,7 +118,16 @@
     "addSubfolder": "Add subfolder",
     "upload": "Upload files",
     "settings": "Sharing & permissions",
-    "delete": "Delete"
+    "delete": "Delete",
+    "leave": "Leave folder"
+  },
+  "leave": {
+    "title": "Leave \"{{name}}\"?",
+    "message": "You'll lose access to this shared folder and it will disappear from your list. The owner can re-add you later.",
+    "leaveButton": "Leave folder",
+    "inProgress": "Leaving…",
+    "success": "You left \"{{name}}\"",
+    "error": "Failed to leave folder: {{error}}"
   },
   "folderSettings": {
     "title": "Folder Settings",
@@ -139,6 +148,9 @@
     "deleteConfirm": "Are you sure you want to delete this folder? This action cannot be undone.",
     "deleteWarning": "This will permanently delete this folder configuration. Files will remain in storage but will no longer be associated with this folder.",
     "dangerZone": "Danger Zone",
+    "leaveZone": "Leave folder",
+    "leaveHint": "You'll lose access to this shared folder. The owner can re-add you later.",
+    "leave": "Leave folder",
     "deleting": "Deleting...",
     "saving": "Saving...",
     "saved": "Settings saved successfully.",
@@ -212,6 +224,8 @@
     "partialSelectionWarning": "You’ve unticked items inside a selected folder. Partial selections can be downloaded, but move and delete are disabled.",
     "delete": "Delete",
     "deleteTooltip": "Delete selected items",
+    "leave": "Leave",
+    "leaveTooltip": "Leave this shared folder",
     "deleteConfirmCta": "Delete",
     "confirmDeleteFiles_one": "Delete {{files}} file?",
     "confirmDeleteFiles_other": "Delete {{files}} files?",

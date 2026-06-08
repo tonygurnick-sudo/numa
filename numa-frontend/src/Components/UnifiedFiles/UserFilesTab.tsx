@@ -149,6 +149,18 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   // Inline expansion at root level
   const [expandedKbs, setExpandedKbs] = useState<Set<string>>(new Set());
+  // FEAT-219 #3: the My Files / Remote / Shared sections start collapsed every
+  // time the view opens; a section key present here means it's expanded. Search
+  // overrides this (everything shows so matches aren't hidden).
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const toggleSection = useCallback((key: string) => {
+    setExpandedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
   // Per-KB file state
   const [kbFileStates, setKbFileStates] = useState<Map<string, KBFileState>>(new Map());
   // Mirror of kbFileStates for async reads (e.g. skip-if-already-loaded guards)
@@ -184,6 +196,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   // Top-level folder delete confirmation (via context menu)
   const [topLevelDeleteConfirm, setTopLevelDeleteConfirm] = useState<UserKB | null>(null);
   const [isDeletingTopLevel, setIsDeletingTopLevel] = useState(false);
+  // Leave-shared-folder confirmation (FEAT-219 #4).
+  const [leaveConfirm, setLeaveConfirm] = useState<UserKB | null>(null);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const [searchValue, setSearchValue] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('name');
@@ -1335,6 +1350,18 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
   const canBulkAct = !!selectionSourceKb && !selectionStats.isMixedKb && canEditKb(selectionSourceKb.kb_id);
 
+  // When the selection is exactly one shared folder root you don't own, the
+  // bulk bar offers "Leave" (FEAT-219 #4) — the only sensible action on a whole
+  // shared folder you're a member of.
+  const leaveCandidateKb = useMemo(() => {
+    const { folderKeys, fileKeys } = selectionStats;
+    if (folderKeys.length !== 1 || fileKeys.length !== 0) return null;
+    if (!isKbRootKey(folderKeys[0])) return null;
+    const kb = selectionSourceKb;
+    if (!kb || kb.is_root || kb.role === 'OWNER') return null;
+    return kb;
+  }, [selectionStats, selectionSourceKb]);
+
   /** Keys carved out of a selected folder (the key itself or any ancestor exclusion). */
   const isKeyExcluded = useCallback(
     (key: string) => excludedKeys.has(key) || [...excludedKeys].some((e) => key.startsWith(e)),
@@ -1632,6 +1659,9 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           // My Files cannot be deleted — it is auto-provisioned per user.
           if (kb.is_root) return;
           if (kb.role === 'OWNER') setTopLevelDeleteConfirm(kb);
+        } else if (action === 'leave') {
+          // Only non-owner members of a shared folder can leave it.
+          if (!kb.is_root && kb.role !== 'OWNER') setLeaveConfirm(kb);
         }
       } else {
         const { kbId, folderId, folderName } = target;
@@ -1670,6 +1700,34 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       setTopLevelDeleteConfirm(null);
     }
   }, [topLevelDeleteConfirm, currentFolder, refreshKBs, showToast, t]);
+
+  const executeLeave = useCallback(async () => {
+    if (!leaveConfirm) return;
+    setIsLeaving(true);
+    try {
+      await knowledgeBaseService.leaveKB(leaveConfirm.kb_id);
+      if (currentFolder?.kbId === leaveConfirm.kb_id) setCurrentFolder(null);
+      setExpandedKbs((prev) => {
+        const n = new Set(prev);
+        n.delete(leaveConfirm.kb_id);
+        return n;
+      });
+      showToast({
+        message: t('leave.success', { defaultValue: 'You left "{{name}}"', name: leaveConfirm.kb_name }),
+        variant: 'success',
+      });
+      refreshKBs();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({
+        message: t('leave.error', { defaultValue: 'Failed to leave folder: {{error}}', error: msg }),
+        variant: 'error',
+      });
+    } finally {
+      setIsLeaving(false);
+      setLeaveConfirm(null);
+    }
+  }, [leaveConfirm, currentFolder, refreshKBs, showToast, t]);
 
   // ── Rename handlers ────────────────────────────────────────
 
@@ -1802,6 +1860,8 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     special?: 'loading' | 'empty' | 'section' | 'createFolder' | 'connectIntegration';
     sectionTitle?: string;
     sectionBadge?: 'private' | 'shared' | 'remote';
+    /** Which collapsible section this row belongs to (key passed to the header). */
+    sectionKey?: string;
     createFolderVisibility?: 'personal' | 'shared';
     /** Set on rows that represent a connected integration (rendered as a
      *  top-level folder inside the Remote Files section). Mutually exclusive
@@ -2008,6 +2068,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     // be noise alongside filtered results.
     const showCreateRows = !anyFilterActive;
 
+    // Tag every row a section emitted with its key so the renderer can hide a
+    // section's contents when it's collapsed (the header row always shows).
+    const tagSection = (start: number, key: string) => {
+      for (let i = start; i < rows.length; i++) rows[i].sectionKey = key;
+    };
+
     // "My Files" section: header emitted only if at least one row landed.
     const myFilesStart = rows.length;
     for (const kb of myFilesKBs) pushKbRows(kb);
@@ -2015,31 +2081,15 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       rows.splice(myFilesStart, 0, sectionHeaderRow('myFiles', t('sections.myFiles'), 'private'));
       if (showCreateRows) rows.push(createFolderRow('personal'));
     }
+    tagSection(myFilesStart, 'myFiles');
 
-    // "Shared Files" section: only if there's at least one shared KB visible
-    // after the search/filter pass.
-    if (sharedSectionKBs.length > 0) {
-      const sharedStart = rows.length;
-      for (const kb of sharedSectionKBs) pushKbRows(kb);
-      if (rows.length > sharedStart) {
-        rows.splice(sharedStart, 0, sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
-        if (showCreateRows) rows.push(createFolderRow('shared'));
-      }
-    } else if (showCreateRows) {
-      // No shared KBs yet — still surface a "Shared Files" section with an
-      // inline create row so the user can spin one up without using the
-      // toolbar.
-      rows.push(sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
-      rows.push(createFolderRow('shared'));
-    }
-
-    // "Remote Files" section: connected integrations that expose a navigable
-    // file tree (Google Drive, Dropbox, Synergy, …). Chat-only integrations
-    // (Slack, simPRO, …) are excluded via the registry-derived isFileStore
-    // flag — they don't belong in a file browser. Hidden when a search/filter
-    // is active because their contents aren't part of the User Files index
-    // and would silently miss matches. The trailing "+" row routes to the
-    // Integrations page rather than creating a folder.
+    // "Remote Files" section (FEAT-219 #2: listed above Shared). Connected
+    // integrations that expose a navigable file tree (Google Drive, Dropbox,
+    // Synergy, …). Chat-only integrations (Slack, simPRO, …) are excluded via
+    // the registry-derived isFileStore flag — they don't belong in a file
+    // browser. Hidden when a search/filter is active because their contents
+    // aren't part of the User Files index and would silently miss matches. The
+    // trailing "+" row routes to the Integrations page rather than creating a folder.
     if (dataConnectorsEnabled && !anyFilterActive) {
       const fileStoreIntegrations = integrations.filter((i) => i.isFileStore);
       const remoteStart = rows.length;
@@ -2054,8 +2104,39 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         rows.push(sectionHeaderRow('remoteFiles', t('sections.remoteFiles'), 'remote'));
         rows.push(connectIntegrationRow());
       }
+      tagSection(remoteStart, 'remoteFiles');
     }
+
+    // "Shared Files" section: only if there's at least one shared KB visible
+    // after the search/filter pass.
+    const sharedStart = rows.length;
+    if (sharedSectionKBs.length > 0) {
+      for (const kb of sharedSectionKBs) pushKbRows(kb);
+      if (rows.length > sharedStart) {
+        rows.splice(sharedStart, 0, sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
+        if (showCreateRows) rows.push(createFolderRow('shared'));
+      }
+    } else if (showCreateRows) {
+      // No shared KBs yet — still surface a "Shared Files" section with an
+      // inline create row so the user can spin one up without using the
+      // toolbar.
+      rows.push(sectionHeaderRow('sharedFiles', t('sections.sharedFiles'), 'shared'));
+      rows.push(createFolderRow('shared'));
+    }
+    tagSection(sharedStart, 'sharedFiles');
   }
+
+  // A row is hidden when its section is collapsed (search overrides collapse so
+  // matches are never buried). Section header rows always show.
+  const sectionFilterActive = !!searchValue.trim() || filterPredicate.isActive;
+  const isRowHiddenByCollapse = useCallback(
+    (entry: RowEntry): boolean =>
+      !!entry.sectionKey &&
+      entry.special !== 'section' &&
+      !sectionFilterActive &&
+      !expandedSections.has(entry.sectionKey),
+    [sectionFilterActive, expandedSections]
+  );
 
   // Selectable rows in the current visible row set — used by the header
   // "select all" checkbox + the bulk bar's deselect action.
@@ -2063,6 +2144,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     const keys: string[] = [];
     for (const entry of rows) {
       if (entry.special) continue;
+      if (isRowHiddenByCollapse(entry)) continue;
       if (entry.isKbFolder) {
         // The whole-KB root row is selectable (for download); its key is the
         // KB's root prefix.
@@ -2078,7 +2160,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
       }
     }
     return keys;
-  }, [rows]);
+  }, [rows, isRowHiddenByCollapse]);
 
   const selectedVisibleCount = useMemo(
     () => selectableRowKeys.reduce((count, k) => (selectedKeys.has(k) ? count + 1 : count), 0),
@@ -2466,9 +2548,19 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                   special,
                   sectionTitle,
                   sectionBadge,
+                  sectionKey,
                   createFolderVisibility,
                   integration,
                 }) => {
+                  // Hide a collapsed section's contents (the header still renders).
+                  if (
+                    sectionKey &&
+                    special !== 'section' &&
+                    !sectionFilterActive &&
+                    !expandedSections.has(sectionKey)
+                  ) {
+                    return null;
+                  }
                   if (special === 'createFolder') {
                     return (
                       <button
@@ -2495,9 +2587,26 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                     );
                   }
                   if (special === 'section') {
+                    const isSectionExpanded = sectionFilterActive || (!!sectionKey && expandedSections.has(sectionKey));
                     return (
                       <div key={row.id} className="finder-section-header finder-grid-6">
-                        <div className="finder-section-header__label">
+                        <div
+                          className="finder-section-header__label"
+                          role="button"
+                          tabIndex={0}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => sectionKey && toggleSection(sectionKey)}
+                          onKeyDown={(e) => {
+                            if ((e.key === 'Enter' || e.key === ' ') && sectionKey) {
+                              e.preventDefault();
+                              toggleSection(sectionKey);
+                            }
+                          }}
+                          aria-expanded={isSectionExpanded}
+                        >
+                          <i
+                            className={`bi bi-chevron-${isSectionExpanded ? 'down' : 'right'} finder-section-header__chevron`}
+                          />
                           <span className="finder-section-header__title">{sectionTitle}</span>
                           {sectionBadge === 'private' && (
                             <span
@@ -3130,6 +3239,44 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         </Modal.Footer>
       </Modal>
 
+      {/* Leave shared folder confirmation (from context menu) */}
+      <Modal show={!!leaveConfirm} onHide={() => setLeaveConfirm(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {t('leave.title', {
+              name: leaveConfirm?.kb_name ?? '',
+              defaultValue: `Leave "${leaveConfirm?.kb_name ?? ''}"?`,
+            })}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">
+            {t('leave.message', {
+              defaultValue:
+                "You'll lose access to this shared folder and it will disappear from your list. The owner can re-add you later.",
+            })}
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-secondary btn-sm" onClick={() => setLeaveConfirm(null)} disabled={isLeaving}>
+            {t('rename.cancel')}
+          </button>
+          <button className="btn btn-danger btn-sm" onClick={executeLeave} disabled={isLeaving}>
+            {isLeaving ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('leave.inProgress', { defaultValue: 'Leaving…' })}
+              </>
+            ) : (
+              <>
+                <i className="bi bi-box-arrow-left me-1" />
+                {t('leave.leaveButton', { defaultValue: 'Leave folder' })}
+              </>
+            )}
+          </button>
+        </Modal.Footer>
+      </Modal>
+
       {settingsKb && (
         <FolderSettingsDrawer
           show={showSettingsDrawer}
@@ -3139,6 +3286,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           role={settingsKb.role}
           onDeleted={handleFolderDeleted}
           onUpdated={refreshKBs}
+          onLeave={() => {
+            const kb = settingsKb;
+            setShowSettingsDrawer(false);
+            if (kb && !kb.is_root && kb.role !== 'OWNER') setLeaveConfirm(kb);
+          }}
         />
       )}
 
@@ -3417,10 +3569,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         canMove={canBulkAct && !selectionStats.hasRootSelection && !hasActiveExclusions && !isMoving && !isBulkDeleting}
         canDownload={(selectionStats.fileKeys.length > 0 || selectionStats.folderKeys.length > 0) && !isBulkDownloading}
         canDelete={canBulkAct && !selectionStats.hasRootSelection && !hasActiveExclusions && !isBulkDeleting}
+        canLeave={!!leaveCandidateKb && !isMoving && !isBulkDeleting && !isBulkDownloading}
         inProgress={isMoving || isBulkDeleting || isBulkDownloading}
         onMove={openBulkMove}
         onDownload={() => void executeBulkDownload()}
         onDelete={openBulkDeleteConfirm}
+        onLeave={() => leaveCandidateKb && setLeaveConfirm(leaveCandidateKb)}
         onClear={() => setSelectedKeys(new Set())}
         warning={
           selectionStats.isMixedKb

@@ -44,6 +44,7 @@
     "createFailed": "Failed to create folder",
     "updateFailed": "Failed to update folder",
     "deleteFailed": "Failed to delete folder",
+    "leaveFailed": "Failed to leave folder",
     "listFilesFailed": "Failed to list files in folder",
     "deleteFilesFailed": "Failed to delete files",
     "createSubfolderFailed": "Failed to create subfolder",
