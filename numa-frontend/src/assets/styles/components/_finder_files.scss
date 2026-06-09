@@ -340,6 +340,12 @@
       color: #71717a;
     }
 
+    .finder-section-header__chevron {
+      font-size: 0.7rem;
+      color: #a1a1aa;
+      flex-shrink: 0;
+    }
+
     .finder-col {
       cursor: pointer;
       display: flex;

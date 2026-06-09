@@ -9,10 +9,13 @@ interface FilesBulkActionBarProps {
   canMove: boolean;
   canDownload: boolean;
   canDelete: boolean;
+  /** When set, the selection is a single shared folder the user can leave. */
+  canLeave?: boolean;
   inProgress?: boolean;
   onMove: () => void;
   onDownload: () => void;
   onDelete: () => void;
+  onLeave?: () => void;
   onClear: () => void;
   /** Optional warning shown next to the count (eg cross-KB selection). */
   warning?: string;
@@ -25,10 +28,12 @@ export function FilesBulkActionBar({
   canMove,
   canDownload,
   canDelete,
+  canLeave = false,
   inProgress = false,
   onMove,
   onDownload,
   onDelete,
+  onLeave,
   onClear,
   warning,
 }: FilesBulkActionBarProps): React.JSX.Element | null {
@@ -87,8 +92,8 @@ export function FilesBulkActionBar({
           disabled={!canDownload || inProgress}
           title={
             folderCount > 0
-              ? t('bulk.downloadFoldersUnsupported', {
-                  defaultValue: 'Only files can be downloaded — folders will be skipped',
+              ? t('bulk.downloadWithFolders', {
+                  defaultValue: 'Download selected items — folders download as a zip',
                 })
               : t('bulk.downloadTooltip', { defaultValue: 'Download selected files' })
           }
@@ -106,6 +111,18 @@ export function FilesBulkActionBar({
           <i className="bi bi-trash" />
           <span className="finder-bulk-bar__btn-label">{t('bulk.delete', { defaultValue: 'Delete' })}</span>
         </button>
+        {canLeave && onLeave && (
+          <button
+            type="button"
+            className="finder-bulk-bar__btn finder-bulk-bar__btn--danger"
+            onClick={onLeave}
+            disabled={inProgress}
+            title={t('bulk.leaveTooltip', { defaultValue: 'Leave this shared folder' })}
+          >
+            <i className="bi bi-box-arrow-left" />
+            <span className="finder-bulk-bar__btn-label">{t('bulk.leave', { defaultValue: 'Leave' })}</span>
+          </button>
+        )}
         <span className="finder-bulk-bar__sep" />
         <button
           type="button"
