@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import * as OpsService from '../../Services/OpsService';
 import type { OpsConfigResponse, BoardSummary, BoardResponse, Ticket, WorkUnit, StaffProfile } from '../../types/ops';
 import { getCached, setCache, LS_ACTIVE_BOARD, LS_ACTIVE_BOARD_LEGACY } from '../../utils/opsCache';
+import { useResourceAudience } from '../../hooks/useResourceAudience';
 
 // ─── localStorage Keys ──────────────────────────────────────────────────────
 
@@ -210,6 +211,17 @@ export const useOpsData = (): OpsDataState => {
     }
   });
 
+  // ── FEAT-127: persona/industry filtering ───────────────────────────────────
+  // Boards whose persona/industry tags don't match the user's profile are
+  // hidden everywhere ops surfaces consume `boards` (switcher, strip, all
+  // tickets). Strict — no exemption for the active board; if the selected board
+  // is filtered out we switch to the first visible one (effect below).
+  const { isFiltering: audienceActive, matches: matchesAudience } = useResourceAudience();
+  const visibleBoards = useMemo(
+    () => (audienceActive ? boards.filter((b) => matchesAudience(b)) : boards),
+    [boards, audienceActive, matchesAudience]
+  );
+
   // ── Refs ─────────────────────────────────────────────────────────────────
   const initialLoadDone = useRef(false);
 
@@ -353,6 +365,18 @@ export const useOpsData = (): OpsDataState => {
       cancelled = true;
     };
   }, [loadConfig, loadBoards, persistBoard]);
+
+  // FEAT-127: if the selected board is hidden by persona/industry filtering
+  // (e.g. the persisted board no longer matches, or the profile just changed),
+  // switch to the first visible board so a filtered-out board never shows.
+  useEffect(() => {
+    if (!initialLoadDone.current || !audienceActive) return;
+    if (selectedBoardId && !visibleBoards.some((b) => b.id === selectedBoardId)) {
+      const next = visibleBoards[0]?.id ?? null;
+      setSelectedBoardId(next);
+      if (next) persistBoard(next);
+    }
+  }, [audienceActive, visibleBoards, selectedBoardId, persistBoard]);
 
   // ── On-demand Staff Sync ────────────────────────────────────────────
   // Called by settings modals when they open to ensure fresh staff data.
@@ -606,7 +630,9 @@ export const useOpsData = (): OpsDataState => {
     config,
     configLoading,
 
-    boards,
+    // Audience-filtered (FEAT-127) — consumers only ever see boards matching
+    // the user's persona/industry.
+    boards: visibleBoards,
     boardsLoading,
     selectedBoardId,
 

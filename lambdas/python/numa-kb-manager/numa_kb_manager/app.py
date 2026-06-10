@@ -247,11 +247,22 @@ async def update_kb(request: Request, kb_id: str) -> Response:
     try:
         user_id = user["sub"]
         kb_manager = KnowledgeBaseManager()
-
-        if not kb_manager.check_owner(kb_id, user_id):
-            return JSONResponse({"error": "Access denied"}, status_code=403)
-
         body = await request.json()
+
+        # Owners get full update rights. Workspace admins (Cognito `admin`
+        # group) may additionally update the persona/industry taxonomy tags —
+        # and ONLY those — on any KB they can see (FEAT-127: lets admins curate
+        # audience tags across shared folders, incl. the system-owned Company
+        # KB). Name/visibility/membership remain owner-only.
+        if not kb_manager.check_owner(kb_id, user_id):
+            user_groups = user.get("cognito:groups", []) or []
+            taxonomy_only = set(body.keys()) <= {"personas", "industries"}
+            can_see = kb_id == "company" or kb_manager.check_permission(
+                kb_id, user_id, "VIEWER"
+            )
+            if not ("admin" in user_groups and taxonomy_only and can_see):
+                return JSONResponse({"error": "Access denied"}, status_code=403)
+
         name = body.get("name")
         viewers = body.get("viewers")
         editors = body.get("editors")

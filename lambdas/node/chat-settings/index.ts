@@ -4,6 +4,7 @@ import { withPRM } from '../../../lib/prm-node/prm';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { SUPPORTED_INTEGRATIONS } from '../../../infra/config/integrations';
 import { NATIVE_CONNECTORS } from '../../../infra/config/connectors';
+import { normalisePersonas, normaliseIndustries } from '../../../lib/resource-taxonomy';
 
 const TABLE_NAME = process.env.CHAT_SETTINGS_TABLE_NAME as string;
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
@@ -106,6 +107,10 @@ export type UserProfile = {
   customInstructions: string;
   // Memories
   memories: Memory[];
+  // Audience tags (FEAT-127) — taxonomy-valid persona/industry selections that
+  // filter which agents, Ops boards, and KBs are surfaced to this user.
+  personas: string[];
+  industries: string[];
   // Toggle
   useProfile: boolean;
 };
@@ -120,6 +125,8 @@ const DEFAULT_USER_PROFILE: UserProfile = {
   profileImage: null,
   customInstructions: '',
   memories: [],
+  personas: [],
+  industries: [],
   useProfile: true,
 };
 
@@ -256,6 +263,10 @@ function validateUserProfile(raw: unknown): UserProfile {
         .slice(0, MAX_MEMORIES)
     : [];
 
+  // Drop anything outside the shared taxonomy (case-insensitive match, canonical casing).
+  const personas = normalisePersonas(obj.personas).values;
+  const industries = normaliseIndustries(obj.industries).values;
+
   return {
     name: truncate(obj.name, MAX_NAME),
     jobTitle: truncate(obj.jobTitle, MAX_TITLE),
@@ -266,6 +277,8 @@ function validateUserProfile(raw: unknown): UserProfile {
     profileImage,
     customInstructions,
     memories,
+    personas,
+    industries,
     useProfile: typeof obj.useProfile === 'boolean' ? obj.useProfile : DEFAULT_USER_PROFILE.useProfile,
   };
 }

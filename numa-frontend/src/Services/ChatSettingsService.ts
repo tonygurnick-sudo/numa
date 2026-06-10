@@ -7,6 +7,7 @@ import i18n from '../i18n';
 import { setCachedUserProfile } from '../utils/userProfileCache';
 import { getSwrCache, setSwrCache } from '../utils/swrCache';
 import { COMPANY_KB_ID, MY_FILES_SENTINEL, NUMA_SUPPORT_KB_ID } from '../constants/knowledgeBase';
+import { normalisePersonas, normaliseIndustries } from '../utils/resourceTaxonomy';
 
 export type ApprovalMode = 'always' | 'non_destructive' | 'never';
 
@@ -100,6 +101,10 @@ export type UserProfile = {
   customInstructions: string;
   // Memories
   memories: Memory[];
+  // Audience tags (FEAT-127) — taxonomy-valid persona/industry selections that
+  // filter which agents, Ops boards, and KBs are surfaced to this user.
+  personas: string[];
+  industries: string[];
   // Toggle
   useProfile: boolean;
 };
@@ -114,6 +119,8 @@ export const DEFAULT_USER_PROFILE: UserProfile = {
   profileImage: null,
   customInstructions: '',
   memories: [],
+  personas: [],
+  industries: [],
   useProfile: true,
 };
 
@@ -478,6 +485,10 @@ function validateUserProfile(data: unknown): UserProfile {
     ? obj.memories.map((m: unknown) => validateMemory(m)).filter((m): m is Memory => m !== null)
     : [];
 
+  // Keep only taxonomy-valid values (canonical casing), matching backend validation.
+  const personas = normalisePersonas(obj.personas).values;
+  const industries = normaliseIndustries(obj.industries).values;
+
   return {
     name: typeof obj.name === 'string' ? obj.name : DEFAULT_USER_PROFILE.name,
     jobTitle: typeof obj.jobTitle === 'string' ? obj.jobTitle : DEFAULT_USER_PROFILE.jobTitle,
@@ -488,6 +499,8 @@ function validateUserProfile(data: unknown): UserProfile {
     profileImage,
     customInstructions,
     memories,
+    personas,
+    industries,
     useProfile: typeof obj.useProfile === 'boolean' ? obj.useProfile : DEFAULT_USER_PROFILE.useProfile,
   };
 }

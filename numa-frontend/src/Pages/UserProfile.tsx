@@ -65,6 +65,8 @@ import { invalidateProfileBlob } from '../utils/profileImageCache';
 import { RichTextEditor } from '../Components/Ops/Shared/RichTextEditor';
 import { CharCount } from '../Components/CharCount';
 import { MemoriesPanel } from '../Components/Memories/MemoriesPanel';
+import { TaxonomyMultiSelect } from '../Components/Inputs/TaxonomyMultiSelect';
+import { PERSONAS, INDUSTRIES } from '../utils/resourceTaxonomy';
 import { listAgents, getCachedAgents } from '../Services/AgentsService';
 import type { AgentSummary } from '../types/agents';
 
@@ -1272,7 +1274,37 @@ export default function UserProfilePage({
                 </Form.Group>
               </div>
 
-              {/* ── Section 2: Custom Instructions ── */}
+              {/* ── Section 2: Relevance (persona / industry) ── */}
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.profile.fields.relevance.sectionTitle')}</div>
+                <p className="profile-section__description">{t('userProfile.profile.fields.relevance.description')}</p>
+                <TaxonomyMultiSelect
+                  id="profile-personas"
+                  label={t('userProfile.profile.fields.relevance.persona.label')}
+                  helperText={t('userProfile.profile.fields.relevance.persona.help')}
+                  options={PERSONAS}
+                  selected={userProfile.personas}
+                  disabled={profileSaving}
+                  onChange={(values) => {
+                    setUserProfile((prev) => ({ ...prev, personas: values }));
+                    setProfileDirty(true);
+                  }}
+                />
+                <TaxonomyMultiSelect
+                  id="profile-industries"
+                  label={t('userProfile.profile.fields.relevance.industry.label')}
+                  helperText={t('userProfile.profile.fields.relevance.industry.help')}
+                  options={INDUSTRIES}
+                  selected={userProfile.industries}
+                  disabled={profileSaving}
+                  onChange={(values) => {
+                    setUserProfile((prev) => ({ ...prev, industries: values }));
+                    setProfileDirty(true);
+                  }}
+                />
+              </div>
+
+              {/* ── Section 3: Custom Instructions ── */}
               <div className="profile-section">
                 <div className="profile-section__title">
                   {t('userProfile.profile.fields.customInstructions.sectionTitle')}

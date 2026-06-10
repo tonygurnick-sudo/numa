@@ -855,6 +855,10 @@ export type BoardSummary = {
   order?: number;
   createdBy?: string;
   accessControl?: AccessControl;
+  // FEAT-127 audience tags — used to filter the board switcher by the user's
+  // persona/industry. Present on the board-list payload (passed through by dbToApi).
+  personas?: string[];
+  industries?: string[];
 };
 
 /** @deprecated Use BoardSummary instead. */
