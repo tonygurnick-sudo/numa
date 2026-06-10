@@ -18,23 +18,24 @@ charge_credits = max( value_credits , floor_credits )
 
 - `context` ∈ `{chat, agent}` — see §5.
 - `tier` ∈ `{low, medium, high, very_high}` — the Nova-classified complexity (see [03-live-metering.md](03-live-metering.md)).
-- Defaults: chat `2/4/8/18`, agent `2/3/5/12`.
+- Defaults: chat `1/2/5/8`, agent `0.5/1.5/3/5` (half-credit steps — fractional tiers genuinely bill).
 - An **unclassified** conversation has `value_credits = 0` (so the floor sets the charge).
 
 ### Floor credits (cost-recovery)
 
 ```
 floor_basis_usd = total_token_cost_usd × AGENTCORE_MULT          # tokens + AgentCore
-floor_credits   = ceil( floor_basis_usd × tier_margin / credit_usd )
+floor_credits   = ceil½( floor_basis_usd × tier_margin / credit_usd )    # rounds UP to the nearest 0.5 credit
 ```
 
-- `tier_margin = MARGINS_BY_TIER[tier]` (defaults `1.15/1.3/1.6/2.0`); falls back to the scalar `MARGIN_TARGET`
+- `tier_margin = MARGINS_BY_TIER[tier]` (defaults `1.1/1.25/1.4/1.6`); falls back to the scalar `MARGIN_TARGET`
   (2.0) when unclassified.
 - `AGENTCORE_MULT = 1.234` — the floor is enforced over **tokens + AgentCore**, not tokens alone. (1.234 is the
   Step-01 fleet-average uplift of token cost → token+AgentCore cost. It's the current best estimate; a future
   refinement replaces it with measured per-conversation AgentCore-seconds + Transcribe/heavy-Lambda lines.)
-- `ceil` rounds **up** so the floored charge never dips below the target margin.
-- It's a **single ceil on the conversation total**, NOT a sum of per-message ceils (per-message floors are kept
+- The floor rounds **up** (to the nearest 0.5 credit) so the floored charge never dips below the target margin;
+  half-credit granularity is what lets sub-1-credit value tiers (agent low = 0.5) actually bill.
+- It's a **single rounding on the conversation total**, NOT a sum of per-message ceils (per-message floors are kept
   on the MSG rows for detail only — summing them would over-charge).
 
 ### Why max(value, floor)
@@ -79,10 +80,10 @@ See [06-defaults-and-config.md](06-defaults-and-config.md) for where each is def
 | -------------------------- | --------------------------------------------------- | ------------------------------------------------- |
 | 1 credit (USD)             | `credit_usd` / `creditUsd`                          | 0.30                                              |
 | AgentCore uplift           | `AGENTCORE_MULT` / `agentcoreMult`                  | 1.234                                             |
-| Per-tier defence margins   | `MARGINS_BY_TIER` / `marginsByTier`                 | `{low:1.15, medium:1.3, high:1.6, very_high:2.0}` |
+| Per-tier defence margins   | `MARGINS_BY_TIER` / `marginsByTier`                 | `{low:1.1, medium:1.25, high:1.4, very_high:1.6}` |
 | Scalar fallback margin     | `MARGIN_TARGET` / `margin`                          | 2.0                                               |
 | Trivial-cost cap           | `TRIVIAL_CONSUMPTION_USD` / `trivialConsumptionUsd` | 0.01                                              |
-| Value tiers                | `VALUE_TIER_CREDITS` / `valueTiers`                 | chat `2/4/8/18`, agent `2/3/5/12`                 |
+| Value tiers                | `VALUE_TIER_CREDITS` / `valueTiers`                 | chat `1/2/5/8`, agent `0.5/1.5/3/5`               |
 | Default monthly allocation | `DEFAULT_MONTHLY_ALLOCATION` / `monthlyAllocations` | 2000 (×12)                                        |
 
 All are per-client overridable via the portal; a client with no override uses these code defaults.

@@ -32,12 +32,12 @@ lib/credit-pricing/
 | `MARGIN_TARGET`              | `2.0`                                             | Scalar fallback margin for unclassified conversations.                                                     |
 | `DEFAULT_MONTHLY_ALLOCATION` | `2000`                                            | New-client starter allocation per month; `credit-debit` falls back to it when no allocation is configured. |
 | `AGENTCORE_MULT`             | `1.234`                                           | Floor basis = token cost × this (tokens + AgentCore).                                                      |
-| `MARGINS_BY_TIER`            | `{low:1.15, medium:1.3, high:1.6, very_high:2.0}` | Per-tier defence (min-enforced) margins.                                                                   |
+| `MARGINS_BY_TIER`            | `{low:1.1, medium:1.25, high:1.4, very_high:1.6}` | Per-tier defence (min-enforced) margins.                                                                   |
 | `TRIVIAL_CONSUMPTION_USD`    | `0.01`                                            | Below this, value tier is capped at `low`.                                                                 |
 
 **Functions:**
 
-- `floor_credits(consumption_usd, *, margin=MARGIN_TARGET, credit_usd=CREDIT_USD) -> int` — `ceil(consumption × margin / credit_usd)`; 0 if consumption ≤ 0. The cost-recovery floor.
+- `floor_credits(consumption_usd, *, margin=MARGIN_TARGET, credit_usd=CREDIT_USD) -> float` — `consumption × margin / credit_usd` rounded UP to the nearest 0.5 credit; 0 if consumption ≤ 0. The cost-recovery floor (half-credit granularity so fractional value tiers genuinely bill).
 - `credits_to_usd(credits, *, credit_usd=CREDIT_USD) -> float` — customer-facing USD value of a credit count.
 - `margin_actual(credits_charged, consumption_usd, *, credit_usd=CREDIT_USD) -> float | None` — realised
   margin `(credits × credit_usd) / consumption`; `None` if no cost. Monitor per row: < 1.0 ⇒ wiring bug.
@@ -83,7 +83,7 @@ over 200K.
 
 **Value tiers:**
 
-- `VALUE_TIER_CREDITS = {chat: {low:2, medium:4, high:8, very_high:18}, agent: {low:2, medium:3, high:5, very_high:12}}`.
+- `VALUE_TIER_CREDITS = {chat: {low:1, medium:2, high:5, very_high:8}, agent: {low:0.5, medium:1.5, high:3, very_high:5}}`.
 - `tier_to_credits(tier, context="chat", *, overrides=None) -> int` — looks up the credits; unknown tier → that
   context's `medium`; unknown context → the chat table. `overrides` lets a client's CONFIG override the table.
 - `VALID_TIERS = ("low","medium","high","very_high")`, `TIER_RANK = {low:1,…,very_high:4}`.

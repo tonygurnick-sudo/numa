@@ -159,7 +159,11 @@ artifacts:
 
 A 48-client / 12,599-priceable-conversation fleet backfill drove the pricing decision (headline metric =
 margin-vs-consumption, target band [1.1, 2.0]×). The settled scheme: **$0.30/credit** (≈ NZD $0.50), chat
-**2/4/8/18**, agent **2/3/5/12**, defence margins **1.15/1.3/1.6/2.0**, **2000/mo** default allocation. Findings
+**2/4/8/18**, agent **2/3/5/12**, defence margins **1.15/1.3/1.6/2.0**, **2000/mo** default allocation.
+**(Superseded 2026-06-10:** after early "too expensive" customer feedback, defaults were lowered to chat
+**1/2/5/8**, agent **0.5/1.5/3/5**, margins **1.1/1.25/1.4/1.6**, with the floor moving to half-credit
+granularity so the fractional agent tiers genuinely bill — Asa approved. Mean fleet margin on chat drops from
+~1.68× to ~1.44×. The analysis below describes the original scheme.) Findings
 that shaped it: lowering `credit_usd` is the strongest lever to pull structurally-cheap chat-light clients toward
 band; the chat 2/4 bump trades ~9pts of band-coverage for more value-led (efficiency-protected) pricing and
 +revenue; the agent value tier is nearly a no-op at $0.30 (most scheduled runs are floor-bound), but raising it
