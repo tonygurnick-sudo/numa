@@ -98,6 +98,13 @@ export interface WorkspaceChatAgentConstructProps {
   creditDebitLambdaArn?: string;
   /** Whether live credit metering is enabled (agent emits usage events). Default OFF. */
   creditMeteringEnabled?: boolean;
+  /**
+   * Centralized numa-email-sender Lambda ARN (deployer account). V2 app
+   * pipeline orchestrators send run-completion emails through it (FEAT-174).
+   * The sender validates callers via STS proof — the client side only needs
+   * invoke permission and the env var.
+   */
+  emailSenderLambdaArn?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -409,6 +416,18 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                   effect: 'Allow',
                   actions: ['lambda:InvokeFunction'],
                   resources: [props.workspaceToolsLambdaArn],
+                },
+              ]
+            : []),
+          // Centralized email sender invoke permission (deployer account) —
+          // V2 app run-completion emails from pipeline orchestrators (FEAT-174)
+          ...(props.emailSenderLambdaArn
+            ? [
+                {
+                  sid: 'LambdaInvokeEmailSender',
+                  effect: 'Allow',
+                  actions: ['lambda:InvokeFunction'],
+                  resources: [props.emailSenderLambdaArn],
                 },
               ]
             : []),
@@ -800,6 +819,10 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // Frontend base URL for constructing links (e.g. ticket URLs)
         ...(props.frontendUrl && {
           NUMA_FRONTEND_URL: props.frontendUrl,
+        }),
+        // Centralized email sender for V2 app run-completion emails (FEAT-174)
+        ...(props.emailSenderLambdaArn && {
+          EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
         }),
       },
     });

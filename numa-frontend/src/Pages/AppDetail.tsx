@@ -11,6 +11,7 @@ import { useFavorites } from '../hooks/useFavorites';
 import AppWizard from '../Components/Apps/AppWizard';
 import { formatCategory } from '../utils/textUtils';
 import { PolicyBuilderDetail } from '../Components/Policy/PolicyBuilderDetail';
+import { PolicyDesignerDetail } from '../Components/Policy/PolicyDesignerDetail';
 import { PolicyReviewerDetail } from '../Components/Policy/PolicyReviewerDetail';
 import { StructuredDataQueryDetail } from '../Components/StructuredDataQuery/StructuredDataQueryDetail';
 import { manifestService } from '../Services/manifestService';
@@ -79,9 +80,9 @@ const AppDetail = () => {
         </div>
       )}
       {/* Job History Sidebar - hide for policy custom pages */}
-      {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && (
-        <JobHistorySidebar hideToggle />
-      )}
+      {numaAppData?.id !== 'policy-builder' &&
+        numaAppData?.id !== 'policy-reviewer' &&
+        numaAppData?.id !== 'policy-designer' && <JobHistorySidebar hideToggle />}
       <JobIdSidebar />
       <PageHeader
         title={
@@ -94,7 +95,9 @@ const AppDetail = () => {
         }
         subtitle={numaAppData?.appDescription}
         actions={
-          numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' ? (
+          numaAppData?.id !== 'policy-builder' &&
+          numaAppData?.id !== 'policy-reviewer' &&
+          numaAppData?.id !== 'policy-designer' ? (
             <Button variant="secondary" onClick={() => setJobHistorySidebarOpen(true)}>
               <i className="bi bi-clock-history me-1"></i>
               {t('appDetail.jobHistory')}
@@ -106,17 +109,19 @@ const AppDetail = () => {
       <Container fluid>
         <Row className="mb-3">
           <Col lg={8}>
-            {numaAppData?.id !== 'policy-builder' && numaAppData?.id !== 'policy-reviewer' && (
-              <div className="app-job-naming-toggle">
-                <Form.Check
-                  type="switch"
-                  id="layout-job-naming-toggle"
-                  label={t('appDetail.jobNaming')}
-                  checked={isJobNamingEnabled}
-                  onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
-                />
-              </div>
-            )}
+            {numaAppData?.id !== 'policy-builder' &&
+              numaAppData?.id !== 'policy-reviewer' &&
+              numaAppData?.id !== 'policy-designer' && (
+                <div className="app-job-naming-toggle">
+                  <Form.Check
+                    type="switch"
+                    id="layout-job-naming-toggle"
+                    label={t('appDetail.jobNaming')}
+                    checked={isJobNamingEnabled}
+                    onChange={(event) => setIsJobNamingEnabled(event.target.checked)}
+                  />
+                </div>
+              )}
           </Col>
           <Col lg={4} className="text-end">
             {numaAppData?.category && (
@@ -149,6 +154,8 @@ const AppDetail = () => {
 
       {loading ? (
         <div>{t('appDetail.loading')}</div>
+      ) : numaAppData?.id === 'policy-designer' ? (
+        <PolicyDesignerDetail />
       ) : numaAppData?.type === 'policy-builder' ? (
         <PolicyBuilderDetail id={numaAppData.id} />
       ) : numaAppData?.id === 'policy-reviewer' ? (

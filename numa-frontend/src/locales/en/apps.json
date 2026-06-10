@@ -439,6 +439,24 @@
       }
     }
   },
+  "policyDesigner": {
+    "empty": "No policies found. Create a new policy to get started.",
+    "status": {
+      "success": "SUCCESS",
+      "failed": "Failed",
+      "processing": "Processing"
+    },
+    "actions": {
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "md": "Markdown"
+    },
+    "errors": {
+      "missingInputs": "Please provide both a school name and school context.",
+      "startFailed": "Failed to start policy generation. Please try again.",
+      "downloadFailed": "Failed to download file"
+    }
+  },
   "policyReviewer": {
     "status": {
       "success": "SUCCESS",

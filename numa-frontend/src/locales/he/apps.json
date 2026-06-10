@@ -439,6 +439,24 @@
       }
     }
   },
+  "policyDesigner": {
+    "empty": "לא נמצאו מדיניות. צרו מדיניות חדשה כדי להתחיל.",
+    "status": {
+      "success": "הצלחה",
+      "failed": "נכשל",
+      "processing": "בעיבוד"
+    },
+    "actions": {
+      "pdf": "PDF",
+      "docx": "DOCX",
+      "md": "Markdown"
+    },
+    "errors": {
+      "missingInputs": "נא לספק שם בית ספר והקשר בית ספרי.",
+      "startFailed": "יצירת המדיניות נכשלה. נסו שוב.",
+      "downloadFailed": "הורדת הקובץ נכשלה"
+    }
+  },
   "policyReviewer": {
     "status": {
       "success": "סוככהסס",
