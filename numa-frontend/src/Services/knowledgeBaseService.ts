@@ -100,6 +100,8 @@ export interface KBDataSource {
   lastCrawled?: string;
   lastSynced?: string;
   lastUpdated?: string;
+  crawlDepth?: number;
+  limitToPath?: boolean;
 }
 
 export interface KBState {

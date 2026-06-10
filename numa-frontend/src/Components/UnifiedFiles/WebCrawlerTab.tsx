@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Form, Spinner, Badge, Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
-import { KBStateProvider, useKBState } from '../../Providers/KBStateProvider';
 import { useWebCrawler, parseUrlsFromText } from '../../utils/webCrawler';
 import { SYSTEM_KB_IDS } from '../../constants/knowledgeBase';
+import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 import type { KBDataSource } from '../../Services/knowledgeBaseService';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -12,6 +12,16 @@ import type { KBDataSource } from '../../Services/knowledgeBaseService';
 interface UrlEntry {
   url: string;
   depth: number;
+}
+
+interface CrawlFolder {
+  kbId: string;
+  label: string;
+}
+
+interface CrawlRow extends KBDataSource {
+  kbId: string;
+  folderLabel: string;
 }
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
@@ -105,6 +115,23 @@ const styles = {
     fontSize: '0.78rem',
     color: '#9ca3af',
   } as React.CSSProperties,
+  folderBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 4,
+    padding: '2px 8px',
+    borderRadius: 100,
+    fontSize: '0.7rem',
+    fontWeight: 600,
+    backgroundColor: '#f5f3ff',
+    color: '#6d28d9',
+    border: '1px solid #ddd6fe',
+    flexShrink: 0,
+    maxWidth: 160,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  } as React.CSSProperties,
   statusBadge: (isActive: boolean): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
@@ -153,6 +180,16 @@ export function WebCrawlerTab(): React.JSX.Element {
     ];
   }, [availableKBs, t]);
 
+  // The crawled-URLs list spans every folder the user can see (any role),
+  // not just the destination selected for new crawls.
+  const crawlFolders = useMemo<CrawlFolder[]>(() => {
+    const userKBs = availableKBs.filter((kb) => !SYSTEM_KB_IDS.has(kb.kb_id));
+    return [
+      { kbId: 'company', label: t('webCrawler.companyFiles') },
+      ...userKBs.map((kb) => ({ kbId: kb.kb_id, label: kb.kb_name })),
+    ];
+  }, [availableKBs, t]);
+
   return (
     <div
       style={{
@@ -185,19 +222,16 @@ export function WebCrawlerTab(): React.JSX.Element {
         </div>
       </div>
 
-      <KBStateProvider kbId={selectedKbId} kbType={selectedKbId === 'company' ? 'company' : 'user'} view="data-sources">
-        <WebCrawlerContent kbId={selectedKbId} />
-      </KBStateProvider>
+      <WebCrawlerContent kbId={selectedKbId} folders={crawlFolders} />
     </div>
   );
 }
 
-// ─── Content (inside KBStateProvider) ───────────────────────────────────────
+// ─── Content ────────────────────────────────────────────────────────────────
 
-function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
+function WebCrawlerContent({ kbId, folders }: { kbId: string; folders: CrawlFolder[] }): React.JSX.Element {
   const { t } = useTranslation('knowledgeBase');
   const { i18n } = useTranslation();
-  const { kbState, isLoading, error, invalidateCache } = useKBState();
   const { startWebCrawler } = useWebCrawler();
 
   // ── Crawl form state ──────────────────────────────────────────────────────
@@ -210,10 +244,45 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
   const [crawlError, setCrawlError] = useState<string | null>(null);
   const [recrawlingId, setRecrawlingId] = useState<string | null>(null);
 
-  const dataSources = useMemo(
-    (): KBDataSource[] => (kbState?.dataSources || []).filter((s) => s.isWebCrawler),
-    [kbState?.dataSources]
-  );
+  // ── Crawled-URLs list (all folders) ───────────────────────────────────────
+  const [rows, setRows] = useState<CrawlRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const loadCrawls = useCallback(async () => {
+    setIsLoading(true);
+    setListError(null);
+
+    const results = await Promise.allSettled(
+      folders.map(async (folder) => {
+        const state = await knowledgeBaseService.getKBState(folder.kbId, { view: 'data-sources' });
+        return (state.dataSources || [])
+          .filter((source) => source.isWebCrawler)
+          .map((source): CrawlRow => ({ ...source, kbId: folder.kbId, folderLabel: folder.label }));
+      })
+    );
+
+    const collected: CrawlRow[] = [];
+    let failedCount = 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        collected.push(...result.value);
+      } else {
+        failedCount += 1;
+      }
+    }
+    collected.sort((a, b) => (b.lastCrawled || '').localeCompare(a.lastCrawled || ''));
+
+    setRows(collected);
+    if (failedCount > 0) {
+      setListError(t('webCrawler.partialLoadError', { count: failedCount }));
+    }
+    setIsLoading(false);
+  }, [folders, t]);
+
+  useEffect(() => {
+    void loadCrawls();
+  }, [loadCrawls]);
 
   // ── URL management ────────────────────────────────────────────────────────
   const handleAddUrl = useCallback(() => {
@@ -268,7 +337,7 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
       if (result.success) {
         setCrawlSuccess(t('webCrawlerComponent.results.successHint'));
         setUrlEntries([]);
-        setTimeout(() => invalidateCache(), 2000);
+        setTimeout(() => void loadCrawls(), 2000);
       } else {
         setCrawlError(result.error || t('webCrawlerComponent.errors.startFailed'));
       }
@@ -277,23 +346,27 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
     } finally {
       setIsCrawling(false);
     }
-  }, [urlEntries, startWebCrawler, kbId, limitToPath, t, invalidateCache]);
+  }, [urlEntries, startWebCrawler, kbId, limitToPath, t, loadCrawls]);
 
   // ── Re-crawl ─────────────────────────────────────────────────────────────
   const handleRecrawl = useCallback(
-    async (source: KBDataSource) => {
+    async (source: CrawlRow) => {
       const url = source.url || source.name || '';
       setRecrawlingId(source.dataSourceId);
       try {
-        await startWebCrawler([url], { urlDepthMap: { [url]: 2 }, kb_id: kbId, limitToPath: true });
-        setTimeout(() => invalidateCache(), 2000);
+        await startWebCrawler([url], {
+          urlDepthMap: { [url]: source.crawlDepth ?? 2 },
+          kb_id: source.kbId,
+          limitToPath: source.limitToPath ?? true,
+        });
+        setTimeout(() => void loadCrawls(), 2000);
       } catch (err) {
         console.error('Re-crawl failed', err);
       } finally {
         setRecrawlingId(null);
       }
     },
-    [startWebCrawler, kbId, invalidateCache]
+    [startWebCrawler, loadCrawls]
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -473,7 +546,7 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
           {t('webCrawler.crawledTitle')}
         </div>
 
-        {error && (
+        {listError && (
           <div
             style={{
               padding: '10px 14px',
@@ -486,7 +559,7 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
             }}
           >
             <i className="bi bi-exclamation-triangle me-2" />
-            {error}
+            {listError}
           </div>
         )}
 
@@ -495,23 +568,23 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
             <Spinner animation="border" size="sm" className="mb-2" />
             <span style={{ fontSize: '0.82rem' }}>{t('webCrawler.loadingList')}</span>
           </div>
-        ) : dataSources.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div style={styles.emptyState}>
             <div style={styles.emptyIcon}>
               <i className="bi bi-link-45deg" />
             </div>
-            <div style={{ fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>{t('webCrawler.emptyTitle')}</div>
+            <div style={{ fontWeight: 600, color: '#6b7280', marginBottom: 4 }}>{t('webCrawler.emptyTitleAll')}</div>
             <div style={{ fontSize: '0.82rem' }}>{t('webCrawler.emptyHint')}</div>
           </div>
         ) : (
           <div>
-            {dataSources.map((source, index) => {
+            {rows.map((source, index) => {
               const displayUrl = source.url || source.name || '';
               const isRecrawling = recrawlingId === source.dataSourceId;
               const isActive = source.status === 'ACTIVE';
 
               return (
-                <div key={source.dataSourceId || index} style={styles.crawledRow}>
+                <div key={`${source.kbId}-${source.dataSourceId || index}`} style={styles.crawledRow}>
                   <i className="bi bi-globe2" style={{ color: '#8e50a7', flexShrink: 0 }} />
                   <a
                     href={displayUrl}
@@ -522,6 +595,10 @@ function WebCrawlerContent({ kbId }: { kbId: string }): React.JSX.Element {
                   >
                     {displayUrl}
                   </a>
+                  <span style={styles.folderBadge} title={source.folderLabel}>
+                    <i className="bi bi-folder2" style={{ fontSize: '0.7rem' }} />
+                    {source.folderLabel}
+                  </span>
                   {source.pageCount != null && source.pageCount > 0 && (
                     <span style={styles.crawledMeta}>
                       {source.pageCount} {source.pageCount === 1 ? 'page' : 'pages'}
