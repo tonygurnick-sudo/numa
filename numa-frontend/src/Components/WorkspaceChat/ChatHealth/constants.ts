@@ -26,17 +26,20 @@ export const MAX_OUTPUT_TOKENS_RESERVE = 32_000;
 // that usable budget, so the pulse reliably fires before summarisation happens.
 export const CONTEXT_PRE_COMPACT_PULSE = 0.95;
 
-// Composite signals for the chat-health alarm. ANY one of these crosses the
-// threshold -> band activates. Compaction count is weighted heavily because
-// each one is irreversible information loss.
-export const CHAT_HEALTH_AMBER = {
-  userMessages: 20,
-  compactions: 1,
-  toolTurns: 30,
-} as const;
-
+// Composite wear signals for chat health. Each signal maps to a 0..1 wear
+// ratio against the red values below; the worst signal drives the bar, the
+// alarm, and the banner (single scale — there is no separate amber set, the
+// orange line is a fraction of red).
 export const CHAT_HEALTH_RED = {
   userMessages: 40,
-  compactions: 2,
-  toolTurns: 60,
+  toolTurns: 120,
 } as const;
+
+// Wear ratio at which health flips green -> orange ("chat getting long").
+// Red is always 1.0.
+export const CHAT_HEALTH_ORANGE_RATIO = 0.75;
+
+// Compactions are irreversible information loss, so they wear non-linearly:
+// the first compaction jumps wear straight to the orange line (a compacted
+// chat is never "healthy" again), the second pins it at red.
+export const COMPACTION_WEAR_FIRST = 0.75;

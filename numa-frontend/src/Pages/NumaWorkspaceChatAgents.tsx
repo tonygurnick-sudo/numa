@@ -36,6 +36,7 @@ import { useFilePreviewProcessor } from '../hooks/useFilePreviewProcessor';
 import { FilePreviewPanel } from '../Components/FilePreviewPanel';
 import { autoNameConversation } from '../utils/autoChatTitle';
 import { useChatInactivity } from '../hooks/useChatInactivity';
+import { getChatDraft, setChatDraft, subscribeChatDraft, useChatDraftValue } from '../hooks/useChatDraft';
 import { useWorkspaceChatStreaming } from '../hooks/useWorkspaceChatStreaming';
 import { markProcessingStart, notifyCompletion } from '../hooks/useBrowserNotification';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -122,6 +123,26 @@ type ConversationChatConfig = {
   enabledNativeConnectorIds?: string[];
 };
 
+// Hoisted so the prop is referentially stable (BUG-194: an inline `{{}}` defeated
+// React.memo on ChatMessages on every keystroke)
+const EMPTY_LOADING_INDICATOR_STYLE = {};
+
+// Draft-connected input components (BUG-194). The input draft lives in an
+// external store (useChatDraft.ts) so only these small wrappers re-render on
+// keystrokes instead of the entire page component. All other props pass
+// through from the page unchanged.
+const NewChatWithDraft = (props: Omit<React.ComponentProps<typeof NewChat>, 'inputMessage' | 'setInputMessage'>) => {
+  const draft = useChatDraftValue();
+  return <NewChat {...props} inputMessage={draft} setInputMessage={setChatDraft} />;
+};
+
+const ChatInputWithDraft = (
+  props: Omit<React.ComponentProps<typeof ChatInput>, 'inputMessage' | 'setInputMessage'>
+) => {
+  const draft = useChatDraftValue();
+  return <ChatInput {...props} inputMessage={draft} setInputMessage={setChatDraft} />;
+};
+
 const resolveErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
     return error.message;
@@ -155,7 +176,9 @@ const NumaWorkspaceChatAgents = () => {
       ),
     [messages]
   );
-  const [inputMessage, setInputMessage] = useState(() => sessionStorage.getItem('numa-chat-draft') || '');
+  // Input draft lives in an external store (see useChatDraft.ts) so keystrokes
+  // don't re-render this whole page component (BUG-194). Read imperatively via
+  // getChatDraft(); the input components subscribe through ChatDraftConsumer.
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [stagedItems, setStagedItems] = useState<StagedItem[]>([]);
@@ -286,30 +309,9 @@ const NumaWorkspaceChatAgents = () => {
   const conversationChatConfigSaveTimeoutRef = useRef<number | null>(null);
   const isApplyingConversationChatConfigRef = useRef(false);
   // Note: Workspace streaming refs moved to useWorkspaceStreaming hook
-  const inputDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Persist the chat input draft to sessionStorage so it survives component remounts
-  // (e.g. from background token re-validation). Debounced to avoid excessive writes.
-  useEffect(() => {
-    if (inputDraftTimerRef.current) clearTimeout(inputDraftTimerRef.current);
-    inputDraftTimerRef.current = setTimeout(() => {
-      if (inputMessage) {
-        sessionStorage.setItem('numa-chat-draft', inputMessage);
-      } else {
-        sessionStorage.removeItem('numa-chat-draft');
-      }
-    }, 300);
-    return () => {
-      if (inputDraftTimerRef.current) clearTimeout(inputDraftTimerRef.current);
-    };
-  }, [inputMessage]);
-
-  // Dismiss suggestion pills when user starts typing beyond a few characters
-  useEffect(() => {
-    if (inputMessage.length > 3) {
-      chatSuggestions.dismiss();
-    }
-  }, [inputMessage]);
+  // Draft persistence to sessionStorage now lives in the chat draft store
+  // (useChatDraft.ts); typing side effects (suggestion dismiss, inactivity
+  // touch) are handled via subscribeChatDraft below the inactivity hook.
 
   // Clear first-message banner once the assistant starts streaming any content (text, thinking, tool calls, etc.)
   // Also clear when transcribing -- the workspace is ready, transcription has its own indicator.
@@ -481,6 +483,27 @@ const NumaWorkspaceChatAgents = () => {
       }
     },
     [openFolderPreview, isMobile, settingsPanel]
+  );
+
+  // Stable handler for opening inline documents from the message list (BUG-194:
+  // an inline arrow here defeated React.memo on ChatMessages on every keystroke)
+  const handleOpenInlineDocumentFromChat = useCallback(
+    (title: string, content: string) => {
+      settingsPanel.closePanel();
+      setInlineDocument({ title, content });
+      // Store inline content and open via FilePreviewPanel
+      setInlinePreviewContent(content);
+      openFilePreview({
+        filename: title,
+        fullPath: '',
+        relativePath: title,
+        extension: 'md',
+      });
+      if (isMobile) {
+        setShowFilePreviewModal(true);
+      }
+    },
+    [settingsPanel, setInlineDocument, openFilePreview, isMobile]
   );
 
   const connectedSet = useMemo(
@@ -1723,7 +1746,7 @@ const NumaWorkspaceChatAgents = () => {
     // Clear all UI states
     setMessages([]);
     setUploadedFiles([]);
-    setInputMessage('');
+    setChatDraft('');
     closeDocument();
     closeFilePreview();
     settingsPanel.clearFiles();
@@ -1782,14 +1805,6 @@ const NumaWorkspaceChatAgents = () => {
     storageKeySuffix: '-v2', // Isolate inactivity timer from V1 chat
     hasUserStartedNewChat,
   });
-
-  // Typing is user activity — prevent the inactivity handler from wiping the input
-  // while the user is composing a message.
-  useEffect(() => {
-    if (inputMessage) {
-      touchInactivityTimer();
-    }
-  }, [inputMessage, touchInactivityTimer]);
 
   // Sort agents by favorites first, then most recently used, then updatedAt
   const sortedPersonalAgents = useMemo(() => {
@@ -1950,6 +1965,24 @@ const NumaWorkspaceChatAgents = () => {
     language: userChatSettings.language,
     debugMode: showCostTotal,
   });
+
+  // Typing side effects, subscribed outside the render cycle so keystrokes don't
+  // re-render the page (BUG-194): dismiss suggestion pills once the user types
+  // past a few characters, and treat typing as user activity so the inactivity
+  // handler doesn't wipe the input while the user is composing a message.
+  useEffect(
+    () =>
+      subscribeChatDraft(() => {
+        const draft = getChatDraft();
+        if (draft.length > 3) {
+          chatSuggestions.dismiss();
+        }
+        if (draft) {
+          touchInactivityTimer();
+        }
+      }),
+    [chatSuggestions, touchInactivityTimer]
+  );
 
   // Combined stream-complete handler: auto-naming + suggestion arming
   const handleStreamComplete = useCallback(
@@ -2420,7 +2453,7 @@ const NumaWorkspaceChatAgents = () => {
         pendingVoiceRecordingsRef.current = [uploadPath];
 
         // Auto-submit the voice message (empty prompt -- transcription will fill it)
-        setInputMessage('');
+        setChatDraft('');
         // Trigger submit by dispatching a form submit on the chat form
         const form = document.querySelector('.chat-input-container form') as HTMLFormElement | null;
         if (form) {
@@ -2448,8 +2481,8 @@ const NumaWorkspaceChatAgents = () => {
       return;
     }
 
-    // Use override message if provided, otherwise use state
-    const messageToSend = overrideMessage ?? inputMessage;
+    // Use override message if provided, otherwise the live input draft
+    const messageToSend = overrideMessage ?? getChatDraft();
 
     // If uploads are still in flight (active uploads OR pre-state-update intents),
     // queue this submission. The watcher useEffect will fire it once uploads + staging
@@ -2464,7 +2497,7 @@ const NumaWorkspaceChatAgents = () => {
       }
       pendingSubmitRef.current = messageToSend;
       setPendingSubmitDisplay(messageToSend);
-      setInputMessage('');
+      setChatDraft('');
       if (inputRef.current) {
         inputRef.current.style.height = '40px';
       }
@@ -2496,7 +2529,7 @@ const NumaWorkspaceChatAgents = () => {
     }
 
     // Prepare UI
-    setInputMessage('');
+    setChatDraft('');
     if (inputRef.current) {
       inputRef.current.style.height = '40px';
     }
@@ -2688,6 +2721,13 @@ const NumaWorkspaceChatAgents = () => {
     handleSubmitRef.current = handleSubmit;
   });
 
+  // Stable prompt-send handler for the message list (BUG-194: an inline arrow here
+  // defeated React.memo on ChatMessages on every keystroke). Reads handleSubmit via
+  // ref so it never needs to be recreated.
+  const handleSendPromptFromChat = useCallback((text: string) => {
+    handleSubmitRef.current({ preventDefault: () => {} } as React.FormEvent, text);
+  }, []);
+
   // Auto-fire any queued submit once uploads + staging finish.
   useEffect(() => {
     const activeUploads = uploadingFiles.filter((f) => f.status === 'uploading').length + pendingUploadIntents;
@@ -2705,7 +2745,7 @@ const NumaWorkspaceChatAgents = () => {
     (action: QuickActionConfig) => {
       if (action.behavior === 'prefill') {
         // Set the prompt text and focus the input so user can complete it
-        setInputMessage(action.prompt);
+        setChatDraft(action.prompt);
         setTimeout(() => {
           if (inputRef.current) {
             inputRef.current.focus();
@@ -3352,9 +3392,7 @@ const NumaWorkspaceChatAgents = () => {
                           </div>
                         </div>
                       ) : shouldShowNewChatView ? (
-                        <NewChat
-                          inputMessage={inputMessage}
-                          setInputMessage={setInputMessage}
+                        <NewChatWithDraft
                           handleSubmit={handleSubmit}
                           setShowUploadModal={() => handleUploadWithConversationMint()}
                           buttonStatus={buttonStatus}
@@ -3439,7 +3477,7 @@ const NumaWorkspaceChatAgents = () => {
                             const queued = pendingSubmitRef.current ?? '';
                             pendingSubmitRef.current = null;
                             setPendingSubmitDisplay(null);
-                            if (queued && !inputMessage) setInputMessage(queued);
+                            if (queued && !getChatDraft()) setChatDraft(queued);
                           }}
                           voiceInputEnabled={voiceInputEnabled}
                           voiceRecordingState={voiceRecordingState}
@@ -3471,22 +3509,8 @@ const NumaWorkspaceChatAgents = () => {
                           <ChatMessages
                             messages={messages}
                             messageEndRef={messageEndRef}
-                            loadingIndicatorStyle={{}}
-                            onOpenDocument={(title, content) => {
-                              settingsPanel.closePanel();
-                              setInlineDocument({ title, content });
-                              // Store inline content and open via FilePreviewPanel
-                              setInlinePreviewContent(content);
-                              openFilePreview({
-                                filename: title,
-                                fullPath: '',
-                                relativePath: title,
-                                extension: 'md',
-                              });
-                              if (isMobile) {
-                                setShowFilePreviewModal(true);
-                              }
-                            }}
+                            loadingIndicatorStyle={EMPTY_LOADING_INDICATOR_STYLE}
+                            onOpenDocument={handleOpenInlineDocumentFromChat}
                             isConversationLoading={false}
                             currentAgent={currentAgent}
                             conversationId={conversationId}
@@ -3498,10 +3522,7 @@ const NumaWorkspaceChatAgents = () => {
                             region={REGION || undefined}
                             onOpenFilePreview={handleOpenFilePreviewForChat}
                             onOpenFolderPreview={handleOpenFolderPreviewForChat}
-                            onSendPrompt={(text) => {
-                              const syntheticEvent = { preventDefault: () => {} };
-                              handleSubmit(syntheticEvent, text);
-                            }}
+                            onSendPrompt={handleSendPromptFromChat}
                           />
                         </>
                       )}
@@ -3525,7 +3546,7 @@ const NumaWorkspaceChatAgents = () => {
                               const queued = pendingSubmitRef.current ?? '';
                               pendingSubmitRef.current = null;
                               setPendingSubmitDisplay(null);
-                              if (queued && !inputMessage) setInputMessage(queued);
+                              if (queued && !getChatDraft()) setChatDraft(queued);
                             }}
                           />
                         )}
@@ -3576,9 +3597,7 @@ const NumaWorkspaceChatAgents = () => {
                               : null
                           }
                         />
-                        <ChatInput
-                          inputMessage={inputMessage}
-                          setInputMessage={setInputMessage}
+                        <ChatInputWithDraft
                           handleSubmit={handleSubmit}
                           setShowUploadModal={() => handleUploadWithConversationMint()}
                           buttonStatus={buttonStatus}

@@ -1807,9 +1807,111 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
 
   const helpers = createWorkspaceChatMessageHelpers(setMessages, setButtonStatus);
 
+  // BUG-194: coalesce per-token text deltas into at most one setMessages per
+  // animation frame. A long streamed answer delivers hundreds of deltas, and
+  // rendering each one re-rendered the whole message list per token. Buffered
+  // text is flushed synchronously before any non-text-delta event is processed
+  // so segment ordering (text -> tool -> text...) is preserved exactly.
+  let pendingTextDelta = '';
+  let pendingFlushHandle: number | null = null;
+
+  const applyTextDelta = (textDelta: string) => {
+    setMessages((prev) => {
+      const updated = [...prev];
+      let lastMsg = updated[updated.length - 1];
+
+      if (!lastMsg || lastMsg.role !== 'assistant') {
+        lastMsg = { role: 'assistant', content: '', segments: [], status: null };
+        updated.push(lastMsg);
+      } else {
+        lastMsg = { ...lastMsg };
+        updated[updated.length - 1] = lastMsg;
+      }
+
+      // Clear processing/thinking/transcribing status when text starts arriving
+      if (
+        lastMsg.status === 'thinking' ||
+        lastMsg.status === 'processing' ||
+        lastMsg.status === 'transcribing' ||
+        lastMsg.status === 'initializing'
+      ) {
+        lastMsg.status = 'streaming';
+      }
+
+      const segments = [...(lastMsg.segments || [])];
+
+      // Remove inline_thinking spinner when text starts (thinking is done)
+      const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
+      if (inlineThinkingIdx >= 0) {
+        segments.splice(inlineThinkingIdx, 1);
+      }
+
+      // Mark any pending tool_cards as complete when text starts streaming.
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        if (seg.kind === 'tool_card' && seg.isLoading) {
+          segments[i] = { ...seg, isLoading: false };
+        }
+      }
+
+      const lastSeg = segments[segments.length - 1];
+
+      if (lastSeg?.kind === 'text' && !lastSeg.finalized) {
+        segments[segments.length - 1] = { ...lastSeg, text: (lastSeg.text || '') + textDelta };
+      } else {
+        segments.push({ kind: 'text', text: textDelta, finalized: false });
+      }
+
+      lastMsg.segments = segments;
+      lastMsg.content = segments
+        .filter((s): s is { kind: 'text'; text: string } => s.kind === 'text')
+        .map((s) => s.text)
+        .join('');
+
+      return updated;
+    });
+  };
+
+  const flushPendingText = () => {
+    if (pendingFlushHandle !== null) {
+      cancelAnimationFrame(pendingFlushHandle);
+      pendingFlushHandle = null;
+    }
+    // Stop clicked while a flush was pending -- discard, consistent with the
+    // handler suppressing all further rendering once stopping.
+    if (isStoppingRef?.current) {
+      pendingTextDelta = '';
+      return;
+    }
+    if (!pendingTextDelta) return;
+    const textDelta = pendingTextDelta;
+    pendingTextDelta = '';
+    applyTextDelta(textDelta);
+  };
+
+  const queueTextDelta = (textDelta: string) => {
+    pendingTextDelta += textDelta;
+    if (pendingFlushHandle === null) {
+      pendingFlushHandle = requestAnimationFrame(() => {
+        pendingFlushHandle = null;
+        flushPendingText();
+      });
+    }
+  };
+
   return (event: SDKEvent) => {
     // Stop clicked -- suppress all further rendering while backend winds down
     if (isStoppingRef?.current) return;
+
+    // Any event that is NOT a text delta must see fully applied text first,
+    // so flush the coalescing buffer before processing it (BUG-194).
+    const isTextDeltaEvent =
+      event.type === 'StreamEvent' &&
+      (event as SDKStreamEvent).event?.type === 'content_block_delta' &&
+      (event as SDKStreamEvent).event?.delta?.type === 'text_delta';
+    if (!isTextDeltaEvent) {
+      flushPendingText();
+    }
 
     // === Handle StreamEvent for real-time streaming ===
     if (event.type === 'StreamEvent') {
@@ -1831,61 +1933,7 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
         if (!textDelta) return;
 
         setButtonStatus('streaming');
-
-        setMessages((prev) => {
-          const updated = [...prev];
-          let lastMsg = updated[updated.length - 1];
-
-          if (!lastMsg || lastMsg.role !== 'assistant') {
-            lastMsg = { role: 'assistant', content: '', segments: [], status: null };
-            updated.push(lastMsg);
-          } else {
-            lastMsg = { ...lastMsg };
-            updated[updated.length - 1] = lastMsg;
-          }
-
-          // Clear processing/thinking/transcribing status when text starts arriving
-          if (
-            lastMsg.status === 'thinking' ||
-            lastMsg.status === 'processing' ||
-            lastMsg.status === 'transcribing' ||
-            lastMsg.status === 'initializing'
-          ) {
-            lastMsg.status = 'streaming';
-          }
-
-          const segments = [...(lastMsg.segments || [])];
-
-          // Remove inline_thinking spinner when text starts (thinking is done)
-          const inlineThinkingIdx = segments.findIndex((s) => s.kind === 'inline_thinking');
-          if (inlineThinkingIdx >= 0) {
-            segments.splice(inlineThinkingIdx, 1);
-          }
-
-          // Mark any pending tool_cards as complete when text starts streaming.
-          for (let i = 0; i < segments.length; i++) {
-            const seg = segments[i];
-            if (seg.kind === 'tool_card' && seg.isLoading) {
-              segments[i] = { ...seg, isLoading: false };
-            }
-          }
-
-          const lastSeg = segments[segments.length - 1];
-
-          if (lastSeg?.kind === 'text' && !lastSeg.finalized) {
-            segments[segments.length - 1] = { ...lastSeg, text: (lastSeg.text || '') + textDelta };
-          } else {
-            segments.push({ kind: 'text', text: textDelta, finalized: false });
-          }
-
-          lastMsg.segments = segments;
-          lastMsg.content = segments
-            .filter((s): s is { kind: 'text'; text: string } => s.kind === 'text')
-            .map((s) => s.text)
-            .join('');
-
-          return updated;
-        });
+        queueTextDelta(textDelta);
       }
 
       // --- THINKING BLOCK START ---

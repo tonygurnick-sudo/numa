@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 
 /**
  * Types for file and folder previews in split view
@@ -80,20 +80,24 @@ export const useFilePreviewProcessor = () => {
     setFilePreview(null);
   }, []);
 
-  return {
-    // State
-    filePreview,
-    showFilePreview,
-    leftFraction,
+  // Memoized so consumers can safely use the hook's return value as a dependency (BUG-194)
+  return useMemo(
+    () => ({
+      // State
+      filePreview,
+      showFilePreview,
+      leftFraction,
 
-    // State setters (for external control if needed)
-    setFilePreview,
-    setShowFilePreview,
-    setLeftFraction,
+      // State setters (for external control if needed)
+      setFilePreview,
+      setShowFilePreview,
+      setLeftFraction,
 
-    // Preview functions
-    openFilePreview,
-    openFolderPreview,
-    closeFilePreview,
-  };
+      // Preview functions
+      openFilePreview,
+      openFolderPreview,
+      closeFilePreview,
+    }),
+    [filePreview, showFilePreview, leftFraction, openFilePreview, openFolderPreview, closeFilePreview]
+  );
 };
