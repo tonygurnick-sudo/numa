@@ -34,6 +34,8 @@ const KBStateContext = createContext<KBStateContextType | undefined>(undefined);
 interface KBStateProviderProps {
   kbId: string;
   kbType: 'user' | 'company';
+  /** 'data-sources' fetches the lightweight state view (no document list). */
+  view?: 'data-sources';
   children: ReactNode;
 }
 
@@ -41,7 +43,7 @@ interface KBStateProviderProps {
  * KBStateProvider
  * Provides cached KB state to child components
  */
-export function KBStateProvider({ kbId, kbType: _kbType, children }: KBStateProviderProps): React.JSX.Element {
+export function KBStateProvider({ kbId, kbType: _kbType, view, children }: KBStateProviderProps): React.JSX.Element {
   const [cache, setCache] = useState<KBStateCache>({
     data: null,
     timestamp: 0,
@@ -89,7 +91,7 @@ export function KBStateProvider({ kbId, kbType: _kbType, children }: KBStateProv
         setCache((prev) => ({ ...prev, isLoading: true, error: null }));
 
         // Use backend API for KB state
-        const state = await knowledgeBaseService.getKBState(kbId);
+        const state = await knowledgeBaseService.getKBState(kbId, view ? { view } : undefined);
 
         // Check for error response from backend
         if (state.error && !state.dataSourceId) {

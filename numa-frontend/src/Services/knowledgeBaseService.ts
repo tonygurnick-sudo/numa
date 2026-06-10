@@ -570,10 +570,18 @@ class KnowledgeBaseService {
   /**
    * Get KB state including documents, sync status, and ingestion jobs
    * This replaces the frontend AWS SDK calls for KB state
+   *
+   * Pass `view: 'data-sources'` for the lightweight view (data sources +
+   * web-crawler stats, no document listing) — the full document pagination
+   * can take minutes on large KBs and time out at CloudFront.
    */
-  async getKBState(kbId: string): Promise<KBState> {
+  async getKBState(kbId: string, options?: { view?: 'data-sources' }): Promise<KBState> {
     try {
-      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/state`), {
+      let url = `${this.baseUrl}/${kbId}/state`;
+      if (options?.view) {
+        url += `?view=${options.view}`;
+      }
+      const response = await fetch(this.buildUrl(url), {
         method: 'GET',
         headers: this.getHeaders(),
       });

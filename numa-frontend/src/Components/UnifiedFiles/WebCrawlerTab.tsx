@@ -185,7 +185,7 @@ export function WebCrawlerTab(): React.JSX.Element {
         </div>
       </div>
 
-      <KBStateProvider kbId={selectedKbId} kbType={selectedKbId === 'company' ? 'company' : 'user'}>
+      <KBStateProvider kbId={selectedKbId} kbType={selectedKbId === 'company' ? 'company' : 'user'} view="data-sources">
         <WebCrawlerContent kbId={selectedKbId} />
       </KBStateProvider>
     </div>

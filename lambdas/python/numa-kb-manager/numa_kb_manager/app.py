@@ -1741,9 +1741,15 @@ def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
 
 
 def _get_bedrock_kb_state(
-    kb_id: str, s3_prefix_filter: str, kb_type: str
+    kb_id: str, s3_prefix_filter: str, kb_type: str, include_documents: bool = True
 ) -> Dict[str, Any]:
-    """Get KB state from a Bedrock Knowledge Base (data sources, jobs, docs)."""
+    """Get KB state from a Bedrock Knowledge Base (data sources, jobs, docs).
+
+    With ``include_documents=False`` the full document pagination and per-job
+    failed-doc collection are skipped — large KBs take minutes to page through
+    ListKnowledgeBaseDocuments (and get throttled), which blows past
+    CloudFront's origin timeout for callers that only need data sources.
+    """
     if not BEDROCK_KNOWLEDGE_BASE_ID:
         return {"error": "Bedrock Knowledge Base ID not configured"}
 
@@ -1793,27 +1799,29 @@ def _get_bedrock_kb_state(
         )
 
         # Pull failed-doc URIs from the failureReasons of the 3 most recent jobs.
-        failed_documents_map: Dict[str, Dict[str, Any]] = {}
-        recent_jobs = ingestion_jobs[:3]
-        s3_uri_pattern = re.compile(r"s3://[^,;\]]+")
+        failed_documents: List[Dict[str, Any]] = []
+        if include_documents:
+            failed_documents_map: Dict[str, Dict[str, Any]] = {}
+            recent_jobs = ingestion_jobs[:3]
+            s3_uri_pattern = re.compile(r"s3://[^,;\]]+")
 
-        for job in recent_jobs:
-            job_failed_docs = _collect_failed_docs_from_job(
-                bedrock_agent,
-                BEDROCK_KNOWLEDGE_BASE_ID,
-                data_source_id,
-                job,
-                s3_uri_pattern,
-            )
-            for doc in job_failed_docs:
-                if doc["documentId"] not in failed_documents_map:
-                    failed_documents_map[doc["documentId"]] = doc
+            for job in recent_jobs:
+                job_failed_docs = _collect_failed_docs_from_job(
+                    bedrock_agent,
+                    BEDROCK_KNOWLEDGE_BASE_ID,
+                    data_source_id,
+                    job,
+                    s3_uri_pattern,
+                )
+                for doc in job_failed_docs:
+                    if doc["documentId"] not in failed_documents_map:
+                        failed_documents_map[doc["documentId"]] = doc
 
-        failed_documents = list(failed_documents_map.values())
+            failed_documents = list(failed_documents_map.values())
 
         docs: List[Dict[str, Any]] = []
         next_token = None
-        while True:
+        while include_documents:
             list_params: Dict[str, Any] = {
                 "knowledgeBaseId": BEDROCK_KNOWLEDGE_BASE_ID,
                 "dataSourceId": data_source_id,
@@ -1881,9 +1889,13 @@ def _get_bedrock_kb_state(
 
 
 def _get_qbusiness_kb_state(
-    kb_id: str, s3_prefix_filter: str, kb_type: str
+    kb_id: str, s3_prefix_filter: str, kb_type: str, include_documents: bool = True
 ) -> Dict[str, Any]:
-    """Get KB state from Amazon Q Business (data sources, sync jobs, docs)."""
+    """Get KB state from Amazon Q Business (data sources, sync jobs, docs).
+
+    With ``include_documents=False`` the full document pagination is skipped —
+    see ``_get_bedrock_kb_state`` for rationale.
+    """
     if not Q_APPLICATION_ID or not Q_INDEX_ID:
         return {"error": "Q Business Application or Index ID not configured"}
 
@@ -1930,7 +1942,7 @@ def _get_qbusiness_kb_state(
 
         docs: List[Dict[str, Any]] = []
         next_token = None
-        while True:
+        while include_documents:
             list_params: Dict[str, Any] = {
                 "applicationId": Q_APPLICATION_ID,
                 "indexId": Q_INDEX_ID,
@@ -2001,21 +2013,32 @@ async def get_kb_state(request: Request, kb_id: str) -> Response:
         kb_type = "company" if kb_id == "company" else "user"
         s3_prefix_filter = s3_prefix
 
+        # ?view=data-sources is the lightweight view (Web Crawler tab): data
+        # sources + crawler stats only, no document listing.
+        include_documents = request.query_params.get("view") != "data-sources"
+
         # Per-KB user data is only indexed in Bedrock (Q Business has no per-KB
         # isolation), so user KBs always read state from Bedrock even on Q-preferred
         # stacks. Only the company KB respects PREFERRED_KNOWLEDGE_BASE.
         if kb_type == "user" and PREFERRED_KNOWLEDGE_BASE == "q":
-            state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)
+            state = _get_bedrock_kb_state(
+                kb_id, s3_prefix_filter, kb_type, include_documents
+            )
         elif PREFERRED_KNOWLEDGE_BASE == "q":
-            state = _get_qbusiness_kb_state(kb_id, s3_prefix_filter, kb_type)
+            state = _get_qbusiness_kb_state(
+                kb_id, s3_prefix_filter, kb_type, include_documents
+            )
         else:
-            state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)
+            state = _get_bedrock_kb_state(
+                kb_id, s3_prefix_filter, kb_type, include_documents
+            )
 
         logger.info(
             "Got KB state",
             kb_id=kb_id,
             user_id=user_id,
             source=state.get("source"),
+            include_documents=include_documents,
             doc_count=len(state.get("documents", [])),
         )
 
