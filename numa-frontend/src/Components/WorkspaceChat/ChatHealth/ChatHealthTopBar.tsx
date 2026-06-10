@@ -2,7 +2,7 @@ import React from 'react';
 import { OverlayTrigger, Popover } from 'react-bootstrap';
 import { HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { CHAT_HEALTH_RED } from './constants';
+import { CHAT_HEALTH_ORANGE_RATIO } from './constants';
 import type { ChatHealthState } from './useChatHealth';
 
 const HOVER_DELAY = { show: 150, hide: 100 };
@@ -15,31 +15,25 @@ type TrafficBand = 'green' | 'orange' | 'red';
 
 /**
  * Ian's design: a slim, always-visible progress bar at the top of the chat
- * area showing chat health only (NOT context fill — that lives in the donut).
+ * area showing chat health.
  *
- * Bar fills as the chat degrades. Worst of: user-message count, compaction
- * count, tool-turn count — each measured against its red threshold. So:
- *   - 0%  = pristine chat
- *   - 50% = at amber threshold for the worst signal
- *   - 100% = at red threshold for the worst signal
+ * Bar fills as the chat degrades, showing the wear ratio computed in
+ * useChatHealth — worst of: context fill, user-message count, tool-turn
+ * count, compaction wear. So:
+ *   - 0%   = pristine chat
+ *   - 75%  = orange ("chat getting long")
+ *   - 100% = red
  * Colour band follows the same scale, traffic-light green/orange/red,
- * brand-independent.
+ * brand-independent, and agrees with the hourglass alarm by construction
+ * (both derive from the same wearRatio).
  */
 export const ChatHealthTopBar: React.FC<Props> = ({ state }) => {
   const { t } = useTranslation('chat');
-  const { userMessages, compactions, toolTurns } = state;
+  const { wearRatio } = state;
 
-  const wearRatio = Math.min(
-    1,
-    Math.max(
-      userMessages / CHAT_HEALTH_RED.userMessages,
-      compactions / CHAT_HEALTH_RED.compactions,
-      toolTurns / CHAT_HEALTH_RED.toolTurns
-    )
-  );
   const pct = Math.round(wearRatio * 100);
 
-  const band: TrafficBand = wearRatio >= 1 ? 'red' : wearRatio >= 0.5 ? 'orange' : 'green';
+  const band: TrafficBand = wearRatio >= 1 ? 'red' : wearRatio >= CHAT_HEALTH_ORANGE_RATIO ? 'orange' : 'green';
 
   const labelKey =
     band === 'red'
