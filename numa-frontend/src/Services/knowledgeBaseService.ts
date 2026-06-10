@@ -320,6 +320,25 @@ class KnowledgeBaseService {
     }
   }
 
+  /**
+   * Leave a shared knowledge base (remove yourself from it). Allowed for
+   * non-owner members of a shared folder; the backend rejects owners and
+   * system/root folders.
+   */
+  async leaveKB(kbId: string): Promise<void> {
+    try {
+      const response = await fetch(this.buildUrl(`${this.baseUrl}/${kbId}/leave`), {
+        method: 'POST',
+        headers: this.getHeaders(),
+      });
+
+      await this.parseJsonResponse<Record<string, unknown>>(response, i18n.t('errors:knowledgeBase.leaveFailed'));
+    } catch (error) {
+      console.error('Error leaving KB:', error);
+      throw error;
+    }
+  }
+
   /** Read cached KB file listing from localStorage (instant, synchronous). */
   getCachedKBFiles(kbId: string): ListKBFilesResponse | null {
     return getSwrCache<ListKBFilesResponse>(`kbFiles_${kbId}`);

@@ -165,7 +165,7 @@ def build_conversation_rows(
     source: str = "chat",
     agent_id: Optional[str] = None,
     bedrock_region: Optional[str] = None,
-    value_tier_credits: Optional[dict[str, dict[str, int]]] = None,
+    value_tier_credits: Optional[dict[str, dict[str, float]]] = None,
     trivial_consumption_usd: float = TRIVIAL_CONSUMPTION_USD,
     margins: Optional[dict[str, float]] = None,
     agentcore_mult: float = AGENTCORE_MULT,

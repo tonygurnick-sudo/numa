@@ -369,6 +369,10 @@ function BacklogGroupFooter({
               <button
                 type="button"
                 className="backlog-quick-add-type-btn"
+                // Keep focus on the input: on macOS (Firefox/Safari) clicking a button
+                // doesn't focus it, so the input would blur with relatedTarget=null and
+                // the blur handler would close the whole quick-add row before the dropdown opens.
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowTypeDropdown((prev) => !prev)}
                 title={selectedType.name}
               >
@@ -382,6 +386,9 @@ function BacklogGroupFooter({
                       key={tt.id}
                       type="button"
                       className={`backlog-quick-add-type-option${tt.id === selectedType.id ? ' active' : ''}`}
+                      // See note on the toggle button: preventDefault keeps the input focused
+                      // so selecting a type doesn't blur-close the quick-add row.
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         setSelectedTypeId(tt.id);
                         setShowTypeDropdown(false);

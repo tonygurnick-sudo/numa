@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useCallback, Dispatch, SetStateAction } from 'react';
-import { Button, Dropdown, Form, Spinner } from 'react-bootstrap';
+import { Button, Dropdown, Form, Modal, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
@@ -24,8 +24,10 @@ import {
   Plug,
   RefreshCw,
   Upload,
+  LogOut,
   UserCircle,
   User as UserIcon,
+  Users as UsersIcon,
   Wrench,
 } from 'lucide-react';
 import {
@@ -37,7 +39,7 @@ import { getConnectorById, surfacesInFiles } from '../DataConnectors/connectorRe
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations';
 import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integrations/integrationCatalogHelpers';
 import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
-import { IntegrationAccountSubmenu } from '../Integrations/IntegrationAccountSubmenu';
+import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
 import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
 import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
@@ -45,6 +47,8 @@ import { getVariantExtension, type OutputFileGroup } from '../../utils/outputFil
 import { getFlag } from '../../utils/featureFlags';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
 import { sortKnowledgeBases } from '../../constants/knowledgeBase';
+import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
+import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
 
 type KnowledgeBase = {
   kb_id: string;
@@ -259,7 +263,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     return { systemKBs: system, myFilesGroupKBs: myFiles, sharedSectionKBs: shared };
   }, [sortedKBs, SYSTEM_KB_ID_SET]);
 
-  const [myFilesGroupExpanded, setMyFilesGroupExpanded] = useState(true);
+  // FEAT-219 #3: all file groups open collapsed.
+  const [myFilesGroupExpanded, setMyFilesGroupExpanded] = useState(false);
 
   const myFilesGroupIds = useMemo(() => myFilesGroupKBs.map((kb) => kb.kb_id), [myFilesGroupKBs]);
   const myFilesGroupSelectedCount = useMemo(
@@ -278,6 +283,49 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
       return Array.from(new Set([...prev, ...myFilesGroupIds]));
     });
   }, [myFilesGroupAllSelected, myFilesGroupIds, setEnabledKBIds]);
+
+  // Shared Files group — mirrors My Files (FEAT-219 #1: it had no collapse control).
+  const [sharedFilesGroupExpanded, setSharedFilesGroupExpanded] = useState(false);
+  const sharedFilesGroupIds = useMemo(() => sharedSectionKBs.map((kb) => kb.kb_id), [sharedSectionKBs]);
+  const sharedFilesGroupSelectedCount = useMemo(
+    () => sharedFilesGroupIds.filter((id) => enabledKBIds.includes(id)).length,
+    [sharedFilesGroupIds, enabledKBIds]
+  );
+  const sharedFilesGroupAllSelected =
+    sharedFilesGroupIds.length > 0 && sharedFilesGroupSelectedCount === sharedFilesGroupIds.length;
+  const sharedFilesGroupNoneSelected = sharedFilesGroupSelectedCount === 0;
+  const sharedFilesGroupIndeterminate = !sharedFilesGroupNoneSelected && !sharedFilesGroupAllSelected;
+
+  const toggleSharedFilesGroup = useCallback(() => {
+    setEnabledKBIds((prev) => {
+      if (sharedFilesGroupAllSelected) {
+        return prev.filter((id) => !sharedFilesGroupIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...sharedFilesGroupIds]));
+    });
+  }, [sharedFilesGroupAllSelected, sharedFilesGroupIds, setEnabledKBIds]);
+
+  // Leave a shared folder straight from the folder picker (FEAT-219 #4).
+  const { refreshKBs } = useKnowledgeBase();
+  const [leaveTarget, setLeaveTarget] = useState<KnowledgeBase | null>(null);
+  const [isLeavingKb, setIsLeavingKb] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  const handleLeaveKb = useCallback(async () => {
+    if (!leaveTarget) return;
+    setIsLeavingKb(true);
+    setLeaveError(null);
+    try {
+      await knowledgeBaseService.leaveKB(leaveTarget.kb_id);
+      setEnabledKBIds((prev) => prev.filter((id) => id !== leaveTarget.kb_id));
+      await refreshKBs();
+      setLeaveTarget(null);
+    } catch (err) {
+      setLeaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsLeavingKb(false);
+    }
+  }, [leaveTarget, setEnabledKBIds, refreshKBs]);
 
   // Remote Files group: file-store native integrations the user has
   // connected (Google Drive, Dropbox, Synergy, …). Sourced from
@@ -336,7 +384,8 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     remoteFilesGroupSlugs.length > 0 && remoteFilesGroupSelectedCount === remoteFilesGroupSlugs.length;
   const remoteFilesGroupNoneSelected = remoteFilesGroupSelectedCount === 0;
   const remoteFilesGroupIndeterminate = !remoteFilesGroupNoneSelected && !remoteFilesGroupAllSelected;
-  const [remoteFilesGroupExpanded, setRemoteFilesGroupExpanded] = useState(true);
+  // FEAT-219 #3: open collapsed.
+  const [remoteFilesGroupExpanded, setRemoteFilesGroupExpanded] = useState(false);
 
   const toggleRemoteFilesGroup = useCallback(() => {
     setEnabledNativeConnectorIds((prev) => {
@@ -635,23 +684,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                         )}
                       </div>
                     )}
-                    {sharedSectionKBs.map((kb) => (
-                      <Form.Check
-                        type="checkbox"
-                        key={kb.kb_id}
-                        id={`panel-kb-${kb.kb_id}`}
-                        className="workspace-settings-list-item workspace-settings-kb-list-item"
-                        label={
-                          <span className="workspace-settings-kb-label">
-                            <UserIcon size={14} />
-                            <span className="workspace-settings-kb-name">{kb.kb_name}</span>
-                          </span>
-                        }
-                        checked={enabledKBIds.includes(kb.kb_id)}
-                        onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
-                        disabled={isDisabled}
-                      />
-                    ))}
+                    {/* FEAT-219 #2: Remote files listed above Shared files. */}
                     {dataConnectorsFeatureEnabled && remoteFilesGroupConnectors.length > 0 && (
                       <div className="workspace-settings-kb-group">
                         <div className="workspace-settings-kb-group__header">
@@ -709,6 +742,77 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                                 />
                               );
                             })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* FEAT-219 #1: Shared files now a collapsible group like the others. */}
+                    {sharedSectionKBs.length > 0 && (
+                      <div className="workspace-settings-kb-group">
+                        <div className="workspace-settings-kb-group__header">
+                          <Form.Check
+                            type="checkbox"
+                            id="panel-kb-group-shared-files"
+                            className="workspace-settings-list-item workspace-settings-kb-group__check"
+                            label={
+                              <span className="workspace-settings-kb-label">
+                                <UsersIcon size={14} />
+                                <span className="workspace-settings-kb-name">
+                                  {t('workspaceSettings.sharedFilesGroup')}
+                                </span>
+                              </span>
+                            }
+                            checked={sharedFilesGroupAllSelected}
+                            ref={(el: HTMLInputElement | null) => {
+                              if (el) el.indeterminate = sharedFilesGroupIndeterminate;
+                            }}
+                            onChange={toggleSharedFilesGroup}
+                            disabled={isDisabled}
+                          />
+                          <button
+                            type="button"
+                            className="workspace-settings-kb-group__chevron"
+                            onClick={() => setSharedFilesGroupExpanded((v) => !v)}
+                            aria-label={
+                              sharedFilesGroupExpanded
+                                ? t('workspaceSettings.collapseGroup')
+                                : t('workspaceSettings.expandGroup')
+                            }
+                          >
+                            {sharedFilesGroupExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          </button>
+                        </div>
+                        {sharedFilesGroupExpanded && (
+                          <div className="workspace-settings-kb-group__children">
+                            {sharedSectionKBs.map((kb) => (
+                              <div key={kb.kb_id} className="workspace-settings-kb-row">
+                                <Form.Check
+                                  type="checkbox"
+                                  id={`panel-kb-${kb.kb_id}`}
+                                  className="workspace-settings-list-item workspace-settings-kb-list-item"
+                                  label={
+                                    <span className="workspace-settings-kb-label">
+                                      <UserIcon size={14} />
+                                      <span className="workspace-settings-kb-name">{kb.kb_name}</span>
+                                    </span>
+                                  }
+                                  checked={enabledKBIds.includes(kb.kb_id)}
+                                  onChange={(e) => handleKBToggle(kb.kb_id, e.target.checked)}
+                                  disabled={isDisabled}
+                                />
+                                {kb.role !== 'OWNER' && (
+                                  <button
+                                    type="button"
+                                    className="workspace-settings-kb-leave"
+                                    onClick={() => setLeaveTarget(kb)}
+                                    title={t('workspaceSettings.leaveFolder', { defaultValue: 'Leave folder' })}
+                                    aria-label={t('workspaceSettings.leaveFolder', { defaultValue: 'Leave folder' })}
+                                  >
+                                    <LogOut size={12} />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1009,6 +1113,23 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                                     <i className={item.iconClass} />
                                   )}
                                   <span>{item.name}</span>
+                                  {item.pipedreamSlug && (
+                                    <IntegrationAccountButton
+                                      connectionId={item.pipedreamSlug}
+                                      displayName={item.name}
+                                      accounts={item.accounts ?? []}
+                                      allowMultipleAccounts={item.allowMultipleAccounts === true}
+                                      isEnabled={pdActive}
+                                      selectedAccountIds={selectedAccountsByApp?.[item.pipedreamSlug]}
+                                      disabled={isDisabled}
+                                      onChange={(next) =>
+                                        setSelectedAccountsByApp?.((prev) => ({
+                                          ...prev,
+                                          [item.pipedreamSlug!]: next,
+                                        }))
+                                      }
+                                    />
+                                  )}
                                 </span>
                               </div>
                               <button
@@ -1027,22 +1148,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                                 )}
                               </button>
                             </div>
-                            {item.pipedreamSlug && (
-                              <IntegrationAccountSubmenu
-                                connectionId={item.pipedreamSlug}
-                                accounts={item.accounts ?? []}
-                                allowMultipleAccounts={item.allowMultipleAccounts === true}
-                                isEnabled={pdActive}
-                                selectedAccountIds={selectedAccountsByApp?.[item.pipedreamSlug]}
-                                disabled={isDisabled}
-                                onChange={(next) =>
-                                  setSelectedAccountsByApp?.((prev) => ({
-                                    ...prev,
-                                    [item.pipedreamSlug!]: next,
-                                  }))
-                                }
-                              />
-                            )}
                           </div>
                         );
                       })}
@@ -1336,6 +1441,52 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
         onOpen={onOpenFile}
         onDownload={onDownloadFile}
       />
+
+      {/* Leave shared folder confirmation (FEAT-219 #4) */}
+      <Modal show={!!leaveTarget} onHide={() => !isLeavingKb && setLeaveTarget(null)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {t('workspaceSettings.leaveTitle', {
+              name: leaveTarget?.kb_name ?? '',
+              defaultValue: `Leave "${leaveTarget?.kb_name ?? ''}"?`,
+            })}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-0">
+            {t('workspaceSettings.leaveMessage', {
+              defaultValue:
+                "You'll lose access to this shared folder and it will disappear from your list. The owner can re-add you later.",
+            })}
+          </p>
+          {leaveError && (
+            <p className="text-danger mb-0 mt-2" role="alert">
+              {t('workspaceSettings.leaveError', {
+                defaultValue: 'Failed to leave folder: {{error}}',
+                error: leaveError,
+              })}
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" size="sm" onClick={() => setLeaveTarget(null)} disabled={isLeavingKb}>
+            {t('workspaceSettings.leaveCancel', { defaultValue: 'Cancel' })}
+          </Button>
+          <Button variant="danger" size="sm" onClick={() => void handleLeaveKb()} disabled={isLeavingKb}>
+            {isLeavingKb ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-1" />
+                {t('workspaceSettings.leaving', { defaultValue: 'Leaving…' })}
+              </>
+            ) : (
+              <>
+                <LogOut size={13} className="me-1" />
+                {t('workspaceSettings.leaveFolder', { defaultValue: 'Leave folder' })}
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

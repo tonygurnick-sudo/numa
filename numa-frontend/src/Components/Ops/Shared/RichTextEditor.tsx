@@ -12,6 +12,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { micromark } from 'micromark';
 import { gfm, gfmHtml } from 'micromark-extension-gfm';
 import { useAlert, usePrompt } from '../../../Providers/ConfirmContext';
+import { cleanPastedHtml, sanitizeRichTextHtml } from '../../../utils/sanitizeRichText';
 
 interface RichTextEditorProps {
   value: string;
@@ -95,45 +96,6 @@ const RICH_TEXT_CONTENT_CSS = `
   .rich-text-editor-content img { max-width: 100% !important; height: auto !important; display: block; border-radius: 6px; margin: 0.3em 0; }
   .rich-text-editor-content .ops-mention { color: #3b82f6; font-weight: 600; }
 `;
-
-/** Inline style props that paste sources (Word, Docs, dark-themed pages) drag
- *  in and that make pasted content look messy. Stripped on paste. */
-const NOISY_STYLE_PROPS = new Set([
-  'background',
-  'background-color',
-  'color',
-  'font-size',
-  'font-family',
-  'line-height',
-  'font',
-]);
-
-/** Strip noisy inline styles (and class cruft) from pasted HTML, keeping
- *  structure and bold/italic/underline. */
-function cleanPastedHtml(html: string): string {
-  if (!html) return html;
-  try {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    doc.body.querySelectorAll('*').forEach((el) => {
-      el.removeAttribute('class');
-      const style = el.getAttribute('style');
-      if (!style) return;
-      const kept = style
-        .split(';')
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .filter((rule) => {
-          const prop = rule.split(':')[0]?.trim().toLowerCase();
-          return prop && !NOISY_STYLE_PROPS.has(prop);
-        });
-      if (kept.length) el.setAttribute('style', kept.join('; '));
-      else el.removeAttribute('style');
-    });
-    return doc.body.innerHTML;
-  } catch {
-    return html;
-  }
-}
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -1110,7 +1072,7 @@ export function RichTextDisplay({ html, placeholder }: { html: string; placehold
         <div
           className="rich-text-editor-content"
           style={{ fontSize: '0.9rem', lineHeight: 1.65, color: '#111827' }}
-          dangerouslySetInnerHTML={{ __html: html }}
+          dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(html) }}
         />
         <style>{RICH_TEXT_CONTENT_CSS}</style>
       </>

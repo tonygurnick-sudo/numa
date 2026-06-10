@@ -164,20 +164,21 @@ FORBIDDEN_ADMIN = {
 # ════════════════════════════════════════════════════════════════════════════════════════════
 def test_pure_math() -> None:
     section("A. Pure pricing math (local lib)")
-    # floor: ceil(cost * margin / credit). cost 0.10 -> ceil(0.10*2/0.5)=ceil(0.4)=1
+    # floor: half-credit ceil of cost*margin/credit (defaults margin=2.0, credit=$0.30).
+    # cost 0.10 -> ceil2(0.10*2/0.30)=ceil2(0.667)=1.0
     check(floor_credits(0.0) == 0, "floor(0)==0")
-    check(floor_credits(0.10) == 1, "floor(0.10 NZD)==1", f"got {floor_credits(0.10)}")
+    check(floor_credits(0.10) == 1, "floor($0.10)==1", f"got {floor_credits(0.10)}")
     check(
-        floor_credits(0.25) == 1,
-        "floor(0.25 NZD)==1 (boundary: 0.25*4=1.0)",
-        f"got {floor_credits(0.25)}",
+        floor_credits(0.075) == 0.5,
+        "floor($0.075)==0.5 (boundary: 0.075*2/0.30=0.5)",
+        f"got {floor_credits(0.075)}",
     )
     check(
-        floor_credits(0.26) == 2,
-        "floor(0.26 NZD)==2 (rounds up)",
-        f"got {floor_credits(0.26)}",
+        floor_credits(0.16) == 1.5,
+        "floor($0.16)==1.5 (rounds up to next half-credit)",
+        f"got {floor_credits(0.16)}",
     )
-    check(floor_credits(5.0) == 20, "floor(5.00 NZD)==20", f"got {floor_credits(5.0)}")
+    check(floor_credits(5.0) == 33.5, "floor($5.00)==33.5", f"got {floor_credits(5.0)}")
     # monotonic
     check(
         all(floor_credits(c) <= floor_credits(c + 0.5) for c in [0.1, 1, 5, 20]),
@@ -185,11 +186,11 @@ def test_pure_math() -> None:
     )
 
     # tier→credit map
-    check(tier_to_credits("high", "chat") == 12, "chat/high==12")
-    check(tier_to_credits("very_high", "chat") == 30, "chat/very_high==30")
-    check(tier_to_credits("low", "agent") == 1, "agent/low==1")
-    check(tier_to_credits("bogus", "chat") == 5, "unknown tier -> medium(5)")
-    check(tier_to_credits("high", "bogus_ctx") == 12, "unknown context -> chat table")
+    check(tier_to_credits("high", "chat") == 5, "chat/high==5")
+    check(tier_to_credits("very_high", "chat") == 8, "chat/very_high==8")
+    check(tier_to_credits("low", "agent") == 0.5, "agent/low==0.5")
+    check(tier_to_credits("bogus", "chat") == 2, "unknown tier -> medium(2)")
+    check(tier_to_credits("high", "bogus_ctx") == 5, "unknown context -> chat table")
 
     # charge = max(value, floor) via build_conversation_rows
     def turns(n: int, usd_each: float) -> list[TurnCost]:
@@ -210,10 +211,9 @@ def test_pure_math() -> None:
         margin=2.0,
         credit_usd=0.5,
         value_tier="high",
-        category="analysis",
         context="chat",
     )
-    check(meta["creditsValue"] == 12, "value high -> 12")
+    check(meta["creditsValue"] == 5, "value high -> 5")
     check(
         meta["creditsCharged"] == max(meta["creditsValue"], meta["creditsFloor"]),
         "charge == max(value, floor)",

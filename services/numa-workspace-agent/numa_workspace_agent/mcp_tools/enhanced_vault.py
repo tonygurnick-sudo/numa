@@ -59,23 +59,14 @@ def _invoke_workspace_tool(tool_name: str, params: Dict[str, Any]) -> Dict[str, 
 
 
 def _pop_approval_id(action_key: str) -> str:
-    """Pop the next approval ID for this vault action from NUMA_REQUEST_ID_MAP."""
-    raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
-    if raw:
-        try:
-            id_map = json.loads(raw)
-            ids = id_map.get(action_key, [])
-            if ids:
-                approval_id = ids.pop(0)
-                if not ids:
-                    id_map.pop(action_key, None)
-                else:
-                    id_map[action_key] = ids
-                os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
-                return approval_id
-        except (json.JSONDecodeError, TypeError):
-            pass
-    return os.environ.get("NUMA_REQUEST_ID", "")
+    """Pop this call's approval entry (id + mode) for a vault action.
+
+    Thin delegate to the canonical popper in ``lambda_client`` so the per-call
+    approval mode is pinned identically across every tool module.
+    """
+    from numa_workspace_agent.mcp_tools.lambda_client import pop_approval_id
+
+    return pop_approval_id(action_key)
 
 
 @tool(

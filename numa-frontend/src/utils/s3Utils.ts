@@ -715,6 +715,97 @@ export const downloadFolderAsZip = async (
 };
 
 /**
+ * Path to use for an S3 object inside a zip: the key with its KB prefix
+ * (`documents/kb-<id>/`, `documents/company/`, `documents/numa-support/`)
+ * stripped, so the archive mirrors the folder structure the user sees in the
+ * file browser. Falls back to the full key if the prefix shape is unexpected.
+ */
+export const zipPathFromKbKey = (key: string): string => {
+  const match = key.match(/^documents\/(?:kb-[^/]+|company|numa-support)\/(.+)$/u);
+  return match ? match[1] : key;
+};
+
+/**
+ * Download an explicit set of S3 objects as a single zip, preserving a
+ * caller-supplied path for each entry. Unlike downloadMultipleFilesAsZip (which
+ * flattens to the bare filename), this keeps folder structure and avoids name
+ * collisions across folders — used by bulk download when the selection contains
+ * whole folders and/or files from different folders.
+ *
+ * @param {Array<{key: string, zipPath: string}>} entries - Objects + their in-zip paths
+ * @param {string} s3Bucket - The S3 bucket name
+ * @param {string} region - AWS region
+ * @param {Function} getCredentials - Function to get AWS credentials
+ * @param {string} [zipFilename] - Optional custom name for the zip file (default: 'files.zip')
+ * @param {Function} [onProgress] - Optional progress callback
+ * @returns {Promise<void>}
+ */
+export const downloadKeysAsZip = async (
+  entries: { key: string; zipPath: string }[],
+  s3Bucket: string,
+  region: string,
+  getCredentials: () => Promise<unknown>,
+  zipFilename: string = 'files.zip',
+  onProgress?: (progress: FolderDownloadProgress) => void
+): Promise<void> => {
+  try {
+    if (entries.length === 0) {
+      throw new Error('No files to download');
+    }
+
+    const zip = new JSZip();
+    const credentials = await getCredentials();
+
+    if (!credentials?.accessKeyId) {
+      throw new Error('AWS Credentials are missing.');
+    }
+
+    const s3Client = withPRM(S3Client, {
+      region,
+      credentials,
+    });
+
+    for (let i = 0; i < entries.length; i++) {
+      const { key, zipPath } = entries[i];
+
+      if (onProgress) {
+        onProgress({
+          processed: i,
+          total: entries.length,
+          currentFile: key,
+          phase: 'downloading',
+        });
+      }
+
+      const response = await s3Client.send(new GetObjectCommand({ Bucket: s3Bucket, Key: key }));
+
+      if (response.Body) {
+        const bodyContents = await response.Body.transformToByteArray();
+        zip.file(zipPath || key.split('/').pop() || key, bodyContents);
+      }
+    }
+
+    if (onProgress) {
+      onProgress({ processed: entries.length, total: entries.length, currentFile: '', phase: 'zipping' });
+    }
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = zipFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+  } catch (error) {
+    console.error('Error downloading keys as zip:', error);
+    throw error;
+  }
+};
+
+/**
  * Download multiple files from S3 as a zip file
  * @param {Array<string>} s3Keys - Array of S3 object keys to download
  * @param {string} s3Bucket - The S3 bucket name

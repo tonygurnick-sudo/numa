@@ -21,6 +21,8 @@ interface FolderSettingsDrawerProps {
   role: 'VIEWER' | 'EDITOR' | 'OWNER';
   onDeleted?: () => void;
   onUpdated?: () => void;
+  /** Invoked when a non-owner chooses to leave the shared folder. */
+  onLeave?: () => void;
 }
 
 function deriveVisibility(kb: KnowledgeBase): Visibility {
@@ -57,6 +59,7 @@ export function FolderSettingsDrawer({
   role,
   onDeleted,
   onUpdated,
+  onLeave,
 }: FolderSettingsDrawerProps): React.JSX.Element {
   const { t } = useTranslation('unifiedFiles');
   const { t: tKB } = useTranslation('knowledgeBase');
@@ -468,6 +471,24 @@ export function FolderSettingsDrawer({
                   </div>
                 </div>
               </>
+            )}
+
+            {/* Leave folder (non-owner members of a shared folder) */}
+            {!isOwner && !isCompanyKb && kbId !== 'numa-support' && onLeave && (
+              <div className="folder-settings-drawer__danger-zone">
+                <label className="folder-settings-drawer__label folder-settings-drawer__label--danger">
+                  {t('folderSettings.leaveZone', { defaultValue: 'Leave folder' })}
+                </label>
+                <p className="folder-settings-drawer__hint">
+                  {t('folderSettings.leaveHint', {
+                    defaultValue: "You'll lose access to this shared folder. The owner can re-add you later.",
+                  })}
+                </p>
+                <button className="folder-settings-drawer__delete-btn" onClick={onLeave}>
+                  <i className="bi bi-box-arrow-left" />
+                  {t('folderSettings.leave', { defaultValue: 'Leave folder' })}
+                </button>
+              </div>
             )}
 
             {/* Save button */}

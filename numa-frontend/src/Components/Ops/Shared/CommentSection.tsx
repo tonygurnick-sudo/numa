@@ -8,6 +8,7 @@ import { useConfirm } from '../../../Providers/ConfirmContext';
 import * as OpsService from '../../../Services/OpsService';
 import type { Comment } from '../../../types/ops';
 import { RichTextEditor } from './RichTextEditor';
+import { sanitizeRichTextHtml } from '../../../utils/sanitizeRichText';
 import { StaffAvatar } from './StaffAvatar';
 import { ImageLightbox } from './ImageLightbox';
 import { useOps } from '../OpsContext';
@@ -295,7 +296,7 @@ export function CommentSection({ ticketId }: CommentSectionProps): React.JSX.Ele
                       className="mb-0 rich-text-editor-content ops-comment-body"
                       style={{ fontSize: '0.875rem', color: '#374151' }}
                       onClick={handleCommentBodyClick}
-                      dangerouslySetInnerHTML={{ __html: comment.content }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(comment.content) }}
                     />
                   )}
                 </div>

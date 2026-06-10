@@ -473,7 +473,23 @@
     "accountsHeading": "Connected accounts",
     "addAccount": "Add account",
     "noAccountsConnected": "No accounts connected yet — click Add account to connect one.",
+    "accountsSearchPlaceholder": "Search accounts...",
+    "accountsNoResults": "No accounts match your search.",
     "intro": "Pick which actions this integration can use in your chats. Disabled here only affects you — the workspace admin controls what is available to everyone."
+  },
+  "accountSelect": {
+    "ariaTrigger": "Choose accounts for {{name}}",
+    "title": "Accounts for {{name}}",
+    "description": "Choose which connected accounts are active here. All accounts are used unless you select specific ones.",
+    "searchPlaceholder": "Search accounts...",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "noResults": "No accounts match your search.",
+    "allActiveNote": "All accounts are active.",
+    "subsetNote": "{{count}} of {{total}} active.",
+    "inactive": "inactive",
+    "reconnect": "reconnect required",
+    "done": "Done"
   },
   "connection": {
     "successTitle": "Integration Connected Successfully!",

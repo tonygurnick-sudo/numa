@@ -45,13 +45,14 @@ VALID_CATEGORIES: tuple[str, ...] = (
     "compliance_grading",
 )
 
-# Value credits per tier (defaults @ $0.30/credit). Every interaction has a 2-credit floor (low);
-# agent runs stay cheaper than chat above the floor (3/5/12 vs 4/8/18). Tunable per client in the
-# portal. Both ad-hoc agent chats and scheduled runs price on the "agent" tier (context resolved
-# upstream); only plain chat uses "chat".
-VALUE_TIER_CREDITS: dict[str, dict[str, int]] = {
-    "chat": {"low": 2, "medium": 4, "high": 8, "very_high": 18},
-    "agent": {"low": 2, "medium": 3, "high": 5, "very_high": 12},
+# Value credits per tier (defaults @ $0.30/credit). Credits are priced in HALF-credit steps —
+# floor_credits() rounds up to the nearest 0.5, so fractional tiers genuinely bill. Agent runs stay
+# cheaper than chat at every tier (0.5/1.5/3/5 vs 1/2/5/8). Tunable per client in the portal. Both
+# ad-hoc agent chats and scheduled runs price on the "agent" tier (context resolved upstream); only
+# plain chat uses "chat".
+VALUE_TIER_CREDITS: dict[str, dict[str, float]] = {
+    "chat": {"low": 1, "medium": 2, "high": 5, "very_high": 8},
+    "agent": {"low": 0.5, "medium": 1.5, "high": 3, "very_high": 5},
 }
 
 NOVA_MODEL = "global.amazon.nova-2-lite-v1:0"
@@ -93,8 +94,8 @@ CLASSIFIER_SYSTEM = (
 def tier_to_credits(
     tier: str,
     context: str = "chat",
-    overrides: Optional[dict[str, dict[str, int]]] = None,
-) -> int:
+    overrides: Optional[dict[str, dict[str, float]]] = None,
+) -> float:
     """Value-tier credits for a tier in a context ('chat' task or 'agent' run). Unknown -> medium.
 
     ``overrides`` (e.g. an admin-configured table from the Credit Admin panel) takes precedence over

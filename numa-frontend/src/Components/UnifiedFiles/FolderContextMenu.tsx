@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { UserKB } from '../../Services/knowledgeBaseService';
 
-export type FolderContextAction = 'addSubfolder' | 'upload' | 'settings' | 'delete';
+export type FolderContextAction = 'addSubfolder' | 'upload' | 'settings' | 'delete' | 'leave';
 
 export type FolderContextTarget =
   | { kind: 'topLevel'; kb: UserKB }
@@ -86,6 +86,9 @@ export function FolderContextMenu({
   // to configure) and can't be deleted (auto-provisioned on every list).
   // Hide both menu items entirely rather than showing them disabled.
   const isPersonal = target.kind === 'topLevel' && !!target.kb.is_root;
+  // You can leave a shared top-level folder you were added to (anyone who isn't
+  // the owner). The backend enforces the same rule.
+  const canLeave = target.kind === 'topLevel' && !target.kb.is_root && target.kb.role !== 'OWNER';
   // Integrations show all the same items so the menu doesn't look stunted,
   // but every action is disabled until we decide what (if anything) they
   // should do against an external connector.
@@ -140,6 +143,18 @@ export function FolderContextMenu({
               />
             </>
           )}
+        </>
+      )}
+
+      {canLeave && (
+        <>
+          <MenuDivider />
+          <MenuItem
+            icon="bi-box-arrow-left"
+            label={t('contextMenu.leave', { defaultValue: 'Leave folder' })}
+            danger
+            onClick={() => dispatch('leave')}
+          />
         </>
       )}
 

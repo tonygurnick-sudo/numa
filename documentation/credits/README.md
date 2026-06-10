@@ -18,7 +18,7 @@ Every conversation is charged:
 ```
 charge_credits = max( value_tier_credits , floor_credits )
 
-floor_credits  = ceil( token_cost_usd × AGENTCORE_MULT × tier_margin / credit_usd )
+floor_credits  = ceil½( token_cost_usd × AGENTCORE_MULT × tier_margin / credit_usd )   # rounds UP to the nearest 0.5 credit
 ```
 
 - **Value tier** — a Nova-classified complexity tier (`low` / `medium` / `high` / `very_high`) maps to a
@@ -31,18 +31,18 @@ floor_credits  = ceil( token_cost_usd × AGENTCORE_MULT × tier_margin / credit_
 Everything is in **USD** — there is deliberately **no FX** in the billing engine, so an exchange-rate move can
 never retroactively reprice usage. (NZD is shown in the portal as a display-only sense-check.)
 
-### The current defaults (Scheme settled 2026-06-03)
+### The current defaults (lowered 2026-06-10 after early "too expensive" feedback — Asa approved)
 
-| Knob                              | Default                    | Notes                                                                           |
-| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------- |
-| `credit_usd`                      | **$0.30**                  | ≈ NZD $0.50 at FX 1.69 — the NZD-anchored price                                 |
-| value tiers — **chat**            | **2 / 4 / 8 / 18**         | low / medium / high / very_high                                                 |
-| value tiers — **agent**           | **2 / 3 / 5 / 12**         | agent (ad-hoc + scheduled) is cheaper than chat above the shared 2-credit floor |
-| defence (min-enforced) margins    | **1.15 / 1.3 / 1.6 / 2.0** | per tier; the floor's multiple over cost                                        |
-| `AGENTCORE_MULT`                  | **1.234**                  | floor basis = tokens + AgentCore, not tokens alone                              |
-| `TRIVIAL_CONSUMPTION_USD`         | **0.01**                   | anti-inflation: < $0.01 conversations capped at `low` tier                      |
-| `MARGIN_TARGET` (scalar fallback) | **2.0**                    | used only when a conversation is unclassified                                   |
-| default monthly allocation        | **2000 credits/mo**        | new-client starter plan; ≈ NZD $1,015/mo                                        |
+| Knob                              | Default                    | Notes                                                         |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------- |
+| `credit_usd`                      | **$0.30**                  | ≈ NZD $0.50 at FX 1.69 — the NZD-anchored price               |
+| value tiers — **chat**            | **1 / 2 / 5 / 8**          | low / medium / high / very_high                               |
+| value tiers — **agent**           | **0.5 / 1.5 / 3 / 5**      | agent (ad-hoc + scheduled) is cheaper than chat at every tier |
+| defence (min-enforced) margins    | **1.1 / 1.25 / 1.4 / 1.6** | per tier; the floor's multiple over cost                      |
+| `AGENTCORE_MULT`                  | **1.234**                  | floor basis = tokens + AgentCore, not tokens alone            |
+| `TRIVIAL_CONSUMPTION_USD`         | **0.01**                   | anti-inflation: < $0.01 conversations capped at `low` tier    |
+| `MARGIN_TARGET` (scalar fallback) | **2.0**                    | used only when a conversation is unclassified                 |
+| default monthly allocation        | **2000 credits/mo**        | new-client starter plan; ≈ NZD $1,015/mo                      |
 
 These live in **three mirrored places** that must stay in sync — see [06-defaults-and-config.md](06-defaults-and-config.md).
 

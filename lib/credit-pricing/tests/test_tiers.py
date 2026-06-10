@@ -15,22 +15,22 @@ from credit_pricing import tiers  # noqa: E402
 
 
 def test_tier_to_credits() -> None:
-    # Defaults @ $0.30/credit — 2-credit floor on every interaction (low)
-    assert tiers.tier_to_credits("low", "chat") == 2
-    assert tiers.tier_to_credits("medium", "chat") == 4
-    assert tiers.tier_to_credits("high", "chat") == 8
-    assert tiers.tier_to_credits("very_high", "chat") == 18
-    # agent runs are cheaper than chat above the shared 2-credit floor
-    assert tiers.tier_to_credits("low", "agent") == 2
-    assert tiers.tier_to_credits("medium", "agent") == 3
-    assert tiers.tier_to_credits("high", "agent") == 5
-    assert tiers.tier_to_credits("very_high", "agent") == 12
+    # Defaults @ $0.30/credit — half-credit pricing steps
+    assert tiers.tier_to_credits("low", "chat") == 1
+    assert tiers.tier_to_credits("medium", "chat") == 2
+    assert tiers.tier_to_credits("high", "chat") == 5
+    assert tiers.tier_to_credits("very_high", "chat") == 8
+    # agent runs are cheaper than chat at every tier (fractional at low/medium)
+    assert tiers.tier_to_credits("low", "agent") == 0.5
+    assert tiers.tier_to_credits("medium", "agent") == 1.5
+    assert tiers.tier_to_credits("high", "agent") == 3
+    assert tiers.tier_to_credits("very_high", "agent") == 5
     # unknown tier -> medium for that context; unknown context -> chat table
     assert (
         tiers.tier_to_credits("bogus", "chat")
         == tiers.VALUE_TIER_CREDITS["chat"]["medium"]
     )
-    assert tiers.tier_to_credits("high", "weird-context") == 8
+    assert tiers.tier_to_credits("high", "weird-context") == 5
 
 
 def test_parse_classification() -> None:

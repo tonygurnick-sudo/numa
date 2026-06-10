@@ -693,18 +693,58 @@ def resolve_approval_mode(
     return fetch_user_approval_mode(user_sub)
 
 
-def resolve_per_integration_approval_modes(user_sub: str) -> dict[str, str]:
+def _agent_overrides_integrations(agent_config: Optional[AgentConfig]) -> bool:
+    """True if the agent explicitly sets the Integrations approval category.
+
+    "Explicitly" means the agent record carries a valid Integrations mode via
+    the per-category `approvalModes` map or the legacy single `approvalMode`
+    field. A category left as "Use default" (stored as None) returns False.
+    """
+    if not agent_config:
+        return False
+    tc = agent_config.tools_config
+    if (
+        tc.approval_modes
+        and tc.approval_modes.get("integrations") in VALID_APPROVAL_MODES
+    ):
+        return True
+    if tc.approval_mode and tc.approval_mode in VALID_APPROVAL_MODES:
+        return True
+    return False
+
+
+def resolve_per_integration_approval_modes(
+    user_sub: str,
+    agent_config: Optional[AgentConfig] = None,
+) -> dict[str, str]:
     """
     Resolve the user's per-integration approval-mode overrides (TASK-127).
 
-    Returns the raw map from chat-settings — this is user-only state with
-    no agent-level override. The caller (sdk_runner) consults it per tool
-    call, falling back to the resolved category mode when a slug is absent.
+    Per-integration overrides are user-only state, but they only take effect
+    when the agent leaves the Integrations category as "Use default". If the
+    agent explicitly sets an Integrations approval mode (e.g. "Auto-approve
+    all"), that agent-level decision applies uniformly to EVERY integration —
+    so we return an empty map and let the resolved category mode drive every
+    slug. This keeps the agent author's intent authoritative: choosing a
+    specific Integrations mode on the agent overrides the user's per-slug
+    preferences, while "Use default" defers to them.
+
+    The caller (sdk_runner) consults the returned map per tool call, falling
+    back to the resolved category mode when a slug is absent.
 
     Returns:
-        Dict mapping integration slug -> approval mode string. Empty when
-        the user has set no per-integration overrides.
+        Dict mapping integration slug -> approval mode string. Empty when the
+        user has set no per-integration overrides, or when an agent-level
+        Integrations mode takes precedence.
     """
+    if _agent_overrides_integrations(agent_config):
+        logger.info(
+            "Agent explicitly set Integrations approval mode; "
+            "ignoring per-integration user overrides",
+            _name="PER_INTEGRATION_OVERRIDE_SUPPRESSED",
+            agent_id=agent_config.agent_id if agent_config else None,
+        )
+        return {}
     return fetch_integration_approval_modes(user_sub)
 
 

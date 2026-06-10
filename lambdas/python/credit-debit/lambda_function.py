@@ -213,8 +213,10 @@ def handler(event: dict, context: Any) -> dict:
     )
     eff_tiers = None
     if isinstance(cfg.get("valueTiers"), dict):
+        # float, NOT int — tiers are priced in half-credit steps (e.g. agent low = 0.5);
+        # int() would silently truncate a configured 0.5 to 0.
         eff_tiers = {
-            ctx: {k: int(v) for k, v in d.items()}
+            ctx: {k: float(v) for k, v in d.items()}
             for ctx, d in cfg["valueTiers"].items()
             if isinstance(d, dict)
         }

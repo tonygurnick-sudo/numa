@@ -190,25 +190,42 @@ def resolve_oversized_result(result: Any) -> Any:
 def pop_approval_id(action_key: str) -> str:
     """Pop the next approval ID for this action_key from NUMA_REQUEST_ID_MAP.
 
-    The SDK runner stores a JSON dict of action_key -> [approval_id, ...] in
-    the env var. Each tool call pops the first entry (FIFO) so parallel calls
-    to the same action each get their own unique ID.
+    The SDK runner stores a JSON dict of action_key -> [entry, ...] in the env
+    var, where each entry is ``{"id": approval_id, "mode": "auto"|"manual"}``.
+    Each tool call pops the first entry (FIFO) so parallel calls to the same
+    action each get their own unique ID *and* their own approval mode.
 
-    Falls back to the legacy single-value NUMA_REQUEST_ID env var.
+    Popping also pins ``NUMA_APPROVAL_MODE`` to this call's mode. The mode used
+    to live solely in that single global, which the runner set for every
+    tool_use block in a parallel batch up front — so the last write won and an
+    auto-approved call (e.g. Slack) could inherit a sibling's "manual" mode
+    (e.g. Gmail) and hang waiting for an approval that was never required.
+    Sourcing the mode from the per-call FIFO entry removes that cross-tool
+    clobber.
+
+    Legacy entries that are bare ID strings (older runner builds) are returned
+    as-is without touching NUMA_APPROVAL_MODE. Falls back to the single-value
+    NUMA_REQUEST_ID env var when the map is empty.
     """
     raw = os.environ.get("NUMA_REQUEST_ID_MAP", "")
     if raw:
         try:
             id_map = json.loads(raw)
-            ids = id_map.get(action_key, [])
-            if ids:
-                approval_id = ids.pop(0)
-                if not ids:
+            entries = id_map.get(action_key, [])
+            if entries:
+                entry = entries.pop(0)
+                if not entries:
                     id_map.pop(action_key, None)
                 else:
-                    id_map[action_key] = ids
+                    id_map[action_key] = entries
                 os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(id_map)
-                return approval_id
+                if isinstance(entry, dict):
+                    mode = entry.get("mode")
+                    if mode in ("auto", "manual"):
+                        os.environ["NUMA_APPROVAL_MODE"] = mode
+                    return entry.get("id", "")
+                # Legacy bare-string entry — leave NUMA_APPROVAL_MODE untouched.
+                return entry
         except (json.JSONDecodeError, TypeError):
             pass
     return os.environ.get("NUMA_REQUEST_ID", "")
