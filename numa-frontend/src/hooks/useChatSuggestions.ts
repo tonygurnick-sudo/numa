@@ -112,10 +112,12 @@ export function useChatSuggestions({
     abortRef.current = null;
   }, []);
 
+  // Idempotent: bails out of state updates when there's nothing to dismiss so
+  // callers can invoke it freely (e.g. per keystroke) without causing re-renders
   const dismiss = useCallback(() => {
     cancelPending();
-    setSuggestions([]);
-    setLoading(false);
+    setSuggestions((prev) => (prev.length === 0 ? prev : []));
+    setLoading((prev) => (prev ? false : prev));
     armedConvIdRef.current = null;
   }, [cancelPending]);
 

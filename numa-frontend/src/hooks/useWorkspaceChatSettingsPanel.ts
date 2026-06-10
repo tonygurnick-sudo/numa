@@ -160,19 +160,37 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
 
   const outputFileGroups = useMemo(() => groupOutputFiles(outputFiles), [outputFiles]);
 
-  return {
-    isPanelOpen,
-    openPanel,
-    closePanel,
-    togglePanel,
-    uploadsFiles,
-    outputFiles,
-    outputFileGroups,
-    filesLoading,
-    filesError,
-    refreshFiles: loadFiles,
-    clearFiles,
-  };
+  // Memoized so consumers can safely use the hook's return value as a dependency
+  // (BUG-194: a fresh object here invalidated useCallback chains in the chat page
+  // on every render, defeating React.memo on the message list)
+  return useMemo(
+    () => ({
+      isPanelOpen,
+      openPanel,
+      closePanel,
+      togglePanel,
+      uploadsFiles,
+      outputFiles,
+      outputFileGroups,
+      filesLoading,
+      filesError,
+      refreshFiles: loadFiles,
+      clearFiles,
+    }),
+    [
+      isPanelOpen,
+      openPanel,
+      closePanel,
+      togglePanel,
+      uploadsFiles,
+      outputFiles,
+      outputFileGroups,
+      filesLoading,
+      filesError,
+      loadFiles,
+      clearFiles,
+    ]
+  );
 }
 
 export default useWorkspaceChatSettingsPanel;
