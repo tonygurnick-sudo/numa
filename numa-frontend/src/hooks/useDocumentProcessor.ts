@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { extractSingleDocBlock } from '../utils/streamingProcessors';
 
 /**
@@ -96,23 +96,37 @@ export const useDocumentProcessor = () => {
     [processDocumentFromResponse, updateMessageWithDocument, saveDocumentMetadata]
   );
 
-  return {
-    // Document state
-    inlineDocument,
-    showSplitView,
-    leftFraction,
+  // Memoized so consumers can safely use the hook's return value as a dependency (BUG-194)
+  return useMemo(
+    () => ({
+      // Document state
+      inlineDocument,
+      showSplitView,
+      leftFraction,
 
-    // Document state setters (for external control if needed)
-    setInlineDocument,
-    setShowSplitView,
-    setLeftFraction,
+      // Document state setters (for external control if needed)
+      setInlineDocument,
+      setShowSplitView,
+      setLeftFraction,
 
-    // Document processing functions
-    processDocumentFromResponse,
-    openDocument,
-    closeDocument,
-    updateMessageWithDocument,
-    saveDocumentMetadata,
-    completeDocumentProcessing,
-  };
+      // Document processing functions
+      processDocumentFromResponse,
+      openDocument,
+      closeDocument,
+      updateMessageWithDocument,
+      saveDocumentMetadata,
+      completeDocumentProcessing,
+    }),
+    [
+      inlineDocument,
+      showSplitView,
+      leftFraction,
+      processDocumentFromResponse,
+      openDocument,
+      closeDocument,
+      updateMessageWithDocument,
+      saveDocumentMetadata,
+      completeDocumentProcessing,
+    ]
+  );
 };
