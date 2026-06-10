@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 import type { WorkspaceChatMessage, WorkspaceChatModelId } from '../../../types/workspaceChatTypes';
 import {
-  CHAT_HEALTH_AMBER,
+  CHAT_HEALTH_ORANGE_RATIO,
   CHAT_HEALTH_RED,
+  COMPACTION_WEAR_FIRST,
   CONTEXT_PRE_COMPACT_PULSE,
   DEFAULT_MODEL_CONTEXT,
   MAX_OUTPUT_TOKENS_RESERVE,
@@ -22,6 +23,8 @@ export interface ChatHealthState {
   modelContextLimit: number;
   /** Donut should pulse softly (>= 90% of effective limit) */
   prePulse: boolean;
+  /** 0..1 — worst-of wear across all signals; drives the top bar and alarm */
+  wearRatio: number;
   /** Chat-health alarm band */
   alarmBand: AlarmBand;
   /** Counts feeding the alarm */
@@ -120,16 +123,22 @@ export function useChatHealth(
 
     const prePulse = contextPct >= CONTEXT_PRE_COMPACT_PULSE;
 
-    const alarmBand: AlarmBand =
-      userMessages >= CHAT_HEALTH_RED.userMessages ||
-      compactions >= CHAT_HEALTH_RED.compactions ||
-      totalToolTurns >= CHAT_HEALTH_RED.toolTurns
-        ? 'red'
-        : userMessages >= CHAT_HEALTH_AMBER.userMessages ||
-            compactions >= CHAT_HEALTH_AMBER.compactions ||
-            totalToolTurns >= CHAT_HEALTH_AMBER.toolTurns
-          ? 'amber'
-          : 'hidden';
+    // Per-signal wear ratios (0..1) — the worst one is the chat's health.
+    // Context fill is the primary signal: it ties health to the real window
+    // and recovers when a compaction empties it. Its red point aligns with
+    // the pre-compact pulse (95% of the usable budget). Message and tool-turn
+    // counts are cost tripwires — a chat can be cheap on context but
+    // expensive to keep re-reading. Compactions wear non-linearly: the first
+    // jumps straight to the orange line, the second pins red.
+    const contextWear = contextPct / CONTEXT_PRE_COMPACT_PULSE;
+    const messageWear = userMessages / CHAT_HEALTH_RED.userMessages;
+    const toolTurnWear = totalToolTurns / CHAT_HEALTH_RED.toolTurns;
+    const compactionWear =
+      compactions === 0 ? 0 : Math.min(1, COMPACTION_WEAR_FIRST + (compactions - 1) * (1 - COMPACTION_WEAR_FIRST));
+
+    const wearRatio = Math.min(1, Math.max(contextWear, messageWear, toolTurnWear, compactionWear));
+
+    const alarmBand: AlarmBand = wearRatio >= 1 ? 'red' : wearRatio >= CHAT_HEALTH_ORANGE_RATIO ? 'amber' : 'hidden';
 
     return {
       contextPct,
@@ -137,6 +146,7 @@ export function useChatHealth(
       effectiveContextLimit,
       modelContextLimit,
       prePulse,
+      wearRatio,
       alarmBand,
       userMessages,
       compactions,
