@@ -15,6 +15,7 @@ from . import nolia_funding as _nolia_funding  # noqa: F401
 from . import numa_chat as _numa_chat  # noqa: F401
 from . import numa_chat_demo as _numa_chat_demo  # noqa: F401
 from . import numa_support as _numa_support  # noqa: F401
+from . import policy_designer as _policy_designer  # noqa: F401
 from . import profile_creator as _profile_creator  # noqa: F401
 from . import profile_researcher as _profile_researcher  # noqa: F401
 from . import profile_validator as _profile_validator  # noqa: F401
