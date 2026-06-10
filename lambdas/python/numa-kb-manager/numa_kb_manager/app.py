@@ -1822,9 +1822,13 @@ def _get_bedrock_kb_state(
         docs: List[Dict[str, Any]] = []
         next_token = None
         while include_documents:
+            # The API default page size is 10 — on a multi-thousand-doc KB
+            # that's hundreds of sequential throttled calls and a 70-120s
+            # request that times out at CloudFront. 1000 is the API max.
             list_params: Dict[str, Any] = {
                 "knowledgeBaseId": BEDROCK_KNOWLEDGE_BASE_ID,
                 "dataSourceId": data_source_id,
+                "maxResults": 1000,
             }
             if next_token:
                 list_params["nextToken"] = next_token
@@ -1943,10 +1947,12 @@ def _get_qbusiness_kb_state(
         docs: List[Dict[str, Any]] = []
         next_token = None
         while include_documents:
+            # 100 is the qbusiness ListDocuments API max (default page is 10).
             list_params: Dict[str, Any] = {
                 "applicationId": Q_APPLICATION_ID,
                 "indexId": Q_INDEX_ID,
                 "dataSourceIds": [data_source_id],
+                "maxResults": 100,
             }
             if next_token:
                 list_params["nextToken"] = next_token
