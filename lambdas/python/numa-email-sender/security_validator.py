@@ -35,8 +35,11 @@ logger = structlog.get_logger()
 #   - {clientName}_cognito-custom-email-sender or {clientName}_cognito_custom_email_sender
 #       (Cognito CustomEmailSender trigger — auth verification/activation/reset
 #        emails, BUG-188)
+#   - numa-{clientName}-workspace-chat-agentcore
+#       (AgentCore runtime execution role — V2 app run-completion emails sent
+#        by pipeline orchestrators inside the workspace agent, FEAT-174)
 ALLOWED_ROLE_REGEX = re.compile(
-    r"^[a-zA-Z0-9-]+_(?:ops[_-]api|agent[_-]schedule[_-]runner|agent[_-]schedules|schedule[_-]runner|ws[_-]agent|chat[_-]agent|workspace[_-]chat[_-]tools|admin[_-]mfa[\w-]*|cognito[_-]custom[_-]email[_-]sender)$"
+    r"^(?:[a-zA-Z0-9-]+_(?:ops[_-]api|agent[_-]schedule[_-]runner|agent[_-]schedules|schedule[_-]runner|ws[_-]agent|chat[_-]agent|workspace[_-]chat[_-]tools|admin[_-]mfa[\w-]*|cognito[_-]custom[_-]email[_-]sender)|numa-[a-zA-Z0-9-]+-workspace-chat-agentcore)$"
 )
 
 
