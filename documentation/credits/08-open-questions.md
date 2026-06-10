@@ -114,4 +114,4 @@ lib defaults cover until the first portal save, and skipping it guarantees a dep
 - **Agent chats price on the agent tier** (ad-hoc + scheduled); plain chat on the chat tier.
 - Config authored centrally in the **portal** and **pushed** to client accounts; in-client view **read-only**,
   gated by `SHOW_CREDITS`; metering on for everyone.
-- Defaults: `$0.30` · chat 2/4/8/18 · agent 2/3/5/12 · margins 1.15/1.3/1.6/2.0 · 2000/mo.
+- Defaults: `$0.30` · chat 1/2/5/8 · agent 0.5/1.5/3/5 · margins 1.1/1.25/1.4/1.6 · 2000/mo (lowered 2026-06-10 after early pricing feedback).

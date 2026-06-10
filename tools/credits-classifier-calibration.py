@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Calibration sweep for the Numa Credit System value-tier classifier (Nova 2 Lite).
 
-The value tier drives price (low=2 … very_high=30 credits), so a miscalibrated classifier directly
+The value tier drives price (chat low=1 … very_high=8 credits), so a miscalibrated classifier directly
 mis-bills. This runs a rubric-spanning sample set through the REAL classifier the system uses
 (credit_pricing.tiers.classify -> Nova 2 Lite, temp 0) and reports a confusion matrix + directional
 bias + the credit-overcharge implied by each mismatch.

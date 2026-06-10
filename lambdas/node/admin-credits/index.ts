@@ -90,14 +90,14 @@ const DEFAULT_CONFIG = {
   creditUsd: 0.3, // ~NZD $0.50/credit @ FX 1.69 — the NZD-anchored default
   margin: 2.0, // scalar fallback (unclassified); per-tier marginsByTier below are the real defence
   trivialConsumptionUsd: 0.01,
-  // 2-credit floor on every interaction (low); agent stays cheaper than chat above the floor.
+  // Half-credit pricing steps (the floor rounds up to 0.5); agent stays cheaper than chat at every tier.
   valueTiers: {
-    chat: { low: 2, medium: 4, high: 8, very_high: 18 },
-    agent: { low: 2, medium: 3, high: 5, very_high: 12 },
+    chat: { low: 1, medium: 2, high: 5, very_high: 8 },
+    agent: { low: 0.5, medium: 1.5, high: 3, very_high: 5 },
   },
   // Per-tier cost-recovery (defence) margin (the floor), scaling UP with complexity so cheap work
   // isn't punished and premium work keeps a fuller margin.
-  marginsByTier: { low: 1.15, medium: 1.3, high: 1.6, very_high: 2.0 },
+  marginsByTier: { low: 1.1, medium: 1.25, high: 1.4, very_high: 1.6 },
   // Monthly credit allocation (Jan..Dec). Credits granted per calendar month; UNUSED CREDITS EXPIRE
   // at month end (no rollover). Defaults to the new-client starter plan (2000/mo ≈ NZD $1,015) so a
   // fresh client meters against a real allowance; portal-set allocations override this.

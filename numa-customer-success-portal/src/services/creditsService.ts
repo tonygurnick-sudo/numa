@@ -73,12 +73,12 @@ export const DEFAULT_CREDIT_CONFIG: Required<CreditConfig> = {
   margin: 2.0, // scalar fallback (unclassified); marginsByTier below is the real defence
   agentcoreMult: 1.234,
   trivialConsumptionUsd: 0.01,
-  // 2-credit floor on every interaction (low); agent stays cheaper than chat above the floor.
+  // Half-credit pricing steps (the floor rounds up to 0.5); agent stays cheaper than chat at every tier.
   valueTiers: {
-    chat: { low: 2, medium: 4, high: 8, very_high: 18 },
-    agent: { low: 2, medium: 3, high: 5, very_high: 12 },
+    chat: { low: 1, medium: 2, high: 5, very_high: 8 },
+    agent: { low: 0.5, medium: 1.5, high: 3, very_high: 5 },
   },
-  marginsByTier: { low: 1.15, medium: 1.3, high: 1.6, very_high: 2.0 },
+  marginsByTier: { low: 1.1, medium: 1.25, high: 1.4, very_high: 1.6 },
   // New-client starter plan: 2000 credits/mo (≈ NZD $1,015). Portal edits override per client.
   monthlyAllocations: Array.from({ length: 12 }, () => 2000),
 };

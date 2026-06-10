@@ -851,6 +851,7 @@ export default function NumaCredits() {
                                     <Form.Label className="small text-muted">{TIER_LABEL[tier]}</Form.Label>
                                     <Form.Control
                                       type="number"
+                                      step="0.5"
                                       value={config.valueTiers[ctx]?.[tier] ?? 0}
                                       onChange={(e) => setTier(ctx, tier, num(e.target.value))}
                                     />

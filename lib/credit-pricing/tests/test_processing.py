@@ -62,8 +62,8 @@ def test_build_rows_charge_is_max_of_value_and_floor() -> None:
     )
     assert meta["PK"] == "CONV#c1" and meta["SK"] == "META"
     assert meta["GSI2PK"] == "MONTH#2026-06"
-    assert meta["creditsValue"] == 8  # high, chat context (Scheme A)
-    assert meta["creditsCharged"] == max(8, meta["creditsFloor"])
+    assert meta["creditsValue"] == 5  # high, chat context (Scheme A)
+    assert meta["creditsCharged"] == max(5, meta["creditsFloor"])
     assert "category" not in meta  # category removed from the live ledger row
     assert len(msgs) == 1 and msgs[0]["SK"].startswith("MSG#")
     assert "content" not in msgs[0] and "text" not in msgs[0]  # privacy
@@ -172,9 +172,7 @@ def test_trivial_cost_caps_value_tier_to_low() -> None:
         value_tier="very_high",
         context="chat",
     )
-    assert (
-        meta["dominantTier"] == "low" and meta["creditsValue"] == 2
-    )  # low chat = 2 (2-credit floor)
+    assert meta["dominantTier"] == "low" and meta["creditsValue"] == 1  # low chat = 1
 
 
 def test_cache_creation_split_priced_per_tier() -> None:
@@ -308,7 +306,7 @@ def test_agentcore_uplift_in_floor_is_default() -> None:
         == 5
     )
     assert abs(meta["agentCoreCostUsd"] - 0.234) < 1e-6  # recorded uplift
-    charged = meta["creditsCharged"]  # max(value low=2, floor 5) = 5
+    charged = meta["creditsCharged"]  # max(value low=1, floor 5) = 5
     assert charged == 5
     # margin measured against tokens + AgentCore, and >= the 2x target (ceil rounds it slightly up)
     assert (

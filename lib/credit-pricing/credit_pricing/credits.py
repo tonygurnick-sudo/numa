@@ -30,16 +30,16 @@ DEFAULT_MONTHLY_ALLOCATION: int = 2000
 # AgentCore-seconds (and add Transcribe / heavy-Lambda lines). Confirm with Asa.
 AGENTCORE_MULT: float = 1.234
 
-# Per-tier cost-recovery margin. The floor binds on token-heavy conversations; a higher multiple
-# for premium tiers stops their margin collapsing to a flat 2x when cost catches up to the value
-# price. Defaults to MARGIN_TARGET for every tier (no change until tuned). Confirm with Asa.
 # Per-tier cost-recovery (defence) margins — scale UP with complexity (Scheme A). Cheap/low-tier work
-# isn't punished; premium work keeps a fuller margin. Confirm with Asa; tunable per client in the portal.
+# isn't punished; premium work keeps a fuller margin. The floor binds on token-heavy conversations; a
+# higher multiple for premium tiers stops their margin collapsing when cost catches up to the value
+# price. Lowered (with the value tiers) after early "too expensive" feedback — Asa approved, June 2026.
+# Tunable per client in the portal.
 MARGINS_BY_TIER: dict[str, float] = {
-    "low": 1.15,
-    "medium": 1.3,
-    "high": 1.6,
-    "very_high": 2.0,
+    "low": 1.1,
+    "medium": 1.25,
+    "high": 1.4,
+    "very_high": 1.6,
 }
 
 # Anti-inflation backstop: below this measured consumption (USD) a conversation is treated as
@@ -54,14 +54,16 @@ def floor_credits(
     *,
     margin: float = MARGIN_TARGET,
     credit_usd: float = CREDIT_USD,
-) -> int:
-    """Cost-recovery floor: the fewest whole credits whose value >= consumption x margin.
+) -> float:
+    """Cost-recovery floor: the fewest half-credits whose value >= consumption x margin.
 
-    Rounds UP so the floored charge never dips below the target margin.
+    Rounds UP (to the nearest 0.5 credit) so the floored charge never dips below the target
+    margin. Half-credit granularity lets sub-1-credit value tiers (e.g. agent low = 0.5)
+    genuinely bill instead of being absorbed by a whole-credit ceil.
     """
     if consumption_usd <= 0:
         return 0
-    return math.ceil(consumption_usd * margin / credit_usd)
+    return math.ceil(consumption_usd * margin / credit_usd * 2) / 2
 
 
 def credits_to_usd(credits: float, *, credit_usd: float = CREDIT_USD) -> float:
@@ -77,8 +79,8 @@ def margin_actual(
 ) -> Optional[float]:
     """Realised margin = (credits charged, in USD) / consumption cost. None if no cost.
 
-    Monitor this per row: with the floor applied it can never fall below MARGIN_TARGET, so a
-    value < 1.0 means a wiring bug, not a cheap customer.
+    Monitor this per row: with the floor applied it can never fall below the tier's enforced
+    margin, so a value < 1.0 means a wiring bug, not a cheap customer.
     """
     if consumption_usd <= 0:
         return None
