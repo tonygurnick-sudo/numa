@@ -657,7 +657,7 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
         createPortal(
           <>
             <div className="ask-numa-overlay" onClick={() => setShowSupportPopup(false)} />
-            <SupportNumaPopup onClose={() => setShowSupportPopup(false)} />
+            <SupportNumaPopup onClose={() => setShowSupportPopup(false)} sidebarCollapsed={isCollapsed} />
           </>,
           document.body
         )}

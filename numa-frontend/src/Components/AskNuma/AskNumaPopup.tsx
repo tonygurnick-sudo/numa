@@ -35,6 +35,12 @@ export interface AskNumaContextFile {
 
 interface AskNumaPopupProps {
   onClose: () => void;
+  /**
+   * Extra class(es) on the popup panel. Used by the Support popup to anchor
+   * next to the nav sidebar (bottom-left) instead of the default bottom-right
+   * placement next to the Ask Numa FAB.
+   */
+  className?: string;
   /** Popup header title. Defaults to the Ask Numa title. */
   title?: string;
   /** Textarea placeholder. Defaults to the Ask Numa placeholder. */
@@ -75,6 +81,7 @@ interface AskNumaPopupProps {
  */
 export function AskNumaPopup({
   onClose,
+  className,
   title,
   placeholder,
   greeting,
@@ -394,7 +401,7 @@ export function AskNumaPopup({
 
   return (
     <>
-      <div className="ask-numa-popup">
+      <div className={`ask-numa-popup${className ? ` ${className}` : ''}`}>
         {/* Header */}
         <div className="ask-numa-popup-header">
           <h6 className="ask-numa-popup-title">{title || t('askNuma.popupTitle')}</h6>

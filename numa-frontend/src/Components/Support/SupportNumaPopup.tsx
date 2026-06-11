@@ -10,6 +10,8 @@ export const SUPPORT_KB_ID = 'numa-support';
 
 interface SupportNumaPopupProps {
   onClose: () => void;
+  /** Collapsed state of the nav sidebar — picks the matching left offset. */
+  sidebarCollapsed?: boolean;
 }
 
 /**
@@ -18,14 +20,19 @@ interface SupportNumaPopupProps {
  * conversation with the dedicated `numa-chat-support` agent type and attaches
  * an environment report (client, feature flags, admin settings) alongside the
  * standard page-context capture (screenshot + HTML).
+ *
+ * Anchored bottom-left next to the nav sidebar (where the Support tab lives)
+ * rather than the Ask Numa FAB's bottom-right corner, so the popup opens
+ * beside the control that triggered it.
  */
-export function SupportNumaPopup({ onClose }: SupportNumaPopupProps) {
+export function SupportNumaPopup({ onClose, sidebarCollapsed }: SupportNumaPopupProps) {
   const { t } = useTranslation('support');
   const buildEnvironmentContext = useSupportEnvironmentContext();
 
   return (
     <AskNumaPopup
       onClose={onClose}
+      className={`ask-numa-popup--nav-left${sidebarCollapsed ? ' ask-numa-popup--nav-collapsed' : ''}`}
       title={t('popup.title')}
       placeholder={t('popup.placeholder')}
       greeting={t('popup.greeting')}
