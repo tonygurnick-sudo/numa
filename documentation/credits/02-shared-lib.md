@@ -64,10 +64,12 @@ write rate, while AWS bills the 1h rate. So we recompute from raw token counts u
 | `anthropic.claude-opus-4-6-v1`             | 15.00 |  75.00 |          18.75 |          30.00 |       1.50 |
 | `anthropic.claude-haiku-4-5-20251001-v1:0` |  1.00 |   5.00 |           1.25 |              … |          … |
 
-**1M-context premium:** if a prompt's total input (input + cache_read + cache_creation) exceeds **200K tokens**,
-the whole request bills at the model's `_200k` rates (~2× input/cache, 1.5× output). Inert today for Numa's SDK
-config, but implemented for correctness. A model with no `_200k` entry (e.g. haiku) stays at standard rates even
-over 200K.
+**No 1M-context premium tier — deliberately.** The premium (`_200k` rates) applies per API _call_ when a single
+prompt exceeds 200K tokens on the 1M-context model variant, which Numa doesn't route to. Critically, every caller
+feeds usage **summed across a whole agentic request** (SDK `ResultMessage` aggregates all inner API calls), so a
+threshold check here fires on cumulative cache reads that AWS bills at standard rates — that bug inflated agentic
+conversation costs ~1.6–1.8× until removed (June 2026). If 1M context is ever enabled, the premium must be priced
+per individual API call, never from aggregated result usage.
 
 `recalculate_anthropic_cost` accepts per-tier cache-creation splits
 (`cache_creation_5m_tokens` / `cache_creation_1h_tokens`) when the trace carries
@@ -183,7 +185,8 @@ Runtime note: `zoneinfo` needs the IANA tz DB. The Lambdas add the `tzdata` pip 
 `python3 -m pytest -q` from `lib/credit-pricing/` (24 tests). Coverage includes:
 
 - `test_processing.py` — charge = max(value, floor); unclassified → floor; single-ceil floor (not per-message
-  sum); the trivial-cost cap; per-tier cache-creation split; the 200K long-context premium; per-tier margin
+  sum); the trivial-cost cap; per-tier cache-creation split; the no-premium-on-cumulative-usage regression
+  guard; per-tier margin
   lifting the floor; the AgentCore uplift in the floor (default 1.234, and `marginVsConsumption` measured against
   tokens + AgentCore).
 - `test_tiers.py` — `tier_to_credits` for the current defaults; classifier parse.

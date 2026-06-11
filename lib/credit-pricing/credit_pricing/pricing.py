@@ -24,10 +24,13 @@ from typing import Optional
 
 _KNOWN_PREFIXES = ("us.", "au.", "apac.", "eu.", "global.")
 
-# Anthropic 1M-context premium: prompts whose total input (input + cache_read + cache_creation)
-# exceeds this bill the WHOLE request at the model's _200k rates. Inert today — Numa's SDK
-# auto-compaction keeps requests under the standard window — but correct if 1M context is enabled.
-LONG_CONTEXT_THRESHOLD = 200_000
+# NO 1M-long-context premium tier — deliberately. The premium (_200k rates) applies per API CALL
+# when a single prompt exceeds 200K tokens on the 1M-context model variant. Numa doesn't route any
+# traffic to that variant, and — critically — every caller of this function feeds usage SUMMED
+# ACROSS a whole agentic request (the SDK ResultMessage aggregates all inner API calls), so a
+# threshold check here fires on cumulative cache reads that AWS bills at standard rates. That bug
+# inflated agentic-conversation costs ~1.6-1.8x (June 2026). If 1M context is ever enabled, the
+# premium must be priced per individual API call, never from aggregated result usage.
 
 # Keep IDENTICAL to the agent's table (drift-guarded). Bare canonical Bedrock ids (no regional
 # prefix). Only verified, production-routed models belong here — adding an unverified rate would
@@ -39,12 +42,6 @@ ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
         "cache_write_5m": 3.75,
         "cache_write_1h": 6.00,
         "cache_read": 0.30,
-        # Long-context tier: prompts > 200K tokens (1M-context) bill ~2x input/cache, 1.5x output.
-        "input_200k": 6.00,
-        "output_200k": 22.50,
-        "cache_write_5m_200k": 7.50,
-        "cache_write_1h_200k": 12.00,
-        "cache_read_200k": 0.60,
     },
     "anthropic.claude-opus-4-6-v1": {
         "input": 15.00,
@@ -66,12 +63,6 @@ ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
         "cache_write_5m": 3.75,
         "cache_write_1h": 6.00,
         "cache_read": 0.30,
-        # Long-context tier: prompts > 200K tokens (1M-context) bill ~2x input/cache, 1.5x output.
-        "input_200k": 6.00,
-        "output_200k": 22.50,
-        "cache_write_5m_200k": 7.50,
-        "cache_write_1h_200k": 12.00,
-        "cache_read_200k": 0.60,
     },
     "anthropic.claude-sonnet-4-20250514-v1:0": {
         "input": 3.00,
@@ -79,12 +70,6 @@ ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
         "cache_write_5m": 3.75,
         "cache_write_1h": 6.00,
         "cache_read": 0.30,
-        # Long-context tier: prompts > 200K tokens (1M-context) bill ~2x input/cache, 1.5x output.
-        "input_200k": 6.00,
-        "output_200k": 22.50,
-        "cache_write_5m_200k": 7.50,
-        "cache_write_1h_200k": 12.00,
-        "cache_read_200k": 0.60,
     },
 }
 
@@ -148,30 +133,18 @@ def recalculate_anthropic_cost(
     rates = ANTHROPIC_MODEL_PRICING.get(_normalise_bare(_strip_prefix(model_id)))
     if rates is None:
         return None
-    # Long-context (1M) tier: if the prompt (input + cached) exceeds 200K tokens, AWS bills the
-    # whole request — including output — at premium rates. Models with no _200k entry stay standard.
-    cw_total = (
-        (cache_creation_5m_tokens or 0) + (cache_creation_1h_tokens or 0)
-        if (
-            cache_creation_5m_tokens is not None or cache_creation_1h_tokens is not None
-        )
-        else cache_creation_tokens
-    )
-    long_ctx = (input_tokens + cache_read_tokens + cw_total) > LONG_CONTEXT_THRESHOLD
-
-    def _r(key: str) -> float:
-        return rates.get(f"{key}_200k", rates[key]) if long_ctx else rates[key]
-
     if cache_creation_5m_tokens is not None or cache_creation_1h_tokens is not None:
-        cache_write_cost = (cache_creation_5m_tokens or 0) * _r("cache_write_5m") + (
+        cache_write_cost = (cache_creation_5m_tokens or 0) * rates["cache_write_5m"] + (
             cache_creation_1h_tokens or 0
-        ) * _r("cache_write_1h")
+        ) * rates["cache_write_1h"]
     else:
-        write_rate = _r("cache_write_1h") if cache_ttl == "1h" else _r("cache_write_5m")
+        write_rate = (
+            rates["cache_write_1h"] if cache_ttl == "1h" else rates["cache_write_5m"]
+        )
         cache_write_cost = cache_creation_tokens * write_rate
     return (
-        input_tokens * _r("input")
-        + output_tokens * _r("output")
-        + cache_read_tokens * _r("cache_read")
+        input_tokens * rates["input"]
+        + output_tokens * rates["output"]
+        + cache_read_tokens * rates["cache_read"]
         + cache_write_cost
     ) / 1_000_000

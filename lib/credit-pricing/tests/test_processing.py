@@ -199,45 +199,39 @@ def test_cache_creation_split_priced_per_tier() -> None:
     assert abs(c5 - 0.375) < 1e-9 and abs(c1 - 0.60) < 1e-9
 
 
-def test_long_context_tier_premium() -> None:
-    """Prompts over 200K tokens bill at the _200k premium rates (1M-context tier)."""
+def test_no_long_context_premium_on_cumulative_usage() -> None:
+    """Usage summed across an agentic loop bills at STANDARD rates, however large.
+
+    Regression guard (June 2026): callers feed ResultMessage usage, which aggregates every API
+    call in the agentic loop — cumulative cache reads routinely exceed 200K tokens even though no
+    single prompt does. A 1M-long-context threshold check on that total falsely billed _200k
+    premium rates (~1.6-1.8x inflation on agentic conversations). AWS bills standard rates; so
+    must we.
+    """
     from credit_pricing.pricing import recalculate_anthropic_cost as rc
 
     m = "anthropic.claude-sonnet-4-6"
-    std = rc(
-        m,
-        input_tokens=100_000,
-        output_tokens=0,
-        cache_read_tokens=0,
-        cache_creation_tokens=0,
-    )
-    lng = rc(
-        m,
-        input_tokens=250_000,
-        output_tokens=0,
-        cache_read_tokens=0,
-        cache_creation_tokens=0,
-    )
-    assert abs(std - 100_000 * 3.0 / 1e6) < 1e-9  # standard $3/M
-    assert abs(lng - 250_000 * 6.0 / 1e6) < 1e-9  # premium $6/M, not 0.75
-    # cached tokens count toward the 200K threshold: 150K input + 100K cache_read -> premium
-    mix = rc(
+    # A realistic big agentic turn: cumulative prompt side >1.1M tokens across many inner calls.
+    big = rc(
         m,
         input_tokens=150_000,
-        output_tokens=0,
-        cache_read_tokens=100_000,
-        cache_creation_tokens=0,
+        output_tokens=70_000,
+        cache_read_tokens=977_000,
+        cache_creation_5m_tokens=0,
+        cache_creation_1h_tokens=140_000,
     )
-    assert abs(mix - (150_000 * 6.0 + 100_000 * 0.60) / 1e6) < 1e-9
-    # a model with no _200k tier (haiku) stays standard even over 200K
-    h = rc(
-        "anthropic.claude-haiku-4-5-20251001-v1:0",
-        input_tokens=250_000,
-        output_tokens=0,
-        cache_read_tokens=0,
-        cache_creation_tokens=0,
+    expected = (150_000 * 3.0 + 70_000 * 15.0 + 977_000 * 0.30 + 140_000 * 6.0) / 1e6
+    assert big is not None and abs(big - expected) < 1e-9, big
+    # Per-token pricing must be scale-invariant: 10x the tokens = exactly 10x the cost.
+    small = rc(
+        m,
+        input_tokens=15_000,
+        output_tokens=7_000,
+        cache_read_tokens=97_700,
+        cache_creation_5m_tokens=0,
+        cache_creation_1h_tokens=14_000,
     )
-    assert abs(h - 250_000 * 1.0 / 1e6) < 1e-9
+    assert small is not None and abs(big - small * 10) < 1e-9
 
 
 def test_per_tier_margin_lifts_floor() -> None:
@@ -375,7 +369,7 @@ if __name__ == "__main__":
     test_floor_is_single_ceil_on_total_not_per_message_sum()
     test_trivial_cost_caps_value_tier_to_low()
     test_cache_creation_split_priced_per_tier()
-    test_long_context_tier_premium()
+    test_no_long_context_premium_on_cumulative_usage()
     test_per_tier_margin_lifts_floor()
     test_agentcore_uplift_in_floor_is_default()
     test_extract_tools_and_value_signal()
