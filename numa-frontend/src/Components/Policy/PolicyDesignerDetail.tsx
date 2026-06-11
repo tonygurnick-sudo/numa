@@ -244,7 +244,9 @@ export const PolicyDesignerDetail = () => {
                             </>
                           )}
                         </Dropdown.Toggle>
-                        <Dropdown.Menu align="end" flip>
+                        {/* strategy: fixed — escapes the .table-responsive overflow
+                            container that otherwise clips the menu on short tables */}
+                        <Dropdown.Menu align="end" flip popperConfig={{ strategy: 'fixed' }}>
                           {OUTPUT_FORMATS.map((format) => (
                             <Dropdown.Item
                               key={format}
