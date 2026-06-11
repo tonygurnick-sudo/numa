@@ -8,20 +8,24 @@
  * pipeline: generation → review & assemble → format rendering).
  *
  * The school context is the run prompt; the school name travels in run
- * metadata as `school_name`. Outputs (final_policy.md / .docx / .pdf) are
- * downloaded straight from S3 under the run's s3Prefix — no per-app
- * download endpoint.
+ * metadata as `school_name`. Downloads fetch the canonical final_policy.md
+ * from the run's s3Prefix and convert on demand through the document-converter
+ * Lambda (same pattern as chat's ResultActions) — the workspace-rendered
+ * DOCX/PDF artifacts in S3 are currently unused while we evaluate which
+ * rendering path produces the better documents.
  */
 import { useEffect, useState } from 'react';
 import { Badge, Button, Container, Dropdown, OverlayTrigger, Tab, Table, Tabs, Toast, Tooltip } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { Download as DownloadIcon, PencilSquare, Plus as PlusIcon } from 'react-bootstrap-icons';
+import { saveAs } from 'file-saver';
 
 import { CreatePolicyModal } from './PolicyBuilderModal';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { useV2AppRun } from '../../hooks/useV2AppRun';
-import { downloadFileWithSignedUrl } from '../../utils/s3Utils';
+import { fetchFileFromS3 } from '../../utils/s3Utils';
+import { downloadDocx, downloadPdf } from '../../Services/documentConverterService';
 import type { RunRecord } from '../../Services/v2AppsService';
 import type { RunConfiguration } from '../../types/apps';
 import i18n from '../../i18n';
@@ -121,11 +125,24 @@ export const PolicyDesignerDetail = () => {
   const handleDownload = async (run: RunRecord, format: OutputFormat) => {
     setIsDownloading(run.runId);
     try {
-      const sanitizedFileName = (run.name || 'final_policy').replace(/[^a-z0-9]/gi, '_').toLowerCase();
       const bucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
       const region = sessionStorage.getItem('REGION') || '';
-      const key = `${run.s3Prefix}/outputs/final_policy.${format}`;
-      await downloadFileWithSignedUrl(key, bucket, region, getCredentials, `${sanitizedFileName}.${format}`);
+      // The markdown is the canonical deliverable; DOCX/PDF are converted on
+      // demand by the document-converter Lambda rather than served from the
+      // workspace-rendered artifacts.
+      const key = `${run.s3Prefix}/outputs/final_policy.md`;
+      const blob = await fetchFileFromS3(key, bucket, region, getCredentials);
+      const markdown = await blob.text();
+      const title = run.name || 'Policy Suite';
+
+      if (format === 'md') {
+        const sanitizedFileName = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        saveAs(new Blob([markdown], { type: 'text/markdown;charset=utf-8' }), `${sanitizedFileName}.md`);
+      } else if (format === 'docx') {
+        await downloadDocx(numaPost, markdown, title);
+      } else {
+        await downloadPdf(numaPost, markdown, title);
+      }
     } catch (error) {
       console.error('Error downloading file:', error);
       setErrorMessage(error instanceof Error ? error.message : t('policyDesigner.errors.downloadFailed'));
