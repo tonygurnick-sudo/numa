@@ -366,10 +366,22 @@ export const listUserVaultNativeIntegrations = async ({
     for (const [key, entry] of Object.entries(vault.secrets ?? {})) {
       // OAuth integration tokens are keyed `oauth-<slug>`. Skip company
       // client-credential entries (`oauth-client-*`).
-      if (!key.startsWith('oauth-') || key.startsWith('oauth-client-')) continue;
-      const slug = key.slice('oauth-'.length);
-      if (!NATIVE_CONNECTOR_SET.has(slug)) continue;
-      if (entry?.fields?.access_token) out.add(slug);
+      if (key.startsWith('oauth-') && !key.startsWith('oauth-client-')) {
+        const slug = key.slice('oauth-'.length);
+        if (NATIVE_CONNECTOR_SET.has(slug) && entry?.fields?.access_token) out.add(slug);
+        continue;
+      }
+      // Non-OAuth native credentials (PAT/api-key/username-password, written
+      // by the chat credential card) are keyed `connector-<slug>` — without
+      // this, token-native dual-method services (e.g. Rentman) always look
+      // disconnected here and preferred_method=native silently falls back.
+      if (key.startsWith('connector-') && !key.startsWith('connector-config-')) {
+        const slug = key.slice('connector-'.length);
+        if (!NATIVE_CONNECTOR_SET.has(slug)) continue;
+        const f = entry?.fields ?? {};
+        const usable = f.api_key || f.bearer_token || f.access_token || f.token || (f.username && f.password);
+        if (usable) out.add(slug);
+      }
     }
     return out;
   } catch (err) {

@@ -6,6 +6,7 @@ types in the unified connect system. OAuth handlers remain in oauth_tools.py.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -186,18 +187,106 @@ def _credential_fields_for(connector_id: str) -> list[Dict[str, Any]]:
         try:
             parsed = json.loads(raw)
             if isinstance(parsed, list) and parsed:
-                return parsed
+                return [_humanize_credential_field(f) for f in parsed]
         except (json.JSONDecodeError, TypeError):
             pass
     return _FALLBACK_CREDENTIAL_FIELDS.get(connector_id, [])
 
 
-def _user_connector_token(connector: str, user_sub: str) -> Optional[str]:
-    """Find a usable per-user credential for a non-OAuth connector.
+def _humanize_credential_field(field: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve raw i18n label keys left by older wizard snapshots.
 
-    Looks at connector-{id} in the user vault (written by the PAT credentials
-    endpoint, POST /api/pat/{id}/credentials). Returns the first populated of
-    api_key / bearer_token / access_token / token.
+    New wizard saves store display text, but snapshots written before that
+    carry keys like 'dataConnectors.fields.apiKey' — turn the tail segment
+    into Title Case ('Api Key') so the chat card and the agent's prompt never
+    surface a raw key.
+    """
+    label = field.get("label")
+    if isinstance(label, str) and label.startswith("dataConnectors."):
+        tail = label.rsplit(".", 1)[-1]
+        spaced = re.sub(r"(?<!^)(?=[A-Z])", " ", tail)
+        field = {**field, "label": spaced.title()}
+    return field
+
+
+def _token_from_fields(fields: Optional[Dict[str, Any]]) -> Optional[str]:
+    """First populated single-token credential field, or None."""
+    if not isinstance(fields, dict):
+        return None
+    for key in ("api_key", "bearer_token", "access_token", "token"):
+        val = fields.get(key)
+        if val:
+            return str(val)
+    return None
+
+
+def _basic_from_fields(fields: Optional[Dict[str, Any]]) -> Optional[str]:
+    """Authorization header value for a username/password pair, or None."""
+    if not isinstance(fields, dict):
+        return None
+    username = fields.get("username")
+    password = fields.get("password")
+    if not (username and password):
+        return None
+    userpass = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return f"Basic {userpass}"
+
+
+def _headers_from_fields(
+    header_map: Dict[str, str], fields: Optional[Dict[str, Any]]
+) -> Dict[str, str]:
+    """Custom auth headers built from the user's credential fields.
+
+    All-or-nothing: partial credentials return {} (not connected).
+    """
+    if not isinstance(fields, dict) or not header_map:
+        return {}
+    headers: Dict[str, str] = {}
+    for header_name, field_key in header_map.items():
+        value = fields.get(str(field_key))
+        if not value:
+            return {}
+        headers[str(header_name)] = str(value)
+    return headers
+
+
+def _user_connector_token(connector: str, user_sub: str) -> Optional[str]:
+    """Find a usable per-user single-token credential for a non-OAuth connector."""
+    return _token_from_fields(_user_connector_fields(connector, user_sub))
+
+
+def _connector_static_headers(connector: str) -> Dict[str, str]:
+    """Account-level headers every request to this connector must carry.
+
+    Some APIs (ProWorkflow) require an account API key on every call in
+    addition to the per-user Authorization header. The admin wizard persists
+    the key as `api_key` and the carrying header name as `api_key_header` on
+    the connector-config-{id} company secret; absent either, no extra headers.
+    """
+    cfg = _connector_config(connector)
+    headers: Dict[str, str] = {}
+    # Constant non-secret headers (e.g. GoHighLevel's Version) persisted by
+    # the wizard as static_headers JSON.
+    raw = cfg.get("static_headers") or ""
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                headers.update({str(k): str(v) for k, v in parsed.items() if v})
+        except (json.JSONDecodeError, TypeError):
+            pass
+    api_key = str(cfg.get("api_key") or "").strip()
+    header_name = str(cfg.get("api_key_header") or "").strip()
+    if api_key and header_name:
+        headers[header_name] = api_key
+    return headers
+
+
+def _user_connector_fields(connector: str, user_sub: str) -> Optional[Dict[str, Any]]:
+    """Fetch the user's connector-{id} vault entry fields, or None.
+
+    Single home for the vault → secrets → entry → fields-or-entry unwrapping
+    that the per-flavor credential helpers all need.
     """
     try:
         vault = _get_user_consolidated_vault(user_sub) or {}
@@ -208,13 +297,42 @@ def _user_connector_token(connector: str, user_sub: str) -> Optional[str]:
     if not entry:
         return None
     fields = entry.get("fields") or entry
+    return fields if isinstance(fields, dict) else None
+
+
+_TOKEN_FIELD_KEYS = ("api_key", "bearer_token", "access_token", "token", "refresh_token")
+
+
+def _connector_header_map(connector: str) -> Dict[str, str]:
+    """The admin-persisted credential_header_map for a connector, or {}."""
+    raw = _connector_config(connector).get("credential_header_map") or ""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _entry_has_usable_credential(connector: str, fields: Dict[str, Any]) -> bool:
+    """True when a user vault entry holds a credential the REQUEST PATH can use.
+
+    Mirrors the auth resolution flavors exactly so status and connect_request
+    never disagree: a token-style field, a complete username/password pair, or
+    ALL fields of the connector's credential_header_map. Partial multi-field
+    credentials are NOT connected — the request path would reject them too.
+    """
     if not isinstance(fields, dict):
-        return None
-    for key in ("api_key", "bearer_token", "access_token", "token"):
-        val = fields.get(key)
-        if val:
-            return str(val)
-    return None
+        return False
+    if any(fields.get(k) for k in _TOKEN_FIELD_KEYS):
+        return True
+    if fields.get("username") and fields.get("password"):
+        return True
+    header_map = _connector_header_map(connector)
+    if header_map and all(fields.get(str(v)) for v in header_map.values()):
+        return True
+    return False
 
 
 def _needs_credential_response(connector: str) -> Dict[str, Any]:
@@ -283,12 +401,7 @@ def handle_connect_status(params: Dict[str, Any]) -> Dict[str, Any]:
                 entry = {"fields": {"access_token": "_via_legacy_store"}}
             if entry:
                 fields = entry.get("fields") or entry
-                has_cred = bool(
-                    fields.get("access_token")
-                    or fields.get("api_key")
-                    or fields.get("bearer_token")
-                    or fields.get("password")
-                )
+                has_cred = _entry_has_usable_credential(connector, fields)
                 if has_cred:
                     result[connector] = {
                         "status": "connected",
@@ -356,12 +469,7 @@ def handle_connect_status(params: Dict[str, Any]) -> Dict[str, Any]:
                 fields: Dict[str, Any] = {}
                 if entry:
                     fields = entry.get("fields") or entry
-                    has_cred = bool(
-                        fields.get("access_token")
-                        or fields.get("api_key")
-                        or fields.get("bearer_token")
-                        or fields.get("password")
-                    )
+                    has_cred = _entry_has_usable_credential(prov, fields)
                 # Synergy also accepts the legacy DynamoDB credential record
                 # as a connection signal.
                 if (
@@ -811,7 +919,9 @@ def _resolve_connector_base_url(connector_id: str) -> str:
     for fields in sources:
         if not isinstance(fields, dict):
             continue
-        for key in ("base_url", "api_endpoint", "instance_url"):
+        # Tenant/admin-specific endpoints (api_endpoint, instance_url) take
+        # precedence over the registry-default base_url the wizards write back.
+        for key in ("api_endpoint", "instance_url", "base_url"):
             value = str(fields.get(key) or "").strip()
             if value:
                 return value.rstrip("/")
@@ -895,20 +1005,46 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
             url = base + (url if url.startswith("/") else "/" + url)
 
         async def do_request():
-            # Try OAuth first; fall back to non-OAuth per-user credential.
+            # OAuth first (token path refreshes automatically); otherwise the
+            # connector's DECLARED auth flavor (connector_type persisted by the
+            # admin wizard) picks exactly one credential shape from the user's
+            # vault entry — a stray token-like field on a username-password or
+            # header-auth connector must not hijack the request. Legacy entries
+            # with no declared type keep the permissive token-then-basic probe.
+            authorization = None
+            custom_auth_headers: Dict[str, str] = {}
             access_token = await get_oauth_token(connector, user_sub)
-            if not access_token:
-                access_token = _user_connector_token(connector, user_sub)
-            if not access_token:
+            if access_token:
+                # Most providers accept "Authorization: Bearer {token}". Zoho (and a
+                # handful of others) require their own scheme — the admin wizard
+                # persists the expected prefix on the oauth-client vault entry so
+                # we don't have to hardcode a per-provider map here.
+                auth_scheme = _auth_header_scheme(connector) or "Bearer"
+                authorization = f"{auth_scheme} {access_token}"
+            else:
+                user_fields = _user_connector_fields(connector, user_sub)
+                header_map = _connector_header_map(connector)
+                declared = str(_connector_config(connector).get("connector_type") or "").strip()
+                if header_map:
+                    custom_auth_headers = _headers_from_fields(header_map, user_fields)
+                elif declared == "username-password":
+                    authorization = _basic_from_fields(user_fields)
+                else:
+                    token = _token_from_fields(user_fields)
+                    if token:
+                        auth_scheme = _auth_header_scheme(connector) or "Bearer"
+                        authorization = f"{auth_scheme} {token}"
+                    elif not declared:
+                        # Legacy connector-config without connector_type: a
+                        # username/password pair is still honoured.
+                        authorization = _basic_from_fields(user_fields)
+            if not authorization and not custom_auth_headers:
                 return _needs_credential_response(connector)
 
-            # Most providers accept "Authorization: Bearer {token}". Zoho (and a
-            # handful of others) require their own scheme — the admin wizard
-            # persists the expected prefix on the oauth-client vault entry so
-            # we don't have to hardcode a per-provider map here.
-            auth_scheme = _auth_header_scheme(connector) or "Bearer"
             request_headers = {
-                "Authorization": f"{auth_scheme} {access_token}",
+                **({"Authorization": authorization} if authorization else {}),
+                **custom_auth_headers,
+                **_connector_static_headers(connector),
                 **headers,
             }
 

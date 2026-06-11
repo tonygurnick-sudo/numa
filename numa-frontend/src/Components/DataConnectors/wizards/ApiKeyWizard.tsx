@@ -30,6 +30,10 @@ interface ApiKeyFormState {
    *  runtime falls back to whatever the connector registry / backend has
    *  hardcoded for this connector. */
   instanceUrl: string;
+  /** Values for the connector's registry `adminFields` — account-level config
+   *  shared by every user (e.g. ProWorkflow's account API key), keyed by field
+   *  key. Persisted to the connector-config company secret. */
+  adminFields: Record<string, string>;
 }
 
 interface ApiKeyWizardProps {
@@ -66,6 +70,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       // No default — always optional. If the registry has a baseUrl it's used at
       // runtime when this is blank; we don't pre-fill to avoid forking the value.
       instanceUrl: '',
+      adminFields: Object.fromEntries((connector.adminFields ?? []).map((f) => [f.key, ''])),
     }),
     [connector]
   );
@@ -105,6 +110,7 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         rateLimitRpm: fields.rate_limit_rpm || connector.rateLimitRpm?.toString() || '',
         rateLimitDaily: fields.rate_limit_daily || connector.rateLimitDaily?.toString() || '',
         instanceUrl: fields.instance_url || '',
+        adminFields: Object.fromEntries((connector.adminFields ?? []).map((f) => [f.key, fields[f.key] || ''])),
       });
     },
     [connector, emptyForm]
@@ -150,7 +156,13 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   // Step 2 shows form inputs; disable Next/Save if any field has a validation
   // error. Right now only instance URL has structural validation — extend this
   // predicate as more fields are validated.
-  const canProceed = step === 1 || step === 3 || (step === 2 && instanceUrlError === null);
+  const adminFieldsMissing = (connector.adminFields ?? []).some((f) => f.required && !form.adminFields[f.key]?.trim());
+  // Customer-hosted connectors (instanceUrlRequired, e.g. Jiwa) have no fixed
+  // base URL — saving without one would produce a connector that errors on
+  // every request, so block the save instead.
+  const instanceUrlMissing = Boolean(connector.instanceUrlRequired) && !form.instanceUrl.trim();
+  const canProceed =
+    step === 1 || step === 3 || (step === 2 && instanceUrlError === null && !adminFieldsMissing && !instanceUrlMissing);
 
   const handleSave = async () => {
     setSaving(true);
@@ -166,7 +178,35 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
 
       if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
       if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
-      if (form.instanceUrl.trim()) fields.instance_url = form.instanceUrl.trim();
+      // Always write instance_url — company-secret updates MERGE fields, so an
+      // omitted key would leave a stale admin URL in place; empty string clears
+      // it (the backend resolver skips empty values).
+      fields.instance_url = form.instanceUrl.trim();
+      // Fixed-URL connectors (registry baseUrl, e.g. ProWorkflow): persist the
+      // base URL so the backend resolver finds it in the vault. Tenant-specific
+      // instance_url/api_endpoint values win — the resolver checks base_url last.
+      if (connector.baseUrl) fields.base_url = connector.baseUrl;
+
+      // Admin-level account config (e.g. ProWorkflow account API key). Stored
+      // alongside the metadata on the same connector-config secret.
+      for (const def of connector.adminFields ?? []) {
+        const value = form.adminFields[def.key]?.trim();
+        if (value) fields[def.key] = value;
+      }
+      // Tell the backend which header carries the account API key on requests.
+      if (connector.apiKeyHeader && form.adminFields.api_key?.trim()) {
+        fields.api_key_header = connector.apiKeyHeader;
+      }
+      // Custom-header auth (e.g. Cin7 Core): persist the header→credential
+      // field mapping so the backend builds auth headers from the user vault.
+      if (connector.credentialHeaderMap && Object.keys(connector.credentialHeaderMap).length > 0) {
+        fields.credential_header_map = JSON.stringify(connector.credentialHeaderMap);
+      }
+      // Constant non-secret headers (e.g. GoHighLevel's Version): the backend
+      // merges these into every request.
+      if (connector.staticHeaders && Object.keys(connector.staticHeaders).length > 0) {
+        fields.static_headers = JSON.stringify(connector.staticHeaders);
+      }
 
       // Persist the credential-field schema so the backend can emit the right
       // `needs_credential` error shape when a user has no stored credential
@@ -175,7 +215,11 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         fields.credential_fields = JSON.stringify(
           connector.credentialFields.map((f) => ({
             key: f.key,
-            label: f.label,
+            // Registry labels are i18n keys — resolve to display text here so
+            // the backend needs_credential payload and the chat credential
+            // card show human labels, never raw keys. t() falls back to the
+            // input when it isn't a known key.
+            label: t(f.label),
             type: f.type,
             placeholder: f.placeholder,
             required: f.required,
@@ -284,10 +328,15 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
 
           <Alert variant="info" className="py-2 small">
             <i className="bi bi-info-circle me-2"></i>
-            {t(
-              'dataConnectors.apiKeyWizard.perUserNotice',
-              'No credential needed here. Each user will be asked for their own credential the first time they use this connector from chat.'
-            )}
+            {(connector.adminFields ?? []).length > 0
+              ? t(
+                  'dataConnectors.apiKeyWizard.adminPlusPerUserNotice',
+                  "You'll enter the account-level credential on the next step. Each user will additionally be asked for their own login the first time they use this connector from chat."
+                )
+              : t(
+                  'dataConnectors.apiKeyWizard.perUserNotice',
+                  'No credential needed here. Each user will be asked for their own credential the first time they use this connector from chat.'
+                )}
           </Alert>
 
           <Row className="g-2 mb-3">
@@ -329,7 +378,9 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               <span className="text-muted small">{t('dataConnectors.apiKeyWizard.secretLabel')}:</span>
               <code>{configSecretName}</code>
               <span className="badge bg-light text-dark small">
-                {t('dataConnectors.apiKeyWizard.metadataOnly', 'metadata only, no credential')}
+                {(connector.adminFields ?? []).length > 0
+                  ? t('dataConnectors.apiKeyWizard.metadataPlusAccountKey', 'metadata + account credential')
+                  : t('dataConnectors.apiKeyWizard.metadataOnly', 'metadata only, no credential')}
               </span>
             </div>
             <div className="small text-muted">
@@ -339,6 +390,34 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               )}
             </div>
           </div>
+
+          {(connector.adminFields ?? []).length > 0 && (
+            <div className="border rounded p-3 mb-3">
+              <h6 className="fw-semibold small text-muted mb-2">
+                {t('dataConnectors.apiKeyWizard.adminFieldsTitle', { defaultValue: 'Account configuration' })}
+              </h6>
+              {(connector.adminFields ?? []).map((def) => (
+                <Form.Group key={def.key} className="mb-2">
+                  <Form.Label className="small fw-semibold mb-1">
+                    {t(def.label)}
+                    {!def.required && (
+                      <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                        ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+                      </span>
+                    )}
+                  </Form.Label>
+                  <Form.Control
+                    type={def.type === 'password' ? 'password' : def.type === 'url' ? 'url' : 'text'}
+                    placeholder={def.placeholder}
+                    value={form.adminFields[def.key] ?? ''}
+                    onChange={(e) => updateForm({ adminFields: { ...form.adminFields, [def.key]: e.target.value } })}
+                    autoComplete="off"
+                  />
+                  {def.helpText && <Form.Text className="text-muted small">{t(def.helpText)}</Form.Text>}
+                </Form.Group>
+              ))}
+            </div>
+          )}
 
           <div className="border rounded p-3 mb-3">
             <Form.Group>

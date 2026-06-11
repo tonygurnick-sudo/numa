@@ -77,6 +77,43 @@ export interface ConnectorTemplate {
   // Non-OAuth credential fields
   credentialFields?: CredentialFieldDef[];
 
+  // Admin-level config fields captured in the ApiKeyWizard and persisted to the
+  // connector-config-{id} company secret — account-level values shared by every
+  // user (e.g. ProWorkflow's account API key). Distinct from credentialFields,
+  // which are per-user and captured in chat on first use.
+  adminFields?: CredentialFieldDef[];
+
+  // Header name that carries the company-level `api_key` admin field on
+  // outbound requests (ProWorkflow uses `apikey`). Persisted to the company
+  // vault as `api_key_header` at wizard save time so the backend request path
+  // picks it up without a redeploy.
+  apiKeyHeader?: string;
+
+  // Maps outbound auth header names to per-user credential field keys for
+  // APIs that authenticate with custom headers instead of an Authorization
+  // header (e.g. Cin7 Core's api-auth-accountid / api-auth-applicationkey).
+  // Persisted to the company vault as `credential_header_map` at wizard save
+  // time; the backend builds these headers from the user's vault fields.
+  credentialHeaderMap?: Record<string, string>;
+
+  // Constant non-secret headers every request to this connector must carry
+  // (e.g. GoHighLevel's `Version: 2021-07-28`). Persisted to the company
+  // vault as `static_headers` at wizard save time; the backend merges them
+  // into every request (caller-supplied headers still win).
+  staticHeaders?: Record<string, string>;
+
+  // False = the connector cannot be self-service-added from the Integrations
+  // picker (chat-only by design like PMO365, or its auth model isn't
+  // supported by the generic request path yet, like the FileMaker/Flowingly/
+  // PrintIQ token-exchange flows). Default true. Also excludes the connector
+  // from the NATIVE_CONNECTORS catalog-consistency expectation.
+  selfService?: boolean;
+
+  // True = the admin MUST enter an Instance URL in the wizard (customer-
+  // hosted APIs with no fixed base URL, e.g. Jiwa). The wizard blocks save
+  // on a blank value.
+  instanceUrlRequired?: boolean;
+
   // Common metadata
   baseUrl?: string;
   rateLimitRpm?: number;
@@ -550,6 +587,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'PMO365 project portfolio management — projects, risks, benefits, and financials, served from Microsoft Dataverse',
     category: 'Project Management',
     authType: 'oauth2',
+    selfService: false,
     surfaces: ['chat'],
     cachingPolicy: CACHING_PRESETS.projectManagement,
     // PMO365 is a Microsoft Power Platform solution — it has no API of its
@@ -751,6 +789,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Custom database application platform',
     category: 'Database',
     authType: 'username-password',
+    selfService: false,
     credentialFields: [
       {
         key: 'server_url',
@@ -790,6 +829,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Business process management and workflow automation',
     category: 'Workflow',
     authType: 'username-password',
+    selfService: false,
     credentialFields: [
       {
         key: 'username',
@@ -814,6 +854,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Print MIS and workflow management',
     category: 'Manufacturing',
     authType: 'username-password',
+    selfService: false,
     credentialFields: [
       {
         key: 'username',
@@ -842,6 +883,285 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'password',
         placeholder: 'Paste your app key',
         required: true,
+      },
+    ],
+  },
+  {
+    id: 'proworkflow',
+    displayName: 'ProWorkflow',
+    icon: 'bi-kanban',
+    description: 'Project, task and time management platform',
+    category: 'Project Management',
+    authType: 'username-password',
+    baseUrl: 'https://api.proworkflow.net',
+    rateLimitRpm: 1000, // API allows 500 requests per 30s per account API key
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // The API requires TWO auth mechanisms on every request: the account-level
+    // API key (apikey header, admin-entered below) AND the user's own
+    // ProWorkflow login as Basic auth — PWF enforces that user's permissions.
+    apiKeyHeader: 'apikey',
+    adminFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: 'XXXX-XXXX-XXXX-XXXX-XXXXXXX-XXXXXXXX',
+        required: true,
+        helpText: 'dataConnectors.fields.proworkflowApiKeyHint',
+      },
+    ],
+    credentialFields: [
+      {
+        key: 'username',
+        label: 'dataConnectors.fields.username',
+        type: 'text',
+        placeholder: 'you@company.com',
+        required: true,
+      },
+      {
+        key: 'password',
+        label: 'dataConnectors.fields.password',
+        type: 'password',
+        placeholder: 'Enter your ProWorkflow password',
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'greentree',
+    displayName: 'MYOB Greentree',
+    icon: 'bi-tree',
+    description: 'Enterprise ERP — GL, AR/AP, job costing, inventory, HR, purchasing',
+    category: 'ERP',
+    authType: 'username-password',
+    instanceUrlRequired: true,
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Customer-hosted: the Greentree API is its own web server on the
+    // customer's box (default port 9000), so the admin sets the instance URL
+    // and the API must be internet-reachable over HTTPS. Every request needs
+    // BOTH the site ApiKey (the Greentree serial number — account-level,
+    // admin-entered, sent as the `ApiKey` header) AND the user's own Greentree
+    // login as Basic auth (Greentree enforces that user's permissions).
+    apiKeyHeader: 'ApiKey',
+    adminFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.greentreeApiKey',
+        type: 'password',
+        placeholder: 'Greentree site serial number',
+        required: true,
+        helpText: 'dataConnectors.fields.greentreeApiKeyHint',
+      },
+    ],
+    credentialFields: [
+      {
+        key: 'username',
+        label: 'dataConnectors.fields.username',
+        type: 'text',
+        placeholder: 'Your Greentree username',
+        required: true,
+        helpText: 'dataConnectors.fields.greentreeUserHint',
+      },
+      {
+        key: 'password',
+        label: 'dataConnectors.fields.password',
+        type: 'password',
+        placeholder: 'Your Greentree password',
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'jiwa',
+    displayName: 'Jiwa Financials',
+    icon: 'bi-box-seam',
+    description: 'ERP for inventory, sales and distribution businesses',
+    category: 'ERP',
+    authType: 'token',
+    instanceUrlRequired: true,
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Customer-hosted (self-hosted Windows service on the customer's own
+    // infrastructure) — there is no fixed cloud base URL. The admin MUST set
+    // the instance URL in the wizard, and the API must be reachable from the
+    // internet over HTTPS. Per-user Staff API key travels as a Bearer token
+    // and carries that staff member's Jiwa route permissions.
+    credentialFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: 'Paste your Jiwa Staff API key',
+        required: true,
+        helpText: 'dataConnectors.fields.jiwaApiKeyHint',
+      },
+    ],
+  },
+  {
+    id: 'cin7-omni',
+    displayName: 'Cin7 Omni',
+    icon: 'bi-boxes',
+    description: 'Inventory and order management (Cin7 Omni)',
+    category: 'Inventory',
+    authType: 'username-password',
+    baseUrl: 'https://api.cin7.com/api',
+    rateLimitRpm: 60, // 3/sec, 60/min, 5,000/day per API connection
+    rateLimitDaily: 5000,
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Basic auth: API username + API key (created in Cin7 Omni Settings →
+    // Integrations & API). Permissions are per-endpoint on the key — a 403
+    // means the key lacks that endpoint's permission, not bad credentials.
+    credentialFields: [
+      {
+        key: 'username',
+        label: 'dataConnectors.fields.username',
+        type: 'text',
+        placeholder: 'API username',
+        required: true,
+        helpText: 'dataConnectors.fields.cin7OmniKeyHint',
+      },
+      {
+        key: 'password',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: 'Paste your Cin7 Omni API key',
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'cin7-core',
+    displayName: 'Cin7 Core',
+    icon: 'bi-boxes',
+    description: 'Inventory and order management (Cin7 Core, formerly DEAR)',
+    category: 'Inventory',
+    authType: 'api-key',
+    baseUrl: 'https://inventory.dearsystems.com/externalapi/v2',
+    rateLimitRpm: 60, // 60/min per application key
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Cin7 Core authenticates with TWO custom headers, not Authorization —
+    // the map below tells the backend which user credential field rides in
+    // which header on every request.
+    credentialHeaderMap: {
+      'api-auth-accountid': 'account_id',
+      'api-auth-applicationkey': 'application_key',
+    },
+    credentialFields: [
+      {
+        key: 'account_id',
+        label: 'dataConnectors.fields.accountId',
+        type: 'text',
+        placeholder: 'Cin7 Core account ID',
+        required: true,
+        helpText: 'dataConnectors.fields.cin7CoreKeyHint',
+      },
+      {
+        key: 'application_key',
+        label: 'dataConnectors.fields.applicationKey',
+        type: 'password',
+        placeholder: 'Paste your application key',
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'betterimpact',
+    displayName: 'Better Impact',
+    icon: 'bi-people',
+    description: 'Volunteer management (Volunteer Impact)',
+    category: 'Volunteer Management',
+    authType: 'username-password',
+    baseUrl: 'https://api.betterimpact.com/v1',
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // An admin-created API key yields a username + password pair sent as
+    // HTTP Basic auth. Key scope is module-based — a key without the
+    // Volunteer module checked returns no volunteers.
+    credentialFields: [
+      {
+        key: 'username',
+        label: 'dataConnectors.fields.username',
+        type: 'text',
+        placeholder: 'API key username',
+        required: true,
+        helpText: 'dataConnectors.fields.betterimpactKeyHint',
+      },
+      {
+        key: 'password',
+        label: 'dataConnectors.fields.password',
+        type: 'password',
+        placeholder: 'API key password',
+        required: true,
+      },
+    ],
+  },
+  {
+    id: 'rentman',
+    displayName: 'Rentman',
+    icon: 'bi-truck',
+    description: 'Rental management — projects, equipment, crew planning',
+    category: 'Rental Management',
+    authType: 'token',
+    baseUrl: 'https://api.rentman.net',
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Workspace API token (Configuration → Account → Integrations → API →
+    // Show token), sent as a Bearer token. Note: Rentman also runs a
+    // first-party MCP server beta (mcp.rentman.net, OAuth 2.1 + PKCE) —
+    // a future second surface once the platform supports generic MCP auth.
+    credentialFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.apiToken',
+        type: 'password',
+        placeholder: 'Paste your Rentman API token',
+        required: true,
+        helpText: 'dataConnectors.fields.rentmanTokenHint',
+      },
+    ],
+  },
+  {
+    id: 'jobadder',
+    displayName: 'JobAdder',
+    icon: 'bi-person-badge',
+    description: 'Recruitment ATS — jobs, candidates, applications, placements',
+    category: 'Recruitment',
+    authType: 'oauth2',
+    baseUrl: 'https://api.jobadder.com/v2',
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    oauth: {
+      authUrl: 'https://id.jobadder.com/connect/authorize',
+      tokenUrl: 'https://id.jobadder.com/connect/token',
+      // `read write` cover nearly all GET/POST operations; offline_access
+      // is required for refresh tokens (access tokens expire after 60 min).
+      scopes: 'read write offline_access',
+    },
+    oauthSetupSteps: [
+      'Go to the JobAdder Developer Centre (developers.jobadder.com) → register an application',
+      'Add the redirect URI below to the application',
+      'Copy the Client ID and Client Secret from the application page',
+    ],
+  },
+  {
+    id: 'gohighlevel',
+    displayName: 'GoHighLevel',
+    icon: 'bi-megaphone',
+    description: 'CRM, marketing automation and sales pipelines (HighLevel)',
+    category: 'CRM',
+    authType: 'token',
+    baseUrl: 'https://services.leadconnectorhq.com',
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Private Integration Token ("pit-..."), created per sub-account in
+    // HighLevel → Settings → Private Integrations. Sent as a Bearer token.
+    // Every request additionally needs a constant `Version` header — injected
+    // automatically by the backend via staticHeaders (agent can override
+    // per-call for endpoint families pinned to a different version).
+    staticHeaders: { Version: '2021-07-28' },
+    credentialFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.pat',
+        type: 'password',
+        placeholder: 'pit-…',
+        required: true,
+        helpText: 'dataConnectors.fields.gohighlevelTokenHint',
       },
     ],
   },

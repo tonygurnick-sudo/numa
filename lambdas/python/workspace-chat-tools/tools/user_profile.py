@@ -115,12 +115,21 @@ _NATIVE_CONNECTOR_SLUGS = {
     "zoho-crm",
     "quickbooks",
     "actionstep",
+    "jobadder",
     "hirehop",
     "connecteam-api",
     "totalsynergy-api",
     "synergy",
     "workbench",
     "fergus",
+    "jiwa",
+    "cin7-omni",
+    "cin7-core",
+    "gohighlevel",
+    "rentman",
+    "proworkflow",
+    "betterimpact",
+    "greentree",
 }
 VALID_INTEGRATION_SLUGS = _PIPEDREAM_INTEGRATION_SLUGS | _NATIVE_CONNECTOR_SLUGS
 

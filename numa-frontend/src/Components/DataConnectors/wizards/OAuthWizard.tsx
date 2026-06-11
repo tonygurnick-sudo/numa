@@ -536,6 +536,15 @@ export const OAuthWizard = ({
         fields.auth_header_scheme = registryEntry.authHeaderScheme;
       }
 
+      // Fixed-base-URL OAuth connectors (e.g. JobAdder): persist the registry
+      // baseUrl so the backend URL resolver finds it in the vault and agents
+      // can use relative request URLs. Mirrors the ApiKeyWizard write-back.
+      // Tenant-specific api_endpoint/instance_url values still win — the
+      // backend resolver checks base_url last.
+      if (registryEntry?.baseUrl) {
+        fields.base_url = registryEntry.baseUrl;
+      }
+
       const connector = getConnectorById(pid);
       if (connector?.oauthPlatform) {
         // Platform connector: scopes at top level, fall back to registry if empty

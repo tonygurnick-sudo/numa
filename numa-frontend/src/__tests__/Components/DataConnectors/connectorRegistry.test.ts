@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { NATIVE_CONNECTORS } from '../../../../../infra/config/connectors';
 import {
   CONNECTOR_REGISTRY,
   surfacesInFiles,
@@ -57,5 +60,50 @@ describe('connectorRegistry — surface helpers', () => {
       (c) => c.surfaces?.includes('files') && !c.surfaces?.includes('chat')
     );
     expect(fileStoresMissingChat).toEqual([]);
+  });
+});
+
+describe('connectorRegistry — catalog consistency', () => {
+  // The integrations catalog has THREE copies of the native connector list:
+  // the frontend registry, NATIVE_CONNECTORS (infra/config/connectors.ts,
+  // drives the admin-integration-settings catalog Lambda), and the Python
+  // mirror _NATIVE_CONNECTOR_SLUGS (workspace-chat-tools/tools/user_profile.py).
+  // A connector missing from NATIVE_CONNECTORS saves fine in the wizard but
+  // never appears in the Integrations list — fail loudly here instead.
+  //
+  // Exclusions are REGISTRY-DECLARED: authType contact-required (no
+  // self-service path) and selfService: false (chat-only by design, or auth
+  // models the generic request path can't drive yet).
+  const expectedCatalogIds = CONNECTOR_REGISTRY.filter(
+    (c) => c.authType !== 'contact-required' && c.selfService !== false
+  ).map((c) => c.id);
+
+  // NATIVE_CONNECTORS is imported directly (same pattern as
+  // integrationCatalogHelpers.test.ts); the Python mirror can't be imported
+  // from TS, so it alone is source-parsed.
+  const native = new Set<string>(NATIVE_CONNECTORS);
+
+  const pythonMirror = (() => {
+    const src = readFileSync(
+      resolve(__dirname, '../../../../../lambdas/python/workspace-chat-tools/tools/user_profile.py'),
+      'utf8'
+    );
+    const block = src.match(/_NATIVE_CONNECTOR_SLUGS = \{([\s\S]*?)\}/)?.[1] ?? '';
+    return new Set(Array.from(block.matchAll(/"([a-z0-9-]+)"/g)).map((m) => m[1]));
+  })();
+
+  it('every self-service registry connector is listed in NATIVE_CONNECTORS', () => {
+    const missing = expectedCatalogIds.filter((id) => !native.has(id));
+    expect(missing).toEqual([]);
+  });
+
+  it('NATIVE_CONNECTORS contains no unknown or non-self-service connector ids', () => {
+    const allowed = new Set(expectedCatalogIds);
+    const unknown = Array.from(native).filter((id) => !allowed.has(id));
+    expect(unknown).toEqual([]);
+  });
+
+  it('the Python mirror matches NATIVE_CONNECTORS exactly', () => {
+    expect(Array.from(pythonMirror).sort()).toEqual(Array.from(native).sort());
   });
 });

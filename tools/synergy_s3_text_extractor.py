@@ -249,6 +249,16 @@ def main() -> None:
     ap.add_argument(
         "--max-files", type=int, default=0, help="Stop after N handled files (test)"
     )
+    ap.add_argument(
+        "--tenant-id",
+        default="",
+        help="Numa CLIENT_NAME — REQUIRED for chat retrieval (filter: tenant_id==this)",
+    )
+    ap.add_argument(
+        "--kb-id",
+        default="",
+        help="Numa folder kb_id — REQUIRED for chat retrieval (filter: kb_id==this)",
+    )
     args = ap.parse_args()
 
     out_root = Path(args.out)
@@ -349,6 +359,12 @@ def main() -> None:
                 (docs_dir / f"{stem}.txt").write_text(text, encoding="utf-8")
                 meta = {
                     "metadataAttributes": {
+                        # tenant_id + kb_id are REQUIRED: Numa filters retrieval on
+                        # andAll[tenant_id==CLIENT_NAME, kb_id==folder]. Without them
+                        # chat returns "No results" even though docs are vectorised.
+                        "tenant_id": args.tenant_id,
+                        "kb_id": args.kb_id,
+                        "uploader_id": "system",
                         "source_bucket": args.bucket,
                         "source_key": key,
                         "job_id": job_id_from_key(key),

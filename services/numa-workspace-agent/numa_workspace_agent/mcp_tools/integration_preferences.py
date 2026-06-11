@@ -45,6 +45,7 @@ _PIPEDREAM_TO_CONNECTOR: dict[str, str] = {
     "podio": "podio",
     "jobber": "getjobber",
     "zoho_crm": "zoho-crm",
+    "rentman": "rentman",
 }
 
 _CONNECTOR_TO_PIPEDREAM: dict[str, str] = {

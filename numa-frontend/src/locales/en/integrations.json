@@ -765,7 +765,19 @@
       "bearerToken": "Bearer Token",
       "appName": "Application Name",
       "appKey": "Application Key",
-      "pat": "Personal Access Token"
+      "pat": "Personal Access Token",
+      "proworkflowApiKeyHint": "Account-level API key shared by all users. Found in the ProWorkflow Client Area (Account Holder only), or returned by the /login API call.",
+      "jiwaApiKeyHint": "Your personal Staff API key, created in Jiwa's Staff Maintenance form. Requests run with your own Jiwa route permissions.",
+      "accountId": "Account ID",
+      "applicationKey": "Application Key",
+      "cin7OmniKeyHint": "API username + key from Cin7 Omni → Settings → Integrations & API → API v1. Permissions are per-endpoint — a 403 means the key lacks that endpoint's permission.",
+      "cin7CoreKeyHint": "Account ID and Application Key from Cin7 Core → Integrations & API. Both values are required on every request.",
+      "greentreeApiKey": "Site ApiKey (serial number)",
+      "greentreeApiKeyHint": "Your Greentree site serial number — the account-level ApiKey sent on every request. Found in your Greentree licensing/About screen, or ask your Greentree administrator.",
+      "greentreeUserHint": "Your own Greentree username and password. The API runs with exactly your Greentree permissions.",
+      "gohighlevelTokenHint": "Private Integration Token (pit-…) from HighLevel → Settings → Private Integrations. Scopes are chosen when the integration is created — a 401/403 usually means a missing scope.",
+      "rentmanTokenHint": "Workspace API token from Rentman → Configuration → Account → Integrations → API → Show token. The token carries full workspace API access.",
+      "betterimpactKeyHint": "Username + password generated when an admin creates an API key in Better Impact. Key access is module-scoped — missing modules return empty data."
     },
     "apiKeyWizard": {
       "title": "Configure {{connector}}",
@@ -795,7 +807,10 @@
       "instanceUrlPlaceholder": "https://your-instance.example.com",
       "instanceUrlHelp": "Set this only if your connector's API is hosted at a customer-specific address (e.g. a private Synergy 12d server). Leave empty to use the connector's built-in default.",
       "instanceUrlInvalid": "Invalid URL",
-      "instanceUrlInvalidProtocol": "Must start with http:// or https://"
+      "instanceUrlInvalidProtocol": "Must start with http:// or https://",
+      "adminFieldsTitle": "Account configuration",
+      "adminPlusPerUserNotice": "You'll enter the account-level credential on the next step. Each user will additionally be asked for their own login the first time they use this connector from chat.",
+      "metadataPlusAccountKey": "metadata + account credential"
     },
     "apiReference": {
       "customize": "Customize"

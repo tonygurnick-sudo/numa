@@ -34,6 +34,7 @@ export const NATIVE_CONNECTORS = [
   'zoho-crm',
   'quickbooks',
   'actionstep',
+  'jobadder',
 
   // API key
   'hirehop',
@@ -44,6 +45,25 @@ export const NATIVE_CONNECTORS = [
   'synergy',
   'workbench',
   'fergus',
+  'jiwa',
+
+  // Inventory (Cin7 is two separate products with separate APIs)
+  'cin7-omni',
+  'cin7-core',
+
+  // CRM / marketing
+  'gohighlevel',
+
+  // Rental / field service
+  'rentman',
+
+  // Username/password (per-user Basic auth + admin-level account API key)
+  'proworkflow',
+  'betterimpact',
+  'greentree',
+  // NOT listed (selfService: false in the registry): pmo365 (chat-only by
+  // design) and filemaker/flowingly/printiq (their APIs need token-exchange
+  // auth the generic request path doesn't support yet).
 ] as const;
 
 export type NativeConnector = (typeof NATIVE_CONNECTORS)[number];
@@ -72,6 +92,7 @@ export const PIPEDREAM_TO_CONNECTOR: Record<string, NativeConnector> = {
   podio: 'podio',
   jobber: 'getjobber',
   zoho_crm: 'zoho-crm',
+  rentman: 'rentman',
 };
 
 /** Reverse lookup: native connector slug -> Pipedream slug, when overlapping. */

@@ -130,10 +130,13 @@ function buildPickerEntries(
       // surfacing them in the admin picker just leads to a dead click. Discovery
       // of these belongs in marketing/docs, not in the add-integration modal.
       if (c.authType === 'contact-required') continue;
-      // Username/password connectors aren't viable for self-service: the
-      // credentials we'd collect at this step are user-level, not admin-level,
-      // and the supported auth methods are OAuth, API key, and PAT token.
-      if (c.authType === 'username-password') continue;
+      // Registry-declared non-self-service connectors (selfService: false):
+      // chat-only-by-design (PMO365) or auth models the generic request path
+      // can't drive yet (FileMaker/Flowingly/PrintIQ token exchanges). The
+      // remaining username-password connectors ARE self-service: wizard
+      // registers metadata, the chat card captures the login, the backend
+      // sends Basic auth.
+      if (c.selfService === false) continue;
       out.push({
         key: c.id,
         name: c.displayName,

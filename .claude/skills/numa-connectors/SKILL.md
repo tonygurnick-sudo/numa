@@ -24,6 +24,8 @@ A connector is not done until ALL of the following are implemented:
 10. **Files Remote rendering** — connector shows with correct icon, Connect/Disconnect based on user secret existence
 11. **Context menu** — appropriate actions for the content type (email actions for email, file actions for files)
 12. **CI/CD** — Lambda in `.gitlab-ci.yml` matrix, packaged by `package-all.sh`
+13. **Catalog listing** — add the connector id to `NATIVE_CONNECTORS` in `infra/config/connectors.ts`. The admin/user Integrations pages are built by the `admin-integration-settings` Lambda from THIS list, not from `connectorRegistry.ts` — skip it and the connector saves fine but never appears in the integrations list. ALSO mirror the new slug into `_NATIVE_CONNECTOR_SLUGS` in `lambdas/python/workspace-chat-tools/tools/user_profile.py` (a Python copy of the same list). (If it pairs with a Pipedream app, also add `PIPEDREAM_TO_CONNECTOR` + the duplicated map in `integration_preferences.py`.)
+14. **API docs pack** — author `ext-api-doc/{slug}/` (9 files from `_templates/`). The add-integration picker greys out native connectors whose docs aren’t deployed, and the workspace agent syncs the `01-*.md` files for connected connectors at runtime.
 
 ## Framework Rules (DO NOT CHANGE without asking)
 
