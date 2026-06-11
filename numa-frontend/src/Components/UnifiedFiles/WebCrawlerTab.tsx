@@ -255,7 +255,7 @@ function WebCrawlerContent({ kbId, folders }: { kbId: string; folders: CrawlFold
 
     const results = await Promise.allSettled(
       folders.map(async (folder) => {
-        const state = await knowledgeBaseService.getKBState(folder.kbId, { view: 'data-sources' });
+        const state = await knowledgeBaseService.getKBState(folder.kbId);
         return (state.dataSources || [])
           .filter((source) => source.isWebCrawler)
           .map((source): CrawlRow => ({ ...source, kbId: folder.kbId, folderLabel: folder.label }));

@@ -13,8 +13,8 @@ import {
   filterTree,
   filterTreeByPredicate,
   collectFoldersToExpand,
-} from './KBFileExplorer';
-import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExplorer';
+} from './fileExplorerUtils';
+import type { S3Object, TableRow, SortColumn, SortDirection } from './fileExplorerUtils';
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
 import DestinationFolderPicker, { type DestinationFolderPickerValue } from './DestinationFolderPicker';
@@ -1894,7 +1894,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
     if (kbState?.isLoading || isSubfolderLoading) {
       rows.push({
-        row: { id: 'loading', type: 'file', name: '', depth: 0, uploadDate: '', size: '', status: 'pending' },
+        row: { id: 'loading', type: 'file', name: '', depth: 0, uploadDate: '', size: '' },
         kbId: currentFolder.kbId,
         isKbFolder: false,
         special: 'loading',
@@ -1919,7 +1919,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       if (childRows.length === 0 && kbState) {
         rows.push({
-          row: { id: 'empty', type: 'file', name: '', depth: 0, uploadDate: '', size: '', status: 'indexed' },
+          row: { id: 'empty', type: 'file', name: '', depth: 0, uploadDate: '', size: '' },
           kbId: currentFolder.kbId,
           isKbFolder: false,
           special: 'empty',
@@ -1969,7 +1969,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           depth: 0,
           uploadDate: '\u2014',
           size: '\u2014',
-          status: 'indexed',
         },
         kbId: kb.kb_id,
         isKbFolder: true,
@@ -1986,7 +1985,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               depth: 1,
               uploadDate: '',
               size: '',
-              status: 'pending',
             },
             kbId: kb.kb_id,
             isKbFolder: false,
@@ -2002,7 +2000,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                 depth: 1,
                 uploadDate: '',
                 size: '',
-                status: 'indexed',
               },
               kbId: kb.kb_id,
               isKbFolder: false,
@@ -2023,7 +2020,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         depth: 0,
         uploadDate: '',
         size: '',
-        status: 'indexed',
       },
       kbId: `section-${key}`,
       isKbFolder: false,
@@ -2040,7 +2036,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         depth: 0,
         uploadDate: '',
         size: '',
-        status: 'indexed',
       },
       kbId: `create-folder-${visibility}`,
       isKbFolder: false,
@@ -2056,7 +2051,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         depth: 0,
         uploadDate: '',
         size: '',
-        status: 'indexed',
       },
       kbId: 'connect-integration',
       isKbFolder: false,
@@ -2072,7 +2066,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           depth: 0,
           uploadDate: '—',
           size: '—',
-          status: 'indexed',
         },
         kbId: `integration-${integration.id}`,
         isKbFolder: false,
