@@ -459,15 +459,61 @@ async function handleSaveConfig(event: {
     };
   }
 
-  // Validate required fields based on protocol
-  if (providerProtocol === 'OIDC') {
-    if (!oidcIssuer || typeof oidcIssuer !== 'string') {
+  // INC-197: Load any existing config BEFORE validating so that partial updates
+  // — e.g. toggling SSO-only mode, which sends only { idpType, ssoOnlyMode } —
+  // don't fail validation (or, further down, overwrite) required fields like the
+  // SAML metadata. When the IdP/provider is unchanged we merge request values
+  // over the stored record; a genuine IdP-type change still requires fresh
+  // metadata/credentials because the old provider's values no longer apply.
+  const providerName = sanitizeProviderName(idpType as string);
+  const existingRes = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'sso-config' } }));
+  const existing = existingRes.Item as SSOConfig | undefined;
+  const sameProvider = !!existing && existing.providerName === providerName;
+  // Request value wins when present; otherwise fall back to the stored value
+  // (only for the same provider — never carry one IdP's secrets onto another).
+  const carry = (reqVal: unknown, prevVal: string | undefined): string | undefined =>
+    typeof reqVal === 'string' && reqVal !== '' ? reqVal : sameProvider ? prevVal : undefined;
+
+  // Effective protocol/credentials used for both validation and the saved record.
+  const effProtocol = (carry(providerProtocol, existing?.providerProtocol) || 'SAML') === 'OIDC' ? 'OIDC' : 'SAML';
+  // The two SAML metadata sources are mutually exclusive: a request that explicitly
+  // supplies ONE source replaces the PAIR. Carrying the other source forward would
+  // shadow the new one — createOrUpdateIdentityProvider prefers MetadataURL over
+  // MetadataFile, so a stale carried URL would silently win over freshly pasted XML.
+  // Stored values are carried only when the request provides NEITHER source (the
+  // partial-save case, e.g. the SSO-only toggle).
+  const reqHasMetadataUrl = typeof metadataUrl === 'string' && metadataUrl !== '';
+  const reqHasMetadataXml = typeof metadataXml === 'string' && metadataXml !== '';
+  const effMetadataUrl = reqHasMetadataUrl
+    ? (metadataUrl as string)
+    : reqHasMetadataXml
+      ? undefined
+      : sameProvider
+        ? existing?.metadataUrl
+        : undefined;
+  // Kept raw here; normalized at record-build time, AFTER the size/shape validation
+  // below has passed (a carried stored value was already normalized when first saved).
+  const effMetadataXmlRaw = reqHasMetadataXml
+    ? (metadataXml as string)
+    : reqHasMetadataUrl
+      ? undefined
+      : sameProvider
+        ? existing?.metadataXml
+        : undefined;
+  const effOidcIssuer = carry(oidcIssuer, existing?.oidcIssuer);
+  const effOidcClientId = carry(oidcClientId, existing?.oidcClientId);
+  const effOidcClientSecret = carry(oidcClientSecret, existing?.oidcClientSecret);
+  const effOidcScopes = carry(oidcScopes, existing?.oidcScopes);
+
+  // Validate required fields based on the effective protocol
+  if (effProtocol === 'OIDC') {
+    if (!effOidcIssuer) {
       return { statusCode: 400, body: JSON.stringify({ error: 'OIDC issuer URL is required' }) };
     }
-    if (!oidcClientId || typeof oidcClientId !== 'string') {
+    if (!effOidcClientId) {
       return { statusCode: 400, body: JSON.stringify({ error: 'OIDC client ID is required' }) };
     }
-  } else if (!metadataUrl && !metadataXml) {
+  } else if (!effMetadataUrl && !effMetadataXmlRaw) {
     console.warn(`SSO save rejected: no metadata provided, requestedBy=${adminSub}`);
     return { statusCode: 400, body: JSON.stringify({ error: 'Either metadataUrl or metadataXml is required' }) };
   }
@@ -507,6 +553,7 @@ async function handleSaveConfig(event: {
   // Validate attribute mapping if provided
   const resolvedMapping =
     (attributeMapping as Record<string, string>) ||
+    (sameProvider ? existing?.attributeMapping : undefined) ||
     DEFAULT_ATTRIBUTE_MAPPINGS[idpType as string] ||
     DEFAULT_ATTRIBUTE_MAPPINGS['other'];
   if (attributeMapping) {
@@ -517,12 +564,8 @@ async function handleSaveConfig(event: {
     }
   }
 
-  const providerName = sanitizeProviderName(idpType as string);
-
-  // Check if there's an existing config — handle IdP type changes
-  const existingRes = await ddb.send(new GetCommand({ TableName: TABLE_NAME, Key: { setting: 'sso-config' } }));
-  const existing = existingRes.Item as SSOConfig | undefined;
-
+  // Check if there's an existing config — handle IdP type changes.
+  // (existing + providerName were loaded above for the merge logic.)
   // If IdP type changed and old provider exists, clean it up
   if (existing && existing.providerName !== providerName) {
     console.log(
@@ -541,25 +584,39 @@ async function handleSaveConfig(event: {
     }
   }
 
-  const validEmailSource = emailSource === 'upn' ? 'upn' : 'email-claim';
-  const validProtocol = providerProtocol === 'OIDC' ? 'OIDC' : 'SAML';
+  const effEmailSource = carry(emailSource, existing?.emailSource);
+  const validEmailSource = effEmailSource === 'upn' ? 'upn' : 'email-claim';
+  const validProtocol = effProtocol;
 
+  // A record holds only its own protocol's credential fields. Clearing the other
+  // protocol's leftovers on a protocol switch prevents a stale OIDC client secret
+  // (or stale SAML metadata) from lingering in DynamoDB and confusing GET/audits.
+  // Request-supplied XML is normalized HERE — after the size/shape validation above —
+  // never before; a carried stored value was normalized when it was first saved.
+  const isSaml = validProtocol === 'SAML';
   const config: SSOConfig = {
     setting: 'sso-config',
     idpType: idpType as string,
     providerProtocol: validProtocol,
     providerName,
     // SAML fields
-    metadataUrl: (metadataUrl as string) || undefined,
-    metadataXml: metadataXml ? normalizeMetadataXml(metadataXml as string) : undefined,
+    metadataUrl: (isSaml && effMetadataUrl) || undefined,
+    metadataXml:
+      isSaml && effMetadataXmlRaw
+        ? reqHasMetadataXml
+          ? normalizeMetadataXml(effMetadataXmlRaw)
+          : effMetadataXmlRaw
+        : undefined,
     // OIDC fields
-    oidcIssuer: (oidcIssuer as string) || undefined,
-    oidcClientId: (oidcClientId as string) || undefined,
-    oidcClientSecret: (oidcClientSecret as string) || undefined,
-    oidcScopes: (oidcScopes as string) || undefined,
+    oidcIssuer: (!isSaml && effOidcIssuer) || undefined,
+    oidcClientId: (!isSaml && effOidcClientId) || undefined,
+    oidcClientSecret: (!isSaml && effOidcClientSecret) || undefined,
+    oidcScopes: (!isSaml && effOidcScopes) || undefined,
     attributeMapping: resolvedMapping,
     emailSource: validEmailSource,
-    ssoOnlyMode: ssoOnlyMode === true,
+    // Preserve the stored value when the request omits the flag (e.g. the Edit
+    // Configuration wizard); the SSO-only toggle always sends an explicit boolean.
+    ssoOnlyMode: typeof ssoOnlyMode === 'boolean' ? ssoOnlyMode : sameProvider ? existing?.ssoOnlyMode === true : false,
     enabled: existing?.enabled || false,
     updatedAt: new Date().toISOString(),
     updatedBy: adminSub || undefined,
@@ -568,7 +625,7 @@ async function handleSaveConfig(event: {
   await ddb.send(new PutCommand({ TableName: TABLE_NAME, Item: config }));
 
   console.log(
-    `SSO config saved: idpType=${idpType}, providerName=${providerName}, metadataSource=${metadataUrl ? 'url' : 'xml'}, attributes=[${Object.keys(resolvedMapping).join(',')}], updatedBy=${adminSub} (${adminEmail})`
+    `SSO config saved: idpType=${idpType}, providerName=${providerName}, metadataSource=${isSaml ? (effMetadataUrl ? 'url' : 'xml') : 'oidc'}, attributes=[${Object.keys(resolvedMapping).join(',')}], updatedBy=${adminSub} (${adminEmail})`
   );
 
   return { statusCode: 200, body: JSON.stringify({ success: true, providerName }) };
