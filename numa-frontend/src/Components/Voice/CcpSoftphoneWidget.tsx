@@ -254,7 +254,10 @@ export const CcpSoftphoneWidget = () => {
           bottom: 88,
           width: 56,
           height: 56,
-          zIndex: 1060,
+          // Above page content and chat drawers (1035), but BELOW the
+          // Ask Numa / Support popups (1049/1050) — the toggle overlaps their
+          // send-button corner and must not cover them while they're open.
+          zIndex: 1045,
         }}
       >
         <i className={`bi ${open ? 'bi-chevron-down' : 'bi-telephone-fill'} fs-5`} aria-hidden="true"></i>
@@ -273,7 +276,8 @@ export const CcpSoftphoneWidget = () => {
           bottom: 156,
           width: PANEL_WIDTH,
           maxWidth: 'calc(100vw - 40px)',
-          zIndex: 1060,
+          // Same layer as the toggle button — see comment above.
+          zIndex: 1045,
           // Keep mounted (so the iframe/session persists) but hide when collapsed.
           display: open ? 'flex' : 'none',
         }}

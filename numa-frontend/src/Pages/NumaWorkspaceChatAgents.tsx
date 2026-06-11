@@ -83,6 +83,8 @@ import { QueuedSubmitBanner } from '../Components/Chat/QueuedSubmitBanner';
 import { ChatSuggestionPills } from '../Components/Chat/ChatSuggestionPills';
 import { useChatSuggestions } from '../hooks/useChatSuggestions';
 import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
+import { ASK_NUMA_PRESELECT_TOKEN, CONVERSATION_AGENT_TYPE_KEY_PREFIX } from '../Components/AskNuma/AskNumaPopup';
+import { SUPPORT_AGENT_TYPE, SUPPORT_KB_ID } from '../Components/Support/SupportNumaPopup';
 import {
   loadStagedItems,
   saveStagedItems,
@@ -153,9 +155,30 @@ const resolveErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
+// Support conversations always need the KB and web-search toggles on so the
+// support agent can query the Numa Support knowledge base regardless of the
+// user's chat-settings defaults (the backend restricts WHICH KBs it sees;
+// these toggles control WHETHER KB/search operations are allowed at all).
+const ensureToolsForAgentType = (enabledTools: string[], agentType?: string | null): string[] =>
+  agentType === SUPPORT_AGENT_TYPE
+    ? Array.from(new Set([...enabledTools, 'knowledge_base', 'web_search']))
+    : enabledTools;
+
+// Resolve the workspace agent type pinned to a conversation (set when the
+// conversation is started from the Support popup). Null = default numa-chat.
+const getConversationAgentType = (conversationId?: string | null): string | undefined => {
+  if (!conversationId) return undefined;
+  try {
+    return sessionStorage.getItem(`${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${conversationId}`) || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const NumaWorkspaceChatAgents = () => {
   const { t } = useTranslation('chat');
   const { t: tCommon } = useTranslation('common');
+  const { t: tSupport } = useTranslation('support');
   const confirm = useConfirm();
   const prompt = usePrompt();
   // Basic UI state
@@ -999,6 +1022,23 @@ const NumaWorkspaceChatAgents = () => {
     ]
   );
 
+  // Chat-settings panel state for Support popup conversations (FEAT-204).
+  // Mirrors what the numa-chat-support agent type ENFORCES on the backend
+  // (KB locked to the Numa Support system KB, no integrations, KB search +
+  // web search only) so the panel shows what is actually in effect instead
+  // of the user's defaults.
+  const applySupportConfiguration = useCallback(() => {
+    setAutoToolsEnabled(false);
+    setWebSearchEnabled(true);
+    setCreateAgentEnabled(false);
+    setMemoriesEnabled(false);
+    setNumaOpsEnabled(false);
+    setEnabledConnections([]);
+    setEnabledNativeConnectorIds([]);
+    setSelectedAccountsByApp({});
+    setEnabledKBIds([SUPPORT_KB_ID]);
+  }, []);
+
   const resetAgentState = useCallback(() => {
     setCurrentAgent(null);
     setPendingAgent(null);
@@ -1080,6 +1120,14 @@ const NumaWorkspaceChatAgents = () => {
       !isConversationLoading &&
       !pendingConversationChatConfig
     ) {
+      // Support conversations pin their own settings (applySupportConfiguration)
+      // — never overwrite them with the user's defaults. sessionStorage is read
+      // directly so the freshest pin is seen regardless of effect ordering.
+      const activeCid = sessionStorage.getItem('currentConversationId-v2');
+      if (activeCid && getConversationAgentType(activeCid) === SUPPORT_AGENT_TYPE) {
+        return;
+      }
+
       applyAgentConfiguration(null);
 
       const forceKbId = searchParams.get('kb');
@@ -1338,6 +1386,11 @@ const NumaWorkspaceChatAgents = () => {
     preselectHandledRef.current = true;
     setIsConversationLoading(false);
     try {
+      // The Ask Numa / Support popup token is a draft-handoff marker, not an
+      // Agents-page launch — never queue an agent for it, even if a stale
+      // numa_preselected_agent payload is still lying around (it would be
+      // applied over the popup's fresh conversation).
+      if (token === ASK_NUMA_PRESELECT_TOKEN) return;
       if (agentsMode === 'off' || !stored) return;
       const parsed = JSON.parse(stored) as AgentSummary;
       setQueuedPreselectedAgent(parsed);
@@ -1362,8 +1415,23 @@ const NumaWorkspaceChatAgents = () => {
     sessionStorage.removeItem('numa_preselected_agent_token');
 
     try {
-      const { message, conversationId: draftCid } = JSON.parse(draft) as { message: string; conversationId: string };
+      const {
+        message,
+        conversationId: draftCid,
+        agentType: draftAgentType,
+      } = JSON.parse(draft) as { message: string; conversationId: string; agentType?: string };
       if (!message || !draftCid) return;
+
+      // Pin the workspace agent type (e.g. numa-chat-support) to this
+      // conversation so every subsequent turn sends it too (see handleSubmit).
+      if (draftAgentType) {
+        sessionStorage.setItem(`${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${draftCid}`, draftAgentType);
+      }
+      // Reflect the support agent's enforced settings in the panel (Numa
+      // Support KB only, no integrations) instead of the user's defaults.
+      if (draftAgentType === SUPPORT_AGENT_TYPE) {
+        applySupportConfiguration();
+      }
 
       // 1. Load staged items from localStorage (files already uploaded to S3 by popup)
       const draftStagedItems = loadStagedItems(draftCid);
@@ -1423,13 +1491,14 @@ const NumaWorkspaceChatAgents = () => {
           await streamChat({
             prompt: message,
             conversationId: draftCid,
-            enabledTools,
+            enabledTools: ensureToolsForAgentType(enabledTools, draftAgentType),
             enabledIntegrations: enabledIntegrationsUnified,
             availableIntegrations: availableIntegrationsUnified,
             enabledKBIds,
             availableKBs,
             attachments,
             modelId: selectedModelId,
+            type: draftAgentType,
           });
         } catch (err) {
           console.error('[AskNuma] Auto-submit failed:', err);
@@ -2668,11 +2737,15 @@ const NumaWorkspaceChatAgents = () => {
       // Reset streaming helpers for this turn
       resetStreamingState();
 
+      // Workspace agent type pinned to this conversation (e.g. Support popup
+      // conversations run on numa-chat-support). Undefined = default numa-chat.
+      const conversationAgentType = getConversationAgentType(cid);
+
       // Call workspace streaming hook
       await streamChat({
         prompt: userMsg,
         conversationId: cid,
-        enabledTools,
+        enabledTools: ensureToolsForAgentType(enabledTools, conversationAgentType),
         enabledIntegrations: enabledIntegrationsUnified,
         availableIntegrations: availableIntegrationsUnified,
         enabledKBIds,
@@ -2681,6 +2754,7 @@ const NumaWorkspaceChatAgents = () => {
         modelId: selectedModelId,
         migrateFromV1: needsV1Migration,
         agentId: activeAgent?.agentId,
+        type: conversationAgentType,
         voiceRecordings,
       });
       // Clear the V1 migration flag after first message (migration happens on first request)
@@ -2881,6 +2955,18 @@ const NumaWorkspaceChatAgents = () => {
             const metaItem = conversationHistory.find(
               (item: { message_type?: string }) => item.message_type === 'meta'
             );
+
+            // Restore the workspace agent type pin (e.g. Support conversations
+            // run on numa-chat-support) so subsequent turns keep using the
+            // right backend agent type even in a fresh session where the
+            // sessionStorage pin from the popup no longer exists.
+            if (metaItem?.workspaceAgentType && typeof metaItem.workspaceAgentType === 'string') {
+              sessionStorage.setItem(
+                `${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${selectedConversationId}`,
+                metaItem.workspaceAgentType
+              );
+            }
+
             if (metaItem?.isAgentConversation && metaItem?.agentId) {
               try {
                 const agent = await getAgent(numaGet, metaItem.agentId);
@@ -2899,12 +2985,18 @@ const NumaWorkspaceChatAgents = () => {
               setAgentError(null);
             }
 
-            // Restore per-conversation chat settings (integrations, KBs, tools)
-            const v2ChatConfig = metaItem?.chatConfig ?? null;
+            // Restore per-conversation chat settings (integrations, KBs, tools).
+            // Support conversations are settings-pinned by their agent type —
+            // ignore any saved chatConfig and apply the support configuration
+            // (the backend enforces it regardless of what the panel says).
+            const isSupportConversationMeta = metaItem?.workspaceAgentType === SUPPORT_AGENT_TYPE;
+            const v2ChatConfig = isSupportConversationMeta ? null : (metaItem?.chatConfig ?? null);
             setPendingConversationChatConfig((v2ChatConfig as ConversationChatConfig) || null);
 
-            // If no saved chatConfig and no agent, apply user defaults
-            if (!v2ChatConfig && !(metaItem?.isAgentConversation && metaItem?.agentId)) {
+            if (isSupportConversationMeta) {
+              applySupportConfiguration();
+            } else if (!v2ChatConfig && !(metaItem?.isAgentConversation && metaItem?.agentId)) {
+              // If no saved chatConfig and no agent, apply user defaults
               applyAgentConfiguration(null);
             }
           } catch (metaErr) {
@@ -3005,6 +3097,18 @@ const NumaWorkspaceChatAgents = () => {
 
   // Derived active agent for header display (pending takes priority during transitions)
   const activeAgent = pendingAgent || currentAgent;
+
+  // Typed conversations (Support popup) show the type's title in the header
+  // like a saved agent would. Driven by the per-conversation type pin, which
+  // is set by the popup/draft handoff and restored from the conversation meta
+  // record on load — so it survives refreshes and new sessions.
+  const isSupportConversation = getConversationAgentType(conversationId) === SUPPORT_AGENT_TYPE;
+  const headerTitle = activeAgent?.title || (isSupportConversation ? tSupport('popup.title') : t('page.title'));
+  const headerSubtitle =
+    activeAgent?.description ||
+    (isSupportConversation
+      ? tSupport('subtitle')
+      : t('page.subtitle', { defaultValue: 'Your AI workspace assistant' }));
 
   // Legacy helper: push buffered text as its own segment then clear buffer, and save to DynamoDB
   // Kept for V1 compatibility but unused in workspace mode (handled by useWorkspaceStreaming hook)
@@ -3180,11 +3284,11 @@ const NumaWorkspaceChatAgents = () => {
             {/* Desktop header */}
             {!isMobile && (
               <PageHeader
-                title={activeAgent?.title || t('page.title')}
+                title={headerTitle}
                 subtitle={
                   showCostTotal
-                    ? `${activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })} · ${t('cost.runningTotal', { cost: chatCostTotal.toFixed(4) })}`
-                    : activeAgent?.description || t('page.subtitle', { defaultValue: 'Your AI workspace assistant' })
+                    ? `${headerSubtitle} · ${t('cost.runningTotal', { cost: chatCostTotal.toFixed(4) })}`
+                    : headerSubtitle
                 }
                 icon={
                   activeAgent

@@ -74,6 +74,10 @@ type StreamConfig = {
   migrateFromV1?: boolean;
   /** Agent ID for custom agent prompts and restrictions */
   agentId?: string;
+  /** Agent type system — selects a registered agent type config on the
+   *  workspace agent (default: "numa-chat"). Set per conversation, e.g.
+   *  "numa-chat-support" for Support popup conversations. */
+  type?: string;
   /** Paths to voice recordings that should be auto-transcribed into the user message */
   voiceRecordings?: string[];
 };
@@ -217,6 +221,7 @@ export function useWorkspaceChatStreaming({
         modelId,
         migrateFromV1,
         agentId,
+        type,
         voiceRecordings,
       } = config;
 
@@ -279,6 +284,7 @@ export function useWorkspaceChatStreaming({
           voiceRecordings,
           migrateFromV1: migrateFromV1 || false,
           agentId,
+          type,
           requestId, // Pass pre-generated requestId so stop works during streaming
         },
         // onEvent - delegate to shared stream event handler

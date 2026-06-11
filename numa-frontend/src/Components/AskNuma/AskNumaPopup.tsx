@@ -18,19 +18,71 @@ import type {
 
 const PAGE_CONTEXT_KEY = 'numa_ask_numa_page_context';
 
+/** sessionStorage key prefix that pins a conversation to a workspace agent type. */
+export const CONVERSATION_AGENT_TYPE_KEY_PREFIX = 'numa_conversation_agent_type_';
+
+/**
+ * Preselect-token value used by the popup draft handoff. It only suppresses
+ * useConversationManager's init on the chat page — it is NOT an Agents-page
+ * launch, and the chat page's preselect effect must ignore it.
+ */
+export const ASK_NUMA_PRESELECT_TOKEN = 'ask-numa';
+
+export interface AskNumaContextFile {
+  filename: string;
+  blob: Blob;
+}
+
 interface AskNumaPopupProps {
   onClose: () => void;
+  /** Popup header title. Defaults to the Ask Numa title. */
+  title?: string;
+  /** Textarea placeholder. Defaults to the Ask Numa placeholder. */
+  placeholder?: string;
+  /** Assistant greeting written to the new conversation. */
+  greeting?: string;
+  /** Prefix for the conversation name (e.g. "Support: "). */
+  conversationNamePrefix?: string;
+  /**
+   * Workspace agent type for the conversation (e.g. "numa-chat-support").
+   * Carried through the draft handoff so the chat page sends it on every
+   * turn of the conversation, and stored on the conversation meta record so
+   * the pin survives across sessions. Omit for the default numa-chat type.
+   */
+  agentType?: string;
+  /**
+   * Display title stored on the conversation meta record (isAgentConversation
+   * + agentTitle, deliberately WITHOUT agentId since there is no saved-agent
+   * record). Drives the agent badge in history panels and the chat header.
+   */
+  agentTitle?: string;
+  /**
+   * Extra context files captured on send and uploaded to the conversation
+   * workspace. Always attached — independent of the user-facing page-context
+   * toggle (used by the Support popup for the environment report).
+   */
+  buildExtraContextFiles?: () => Promise<AskNumaContextFile[]>;
 }
 
 /**
- * Lightweight chat popup for the Ask Numa FAB.
+ * Lightweight chat popup for the Ask Numa FAB (and, parameterized, the
+ * Support popup — see Components/Support/SupportNumaPopup).
  * Creates a FRESH conversation every time and navigates to /chat on send.
  *
  * Important: Does NOT use useConversationManager to avoid inheriting an
  * existing conversation from sessionStorage. Instead, mints its own
  * conversation ID and writes meta directly to DynamoDB.
  */
-export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
+export function AskNumaPopup({
+  onClose,
+  title,
+  placeholder,
+  greeting,
+  conversationNamePrefix,
+  agentType,
+  agentTitle,
+  buildExtraContextFiles,
+}: AskNumaPopupProps) {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
   const { numaChatDynamoUtils, getCredentials, user } = useAuth();
@@ -91,15 +143,21 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
       }
 
       const cid = `${sub}_${Date.now()}`;
+      const fullName = `${conversationNamePrefix || ''}${conversationName}`;
 
       await numaChatDynamoUtils.addMessage({
         conversationId: cid,
         userId: sub,
         messageType: 'meta',
         role: 'user',
-        conversationName: conversationName.length > 60 ? `${conversationName.slice(0, 57)}...` : conversationName,
+        conversationName: fullName.length > 60 ? `${fullName.slice(0, 57)}...` : fullName,
         content: 'New conversation started',
         isWorkspaceConversation: true,
+        // Typed conversations (e.g. Support) persist their workspace agent
+        // type and show an agent-style title badge in history. No agentId —
+        // there is no saved-agent record behind an agent type.
+        workspaceAgentType: agentType,
+        ...(agentTitle ? { isAgentConversation: true, agentTitle } : {}),
       } as never);
 
       // Write the initial assistant greeting
@@ -108,12 +166,12 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
         userId: sub,
         messageType: 'text',
         role: 'assistant',
-        content: 'How can I help you today?',
+        content: greeting || 'How can I help you today?',
       });
 
       return cid;
     },
-    [numaChatDynamoUtils, sub]
+    [numaChatDynamoUtils, sub, conversationNamePrefix, greeting, agentType, agentTitle]
   );
 
   // Get or create conversation ID (for file uploads before sending)
@@ -210,6 +268,20 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
       let finalMessage = inputMessage;
       const contextFiles: StagedFile[] = [];
 
+      // Extra context files (e.g. Support environment report) are always
+      // attached — they are not covered by the page-context toggle.
+      if (buildExtraContextFiles) {
+        try {
+          const extraFiles = await buildExtraContextFiles();
+          for (const { filename, blob } of extraFiles) {
+            const uploaded = await uploadContextFile(blob, filename, cid);
+            if (uploaded) contextFiles.push(uploaded);
+          }
+        } catch (err) {
+          console.warn('[AskNuma] Extra context capture failed:', err);
+        }
+      }
+
       // Capture page context if enabled
       if (includePageContext) {
         const { textPrefix, screenshotBlob, htmlContent } = await captureContext();
@@ -262,11 +334,29 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
       sessionStorage.setItem('currentConversationId-v2', cid);
       sessionStorage.setItem('isWorkspaceConversation-v2', 'true');
       localStorage.setItem('numa_chat_lastInteraction-v2', String(Date.now()));
-      sessionStorage.setItem('numa_preselected_agent_token', 'ask-numa');
-      sessionStorage.setItem('numa_ask_numa_draft', JSON.stringify({ message: finalMessage, conversationId: cid }));
+      sessionStorage.setItem('numa_preselected_agent_token', ASK_NUMA_PRESELECT_TOKEN);
+      // Clear any stale Agents-page launch payload. If one is left over (an
+      // agent was selected but never activated in this tab), the chat page's
+      // preselect effect would apply that agent OVER this fresh popup
+      // conversation — wrong header title and, worse, the stale agent's
+      // prompt/agentId on subsequent turns.
+      sessionStorage.removeItem('numa_preselected_agent');
+      if (agentType) {
+        sessionStorage.setItem(`${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${cid}`, agentType);
+      }
+      sessionStorage.setItem(
+        'numa_ask_numa_draft',
+        JSON.stringify({ message: finalMessage, conversationId: cid, agentType })
+      );
 
-      // Navigate to chat
-      navigate('/chat');
+      // Navigate to chat. The chat page consumes the draft on mount, so when
+      // we are already on /chat (e.g. Support popup opened from the chat page)
+      // a SPA navigate would be a no-op — force a full load instead.
+      if (window.location.pathname.startsWith('/chat')) {
+        window.location.assign('/chat');
+      } else {
+        navigate('/chat');
+      }
     } catch (err) {
       console.error('[AskNuma] Failed to send:', err);
       setIsSending(false);
@@ -282,6 +372,8 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
     captureContext,
     uploadContextFile,
     navigate,
+    agentType,
+    buildExtraContextFiles,
   ]);
 
   // Handle Enter key (send) and Shift+Enter (newline)
@@ -305,7 +397,7 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
       <div className="ask-numa-popup">
         {/* Header */}
         <div className="ask-numa-popup-header">
-          <h6 className="ask-numa-popup-title">{t('askNuma.popupTitle')}</h6>
+          <h6 className="ask-numa-popup-title">{title || t('askNuma.popupTitle')}</h6>
           <button className="ask-numa-popup-close" onClick={onClose} aria-label={t('askNuma.close')}>
             <X size={16} />
           </button>
@@ -324,7 +416,7 @@ export function AskNumaPopup({ onClose }: AskNumaPopupProps) {
           <textarea
             ref={textareaRef}
             className="ask-numa-textarea"
-            placeholder={t('askNuma.placeholder')}
+            placeholder={placeholder || t('askNuma.placeholder')}
             value={inputMessage}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
