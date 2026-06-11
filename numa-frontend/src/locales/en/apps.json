@@ -197,8 +197,12 @@
         "description": "Analyze documents using a knowledge base. Upload a document and select a knowledge base; the AI assistant will perform comprehensive analysis using the knowledge base files."
       },
       "policy-builder": {
-        "name": "Policy Designer",
+        "name": "Policy Designer (old version)",
         "description": "Create and manage organizational policies with AI assistance. This tool helps draft, review, and format policies while ensuring compliance with industry standards and regulations."
+      },
+      "policy-designer": {
+        "name": "Policy Designer",
+        "description": "Generate a complete school governance policy suite from your school's context, based on the NZSBA exemplar."
       },
       "policy-drafter": {
         "name": "Policy Drafter",
