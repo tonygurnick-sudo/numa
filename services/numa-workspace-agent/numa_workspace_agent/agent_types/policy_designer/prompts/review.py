@@ -72,7 +72,8 @@ truncated in assembly.
 ### Do NOT in this phase
 
 - Do NOT write any file to `/workdir/outputs/` other than `final_policy.md`.
-- Do NOT render DOCX or PDF — Phase 3 does that.
+- Do NOT render DOCX or PDF — those are generated outside the pipeline from \
+this markdown.
 
 ### Final response
 

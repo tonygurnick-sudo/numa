@@ -1,12 +1,15 @@
 """Custom pipeline orchestrator for the NZSBA Policy Designer (FEAT-174).
 
-Three strictly sequential phases inside one MicroVM:
+Two strictly sequential phases inside one MicroVM:
 
 1. Generation — writes the four customised policy area files to /workdir/tmp/.
 2. Review & assemble — focused edits, front/back matter, assembles
    /workdir/outputs/final_policy.md.
-3. Format rendering — produces final_policy.docx and final_policy.pdf via
-   pandoc / WeasyPrint.
+
+The markdown is the only pipeline deliverable. DOCX/PDF are converted on
+demand by the frontend through the document-converter Lambda (see
+numa-frontend/CLAUDE.md → "Markdown → DOCX/PDF Downloads") — an earlier
+in-workspace render phase was removed once that path proved better.
 
 The orchestrator mirrors Nolia's (``nolia/orchestrator.py``) but is simpler:
 no KB downloads, no document extraction, no parallelism, no subagents. It
@@ -33,10 +36,9 @@ from .workspace_setup import OUTPUTS_DIR, setup_policy_designer_workspace
 
 logger = structlog.get_logger()
 
-# Final deliverables, in presentation order. The markdown is the canonical
-# output; DOCX/PDF are best-effort renderings (Phase 3 may legitimately
-# complete with only some of them — see the render prompt's fallback).
-FINAL_OUTPUTS = ("final_policy.md", "final_policy.docx", "final_policy.pdf")
+# The sole pipeline deliverable — DOCX/PDF are converted from this markdown
+# on demand by the frontend (document-converter Lambda).
+FINAL_POLICY_MD = "final_policy.md"
 
 
 def _emit_progress(
@@ -140,13 +142,6 @@ async def run_policy_designer_pipeline(
         "assemble /workdir/outputs/final_policy.md per your system prompt."
     )
 
-    render_prompt = (
-        f"You are running Phase 3 (Format Rendering) for **{school_name}**. "
-        "The reviewed /workdir/outputs/final_policy.md is complete. Render "
-        "final_policy.docx and final_policy.pdf into /workdir/outputs/ per "
-        "your system prompt. Make no content edits."
-    )
-
     step_kwargs = dict(
         user_sub=user_sub,
         conversation_id=conversation_id,
@@ -244,7 +239,7 @@ async def run_policy_designer_pipeline(
 
     # The markdown is the canonical deliverable — without it the run failed
     # no matter what Phase 2 reported.
-    if not (OUTPUTS_DIR / "final_policy.md").exists():
+    if not (OUTPUTS_DIR / FINAL_POLICY_MD).exists():
         logger.error(
             "Phase 2 completed but final_policy.md is missing",
             _name="POLICY_DESIGNER_MISSING_OUTPUT",
@@ -252,32 +247,15 @@ async def run_policy_designer_pipeline(
         )
         return await _fail("Phase 2 (Review & Assemble) — final_policy.md missing")
 
-    # ── Phase 3: Format rendering ────────────────────────────────────────
-    emit("render", "Rendering Word and PDF documents...")
-    render_result = _accumulate(
-        await _run_step(
-            "policy-designer-render",
-            "render",
-            prompt=render_prompt,
-            **step_kwargs,
-        ),
-        "policy-designer-render",
-    )
-    if _check_error(render_result, "policy-designer-render"):
-        return await _fail("Phase 3 (Format Rendering)")
-
     # ── Done ──────────────────────────────────────────────────────────────
     emit("complete", "Policy suite complete")
     total_usage["duration_ms"] = int((time.monotonic() - pipeline_start) * 1000)
 
-    # Artifacts: the final deliverables that actually exist on disk.
-    produced = [name for name in FINAL_OUTPUTS if (OUTPUTS_DIR / name).exists()]
-    final_artifacts = [{"type": "file", "path": f"outputs/{name}"} for name in produced]
-
-    file_refs = "\n".join(f"<file:outputs/{name}>" for name in produced)
+    final_artifacts = [{"type": "file", "path": f"outputs/{FINAL_POLICY_MD}"}]
     final_text = (
         f"# Policy Suite for {school_name}\n\n"
-        f"The complete policy suite has been generated.\n\n{file_refs}\n\n"
+        f"The complete policy suite has been generated.\n\n"
+        f"<file:outputs/{FINAL_POLICY_MD}>\n\n"
         f"{all_steps[-1].get('text', '')}"
     )
 
@@ -289,7 +267,7 @@ async def run_policy_designer_pipeline(
         total_turns=total_usage["num_turns"],
         total_cost=total_usage["total_cost_usd"],
         duration_ms=total_usage["duration_ms"],
-        outputs=produced,
+        outputs=[FINAL_POLICY_MD],
     )
 
     result = {
@@ -598,5 +576,5 @@ def _send_completion_email(
 __all__ = [
     "run_policy_designer_pipeline",
     "_send_completion_email",
-    "FINAL_OUTPUTS",
+    "FINAL_POLICY_MD",
 ]

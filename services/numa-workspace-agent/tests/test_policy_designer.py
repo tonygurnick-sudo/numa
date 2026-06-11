@@ -45,7 +45,6 @@ class TestPolicyDesignerRegistration:
         [
             "policy-designer-generation",
             "policy-designer-review",
-            "policy-designer-render",
         ],
     )
     def test_phase_types_registered(self, type_id):
@@ -64,10 +63,12 @@ class TestPolicyDesignerRegistration:
         assert config.restrict_kbs is True
         assert config.restrict_integrations is True
 
-    def test_render_phase_allows_rendering_commands(self):
+    def test_no_render_phase_registered(self):
+        # Format rendering was removed from the pipeline — DOCX/PDF are
+        # converted from the markdown by the frontend (document-converter).
+        # The registry falls back to numa-chat for unknown type_ids.
         config = get_agent_type_config("policy-designer-render")
-        assert "Bash(pandoc:*)" in config.allowed_tools
-        assert "Bash(weasyprint:*)" in config.allowed_tools
+        assert config.type_id != "policy-designer-render"
 
     def test_generation_phase_has_no_rendering_commands(self):
         config = get_agent_type_config("policy-designer-generation")
@@ -147,7 +148,6 @@ class TestPromptBuilders:
     def test_phase_addenda_appended(self):
         gen = get_agent_type_config("policy-designer-generation")
         review = get_agent_type_config("policy-designer-review")
-        render = get_agent_type_config("policy-designer-render")
 
         gen_prompt = gen.system_prompt_builder(working_dir="/workdir")
         assert "/workdir/tmp/impact.md" in gen_prompt
@@ -161,10 +161,6 @@ class TestPromptBuilders:
             "performance" in review_prompt
         )
         assert "The Māori text of the Treaty of Waitangi" in review_prompt
-
-        render_prompt = render.system_prompt_builder(working_dir="/workdir")
-        assert "weasyprint" in render_prompt
-        assert "ZERO content edits" in render_prompt
 
 
 # ---------------------------------------------------------------------------
