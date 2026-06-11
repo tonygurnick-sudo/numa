@@ -875,7 +875,8 @@
       "saving": "Saving...",
       "save": "Save Changes",
       "reset": "Reset to company defaults",
-      "resetBrowser": "Reset to browser defaults"
+      "resetBrowser": "Reset to browser defaults",
+      "retry": "Retry"
     },
     "errors": {
       "loadDefaults": "Failed to load defaults",

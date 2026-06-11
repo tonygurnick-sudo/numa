@@ -5,6 +5,7 @@
     "userNotAuthenticated": "User not authenticated"
   },
   "chatSettings": {
+    "loadFailed": "Failed to load chat settings",
     "updateFailed": "Failed to update chat settings"
   },
   "adminChatSettings": {

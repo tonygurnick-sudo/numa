@@ -139,6 +139,12 @@ export default function UserProfilePage({
   const [userDefaultsEnabled, setUserDefaultsEnabled] = useState<boolean>(false);
   const [userDefaults, setUserDefaults] = useState(() => ({ ...DEFAULT_CHAT_SETTINGS }));
   const [loading, setLoading] = useState<boolean>(true);
+  // True once the user's settings have been fetched successfully at least once.
+  // The settings forms must never render (or allow saving) the placeholder
+  // DEFAULT_CHAT_SETTINGS state — a failed load otherwise looks exactly like
+  // "your settings were wiped", and saving from that state would make it real.
+  const [defaultsLoaded, setDefaultsLoaded] = useState<boolean>(false);
+  const [defaultsReloadNonce, setDefaultsReloadNonce] = useState(0);
   const [saving, setSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [dirty, setDirty] = useState<boolean>(false);
@@ -600,13 +606,6 @@ export default function UserProfilePage({
   }, []);
 
   useEffect(() => {
-    if (!dataAnalysisAvailable) {
-      setUserDefaults((prev) => ({ ...prev, dataAnalysisEnabled: false }));
-      setDirty(true);
-    }
-  }, [dataAnalysisAvailable]);
-
-  useEffect(() => {
     if (settingsScope !== 'user') return;
     let cancelled = false;
     (async () => {
@@ -618,6 +617,7 @@ export default function UserProfilePage({
         setUserDefaultsEnabled(res.userDefaultsEnabled);
         savedDefaultsRef.current = JSON.stringify(res.settings);
         savedDefaultsEnabledRef.current = res.userDefaultsEnabled;
+        setDefaultsLoaded(true);
         setError(null);
         setDirty(false);
       } catch (e) {
@@ -630,7 +630,7 @@ export default function UserProfilePage({
     return () => {
       cancelled = true;
     };
-  }, [numaGet, settingsScope]);
+  }, [numaGet, settingsScope, defaultsReloadNonce]);
 
   // Load user profile
   useEffect(() => {
@@ -1057,8 +1057,20 @@ export default function UserProfilePage({
         </div>
       )}
       {error && (
-        <Alert variant="danger" className="mb-3">
-          {error}
+        <Alert variant="danger" className="mb-3 d-flex align-items-center justify-content-between gap-2">
+          <span>{error}</span>
+          {!defaultsLoaded && (
+            <Button
+              size="sm"
+              variant="outline-danger"
+              onClick={() => {
+                setError(null);
+                setDefaultsReloadNonce((n) => n + 1);
+              }}
+            >
+              {t('userProfile.actions.retry')}
+            </Button>
+          )}
         </Alert>
       )}
 
@@ -1388,135 +1400,101 @@ export default function UserProfilePage({
             </span>
           }
         >
-          <Form>
-            <div className="profile-section">
-              <div className="profile-section__title">{t('userProfile.defaults.language.label')}</div>
-              <p className="profile-section__description">{t('userProfile.defaults.language.help')}</p>
-              <Form.Select
-                value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
-                disabled={disableProfileForm}
-                onChange={(e) => {
-                  setUserDefaults((prev) => ({ ...prev, language: e.target.value }));
-                  setDirty(true);
-                }}
-              >
-                <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
-                <option value="en">{t('userProfile.defaults.language.english')}</option>
-              </Form.Select>
-            </div>
-
-            <div className="profile-section">
-              <div className="profile-section__title">{t('userProfile.defaults.emailSignature.label')}</div>
-              <p className="profile-section__description">{t('userProfile.defaults.emailSignature.help')}</p>
-              <div className="profile-signature-toggle">
-                <Form.Check
-                  type="switch"
-                  id="profile-email-signature-enabled"
-                  label=""
-                  checked={userDefaults.emailSignatureEnabled}
+          {!defaultsLoaded ? (
+            !error && (
+              <div className="text-center py-4">
+                <Spinner animation="border" />
+              </div>
+            )
+          ) : (
+            <Form>
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.defaults.language.label')}</div>
+                <p className="profile-section__description">{t('userProfile.defaults.language.help')}</p>
+                <Form.Select
+                  value={userDefaults.language ?? LANGUAGE_BROWSER_DEFAULT}
                   disabled={disableProfileForm}
                   onChange={(e) => {
-                    setUserDefaults((prev) => ({ ...prev, emailSignatureEnabled: e.target.checked }));
+                    setUserDefaults((prev) => ({ ...prev, language: e.target.value }));
                     setDirty(true);
                   }}
-                />
-                <span className="profile-signature-toggle__label">
-                  {t('userProfile.defaults.emailSignature.enableTitle')}
-                </span>
+                >
+                  <option value={LANGUAGE_BROWSER_DEFAULT}>{t('userProfile.defaults.language.browser')}</option>
+                  <option value="en">{t('userProfile.defaults.language.english')}</option>
+                </Form.Select>
               </div>
-              {userDefaults.emailSignatureEnabled && (
-                <>
-                  <Form.Label className="profile-field-label">
-                    {t('userProfile.defaults.emailSignature.textLabel')}
-                  </Form.Label>
-                  <RichTextEditor
-                    value={userDefaults.emailSignatureText}
+
+              <div className="profile-section">
+                <div className="profile-section__title">{t('userProfile.defaults.emailSignature.label')}</div>
+                <p className="profile-section__description">{t('userProfile.defaults.emailSignature.help')}</p>
+                <div className="profile-signature-toggle">
+                  <Form.Check
+                    type="switch"
+                    id="profile-email-signature-enabled"
+                    label=""
+                    checked={userDefaults.emailSignatureEnabled}
                     disabled={disableProfileForm}
-                    placeholder={DEFAULT_CHAT_SETTINGS.emailSignatureText}
-                    onSave={() => {}}
-                    onImageUpload={handleSignatureImageUpload}
-                    onChange={(val) => {
-                      setUserDefaults((prev) => ({ ...prev, emailSignatureText: val }));
+                    onChange={(e) => {
+                      setUserDefaults((prev) => ({ ...prev, emailSignatureEnabled: e.target.checked }));
                       setDirty(true);
                     }}
                   />
-                </>
-              )}
-            </div>
-
-            <div className="profile-section">
-              <div className="profile-section__title">{t('userProfile.defaults.chatScrollMode.label')}</div>
-              <p className="profile-section__description">{t('userProfile.defaults.chatScrollMode.help')}</p>
-              <div className="profile-radio-group">
-                {(['auto', 'manual'] as const).map((mode) => (
-                  <div
-                    key={mode}
-                    className={`profile-radio-option ${userDefaults.chatScrollMode === mode ? 'is-selected' : ''}`}
-                    onClick={() => {
-                      if (disableProfileForm) return;
-                      setUserDefaults((prev) => ({ ...prev, chatScrollMode: mode }));
-                      setDirty(true);
-                    }}
-                  >
-                    <div className="profile-radio-option__inner">
-                      <Form.Check
-                        type="radio"
-                        id={`chat-scroll-mode-${mode}`}
-                        name="chatScrollMode"
-                        checked={userDefaults.chatScrollMode === mode}
-                        disabled={disableProfileForm}
-                        onChange={() => {
-                          setUserDefaults((prev) => ({ ...prev, chatScrollMode: mode }));
-                          setDirty(true);
-                        }}
-                      />
-                      <div className="profile-radio-option__text">
-                        <div className="profile-radio-option__label">
-                          {t(`userProfile.defaults.chatScrollMode.${mode}`)}
-                        </div>
-                        <div className="profile-radio-option__help">
-                          {t(`userProfile.defaults.chatScrollMode.${mode}Help`)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  <span className="profile-signature-toggle__label">
+                    {t('userProfile.defaults.emailSignature.enableTitle')}
+                  </span>
+                </div>
+                {userDefaults.emailSignatureEnabled && (
+                  <>
+                    <Form.Label className="profile-field-label">
+                      {t('userProfile.defaults.emailSignature.textLabel')}
+                    </Form.Label>
+                    <RichTextEditor
+                      value={userDefaults.emailSignatureText}
+                      disabled={disableProfileForm}
+                      placeholder={DEFAULT_CHAT_SETTINGS.emailSignatureText}
+                      onSave={() => {}}
+                      onImageUpload={handleSignatureImageUpload}
+                      onChange={(val) => {
+                        setUserDefaults((prev) => ({ ...prev, emailSignatureText: val }));
+                        setDirty(true);
+                      }}
+                    />
+                  </>
+                )}
               </div>
-            </div>
 
-            {!CHAT_SUGGESTIONS_DISABLED && getFlag('CHAT_SUGGESTIONS') && (
               <div className="profile-section">
-                <div className="profile-section__title">{t('userProfile.defaults.chatSuggestions.label')}</div>
-                <p className="profile-section__description">{t('userProfile.defaults.chatSuggestions.help')}</p>
+                <div className="profile-section__title">{t('userProfile.defaults.chatScrollMode.label')}</div>
+                <p className="profile-section__description">{t('userProfile.defaults.chatScrollMode.help')}</p>
                 <div className="profile-radio-group">
-                  {([true, false] as const).map((enabled) => (
+                  {(['auto', 'manual'] as const).map((mode) => (
                     <div
-                      key={String(enabled)}
-                      className={`profile-radio-option ${userDefaults.chatSuggestionsEnabled === enabled ? 'is-selected' : ''}`}
+                      key={mode}
+                      className={`profile-radio-option ${userDefaults.chatScrollMode === mode ? 'is-selected' : ''}`}
                       onClick={() => {
                         if (disableProfileForm) return;
-                        setUserDefaults((prev) => ({ ...prev, chatSuggestionsEnabled: enabled }));
+                        setUserDefaults((prev) => ({ ...prev, chatScrollMode: mode }));
                         setDirty(true);
                       }}
                     >
                       <div className="profile-radio-option__inner">
                         <Form.Check
                           type="radio"
-                          id={`chat-suggestions-${enabled}`}
-                          name="chatSuggestionsEnabled"
-                          checked={userDefaults.chatSuggestionsEnabled === enabled}
+                          id={`chat-scroll-mode-${mode}`}
+                          name="chatScrollMode"
+                          checked={userDefaults.chatScrollMode === mode}
                           disabled={disableProfileForm}
                           onChange={() => {
-                            setUserDefaults((prev) => ({ ...prev, chatSuggestionsEnabled: enabled }));
+                            setUserDefaults((prev) => ({ ...prev, chatScrollMode: mode }));
                             setDirty(true);
                           }}
                         />
                         <div className="profile-radio-option__text">
                           <div className="profile-radio-option__label">
-                            {t(`userProfile.defaults.chatSuggestions.${enabled ? 'enabled' : 'disabled'}`)}
+                            {t(`userProfile.defaults.chatScrollMode.${mode}`)}
                           </div>
                           <div className="profile-radio-option__help">
-                            {t(`userProfile.defaults.chatSuggestions.${enabled ? 'enabledHelp' : 'disabledHelp'}`)}
+                            {t(`userProfile.defaults.chatScrollMode.${mode}Help`)}
                           </div>
                         </div>
                       </div>
@@ -1524,15 +1502,57 @@ export default function UserProfilePage({
                   ))}
                 </div>
               </div>
-            )}
 
-            {renderSaveActions(
-              'userProfile.actions.resetBrowser',
-              resetToBrowserDefaults,
-              handleSaveProfileLanguage,
-              canEditProfile
-            )}
-          </Form>
+              {!CHAT_SUGGESTIONS_DISABLED && getFlag('CHAT_SUGGESTIONS') && (
+                <div className="profile-section">
+                  <div className="profile-section__title">{t('userProfile.defaults.chatSuggestions.label')}</div>
+                  <p className="profile-section__description">{t('userProfile.defaults.chatSuggestions.help')}</p>
+                  <div className="profile-radio-group">
+                    {([true, false] as const).map((enabled) => (
+                      <div
+                        key={String(enabled)}
+                        className={`profile-radio-option ${userDefaults.chatSuggestionsEnabled === enabled ? 'is-selected' : ''}`}
+                        onClick={() => {
+                          if (disableProfileForm) return;
+                          setUserDefaults((prev) => ({ ...prev, chatSuggestionsEnabled: enabled }));
+                          setDirty(true);
+                        }}
+                      >
+                        <div className="profile-radio-option__inner">
+                          <Form.Check
+                            type="radio"
+                            id={`chat-suggestions-${enabled}`}
+                            name="chatSuggestionsEnabled"
+                            checked={userDefaults.chatSuggestionsEnabled === enabled}
+                            disabled={disableProfileForm}
+                            onChange={() => {
+                              setUserDefaults((prev) => ({ ...prev, chatSuggestionsEnabled: enabled }));
+                              setDirty(true);
+                            }}
+                          />
+                          <div className="profile-radio-option__text">
+                            <div className="profile-radio-option__label">
+                              {t(`userProfile.defaults.chatSuggestions.${enabled ? 'enabled' : 'disabled'}`)}
+                            </div>
+                            <div className="profile-radio-option__help">
+                              {t(`userProfile.defaults.chatSuggestions.${enabled ? 'enabledHelp' : 'disabledHelp'}`)}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {renderSaveActions(
+                'userProfile.actions.resetBrowser',
+                resetToBrowserDefaults,
+                handleSaveProfileLanguage,
+                canEditProfile
+              )}
+            </Form>
+          )}
         </Tab>
         <Tab
           eventKey="user-defaults"
@@ -1559,7 +1579,7 @@ export default function UserProfilePage({
                 id="profile-defaults-enabled"
                 label=""
                 checked={userDefaultsEnabled}
-                disabled={!canEditUserDefaults || saving || loading}
+                disabled={!canEditUserDefaults || saving || loading || !defaultsLoaded}
                 onChange={(e) => {
                   setUserDefaultsEnabled(e.target.checked);
                   setDirty(true);
@@ -1567,10 +1587,12 @@ export default function UserProfilePage({
               />
             </div>
 
-            {loading ? (
-              <div className="text-center py-4">
-                <Spinner animation="border" />
-              </div>
+            {!defaultsLoaded ? (
+              !error && (
+                <div className="text-center py-4">
+                  <Spinner animation="border" />
+                </div>
+              )
             ) : (
               <>
                 <div className="profile-section">
@@ -2043,175 +2065,84 @@ export default function UserProfilePage({
               </span>
             }
           >
-            <Form>
-              <p className="profile-page-intro">{t('userProfile.approval.description')}</p>
+            {!defaultsLoaded ? (
+              !error && (
+                <div className="text-center py-4">
+                  <Spinner animation="border" />
+                </div>
+              )
+            ) : (
+              <Form>
+                <p className="profile-page-intro">{t('userProfile.approval.description')}</p>
 
-              <div className="profile-section">
-                <table className="table table-borderless approval-grid mb-0">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '28%' }}>{t('userProfile.approval.grid.toolType')}</th>
-                      <th className="text-center">{t('userProfile.approval.modes.always.label')}</th>
-                      <th className="text-center">{t('userProfile.approval.modes.non_destructive.label')}</th>
-                      <th className="text-center">{t('userProfile.approval.modes.never.label')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Integrations row */}
-                    <tr>
-                      <td>
-                        <div className="fw-semibold">{t('userProfile.approval.grid.integrations')}</div>
-                        <div className="text-muted small">
-                          {t('userProfile.approval.grid.integrationsHelp')}{' '}
-                          {/* TASK-127: per-integration overrides live on the
+                <div className="profile-section">
+                  <table className="table table-borderless approval-grid mb-0">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '28%' }}>{t('userProfile.approval.grid.toolType')}</th>
+                        <th className="text-center">{t('userProfile.approval.modes.always.label')}</th>
+                        <th className="text-center">{t('userProfile.approval.modes.non_destructive.label')}</th>
+                        <th className="text-center">{t('userProfile.approval.modes.never.label')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {/* Integrations row */}
+                      <tr>
+                        <td>
+                          <div className="fw-semibold">{t('userProfile.approval.grid.integrations')}</div>
+                          <div className="text-muted small">
+                            {t('userProfile.approval.grid.integrationsHelp')}{' '}
+                            {/* TASK-127: per-integration overrides live on the
                               Integrations page. Surface that here so users
                               know this row is the default — they can pick a
                               different mode per integration if they want. */}
-                          {t('userProfile.approval.grid.integrationsOverrideNote', {
-                            defaultValue: 'Override this default per integration on the Integrations page.',
-                          })}
-                        </div>
-                      </td>
-                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                        <td key={mode} className="text-center align-middle">
-                          <Form.Check
-                            type="radio"
-                            id={`approval-integrations-${mode}`}
-                            name="approvalMode"
-                            checked={userDefaults.approvalMode === mode}
-                            disabled={disableDefaultsForm}
-                            onChange={() => {
-                              setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
-                              setDirty(true);
-                            }}
-                            className="d-inline-block"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    {/* Agents row */}
-                    <tr>
-                      <td>
-                        <div className="fw-semibold">{t('userProfile.approval.grid.agents')}</div>
-                        <div className="text-muted small">{t('userProfile.approval.grid.agentsHelp')}</div>
-                      </td>
-                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                        <td key={mode} className="text-center align-middle">
-                          <Form.Check
-                            type="radio"
-                            id={`approval-agents-${mode}`}
-                            name="numaToolApprovalMode.agents"
-                            checked={(userDefaults.numaToolApprovalMode?.agents ?? 'never') === mode}
-                            disabled={disableDefaultsForm}
-                            onChange={() => {
-                              setUserDefaults((prev) => ({
-                                ...prev,
-                                numaToolApprovalMode: {
-                                  ...(prev.numaToolApprovalMode ?? {
-                                    agents: 'never',
-                                    memories: 'never',
-                                    knowledgeBases: 'never',
-                                    ops: 'never',
-                                  }),
-                                  agents: mode,
-                                },
-                              }));
-                              setDirty(true);
-                            }}
-                            className="d-inline-block"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    {/* Memories row */}
-                    <tr>
-                      <td>
-                        <div className="fw-semibold">{t('userProfile.approval.grid.memories')}</div>
-                        <div className="text-muted small">{t('userProfile.approval.grid.memoriesHelp')}</div>
-                      </td>
-                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                        <td key={mode} className="text-center align-middle">
-                          <Form.Check
-                            type="radio"
-                            id={`approval-memories-${mode}`}
-                            name="numaToolApprovalMode.memories"
-                            checked={(userDefaults.numaToolApprovalMode?.memories ?? 'never') === mode}
-                            disabled={disableDefaultsForm}
-                            onChange={() => {
-                              setUserDefaults((prev) => ({
-                                ...prev,
-                                numaToolApprovalMode: {
-                                  ...(prev.numaToolApprovalMode ?? {
-                                    agents: 'never',
-                                    memories: 'never',
-                                    knowledgeBases: 'never',
-                                    ops: 'never',
-                                  }),
-                                  memories: mode,
-                                },
-                              }));
-                              setDirty(true);
-                            }}
-                            className="d-inline-block"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    {/* Knowledge Bases row */}
-                    <tr>
-                      <td>
-                        <div className="fw-semibold">{t('userProfile.approval.grid.knowledgeBases')}</div>
-                        <div className="text-muted small">{t('userProfile.approval.grid.knowledgeBasesHelp')}</div>
-                      </td>
-                      {(['always', 'non_destructive', 'never'] as const).map((mode) => (
-                        <td key={mode} className="text-center align-middle">
-                          <Form.Check
-                            type="radio"
-                            id={`approval-kb-${mode}`}
-                            name="numaToolApprovalMode.knowledgeBases"
-                            checked={(userDefaults.numaToolApprovalMode?.knowledgeBases ?? 'never') === mode}
-                            disabled={disableDefaultsForm}
-                            onChange={() => {
-                              setUserDefaults((prev) => ({
-                                ...prev,
-                                numaToolApprovalMode: {
-                                  ...(prev.numaToolApprovalMode ?? {
-                                    agents: 'never',
-                                    memories: 'never',
-                                    knowledgeBases: 'never',
-                                    ops: 'never',
-                                  }),
-                                  knowledgeBases: mode,
-                                },
-                              }));
-                              setDirty(true);
-                            }}
-                            className="d-inline-block"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                    {/* Ops row — conditional on feature flag */}
-                    {hasOps && (
-                      <tr>
-                        <td>
-                          <div className="fw-semibold">{t('userProfile.approval.grid.ops')}</div>
-                          <div className="text-muted small">{t('userProfile.approval.grid.opsHelp')}</div>
+                            {t('userProfile.approval.grid.integrationsOverrideNote', {
+                              defaultValue: 'Override this default per integration on the Integrations page.',
+                            })}
+                          </div>
                         </td>
                         {(['always', 'non_destructive', 'never'] as const).map((mode) => (
                           <td key={mode} className="text-center align-middle">
                             <Form.Check
                               type="radio"
-                              id={`approval-ops-${mode}`}
-                              name="numaToolApprovalMode.ops"
-                              checked={(userDefaults.numaToolApprovalMode?.ops ?? 'never') === mode}
+                              id={`approval-integrations-${mode}`}
+                              name="approvalMode"
+                              checked={userDefaults.approvalMode === mode}
+                              disabled={disableDefaultsForm}
+                              onChange={() => {
+                                setUserDefaults((prev) => ({ ...prev, approvalMode: mode }));
+                                setDirty(true);
+                              }}
+                              className="d-inline-block"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                      {/* Agents row */}
+                      <tr>
+                        <td>
+                          <div className="fw-semibold">{t('userProfile.approval.grid.agents')}</div>
+                          <div className="text-muted small">{t('userProfile.approval.grid.agentsHelp')}</div>
+                        </td>
+                        {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                          <td key={mode} className="text-center align-middle">
+                            <Form.Check
+                              type="radio"
+                              id={`approval-agents-${mode}`}
+                              name="numaToolApprovalMode.agents"
+                              checked={(userDefaults.numaToolApprovalMode?.agents ?? 'never') === mode}
                               disabled={disableDefaultsForm}
                               onChange={() => {
                                 setUserDefaults((prev) => ({
                                   ...prev,
                                   numaToolApprovalMode: {
-                                    ...(prev.numaToolApprovalMode ?? DEFAULT_CHAT_SETTINGS.numaToolApprovalMode),
-                                    ops: mode,
+                                    ...(prev.numaToolApprovalMode ?? {
+                                      agents: 'never',
+                                      memories: 'never',
+                                      knowledgeBases: 'never',
+                                      ops: 'never',
+                                    }),
+                                    agents: mode,
                                   },
                                 }));
                                 setDirty(true);
@@ -2221,58 +2152,157 @@ export default function UserProfilePage({
                           </td>
                         ))}
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                      {/* Memories row */}
+                      <tr>
+                        <td>
+                          <div className="fw-semibold">{t('userProfile.approval.grid.memories')}</div>
+                          <div className="text-muted small">{t('userProfile.approval.grid.memoriesHelp')}</div>
+                        </td>
+                        {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                          <td key={mode} className="text-center align-middle">
+                            <Form.Check
+                              type="radio"
+                              id={`approval-memories-${mode}`}
+                              name="numaToolApprovalMode.memories"
+                              checked={(userDefaults.numaToolApprovalMode?.memories ?? 'never') === mode}
+                              disabled={disableDefaultsForm}
+                              onChange={() => {
+                                setUserDefaults((prev) => ({
+                                  ...prev,
+                                  numaToolApprovalMode: {
+                                    ...(prev.numaToolApprovalMode ?? {
+                                      agents: 'never',
+                                      memories: 'never',
+                                      knowledgeBases: 'never',
+                                      ops: 'never',
+                                    }),
+                                    memories: mode,
+                                  },
+                                }));
+                                setDirty(true);
+                              }}
+                              className="d-inline-block"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                      {/* Knowledge Bases row */}
+                      <tr>
+                        <td>
+                          <div className="fw-semibold">{t('userProfile.approval.grid.knowledgeBases')}</div>
+                          <div className="text-muted small">{t('userProfile.approval.grid.knowledgeBasesHelp')}</div>
+                        </td>
+                        {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                          <td key={mode} className="text-center align-middle">
+                            <Form.Check
+                              type="radio"
+                              id={`approval-kb-${mode}`}
+                              name="numaToolApprovalMode.knowledgeBases"
+                              checked={(userDefaults.numaToolApprovalMode?.knowledgeBases ?? 'never') === mode}
+                              disabled={disableDefaultsForm}
+                              onChange={() => {
+                                setUserDefaults((prev) => ({
+                                  ...prev,
+                                  numaToolApprovalMode: {
+                                    ...(prev.numaToolApprovalMode ?? {
+                                      agents: 'never',
+                                      memories: 'never',
+                                      knowledgeBases: 'never',
+                                      ops: 'never',
+                                    }),
+                                    knowledgeBases: mode,
+                                  },
+                                }));
+                                setDirty(true);
+                              }}
+                              className="d-inline-block"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                      {/* Ops row — conditional on feature flag */}
+                      {hasOps && (
+                        <tr>
+                          <td>
+                            <div className="fw-semibold">{t('userProfile.approval.grid.ops')}</div>
+                            <div className="text-muted small">{t('userProfile.approval.grid.opsHelp')}</div>
+                          </td>
+                          {(['always', 'non_destructive', 'never'] as const).map((mode) => (
+                            <td key={mode} className="text-center align-middle">
+                              <Form.Check
+                                type="radio"
+                                id={`approval-ops-${mode}`}
+                                name="numaToolApprovalMode.ops"
+                                checked={(userDefaults.numaToolApprovalMode?.ops ?? 'never') === mode}
+                                disabled={disableDefaultsForm}
+                                onChange={() => {
+                                  setUserDefaults((prev) => ({
+                                    ...prev,
+                                    numaToolApprovalMode: {
+                                      ...(prev.numaToolApprovalMode ?? DEFAULT_CHAT_SETTINGS.numaToolApprovalMode),
+                                      ops: mode,
+                                    },
+                                  }));
+                                  setDirty(true);
+                                }}
+                                className="d-inline-block"
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
 
-                {/* TASK-127: surface the integrations whose approval mode the
+                  {/* TASK-127: surface the integrations whose approval mode the
                     user has overridden away from the Integrations default
                     above, each linking to its card on the Integrations page. */}
-                {Object.keys(userDefaults.integrationApprovalModes ?? {}).length > 0 && (
-                  <div className="mt-3 pt-3 border-top">
-                    <div className="fw-semibold small mb-1">{t('userProfile.approval.grid.overriddenTitle')}</div>
-                    <div className="text-muted small mb-2">{t('userProfile.approval.grid.overriddenHelp')}</div>
-                    <ul className="list-unstyled mb-0">
-                      {Object.entries(userDefaults.integrationApprovalModes ?? {}).map(([slug, mode]) => (
-                        <li key={slug} className="d-flex align-items-center gap-2 py-1">
-                          {getConnectionConfig(slug) ? (
-                            <img src={getConnectionIcon(slug)} alt="" width={18} height={18} className="rounded" />
-                          ) : (
-                            <i className={getConnectionFallbackIcon(slug)} aria-hidden="true" />
-                          )}
-                          <span className="fw-medium">{getConnectionDisplayName(slug)}</span>
-                          <span className="badge bg-light text-dark border fw-normal">
-                            {t(`userProfile.approval.modes.${mode}.label`)}
-                          </span>
-                          <Link to={`/integrations#${slug}`} className="ms-auto small text-decoration-none">
-                            {t('userProfile.approval.grid.manageOverride')}
-                            <i className="bi bi-arrow-right-short" aria-hidden="true"></i>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                  {Object.keys(userDefaults.integrationApprovalModes ?? {}).length > 0 && (
+                    <div className="mt-3 pt-3 border-top">
+                      <div className="fw-semibold small mb-1">{t('userProfile.approval.grid.overriddenTitle')}</div>
+                      <div className="text-muted small mb-2">{t('userProfile.approval.grid.overriddenHelp')}</div>
+                      <ul className="list-unstyled mb-0">
+                        {Object.entries(userDefaults.integrationApprovalModes ?? {}).map(([slug, mode]) => (
+                          <li key={slug} className="d-flex align-items-center gap-2 py-1">
+                            {getConnectionConfig(slug) ? (
+                              <img src={getConnectionIcon(slug)} alt="" width={18} height={18} className="rounded" />
+                            ) : (
+                              <i className={getConnectionFallbackIcon(slug)} aria-hidden="true" />
+                            )}
+                            <span className="fw-medium">{getConnectionDisplayName(slug)}</span>
+                            <span className="badge bg-light text-dark border fw-normal">
+                              {t(`userProfile.approval.modes.${mode}.label`)}
+                            </span>
+                            <Link to={`/integrations#${slug}`} className="ms-auto small text-decoration-none">
+                              {t('userProfile.approval.grid.manageOverride')}
+                              <i className="bi bi-arrow-right-short" aria-hidden="true"></i>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-muted small mt-3 mb-3">
+                  <strong>{t('userProfile.approval.modes.always.label')}:</strong>{' '}
+                  {t('userProfile.approval.grid.alwaysHelp')}
+                  <br />
+                  <strong>{t('userProfile.approval.modes.non_destructive.label')}:</strong>{' '}
+                  {t('userProfile.approval.grid.safeHelp')}
+                  <br />
+                  <strong>{t('userProfile.approval.modes.never.label')}:</strong>{' '}
+                  {t('userProfile.approval.grid.neverHelp')}
+                </div>
+
+                {renderSaveActions(
+                  'userProfile.actions.reset',
+                  resetToCompanyDefaults,
+                  handleSaveUserDefaults,
+                  canEditUserDefaults
                 )}
-              </div>
-
-              <div className="text-muted small mt-3 mb-3">
-                <strong>{t('userProfile.approval.modes.always.label')}:</strong>{' '}
-                {t('userProfile.approval.grid.alwaysHelp')}
-                <br />
-                <strong>{t('userProfile.approval.modes.non_destructive.label')}:</strong>{' '}
-                {t('userProfile.approval.grid.safeHelp')}
-                <br />
-                <strong>{t('userProfile.approval.modes.never.label')}:</strong>{' '}
-                {t('userProfile.approval.grid.neverHelp')}
-              </div>
-
-              {renderSaveActions(
-                'userProfile.actions.reset',
-                resetToCompanyDefaults,
-                handleSaveUserDefaults,
-                canEditUserDefaults
-              )}
-            </Form>
+              </Form>
+            )}
           </Tab>
         )}
 

@@ -202,34 +202,34 @@ export const ChatSettingsService = {
     }
   },
 
+  /**
+   * Unlike {@link get}, failures are NOT swallowed here. The settings page
+   * renders (and saves) whatever this returns as the user's own settings, so
+   * silently substituting defaults makes a failed load indistinguishable from
+   * wiped settings — and saving from that state would wipe them for real.
+   */
   async getForProfile(numaGet?: NumaGet): Promise<ProfileChatSettingsResponse> {
-    try {
-      if (numaGet) {
-        const res = (await numaGet('/api/chat/settings?profile=true')) as unknown;
-        return validateProfile(res);
-      }
-
-      const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
-      const idToken = localStorage.getItem('idToken');
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (idToken) headers.Authorization = `Bearer ${idToken}`;
-
-      const resp = await fetch(`${API_ENDPOINT}/chat/settings?profile=true`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!resp.ok) {
-        console.warn('Failed to fetch profile chat settings, using defaults', resp.status);
-        return { userDefaultsEnabled: true, settings: { ...DEFAULT_CHAT_SETTINGS } };
-      }
-
-      const json = (await resp.json()) as unknown;
-      return validateProfile(json);
-    } catch (error) {
-      console.warn('Error fetching profile chat settings, using defaults', error);
-      return { userDefaultsEnabled: true, settings: { ...DEFAULT_CHAT_SETTINGS } };
+    if (numaGet) {
+      const res = (await numaGet('/api/chat/settings?profile=true')) as unknown;
+      return validateProfile(res);
     }
+
+    const API_ENDPOINT = sessionStorage.getItem('API_ENDPOINT') || '/api';
+    const idToken = localStorage.getItem('idToken');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+    const resp = await fetch(`${API_ENDPOINT}/chat/settings?profile=true`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!resp.ok) {
+      throw new Error(i18n.t('errors:chatSettings.loadFailed'));
+    }
+
+    const json = (await resp.json()) as unknown;
+    return validateProfile(json);
   },
 
   /**
