@@ -127,10 +127,16 @@ export const PolicyDesignerDetail = () => {
     try {
       const bucket = sessionStorage.getItem('OUTPUTS_BUCKET_NAME') || '';
       const region = sessionStorage.getItem('REGION') || '';
+      // RunRecord.s3Prefix is an UNFORMATTED template — the v2-apps API keeps
+      // the {user_sub}/{conversation_id} placeholders and substitutes them
+      // server-side. Format it the same way before building the object key.
+      const prefix = run.s3Prefix
+        .replace('{user_sub}', run.userId)
+        .replace('{conversation_id}', run.conversationId || run.runId);
       // The markdown is the canonical deliverable; DOCX/PDF are converted on
       // demand by the document-converter Lambda rather than served from the
       // workspace-rendered artifacts.
-      const key = `${run.s3Prefix}/outputs/final_policy.md`;
+      const key = `${prefix}/outputs/final_policy.md`;
       const blob = await fetchFileFromS3(key, bucket, region, getCredentials);
       const markdown = await blob.text();
       const title = run.name || 'Policy Suite';
