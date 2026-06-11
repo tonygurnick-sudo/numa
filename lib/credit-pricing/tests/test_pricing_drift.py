@@ -59,7 +59,7 @@ def test_pricing_table_matches_agent() -> None:
 
 
 def test_recompute_sane() -> None:
-    # 100K cache-read tokens of Sonnet 4.6 @ $0.30/MTok = $0.03 (standard tier; sub-200K prompt).
+    # 100K cache-read tokens of Sonnet 4.6 @ $0.30/MTok = $0.03.
     cost = recalculate_anthropic_cost(
         "global.anthropic.claude-sonnet-4-6",
         input_tokens=0,

@@ -182,7 +182,7 @@ Runtime note: `zoneinfo` needs the IANA tz DB. The Lambdas add the `tzdata` pip 
 
 ## Tests
 
-`python3 -m pytest -q` from `lib/credit-pricing/` (24 tests). Coverage includes:
+`python3 -m pytest -q` from `lib/credit-pricing/` (26 tests). Coverage includes:
 
 - `test_processing.py` — charge = max(value, floor); unclassified → floor; single-ceil floor (not per-message
   sum); the trivial-cost cap; per-tier cache-creation split; the no-premium-on-cumulative-usage regression
