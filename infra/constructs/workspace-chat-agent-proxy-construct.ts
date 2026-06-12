@@ -35,6 +35,13 @@ export interface WorkspaceChatAgentProxyProps {
   outputsBucketArn?: string;
   /** Schedule runner secret for authenticating server-to-server calls from the agent-schedule-runner Lambda */
   scheduleRunnerSecret?: string;
+  /**
+   * HMAC secret for minting short-lived "service identity" tokens for
+   * non-interactive runs (scheduled / V2 / Nolia) that have no user Cognito
+   * token. numa-cli-api verifies these with the same secret. Never injected
+   * into the workspace agent container, so the LLM can't reach it.
+   */
+  cliIdentitySecret?: string;
   /** Workspace chat tools Lambda ARN (for document conversion preview) */
   workspaceToolsLambdaArn?: string;
   /** Workspace chat tools Lambda name (for invoking from proxy) */
@@ -109,6 +116,11 @@ export class WorkspaceChatAgentProxy extends Construct {
         // from the agent-schedule-runner Lambda (scheduled agents use V2 sync mode)
         ...(props.scheduleRunnerSecret && {
           SCHEDULE_RUNNER_SECRET: props.scheduleRunnerSecret,
+        }),
+        // HMAC secret to sign service-identity tokens for non-interactive runs
+        // (scheduled / V2 / Nolia). Verified by numa-cli-api with the same secret.
+        ...(props.cliIdentitySecret && {
+          NUMA_CLI_IDENTITY_SECRET: props.cliIdentitySecret,
         }),
         // Workspace chat tools Lambda for document conversion preview
         ...(props.workspaceToolsLambdaName && {

@@ -61,7 +61,7 @@ The `.env` file at the project root (`/Users/nathandouglas/arcanum/numa/.env`) s
 Even without DynamoDB/S3/Lambda vars, these features work:
 
 - Bedrock model calls (chat, thinking)
-- Code execution via `execute_script` MCP tool
+- Code execution via Bash (write a Python script to `/workdir/tmp/` and run it)
 - File operations (Read, Write, Edit, Glob, Grep)
 - All agent types and response modes (stream, sync)
 
@@ -100,6 +100,17 @@ eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
 
 **Note:** Do NOT try to `sts assume-role` into the same role you're already in — it will fail with AccessDenied. The `export-credentials` command handles this correctly.
 
+**GOTCHA — credential order matters.** The `.env` file currently hardcodes a long-term IAM access key (`AWS_ACCESS_KEY_ID=AKIA...`, plus its secret), which means **`source .env` will silently overwrite SSO temp creds** even if you exported them first. Symptoms: container starts fine, then every AWS call fails with `InvalidToken` / `UnrecognizedClientException`, and `boto3.client("sts").get_caller_identity()` inside the container resolves to a totally different IAM identity (e.g. `arn:aws:iam::442483608950:user/nathan`) instead of the q-demo SSO role. The correct order is `source` first, then unset the AKIA creds, then `eval` the SSO export last:
+
+```bash
+source /Users/nathandouglas/arcanum/numa/.env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
+# Verify: $AWS_ACCESS_KEY_ID should now start with ASIA (SSO temp creds), not AKIA
+```
+
+Eventually the hardcoded AKIA creds in `.env` should be moved into a named profile in `~/.aws/credentials` (or removed if unused) so this ordering dance isn't needed.
+
 ### Step 4: Run the Container
 
 Read env vars from `.env` and start the container. Note: the `.env` uses `AWS_REGION_WORKSPACE` to avoid conflicting with the deployment region, but the container needs `AWS_REGION`:
@@ -107,8 +118,11 @@ Read env vars from `.env` and start the container. Note: the `.env` uses `AWS_RE
 ```bash
 docker rm -f workspace-test 2>/dev/null
 
-# Source the .env file (reading AWS_REGION_WORKSPACE)
+# Source the .env file (reading AWS_REGION_WORKSPACE), then re-export SSO creds
+# so the AKIA values in .env don't override them (see GOTCHA above).
 source /Users/nathandouglas/arcanum/numa/.env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
 
 docker run -d --rm --name workspace-test \
   -p 8080:8080 \
@@ -159,11 +173,11 @@ The workspace agent supports multiple agent types, each with different tools, re
 
 ### Agent Type Overview
 
-| Type ID               | Response Mode | Tools                                       | Use Case               |
-| --------------------- | ------------- | ------------------------------------------- | ---------------------- |
-| `numa-chat`           | stream        | Full (SDK + scripts MCP + integrations MCP) | Interactive chat       |
-| `research-agent`      | stream        | SDK + scripts MCP (no integrations)         | Research & analysis    |
-| `document-summariser` | sync          | Minimal (Read, Write, Glob, Grep only)      | Structured JSON output |
+| Type ID               | Response Mode | Tools                                  | Use Case               |
+| --------------------- | ------------- | -------------------------------------- | ---------------------- |
+| `numa-chat`           | stream        | Full (SDK tools + numa CLI via Bash)   | Interactive chat       |
+| `research-agent`      | stream        | SDK tools + numa CLI (no integrations) | Research & analysis    |
+| `document-summariser` | sync          | Minimal (Read, Write, Glob, Grep only) | Structured JSON output |
 
 ### Test: numa-chat (streaming)
 
@@ -177,8 +191,8 @@ curl -s -X POST http://localhost:8080/invocations \
 **What to verify:**
 
 - `session_init` event with `isNewSession: true`
-- `system` init event shows tools including `mcp__integrations__run_action` and `mcp__scripts__execute_script`
-- MCP servers: `scripts` AND `integrations` both connected
+- `system` init event shows the SDK tools (Bash, Read, Write, Edit, Glob, Grep, etc.) — the agent calls the `numa` CLI through Bash
+- MCP servers: empty `[]` (the agent runs with zero MCP servers)
 - Streaming `StreamEvent` deltas arrive
 - `result` event with `subtype: "success"`
 
@@ -193,8 +207,8 @@ curl -s -X POST http://localhost:8080/invocations \
 
 **What to verify:**
 
-- `system` init shows `mcp__scripts__execute_script` but NO `mcp__integrations__*` tools
-- MCP servers: only `scripts` (no `integrations`)
+- `system` init shows the SDK tools (Bash, Read, Write, etc.) — code runs via Bash, integrations are unavailable for this type
+- MCP servers: empty `[]` (the agent runs with zero MCP servers)
 - Response streams successfully
 
 ### Test: document-summariser (sync)
@@ -239,19 +253,21 @@ done
 
 ```
 === numa-chat ===
-  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill', 'mcp__scripts__execute_script', 'mcp__integrations__run_action', 'mcp__integrations__configure_props', 'mcp__integrations__proxy_request']
-  MCP: ['scripts', 'integrations']
+  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill']
+  MCP: []
 === research-agent ===
-  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill', 'mcp__scripts__execute_script']
-  MCP: ['scripts']
+  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill']
+  MCP: []
 === document-summariser ===
   Tools: ['Glob', 'Grep', 'Read', 'Write', 'TodoWrite']
   MCP: []
 ```
 
+All agent types run with zero MCP servers. `numa-chat` and `research-agent` get the full SDK toolset (including Bash) and invoke the `numa` CLI through Bash; `document-summariser` gets a minimal read/write toolset with no Bash.
+
 ### Test: Code Execution (numa-chat or research-agent)
 
-Verify the scripts MCP server works:
+Verify code execution via Bash works:
 
 ```bash
 curl -s -X POST http://localhost:8080/invocations \
@@ -262,7 +278,7 @@ curl -s -X POST http://localhost:8080/invocations \
 
 **What to verify:**
 
-- Agent uses `mcp__scripts__execute_script` tool
+- Agent writes a Python script to `/workdir/tmp/` and runs it via the Bash tool
 - Python executes successfully inside the container
 - Output includes the current datetime
 
@@ -338,6 +354,28 @@ These are OpenTelemetry/AWS resource detectors that only work in cloud environme
 
 **Cause:** The `q-demo` profile is already assumed into the target role
 **Fix:** Use `eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"` instead of `sts assume-role`
+
+### InvalidToken / UnrecognizedClientException everywhere (S3, DynamoDB, Bedrock)
+
+**Symptom:** Container starts cleanly, but every AWS call inside fails with `InvalidToken` / `UnrecognizedClientException` / `InvalidClientTokenId`. `boto3.client("sts").get_caller_identity()` inside the container resolves to an unexpected IAM identity (often `arn:aws:iam::442483608950:user/nathan`).
+
+**Cause:** The `.env` file hardcodes a long-term IAM access key (`AKIA...`). Sourcing `.env` after exporting SSO temp creds silently overwrites them. The container then runs as the wrong identity.
+
+**Fix:** Source `.env` first, unset the AKIA values, then export SSO creds last (see Step 3 GOTCHA):
+
+```bash
+source /Users/nathandouglas/arcanum/numa/.env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
+# Sanity check: $AWS_ACCESS_KEY_ID should start with ASIA, not AKIA
+```
+
+To verify inside a running container:
+
+```bash
+docker exec workspace-test bash -c 'python3 -c "import boto3; print(boto3.client(\"sts\").get_caller_identity()[\"Arn\"])"'
+# Should print: arn:aws:sts::905418183804:assumed-role/AWSReservedSSO_AdministratorAccess_.../nathan@arcanum.ai
+```
 
 ### S3/DynamoDB Warnings
 
@@ -480,8 +518,11 @@ AWS_PROFILE=q-demo aws s3 cp \
   --region us-east-1
 
 # 2. Start container with debug logging
+# Source .env BEFORE the SSO export so the AKIA creds in .env don't override
+# the q-demo temp creds (see GOTCHA in Step 3).
+source /Users/nathandouglas/arcanum/numa/.env 2>/dev/null
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
-source /Users/nathandouglas/arcanum/numa/.env 2>/dev/null; \
 docker rm -f workspace-test 2>/dev/null; \
 docker run -d --rm --name workspace-test -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
@@ -584,8 +625,9 @@ Load image, get credentials, start container, test all types, stop:
 
 ```bash
 docker load -i /Users/nathandouglas/arcanum/numa/infra/assets/artifacts/numa-workspace-agent/image.tar && \
-eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
 source /Users/nathandouglas/arcanum/numa/.env && \
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN && \
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
 docker rm -f workspace-test 2>/dev/null; \
 docker run -d --rm --name workspace-test -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \

@@ -115,8 +115,9 @@ answer would be better.
 ### DOCX-specific handling
 
 If the template is a DOCX file:
-- Use `mcp__scripts__execute_script` with Python (`python-docx`) to read \
-it, or `Read` it (the workspace agent can handle DOCX text extraction).
+- Write a Python script (`python-docx`) to `/workdir/tmp/` and run it with \
+Bash (`python3`) to read it, or `Read` it (the workspace agent can handle \
+DOCX text extraction).
 - Treat the DOCX's structure as a Markdown blueprint:
   - Heading 1 → `#`, Heading 2 → `##`, etc.
   - Bulleted / numbered lists → MD equivalents
@@ -402,8 +403,8 @@ _OUTPUT_FORMAT = """\
 Write **`/workdir/outputs/Assessment_<filename_safe_name>.md`**.
 
 Derive `<filename_safe_name>` from `applicant.json`'s `applicant.name` \
-using this exact transformation (use \
-`mcp__scripts__execute_script` with python3 to compute it):
+using this exact transformation (Write a Python script to `/workdir/tmp/` \
+and run it with Bash (`python3`) to compute it):
 
 ```python
 import unicodedata, re

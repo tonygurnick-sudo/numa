@@ -28,7 +28,7 @@ python -m markitdown /workdir/uploads/data.xlsx
 
 This outputs the spreadsheet content as markdown tables — useful for quick review.
 
-> **For richer extraction** and for legacy/template formats (`.xls`, `.xlt`, `.xltx`) where markitdown may miss structure, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+> **For richer extraction** and for legacy/template formats (`.xls`, `.xlt`, `.xltx`) where markitdown may miss structure, prefer `numa docs extract /path -m "..."` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 ---
 

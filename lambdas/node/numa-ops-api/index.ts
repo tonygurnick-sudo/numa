@@ -2515,8 +2515,13 @@ const handleTickets = async (
     ]);
     const unknownKeys = Object.keys(body).filter((k) => !knownCreateFields.has(k));
 
-    if (!rawTeamId || !rawStageId || !title)
-      return errorResponse(400, 'Missing required fields: boardId, stageId, title');
+    if (!rawTeamId || !rawStageId || !title) {
+      const missing: string[] = [];
+      if (!rawTeamId) missing.push('boardId');
+      if (!rawStageId) missing.push('stageId');
+      if (!title) missing.push('title');
+      return errorResponse(400, `Missing required field${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`);
+    }
 
     const teamId = String(rawTeamId);
 

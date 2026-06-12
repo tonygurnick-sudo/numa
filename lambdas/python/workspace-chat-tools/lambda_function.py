@@ -45,7 +45,9 @@ from tools import (
     handle_convert_document,
     handle_convert_preview,
     handle_create_agent,
+    handle_delete_agent,
     handle_delete_kb_file,
+    handle_delete_memory,
     handle_duplicate_agent,
     handle_extract_content,
     handle_get_agent,
@@ -124,6 +126,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "convert_document": handle_convert_document,
     "convert_preview": handle_convert_preview,
     "create_agent": handle_create_agent,
+    "delete_agent": handle_delete_agent,
     "duplicate_agent": handle_duplicate_agent,
     "extract_content": handle_extract_content,
     "get_agent": handle_get_agent,
@@ -145,6 +148,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "user_profile_list_memories": handle_list_memories,
     "user_profile_add_memory": handle_add_memory,
     "user_profile_update_memory": handle_update_memory,
+    "user_profile_delete_memory": handle_delete_memory,
     # Consolidated Vault Tools
     "vault_list_consolidated_secrets": handle_vault_list_consolidated_secrets,
     "vault_request_consolidated_secret": handle_vault_request_consolidated_secret,
@@ -543,6 +547,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         "update_agent",
         "patch_agent_prompt",
         "duplicate_agent",
+        "delete_agent",
     }
     if tool_name in agent_tools:
         # Security: Validate create_agent_tool access (fail-closed)
@@ -594,6 +599,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         "user_profile_list_memories",
         "user_profile_add_memory",
         "user_profile_update_memory",
+        "user_profile_delete_memory",
     }
     if tool_name in user_profile_tools:
         # Check that memories_tool is in the allowed tools list

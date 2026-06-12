@@ -4,6 +4,7 @@
     "style",
     "infra",
     "tools",
+    "numa-admin-cli",
     "numa-cli",
     "numa-frontend",
     "numa-customer-success-portal",

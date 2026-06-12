@@ -475,6 +475,125 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/data-connectors/{connector}' },
     });
 
+    // Numa CLI API — backend for the `numa` CLI binary in /numa-cli/.
+    // Per-client opt-in (clientConfig.numaCliApi). Phase 3 will add the
+    // /api/cli/tools/invoke + /api/cli/tools/confirm routes that translate
+    // CLI calls into workspace-chat-tools events.
+    //
+    // The bootstrap route is intentionally rich — it returns the same context
+    // the workspace chat agent assembles at startup (user identity from
+    // Cognito GetUser + JWT, agents, integrations + admin policies, knowledge
+    // bases, full /config.json). Long-term goal is for the workspace chat
+    // agent itself to consume this endpoint so we have a single source of
+    // truth for "what does this user have access to" instead of assembling
+    // it piecemeal across frontend, proxy, and agent.
+    //
+    // Implementation: the Lambda fans out in parallel to other client-account
+    // Lambdas via Lambda.Invoke with synthetic API Gateway events, plus a
+    // Cognito GetUser call (using the caller's access token as the
+    // credential, no IAM perm needed). For the `kb_manager` Lambda specifically
+    // — which sits behind a Function URL not API Gateway — we also forward
+    // the CloudFront shared secret since kb_manager validates it on every
+    // request.
+    if (props.numaCliApiEnabled) {
+      this.addLambdaFunction(this, 'numa-cli-api', {
+        addAuthorizer: true,
+        lambdaDirectory: 'node/numa-cli-api',
+        runtime: 'nodejs22.x',
+        handler: 'index.handler',
+        timeout: 300,
+        environment: {
+          CLIENT_NAME: props.clientName,
+          CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
+          // Cognito config for in-Lambda JWT verification (src/shared/auth.ts).
+          // numa-cli-api verifies the bearer token itself rather than trusting
+          // the upstream authorizer — a direct lambda:Invoke from the workspace
+          // role bypasses API Gateway entirely. Must accept the same client-ID
+          // set the api-gateway-authorizer does.
+          COGNITO_USER_POOL_ID: props.userPoolId,
+          COGNITO_USER_POOL_CLIENT_ID: props.userPoolClientId,
+          ...(props.additionalCognitoClientIds
+            ? { ADDITIONAL_COGNITO_CLIENT_IDS: props.additionalCognitoClientIds }
+            : {}),
+          // HMAC secret for verifying proxy-minted service tokens (non-interactive
+          // runs). Shared only with workspace-chat-agent-proxy; never reaches the
+          // MicroVM. Without it, service tokens are rejected (fail closed).
+          ...(props.cliIdentitySecret ? { NUMA_CLI_IDENTITY_SECRET: props.cliIdentitySecret } : {}),
+          ...(props.companyBucketName ? { COMPANY_BUCKET_NAME: props.companyBucketName } : {}),
+          ...(props.integrationsApprovalTableName
+            ? { INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName }
+            : {}),
+          // Numa Ops entitlement flag — lets numa-cli-api hard-gate `ops_*`
+          // tool calls server-side. Same flag source + env value the workspace
+          // agent container receives (clientConfig.numaOps → 'true').
+          ...(props.numaOpsEnabled ? { NUMA_OPS_ENABLED: 'true' } : {}),
+        },
+        additionalPolicyStatements: [
+          {
+            // Fan-out aggregator: this Lambda invokes a handful of other
+            // client-account Lambdas (agents, admin-integration-settings-get,
+            // data-connectors-status, kb_manager, chat-settings-get,
+            // workspace_chat_tools, oauth_workspace_tools) with synthetic
+            // API Gateway events. Scoped to the same client's Lambdas only
+            // — no cross-client reach, no cross-account reach.
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [`arn:aws:lambda:*:*:function:${props.clientName}_*`],
+          },
+          // DDB read/write on the integrations-approval table for the
+          // centralised Phase 2 approval orchestrator (create + poll).
+          ...(props.integrationsApprovalTableArn
+            ? [
+                {
+                  effect: 'Allow',
+                  actions: ['dynamodb:PutItem', 'dynamodb:GetItem'],
+                  resources: [props.integrationsApprovalTableArn],
+                },
+              ]
+            : []),
+          // Read company-data.json from the company bucket for bootstrap's
+          // `company_profile` field. Only added when the bucket exists for
+          // this stack.
+          ...(props.companyBucketArn
+            ? [
+                {
+                  effect: 'Allow',
+                  actions: ['s3:GetObject'],
+                  resources: [`${props.companyBucketArn}/company-data.json`],
+                },
+              ]
+            : []),
+          // List + read native-connector API docs for the integrations docs
+          // endpoint. Same prefix the workspace agent's
+          // `sync_ext_api_docs_for_connectors` reads from at chat start.
+          {
+            effect: 'Allow',
+            actions: ['s3:ListBucket'],
+            resources: [`arn:aws:s3:::numa-${props.clientName}-outputs`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['s3:GetObject'],
+            resources: [`arn:aws:s3:::numa-${props.clientName}-outputs/tools/api-docs/*`],
+          },
+        ],
+        route: [
+          { verb: 'POST', path: 'cli/bootstrap' },
+          { verb: 'GET', path: 'cli/bootstrap' },
+          // Generic tool dispatcher — translates CLI tool calls into
+          // workspace-chat-tools events and invokes via boto3. Single route
+          // for files / integrations / KB / ops — the CLI command tree on
+          // the front side is what's visible; backend routes are an
+          // implementation detail.
+          { verb: 'POST', path: 'cli/tools/invoke' },
+          // Integration reference docs — Pipedream action index OR native
+          // connector markdown bundle, fetched on demand and cached
+          // CLI-side at ~/.cache/numa/integrations/<slug>/.
+          { verb: 'GET', path: 'cli/integrations/{slug}/docs' },
+        ],
+      });
+    }
+
     // Admin Capabilities API (GET list, PUT single)
     const adminCapabilitiesEnv = {
       CAPABILITIES_TABLE_NAME: props.capabilitiesTableName,
@@ -2883,6 +3002,13 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   outputsBucketArn: string;
   /** Outputs bucket name for constructing S3 keys. */
   outputsBucketName: string;
+  /** Company-data bucket name (holds company-data.json read by numa-cli-api
+   *  for bootstrap and by the workspace agent at chat-start). Optional —
+   *  some client stacks don't provision this bucket. */
+  companyBucketName?: string;
+  /** Company-data bucket ARN — needed to scope the S3 GetObject perm on
+   *  the numa-cli-api Lambda. Optional alongside `companyBucketName`. */
+  companyBucketArn?: string;
   workspaceAgentsTableName: string;
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
@@ -2920,6 +3046,21 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   mfaSettingsTableName: string;
   /** Cognito User Pool ID — needed for admin MFA reset operations. */
   userPoolId: string;
+  /**
+   * Comma-separated extra Cognito app-client IDs (beyond `userPoolClientId`)
+   * that may have minted valid tokens. Forwarded to numa-cli-api so its
+   * in-Lambda JWT verifier accepts the same set the api-gateway-authorizer
+   * does. Optional — most stacks have a single client ID.
+   */
+  additionalCognitoClientIds?: string;
+  /**
+   * HMAC secret numa-cli-api uses to verify proxy-minted "service identity"
+   * tokens for non-interactive runs. Same secret the workspace-chat-agent-proxy
+   * signs with. Never injected into the workspace container. Optional — when
+   * absent, numa-cli-api rejects service tokens (interactive Cognito path is
+   * unaffected).
+   */
+  cliIdentitySecret?: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
   chatSettingsTableName: string;
   /** Data connectors table name for per-user connector configs. */
@@ -3024,4 +3165,19 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
    *  Pipedream-trigger schedules. Optional because the relay is only created
    *  when PIPEDREAM_INTEGRATIONS is enabled. */
   pipedreamRelayLambdaArn?: string;
+  /** Per-client kill switch for the numa-cli-api Lambda (Numa CLI backend).
+   *  When false (default) the routes aren't registered at all. Flip on for
+   *  dev clients (nd-labs, arcanum-demo-*) and HQ; leave off on customer
+   *  stacks until the CLI ships externally. Phase 3 will add tool-execution
+   *  routes that need this gate to keep the surface area opt-in. */
+  numaCliApiEnabled?: boolean;
+  /** Numa Ops entitlement flag (client's `numaOps` feature flag). Forwarded to
+   *  numa-cli-api as `NUMA_OPS_ENABLED` so it can hard-gate `ops_*` tool calls
+   *  server-side — same source + env the workspace agent container receives. */
+  numaOpsEnabled?: boolean;
+  /** Integrations approval table name — used by numa-cli-api's Phase 2
+   *  centralised approval orchestrator (DDB create + poll). */
+  integrationsApprovalTableName?: string;
+  /** Integrations approval table ARN — IAM grant for DDB read/write. */
+  integrationsApprovalTableArn?: string;
 }

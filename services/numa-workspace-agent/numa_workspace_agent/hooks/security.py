@@ -94,14 +94,11 @@ DANGEROUS_COMMANDS = [
     "declare -x",
     "/proc/self/environ",
     "/proc/1/environ",
-    # System information disclosure (reveals root user, kernel version, etc.)
-    "whoami",
-    "groups",
-    "uname",
-    "hostname",
-    "hostnamectl",
-    # Note: "df" moved to ENV_VAR_PATTERNS with word-boundary regex to avoid
-    # false positives (e.g., "--format pdf" was matching "df " substring)
+    # System information disclosure (whoami / groups / uname / hostname /
+    # hostnamectl) is handled by a command-boundary regex in ENV_VAR_PATTERNS,
+    # NOT as a substring here — otherwise `numa whoami` (a vetted CLI
+    # subcommand) false-positives on the bare "whoami" substring. Same reason
+    # "df" was moved there (it matched "--format pdf").
     # Package installation (could install malicious packages or bypass restrictions)
     "pip install",
     "pip3 install",
@@ -166,6 +163,11 @@ ENV_VAR_PATTERNS = [
     r"\$\((?:whoami|id|hostname|uname|groups)\)",
     # Standalone 'id' command (special case - common substring)
     r"(?:^|\||;|&&)\s*id\s*(?:$|\||;|&&|>|\s+-)",
+    # System-info commands at a command boundary (start, or after | ; && $( ).
+    # Anchored so they only match as the COMMAND, not as an argument — e.g.
+    # `numa whoami` (whoami preceded by `numa `, not a separator) is allowed,
+    # while `whoami`, `; whoami`, `| uname -a`, `$(hostname)` are blocked.
+    r"(?:^|\||;|&&|\$\()\s*(?:whoami|groups|uname|hostname|hostnamectl)\b",
     # Note: standalone `df` (disk free) was previously blocked here. Removed —
     # the regex trailing `(?:\s|$|-)` false-positived on the canonical pandas
     # variable name in `python3 -c "...; df = pd.read_excel(...)"` (df followed

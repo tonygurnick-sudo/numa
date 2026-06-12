@@ -33,16 +33,16 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 python -m markitdown presentation.pptx
 ```
 
-> **For richer extraction** and for legacy/template formats (`.ppt`, `.pot`, `.potx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+> **For richer extraction** and for legacy/template formats (`.ppt`, `.pot`, `.potx`) where markitdown often returns empty or truncated content, prefer `numa docs extract /path -m "..."` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 For visual overview, convert to PDF then render as images:
 
-```
+```bash
 # Step 1: Convert PPTX to PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/presentation.pptx --format pdf -m "Converting PPTX to PDF for visual overview"
 
 # Step 2: Render PDF pages as images
-Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
+pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide
 ```
 
 This creates `slide-01.jpg`, `slide-02.jpg`, etc. in `/workdir/tmp/` so they don't clutter the user's outputs view.
@@ -170,12 +170,12 @@ Your first render is almost never correct. Always verify output visually.
 
 ### Convert to Images
 
-```
+```bash
 # Step 1: Convert PPTX to PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/presentation.pptx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/outputs/presentation.pptx --format pdf -m "Converting PPTX to PDF for visual QA"
 
 # Step 2: Render PDF pages as images (in /workdir/tmp/ — they're not for the user)
-Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
+pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide
 ```
 
 > `convert_document` accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx` — same `mode="file"` call.

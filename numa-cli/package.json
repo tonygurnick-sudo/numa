@@ -1,35 +1,14 @@
 {
-  "name": "@numa/cli",
+  "name": "@numa/cli-workspace",
   "version": "0.1.0",
-  "description": "Numa CLI - Command line tools for Numa platform",
-  "type": "module",
-  "bin": {
-    "numa": "./dist/index.js"
-  },
+  "description": "Numa CLI workspace root — coordinates @numa/cli (prod) and @numa/cli-dev (dev addon). Source lives under packages/.",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
-    "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@aws-sdk/client-cloudfront": "^3.600.0",
-    "@aws-sdk/client-cognito-identity-provider": "^3.600.0",
-    "@aws-sdk/client-dynamodb": "^3.600.0",
-    "@aws-sdk/client-lambda": "^3.600.0",
-    "@aws-sdk/client-s3": "^3.600.0",
-    "@aws-sdk/credential-providers": "^3.600.0",
-    "@aws-sdk/lib-dynamodb": "^3.600.0",
-    "@aws-sdk/s3-request-presigner": "^3.600.0",
-    "cognito-srp-helper": "^2.2.3",
-    "commander": "^12.1.0",
-    "zod": "^3.24.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
-  },
-  "engines": {
-    "node": ">=20.0.0"
+    "build": "yarn workspaces foreach --from '@numa/cli-dev' --recursive --topological-dev run build",
+    "typecheck": "yarn workspaces foreach --from '@numa/cli-dev' --recursive run typecheck",
+    "clean": "yarn workspaces foreach --from '@numa/cli-dev' --recursive run clean"
   }
 }

@@ -78,7 +78,8 @@ with a note (see Step 4 below).
 
 Supporting-data files are often large (multi-thousand-row CSVs, \
 hundreds-of-page PDFs). Use `Bash` (`grep`, `awk`, `head`, `cut`) or \
-`mcp__scripts__execute_script` with Python (`pandas`, `openpyxl`) to look \
+a Python script (Write it to `/workdir/tmp/`, run it with Bash) with \
+(`pandas`, `openpyxl`) to look \
 up specific values. Do NOT use the `Read` tool on large CSV/XLSX/PDF files.
 
 Generic query patterns (substitute actual filenames + values at runtime):
@@ -89,7 +90,7 @@ grep -i "<value-to-find>" "/workdir/knowledge-bases/supporting-data/<file_key>"
 ```
 
 ```python
-# XLSX lookup via openpyxl (use execute_script)
+# XLSX lookup via openpyxl (via a Python script run with Bash)
 import openpyxl
 wb = openpyxl.load_workbook("/workdir/knowledge-bases/supporting-data/<file_key>")
 for sheet in wb.sheetnames:

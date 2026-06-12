@@ -185,7 +185,7 @@ python -m markitdown /workdir/uploads/document.docx
 
 This outputs the document content as markdown — great for quick review or processing.
 
-> **For richer extraction** (full body, tables, more accurate structure) and for legacy/template formats (`.doc`, `.dot`, `.dotx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+> **For richer extraction** (full body, tables, more accurate structure) and for legacy/template formats (`.doc`, `.dot`, `.dotx`) where markitdown often returns empty or truncated content, prefer `numa docs extract /path -m "..."` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 ### Extract All Text with python-docx
 
@@ -553,10 +553,10 @@ pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx --reference-doc=/workdir/uploads/template.docx
 ```
 
-### MCP Tool Fallback
+### CLI Fallback
 
-```
-mcp__numa__numa_tool(name="convert_document", description="Converting markdown report to DOCX", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
+```bash
+numa docs convert /workdir/outputs/report.md --format docx -m "Converting markdown report to DOCX"
 ```
 
 **Why this approach works well:**
@@ -605,22 +605,22 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 
 ## Document Conversion (PDF ↔ DOCX)
 
-Use the `convert_document` tool (via `numa_tool` MCP) for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
+Use the `numa docs convert` CLI for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
 
-> `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same `mode="file"` call.
+> `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same call.
 
-```
+```bash
 # DOCX → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/document.docx --format pdf -m "Converting DOCX to PDF"
 
 # PDF → DOCX
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
+numa docs convert /workdir/uploads/document.pdf --format docx -m "Converting PDF to DOCX"
 
 # Markdown → DOCX
-numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
+numa docs convert /workdir/outputs/report.md --format docx -m "Converting markdown to DOCX"
 
 # Markdown → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/report.md", "format": "pdf", "mode": "markdown"})
+numa docs convert /workdir/outputs/report.md --format pdf -m "Converting markdown to PDF"
 ```
 
 Local markdown conversion is also available:
@@ -640,22 +640,22 @@ pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
 ### When to Use python-docx vs. Conversion Tools
 
-| Scenario                       | Recommended Approach                                     |
-| ------------------------------ | -------------------------------------------------------- |
-| Creating new DOCX from scratch | python-docx (this skill)                                 |
-| Filling DOCX templates         | python-docx (this skill)                                 |
-| Modifying existing DOCX        | python-docx (this skill)                                 |
-| Converting DOCX → PDF          | `convert_document` tool (mode="file")                    |
-| Converting Markdown → DOCX     | `pandoc` (local) or `convert_document` (mode="markdown") |
-| Complex/scanned PDFs           | `extract_content` tool (via `numa_tool` MCP) + `pandoc`  |
+| Scenario                       | Recommended Approach                        |
+| ------------------------------ | ------------------------------------------- |
+| Creating new DOCX from scratch | python-docx (this skill)                    |
+| Filling DOCX templates         | python-docx (this skill)                    |
+| Modifying existing DOCX        | python-docx (this skill)                    |
+| Converting DOCX → PDF          | `numa docs convert` CLI                     |
+| Converting Markdown → DOCX     | `pandoc` (local) or `numa docs convert` CLI |
+| Complex/scanned PDFs           | `numa docs extract` CLI + `pandoc`          |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 
 For scanned or complex PDFs where direct conversion fails:
 
-```
-# Step 1: Extract content using vision AI (via MCP tool)
-mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned document", params={"file_path": "/workdir/uploads/scanned_document.pdf"})
+```bash
+# Step 1: Extract content using vision AI
+numa docs extract /workdir/uploads/scanned_document.pdf -m "Extracting content from scanned document"
 ```
 
 ```bash

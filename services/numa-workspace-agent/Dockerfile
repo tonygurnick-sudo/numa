@@ -1,6 +1,3 @@
-# syntax=docker/dockerfile:1
-# check=skip=FromPlatformFlagConstDisallowed
-
 # Numa Workspace Agent - AgentCore Service
 # Based on Python 3.13 slim for minimal image size
 # ARM64 required for AWS Bedrock AgentCore
@@ -67,6 +64,16 @@ RUN mkdir -p /app/node_packages && cd /app/node_packages \
     && npm init -y && npm install --production pptxgenjs@3.12.0 sharp@0.33.0 \
     && npm cache clean --force
 ENV NODE_PATH="/app/node_packages/node_modules"
+
+# numa-cli — production binary (@numa/cli only; the @numa/cli-dev addon with
+# bypass flags MUST NEVER ship into a workspace MicroVM). The tarball is built
+# by package-service.sh via `npm pack` in numa-cli/packages/cli/ and copied
+# into the build context immediately before `docker buildx build` runs.
+COPY numa-cli.tgz /tmp/numa-cli.tgz
+RUN npm install --global --production /tmp/numa-cli.tgz \
+    && rm /tmp/numa-cli.tgz \
+    && npm cache clean --force \
+    && numa --version
 
 # Create non-root user with UID 1000
 # Note: AgentCore uses ephemeral storage, no EFS access point needed

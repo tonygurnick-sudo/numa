@@ -1,47 +1,19 @@
-import type React from 'react';
-import { WebSearchRenderer } from '../toolRenderers/WebSearchRenderer';
-import { KnowledgeBaseRenderer } from '../toolRenderers/KnowledgeBaseRenderer';
-import { FallbackRenderer } from '../toolRenderers/FallbackRenderer';
-import { DataAnalysisRenderer } from '../toolRenderers/DataAnalysisRenderer';
-import { AgentCreationRenderer } from '../toolRenderers/AgentCreationRenderer';
-import { IntegrationsRenderer } from '../toolRenderers/IntegrationsRenderer';
-import { OpsToolRenderer } from '../toolRenderers/OpsToolRenderer';
 import { getConnectionDisplayName, getConnectionIcon, getConnectionFallbackIcon } from '../config/integrationsConfig';
 import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 import { resolveServiceIcon, pipedreamSlugForConnector } from '../Components/Integrations/integrationCatalogHelpers';
 import i18n from '../i18n';
 
-type ToolRenderer = (props: { result: unknown }) => React.ReactNode;
-
 export type ToolDescriptor = {
   label: string;
-  renderer: ToolRenderer;
 };
 
 /**
- * Static mapping for known core tools.
- * Labels are resolved at runtime via getToolConfig() to ensure i18n translations
- * are loaded before being accessed.
+ * Per-tool i18n label keys. Renderers are no longer mapped here: `tool_card`
+ * segments render via the generic UnifiedToolCard (with Web Search as the one
+ * rich result view), and Numa Ops + the render tool are handled inline in
+ * ChatMessages.tsx. This map only supplies the human label + (via
+ * resolveToolVisual) the icon for each tool.
  */
-const TOOL_RENDERERS: Record<string, ToolRenderer> = {
-  web_search: WebSearchRenderer,
-  query_knowledge_base: KnowledgeBaseRenderer,
-  create_agent_tool: AgentCreationRenderer,
-  data_analysis: DataAnalysisRenderer,
-  integrations: IntegrationsRenderer,
-  mcp__numa__numa_tool: FallbackRenderer,
-  mcp__numa__numa_ops_tool: OpsToolRenderer,
-  // Numa sub-tool renderers (used when effectiveToolName resolves from mcp__numa__numa_tool input)
-  numa_files: KnowledgeBaseRenderer,
-  knowledge_base: KnowledgeBaseRenderer, // legacy alias for numa_files
-  extract_content: FallbackRenderer,
-  convert_document: FallbackRenderer,
-  agents: FallbackRenderer,
-  memories: FallbackRenderer,
-  render: FallbackRenderer,
-  _default: FallbackRenderer,
-};
-
 const TOOL_LABEL_KEYS: Record<string, string> = {
   web_search: 'common:toolLabels.webSearch',
   query_knowledge_base: 'common:toolLabels.knowledgeBase',
@@ -55,8 +27,27 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
   knowledge_base: 'common:toolLabels.numaFiles', // legacy alias for numa_files
   extract_content: 'common:toolLabels.extractContent',
   convert_document: 'common:toolLabels.convertDocument',
+  transcribe: 'common:toolLabels.transcribe',
   agents: 'common:toolLabels.agents',
   memories: 'common:toolLabels.memories',
+  user_profile_list_memories: 'common:toolLabels.memoriesList',
+  user_profile_add_memory: 'common:toolLabels.memoriesAdd',
+  user_profile_update_memory: 'common:toolLabels.memoriesUpdate',
+  user_profile_delete_memory: 'common:toolLabels.memoriesDelete',
+  list_agents: 'common:toolLabels.agentsList',
+  get_agent: 'common:toolLabels.agentsGet',
+  create_agent: 'common:toolLabels.agentsCreate',
+  update_agent: 'common:toolLabels.agentsUpdate',
+  patch_agent_prompt: 'common:toolLabels.agentsPatchPrompt',
+  duplicate_agent: 'common:toolLabels.agentsDuplicate',
+  delete_agent: 'common:toolLabels.agentsDelete',
+  pipedream_list_actions: 'common:toolLabels.integrationsPipedreamActions',
+  pipedream_batch_get_schemas: 'common:toolLabels.integrationsPipedreamSchemas',
+  pipedream_configure_props: 'common:toolLabels.integrationsPipedreamPropsOptions',
+  pipedream_run_action: 'common:toolLabels.integrationsPipedreamCall',
+  pipedream_proxy_request: 'common:toolLabels.integrationsRequest',
+  connect_request: 'common:toolLabels.integrationsRequest',
+  connect_status: 'common:toolLabels.integrationsStatus',
   render: 'common:toolLabels.render',
   _default: 'common:toolLabels.unknown',
 };
@@ -68,11 +59,8 @@ const TOOL_LABEL_KEYS: Record<string, string> = {
  */
 function getToolConfig(): Record<string, ToolDescriptor> {
   const config: Record<string, ToolDescriptor> = {};
-  for (const key of Object.keys(TOOL_RENDERERS)) {
-    config[key] = {
-      label: i18n.t(TOOL_LABEL_KEYS[key]),
-      renderer: TOOL_RENDERERS[key],
-    };
+  for (const key of Object.keys(TOOL_LABEL_KEYS)) {
+    config[key] = { label: i18n.t(TOOL_LABEL_KEYS[key]) };
   }
   return config;
 }
@@ -84,10 +72,10 @@ export const TOOL_CONFIG: Record<string, ToolDescriptor> = new Proxy({} as Recor
     return getToolConfig()[prop];
   },
   ownKeys() {
-    return Object.keys(TOOL_RENDERERS);
+    return Object.keys(TOOL_LABEL_KEYS);
   },
   getOwnPropertyDescriptor(_, prop: string) {
-    if (prop in TOOL_RENDERERS) {
+    if (prop in TOOL_LABEL_KEYS) {
       return { enumerable: true, configurable: true };
     }
     return undefined;
@@ -112,7 +100,7 @@ export function resolveToolDescriptor(toolName: string | null | undefined): Tool
   if (name.endsWith('_integration')) {
     const integrationId = name.replace(/_integration$/, '');
     const display = getConnectionDisplayName(integrationId) || humanize(integrationId, { titleCase: true });
-    return { label: display, renderer: IntegrationsRenderer };
+    return { label: display };
   }
 
   // Native connector tools follow `<connectorId>_connector` (synthesised in
@@ -120,7 +108,7 @@ export function resolveToolDescriptor(toolName: string | null | undefined): Tool
   if (name.endsWith('_connector')) {
     const connectorId = name.replace(/_connector$/, '');
     const display = getConnectorById(connectorId)?.displayName || humanize(connectorId, { titleCase: true });
-    return { label: display, renderer: TOOL_CONFIG._default.renderer };
+    return { label: display };
   }
 
   // Fallback

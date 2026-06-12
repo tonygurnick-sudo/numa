@@ -64,7 +64,7 @@ evidence. Don't spend excessive turns verifying low-impact rules.
 ### CRITICAL: Context Management
 - **Read only the manifest, summary, and rules file yourself.** Do NOT read the extracted document — let subagents do that.
 - **Include all Agent calls in ONE response** so they run concurrently.
-- **After subagents complete, trust their results.** Do NOT re-read the document or rules file to verify. Use execute_script to merge their outputs into final files directly from disk.
+- **After subagents complete, trust their results.** Do NOT re-read the document or rules file to verify. Use a Python script (Write it to /workdir/tmp/, run it with Bash) to merge their outputs into final files directly from disk.
 - **Have each subagent write its findings to a temp file** (e.g., `/workdir/tmp/global_chunk_1.json`) AND return a brief summary. Then merge from disk, not from context.
 - **Keep your synthesis scripts short.** Read subagent temp files from disk in Python, don't try to hold all findings in your context window.
 
@@ -85,7 +85,7 @@ bidders, lots, forms with page ranges, and timeline
 - Instruction to use `tmp/page_index.csv` to locate specific pages by content type
 - The extracted document file path — but instruct them to use the manifest \
 and page index to navigate to specific pages, NOT to read the entire file. \
-They should use execute_script to extract only the pages they need.
+They should use a Python script (run with Bash) to extract only the pages they need.
 
 ## Your Task
 Systematically check the evaluation report against EVERY rule in the global rules file (`/workdir/knowledge-bases/global-rules.md`).
@@ -105,8 +105,9 @@ Each subagent should:
 6. Write findings to its temp file
 
 #### Step 3: Merge Results
-Use execute_script to merge all subagent temp files into the final \
-output files. Rely on the subagent outputs — only go back to the \
+Use a Python script (Write it to /workdir/tmp/, run it with Bash) to merge \
+all subagent temp files into the final output files. Rely on the subagent \
+outputs — only go back to the \
 source document if you spot clear gaps or errors in the merged data \
 that need correction. Use the manifest and page index to look up \
 specific pages if needed, rather than broadly re-reading the document.

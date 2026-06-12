@@ -187,12 +187,13 @@ export class WorkspaceChatToolsConstruct extends Construct {
     });
 
     // DynamoDB permission for agent management
-    // Allows listing, getting, creating, updating, patching, and duplicating agents.
+    // Allows listing, getting, creating, updating, patching, duplicating, and deleting agents.
     // UpdateItem is required by patch_agent_prompt for targeted system_prompt edits.
+    // DeleteItem is required by delete_agent.
     policyStatements.push({
       sid: 'DynamoDBAgentManagement',
       effect: 'Allow',
-      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Query'],
       resources: [
         // Workspace agents table
         `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agents`,

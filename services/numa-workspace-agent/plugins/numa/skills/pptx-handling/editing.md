@@ -29,9 +29,9 @@ Use python-pptx to edit existing PPTX files or fill templates with data.
 
 3. **Visual overview** (convert to images):
 
-   ```
-   # Convert PPTX to PDF using convert_document tool, then render pages:
-   numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/template.pptx", "format": "pdf", "mode": "file"})
+   ```bash
+   # Convert PPTX to PDF using the numa docs convert CLI, then render pages:
+   numa docs convert /workdir/uploads/template.pptx --format pdf -m "Converting template to PDF for visual QA"
    # Then: pdftoppm -jpeg -r 120 /workdir/outputs/converted_template.pdf /workdir/outputs/slide
    ```
 

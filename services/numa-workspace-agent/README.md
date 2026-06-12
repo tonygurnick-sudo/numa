@@ -160,34 +160,22 @@ Skills are Claude-readable instructions that teach the AI how to accomplish spec
 
 ### Knowledge Search Skill
 
-Search and retrieve from enterprise knowledge bases via the `mcp__numa__numa_tool` MCP tool:
+Search and retrieve from enterprise knowledge bases via the `numa files` CLI (run through the Bash tool):
 
-```python
+```bash
 # Basic KB search
-mcp__numa__numa_tool(
-  name="query_knowledge_base",
-  description="Searching for annual leave policy",
-  params={"query": "annual leave policy", "user_intent": "find how many days of leave employees get"}
-)
+numa files search --query "annual leave policy" -m "Searching for annual leave policy"
 
 # Query all KBs at once
-mcp__numa__numa_tool(
-  name="query_knowledge_base",
-  description="Searching all KBs for compliance requirements",
-  params={"query": "compliance requirements", "user_intent": "find all compliance info", "all_kbs": true}
-)
+numa files search --query "compliance requirements" --all-kbs -m "Searching all KBs for compliance requirements"
 ```
 
 ### Web Search Skill
 
-Search the internet for current information via MCP:
+Search the internet for current information via the `numa web` CLI:
 
-```python
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Searching for AWS Lambda pricing",
-  params={"query": "AWS Lambda pricing 2025", "user_intent": "Find current Lambda pricing information"}
-)
+```bash
+numa web search --query "AWS Lambda pricing 2025" -m "Searching for AWS Lambda pricing"
 ```
 
 ### PDF Handling Skill
@@ -239,94 +227,88 @@ pivot.to_excel('/workdir/outputs/pivot_report.xlsx')
 
 ## Workspace Tools
 
-All Numa tool operations go through the unified `mcp__numa__numa_tool` MCP tool. The files at `/workdir/tools/numa/` are **documentation-only reference cards** — direct bash execution is blocked by security hooks.
+All Numa platform operations go through the unified **`numa` CLI** — the agent shells out via the Bash tool (`numa <category> <command> ... -m "caption"`). There are **no MCP servers** — the whole `numa`/`integrations`/`connectors`/`vault`/`scripts` MCP layer was deleted (Phase 6) and `sdk_config.py` builds `mcp_servers = {}`. The CLI POSTs `{tool, params, context}` to the `numa-cli-api` Lambda, which routes to the kept Python handlers in `lambdas/python/workspace-chat-tools/tools/`. The files at `/workdir/tools/numa/` are **documentation-only reference cards** for those CLI commands — direct bash execution of them is blocked by security hooks.
 
-| MCP Tool Name          | Purpose                      | Key Parameters                             |
-| ---------------------- | ---------------------------- | ------------------------------------------ |
-| `query_knowledge_base` | Search knowledge bases       | `query`, `user_intent`, `kb_id`, `all_kbs` |
-| `kb_upload`            | Upload file to a KB          | `file`, `kb_id`, `path`                    |
-| `kb_download`          | Download file from KB        | `file` + `kb_id`, or `uri`                 |
-| `kb_list`              | List files in a KB           | `kb_id`, `pattern`                         |
-| `kb_download_folder`   | Download KB folder as zip    | `kb_id`, `folder_path`                     |
-| `web_search`           | Web search with AI synthesis | `query`, `user_intent`, `max_results`      |
-| `extract_content`      | Extract text from docs (OCR) | `file_path`                                |
-| `convert_document`     | Document format conversion   | `file_path`, `format`, `mode`, `title`     |
-| `agents`               | Manage saved Numa agents     | `operation`, `agent_id`, `title`, etc.     |
-| `memories`             | Manage user memories         | `operation`, `content`, `scope`, etc.      |
+| CLI command                  | Purpose                      | Key flags                                  |
+| ---------------------------- | ---------------------------- | ------------------------------------------ |
+| `numa files search`          | Search knowledge bases       | `--query`, `--kb-id`, `--all-kbs`          |
+| `numa files upload`          | Upload file to a KB          | local path, `--kb-id`, `--filename`        |
+| `numa files download`        | Download file from KB        | `--uri`, or `--kb-id` + path               |
+| `numa files list`            | List files in a KB           | `--kb-id`, `--pattern`                     |
+| `numa files download-folder` | Download KB folder as zip    | `--kb-id`, `--folder`                      |
+| `numa web search`            | Web search with AI synthesis | `--query`, `--max-results`                 |
+| `numa web fetch`             | Fetch a URL                  | `--url`                                    |
+| `numa docs extract`          | Extract text from docs (OCR) | file path                                  |
+| `numa docs transcribe`       | Transcribe audio/video       | file path                                  |
+| `numa docs convert`          | Document format conversion   | file path, `--format`, `--mode`, `--title` |
+| `numa agents ...`            | Manage saved Numa agents     | `list`/`show`/`create`/`update`/`delete`   |
+| `numa memory ...`            | Manage user memories         | `list`/`show`/`add`/`update`/`delete`      |
+| `numa ops ...`               | Numa Ops (gated)             | see `numa ops --help`                      |
+| `numa render ...`            | Render artifacts             | see `numa render --help`                   |
+
+Every API-hitting command requires `-m/--user-message` — the user-visible caption shown on the tool card / approval prompt. Discover commands with `numa <category> --help`; compose with `--json | jq ...`.
 
 ### Tool Examples
 
-```python
-# Query knowledge base
-mcp__numa__numa_tool(
-  name="query_knowledge_base",
-  description="Searching KB for expense policy",
-  params={"query": "expense policy", "user_intent": "find expense limits"}
-)
+```bash
+# Search a knowledge base
+numa files search --query "expense policy" -m "Searching KB for expense policy"
 
 # Download a file from KB
-mcp__numa__numa_tool(
-  name="kb_download",
-  description="Downloading policy document",
-  params={"uri": "s3://bucket/documents/company/policy.pdf"}
-)
+numa files download --uri "s3://bucket/documents/company/policy.pdf" -m "Downloading policy document"
 
 # Web search
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Researching GDPR compliance",
-  params={"query": "GDPR compliance requirements", "user_intent": "understand data protection obligations"}
-)
+numa web search --query "GDPR compliance requirements" -m "Researching GDPR compliance"
 
-# Extract text from scanned PDF
-mcp__numa__numa_tool(
-  name="extract_content",
-  description="Extracting text from scanned invoice",
-  params={"file_path": "/workdir/uploads/scanned_invoice.pdf"}
-)
+# Extract text from a scanned PDF
+numa docs extract /workdir/uploads/scanned_invoice.pdf -m "Extracting text from scanned invoice"
 
 # Convert DOCX to PDF
-mcp__numa__numa_tool(
-  name="convert_document",
-  description="Converting DOCX to PDF",
-  params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"}
-)
+numa docs convert /workdir/uploads/document.docx --format pdf --mode file -m "Converting DOCX to PDF"
 ```
 
-### Tool Access Control (Two-Layer Model)
+### Tool Access Control
 
-Tool operations are controlled by two independent layers. Both must allow an operation for it to proceed:
+Three enforcement gates govern what a `numa` command can do, all server-side in `numa-cli-api`:
 
-| Layer                 | Source                                         | Scope                          | Controls                                     |
-| --------------------- | ---------------------------------------------- | ------------------------------ | -------------------------------------------- |
-| **Agent type config** | `allowed_numa_operations` on `AgentTypeConfig` | Per agent type (developer-set) | Hard limit on which operations are available |
-| **Frontend toggles**  | `enabledTools` in request body                 | Per request (user-set)         | User-controlled toggles in chat settings     |
+| Gate                              | Source                                            | Scope                          | Controls                                                      |
+| --------------------------------- | ------------------------------------------------- | ------------------------------ | ------------------------------------------------------------- |
+| **`Bash(numa:*)` grant**          | `allowed_tools` on `AgentTypeConfig`              | Per agent type (developer-set) | Whether the type can run the CLI at all                       |
+| **Per-agent-type CLI allow-list** | `allowed_cli_commands` + `numa-cli-api/policy.ts` | Per agent type (developer-set) | Which CLI _categories_ are permitted (`None` = all)           |
+| **Ops entitlement + HITL**        | `NUMA_OPS_ENABLED` + approval polling             | Per client / per request       | `numa ops` requires the flag; write ops require user approval |
 
-**Agent type config** (Layer 1): Set `allowed_numa_operations` on an `AgentTypeConfig` to restrict which operations are available. `None` (default) means all operations are allowed. A list means only those operations are permitted:
+**`Bash(numa:*)` grant:** a type must have `Bash(numa:*)` in `allowed_tools` to reach the platform at all.
+
+**Per-agent-type CLI allow-list:** set `allowed_cli_commands` on the `AgentTypeConfig`. `None` (default) = unrestricted; a list restricts to those categories. It drives the dynamic prompt (only permitted categories are described) AND is enforced server-side in `numa-cli-api` (keyed on `NUMA_AGENT_TYPE`, with a parity test against `policy.ts`):
 
 ```python
 # Full access (default for numa-chat)
-allowed_numa_operations=None
+allowed_cli_commands=None
 
-# Only KB search and content extraction
-allowed_numa_operations=["query_knowledge_base", "extract_content"]
-
-# No operations (even though MCP server is registered)
-allowed_numa_operations=[]
+# Docs only (Nolia phases — never touch ops/agents/memory)
+allowed_cli_commands=["docs"]
 ```
 
-**Frontend toggles** (Layer 2): The frontend sends `enabledTools` in the request body based on user settings. Operations are gated by these toggles:
+**Frontend toggles:** the frontend still sends `enabledTools` in the request body based on user settings; these scope which knowledge bases / capabilities are active for the conversation and are forwarded to `numa-cli-api` as narrowing hints (they can only narrow, never grant). KB operations share the knowledge-base toggle — if the user hasn't enabled a KB, the CLI can't query, upload, download, or list it.
 
-| Frontend toggle key    | Operations gated                                                                    |
-| ---------------------- | ----------------------------------------------------------------------------------- |
-| `query_knowledge_base` | `query_knowledge_base`, `kb_upload`, `kb_download`, `kb_list`, `kb_download_folder` |
-| `web_search`           | `web_search`                                                                        |
-| `create_agent_tool`    | `agents`                                                                            |
-| `memories_tool`        | `memories`                                                                          |
+**Ops gate:** `numa ops` commands are blocked unless `NUMA_OPS_ENABLED` is set, both in the system prompt (the `numa ops` subsection is only included when enabled) and as a hard server-side gate in `numa-cli-api`.
 
-KB operations all share the same toggle — if the user hasn't enabled a knowledge base, they can't query, upload, download, or list.
+---
 
-The remaining operations (`extract_content`, `convert_document`) have no frontend toggle — they're pure utility operations always available if the MCP server is enabled.
+## numa CLI Identity Model
+
+Inside a MicroVM, the LLM runs `numa <cmd>` (the `@numa/cli` binary) to reach the platform. Each call invokes the `<client>_numa-cli-api` Lambda directly, signed by the workspace IAM role. **That IAM signature proves a real MicroVM is calling — but NOT which user.** Because the LLM controls the workspace role (its credentials are ambient via IMDS), it could invoke `numa-cli-api` directly with any payload. So identity must be **unforgeable**, not asserted.
+
+The rule: **`numa-cli-api` derives the user only from a cryptographically verified token, never from a plaintext `sub`.** The agent supplies that token in `NUMA_IDENTITY_TOKEN` (set per turn in [`main.py`](numa_workspace_agent/main.py) from the proxy's `x-numa-identity-token` header, propagated into the CLI subprocess by [`sdk_config.py`](numa_workspace_agent/sdk_config.py)). It holds one of two verifiable tokens:
+
+| Run type                                               | `NUMA_IDENTITY_TOKEN` is…                                                                | Minted by                    | Verified against   |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------- | ------------------ |
+| **Interactive chat**                                   | the user's real Cognito **id token**                                                     | Cognito (via the frontend)   | Cognito JWKS       |
+| **Non-interactive** (scheduled agents, V2 apps, Nolia) | a short-lived **HS256 service token** (`iss: numa-workspace-proxy`, `aud: numa-cli-api`) | `workspace-chat-agent-proxy` | shared HMAC secret |
+
+Non-interactive runs authenticate to the proxy with `SCHEDULE_RUNNER_SECRET` and carry no user token — so the proxy mints a signed assertion vouching for the run's owner. **The signing secret (`NUMA_CLI_IDENTITY_SECRET`) is shared only between the proxy and `numa-cli-api` and is deliberately never injected into this container** — so the LLM has no path to it and cannot forge a service token. Verification (both paths) lives in [`lambdas/node/numa-cli-api/src/shared/auth.ts`](../../lambdas/node/numa-cli-api/src/shared/auth.ts); the full design note is at [`dev-notes/tasks/numa-cli/identity-model.md`](../../dev-notes/tasks/numa-cli/identity-model.md).
+
+> `NUMA_USER_ID_TOKEN` is a separate variable — it stays the real Cognito id token (interactive only) for Q Business `AssumeRoleWithWebIdentity`, and is **not** the CLI's auth credential.
 
 ---
 
@@ -339,9 +321,9 @@ The workspace agent integrates with external SaaS tools through Pipedream Connec
 ```
 Frontend (enabledConnections: ["google_drive", "slack"])
     ↓
-Workspace Agent (registers MCP tools, syncs schemas)
-    ↓ (MCP tool call)
-workspace-chat-tools Lambda (validates access, routes request)
+Workspace Agent (syncs action schemas to /workdir/tools/integrations/)
+    ↓ (numa integrations <cmd> via Bash)
+numa-cli-api Lambda  →  workspace-chat-tools Lambda (validates access, routes request)
     ↓ (cross-account)
 Pipedream Relay Lambda → Pipedream Proxy Lambda
     ↓
@@ -351,17 +333,19 @@ Pipedream API (OAuth injected automatically)
 1. Frontend sends `enabledConnections` array in the chat request
 2. Agent builds `external_user_id = "{client_name}_{user_sub}"` for the Pipedream relay
 3. Integration action schemas are auto-synced to `/workdir/tools/integrations/{app_slug}/`
-4. MCP tools invoke the `workspace-chat-tools` Lambda, which calls the Pipedream relay cross-account
+4. The agent runs `numa integrations <command>`, which flows through `numa-cli-api` → `workspace-chat-tools` Lambda, which calls the Pipedream relay cross-account
 
-### MCP Tools
+### Integration Commands
 
-Three tools are registered via the Claude Agent SDK `@tool` decorator in `mcp_tools/integrations.py`:
+Pipedream operations are exposed as `numa integrations` subcommands (the old MCP `run_action` / `configure_props` / `proxy_request` tools, now CLI commands routed through `numa-cli-api` to `workspace-chat-tools/tools/pipedream_integration.py`):
 
-| Tool              | Description                                                                     | Requires Approval? |
-| ----------------- | ------------------------------------------------------------------------------- | ------------------ |
-| `run_action`      | Execute a Pipedream action (e.g., search Google Drive, send Slack message)      | YES                |
-| `configure_props` | Get dynamic dropdown options for action props (e.g., list drives, folders)      | NO (read-only)     |
-| `proxy_request`   | Make a raw API call through Pipedream's proxy (when no pre-built action exists) | YES                |
+| Operation       | Description                                                                     | Requires Approval? |
+| --------------- | ------------------------------------------------------------------------------- | ------------------ |
+| run action      | Execute a Pipedream action (e.g., search Google Drive, send Slack message)      | YES                |
+| configure props | Get dynamic dropdown options for action props (e.g., list drives, folders)      | NO (read-only)     |
+| proxy request   | Make a raw API call through Pipedream's proxy (when no pre-built action exists) | YES                |
+
+Write operations are gated through the CLI's `gateWriteOp()` (HITL) and the `numa-cli-api` approval poll. Run `numa integrations --help` for the exact subcommands and flags.
 
 ### Human-in-the-Loop Approval
 
@@ -550,28 +534,29 @@ numa_workspace_agent/
 │   ├── numa_chat.py       # Default chat agent type (full access)
 │   ├── research_agent.py  # Research-focused agent type
 │   └── document_summariser.py  # Restricted summariser agent type
-└── mcp_tools/            # SDK-registered MCP tools
-    ├── __init__.py
-    ├── numa_tool.py       # Unified Numa tool dispatcher (KB, web search, agents, memories, etc.)
-    ├── execute_script.py  # Sandboxed code execution (Python, Bash)
-    └── integrations.py    # Pipedream integration tools (run_action, configure_props, proxy_request)
+└── mcp_tools/            # MCP layer REMOVED (Phase 6) — zero MCP servers
+    ├── __init__.py            # Docstring only; the in-process MCP tools are gone
+    └── integration_preferences.py  # Surviving pure-Python helper (per-service
+                                    #   preferred_method lookup), imported by
+                                    #   prompts.py — NOT an MCP tool
 ```
+
+> Platform capabilities (KB, web, agents, memories, integrations, code execution, vault) are no longer MCP tools. They're reached via the `numa` CLI (Bash) → `numa-cli-api` Lambda → `lambdas/python/workspace-chat-tools/tools/` handlers. Code execution is just a script the agent writes to `/workdir/tmp/` and runs with Bash.
 
 ### Key Module Responsibilities
 
-| Module                          | Purpose                                                                                         |
-| ------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **sdk_config.py**               | Builds `ClaudeAgentOptions`, defines allowed/disallowed tools, configures Python hooks          |
-| **sdk_runner.py**               | Uses `query()` for agentic loops, serializes events to NDJSON, streams to client                |
-| **hooks/security.py**           | Blocks `.system/` access, validates paths, blocks dangerous commands, audit logging             |
-| **workspace.py**                | Path helpers, directory management, file listing                                                |
-| **s3_workspace.py**             | Sync to/from S3, session archiving, conversation switching                                      |
-| **agent_config.py**             | Fetches agent configs from DynamoDB, resolves approval modes for integrations                   |
-| **assistant.py**                | Pre-request routing via Nova 2 Lite; detects skills needed from message content/file extensions |
-| **stream_logger.py**            | Captures full conversation flow (text + tool calls) and logs summary at stream end              |
-| **mcp_tools/numa_tool.py**      | Unified Numa tool dispatcher with two-layer access control                                      |
-| **mcp_tools/execute_script.py** | Sandboxed code execution for Python/Bash scripts with security scanning                         |
-| **mcp_tools/integrations.py**   | Pipedream integration tools with human-in-the-loop approval                                     |
+| Module                                   | Purpose                                                                                                                                                                                                                                                                      |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **sdk_config.py**                        | Builds `ClaudeAgentOptions`, defines allowed/disallowed tools, configures Python hooks                                                                                                                                                                                       |
+| **sdk_runner.py**                        | Uses `query()` for agentic loops, serializes events to NDJSON, streams to client                                                                                                                                                                                             |
+| **hooks/security.py**                    | Blocks `.system/` access, validates paths, blocks dangerous commands, audit logging                                                                                                                                                                                          |
+| **workspace.py**                         | Path helpers, directory management, file listing                                                                                                                                                                                                                             |
+| **s3_workspace.py**                      | Sync to/from S3, session archiving, conversation switching                                                                                                                                                                                                                   |
+| **agent_config.py**                      | Fetches agent configs from DynamoDB, resolves approval modes for integrations                                                                                                                                                                                                |
+| **assistant.py**                         | Pre-request routing via Nova 2 Lite; detects skills needed from message content/file extensions                                                                                                                                                                              |
+| **stream_logger.py**                     | Captures full conversation flow (text + tool calls) and logs summary at stream end                                                                                                                                                                                           |
+| **mcp_tools/integration_preferences.py** | Surviving non-MCP helper — per-service `preferred_method` lookup, imported by `prompts.py` (the rest of `mcp_tools/` was deleted in Phase 6)                                                                                                                                 |
+| **`numa` CLI → `numa-cli-api`**          | Platform tools (KB, web, agents, memories, integrations, ops, render) now run as `numa <category> <command>` Bash calls dispatched server-side to `workspace-chat-tools/tools/` — no in-process MCP. Code execution is a script written to `/workdir/tmp/` and run with Bash |
 
 ---
 

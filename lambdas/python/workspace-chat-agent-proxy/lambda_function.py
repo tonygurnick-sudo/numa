@@ -64,6 +64,23 @@ OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 SCHEDULE_RUNNER_SECRET = os.environ.get("SCHEDULE_RUNNER_SECRET", "")
 WORKSPACE_TOOLS_LAMBDA_NAME = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
 
+# ── numa CLI service-identity tokens ─────────────────────────────────────────
+# Non-interactive runs (scheduled agents, V2 apps, Nolia) authenticate to this
+# proxy with SCHEDULE_RUNNER_SECRET and carry no user Cognito token. The numa
+# CLI inside those MicroVMs still needs an UNFORGEABLE identity to present to
+# numa-cli-api (it can't be trusted to assert its own user — the LLM controls
+# the workspace role). So we mint a short-lived HS256 JWT here, signed with a
+# secret shared ONLY between this proxy and numa-cli-api (never injected into
+# the workspace container). numa-cli-api verifies it and derives the user from
+# the signed `sub`. Interactive chat doesn't use this — it forwards the user's
+# real Cognito id token instead.
+CLI_IDENTITY_SECRET = os.environ.get("NUMA_CLI_IDENTITY_SECRET", "")
+CLI_IDENTITY_ISSUER = "numa-workspace-proxy"
+CLI_IDENTITY_AUDIENCE = "numa-cli-api"
+# Long enough to cover a non-interactive run end-to-end; the workspace IAM
+# signature is a second factor bounding replay, so a generous TTL is low-risk.
+CLI_IDENTITY_TTL_SECONDS = 3600
+
 # JWKS cache (persists across warm Lambda invocations)
 _jwks_cache: Dict[str, Any] = {"data": None}
 
@@ -313,6 +330,59 @@ def extract_user_sub(
     except Exception as e:
         logger.error("JWT verification error: %s", str(e))
         raise HTTPException(status_code=401, detail="Authentication failed")
+
+
+def _strip_bearer(authorization: str | None) -> str:
+    if not authorization:
+        return ""
+    return (
+        authorization[len("Bearer ") :]
+        if authorization.startswith("Bearer ")
+        else authorization
+    )
+
+
+def _mint_cli_identity_token(user_sub: str, conversation_id: str | None) -> str:
+    """Mint a short-lived service-identity token for the numa CLI.
+
+    Used only for non-interactive runs (server-to-server). Signed with the
+    shared HMAC secret; numa-cli-api verifies it. Fails closed if the secret
+    isn't configured — we never want to hand the CLI an unsigned identity.
+    """
+    if not CLI_IDENTITY_SECRET:
+        raise HTTPException(
+            status_code=500,
+            detail="Service identity signing not configured (NUMA_CLI_IDENTITY_SECRET unset)",
+        )
+    now = int(time_mod.time())
+    claims = {
+        "sub": user_sub,
+        "conversation_id": conversation_id or "",
+        "iss": CLI_IDENTITY_ISSUER,
+        "aud": CLI_IDENTITY_AUDIENCE,
+        "iat": now,
+        "exp": now + CLI_IDENTITY_TTL_SECONDS,
+        "kind": "service",
+    }
+    return jwt.encode(claims, CLI_IDENTITY_SECRET, algorithm="HS256")
+
+
+def resolve_cli_identity_token(
+    authorization: str | None, user_sub: str, conversation_id: str | None
+) -> str:
+    """Resolve the identity credential the numa CLI will present to numa-cli-api.
+
+    - Server-to-server auth (schedule runner secret) → mint a signed service
+      token, because there's no user Cognito token to forward.
+    - Interactive auth (Cognito JWT) → the user's id token itself is the
+      credential; forward it unchanged.
+    """
+    token = _strip_bearer(authorization)
+    if SCHEDULE_RUNNER_SECRET and hmac_mod.compare_digest(
+        token, SCHEDULE_RUNNER_SECRET
+    ):
+        return _mint_cli_identity_token(user_sub, conversation_id)
+    return token
 
 
 def build_session_id(conversation_id: str) -> str:
@@ -962,6 +1032,14 @@ async def _invoke_agentcore(
         # Fallback for requests without a conversation_id
         session_id = f"user-{user_sub}"
 
+    # Identity credential the numa CLI presents to numa-cli-api: the user's
+    # Cognito id token for interactive chat, or a freshly-minted signed service
+    # token for non-interactive runs (which have no user token). main.py reads
+    # this into NUMA_IDENTITY_TOKEN for the CLI subprocess.
+    cli_identity_token = resolve_cli_identity_token(
+        authorization, user_sub, conversation_id
+    )
+
     # Build the payload that the workspace agent will receive
     # The workspace agent's FastAPI app will parse this
     payload = {
@@ -970,6 +1048,7 @@ async def _invoke_agentcore(
         "headers": {
             "authorization": authorization or "",
             "x-user-sub": user_sub,
+            "x-numa-identity-token": cli_identity_token,
         },
     }
     if http_body:

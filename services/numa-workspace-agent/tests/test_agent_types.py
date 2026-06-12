@@ -31,11 +31,16 @@ class TestAgentTypeConfigDefaults:
         assert config.allowed_tools == []
         assert config.disallowed_tools == []
 
-    def test_default_mcp_enabled(self):
+    def test_default_mcp_disabled(self):
+        # Phase 6: the in-process MCP tool layer was deleted and the enable_*_mcp
+        # flags now default to False on every agent type (capabilities are served
+        # via the `numa` CLI / Bash instead).
         config = AgentTypeConfig(type_id="test", display_name="Test")
-        assert config.enable_scripts_mcp is True
-        assert config.enable_integrations_mcp is True
-        assert config.enable_numa_mcp is True
+        assert config.enable_scripts_mcp is False
+        assert config.enable_integrations_mcp is False
+        assert config.enable_numa_mcp is False
+        assert config.enable_connect_mcp is False
+        assert config.enable_vault_mcp is False
 
     def test_default_allowed_numa_operations_is_none(self):
         config = AgentTypeConfig(type_id="test", display_name="Test")
@@ -163,14 +168,15 @@ class TestNumaChatType:
         config = get_agent_type_config("numa-chat")
         assert config.response_mode == "stream"
 
-    def test_mcp_servers_enabled(self):
-        """numa-chat keeps integrations/numa/connect MCP servers. The scripts MCP
-        server (execute_script) was removed — model now uses Write+Bash+Edit."""
+    def test_mcp_servers_disabled(self):
+        """Phase 6: the in-process MCP tool layer was deleted. numa-chat no longer
+        enables any MCP server — integrations/numa/connect capabilities are served
+        via the `numa` CLI / Bash instead."""
         config = get_agent_type_config("numa-chat")
         assert config.enable_scripts_mcp is False
-        assert config.enable_integrations_mcp is True
-        assert config.enable_numa_mcp is True
-        assert config.enable_connect_mcp is True
+        assert config.enable_integrations_mcp is False
+        assert config.enable_numa_mcp is False
+        assert config.enable_connect_mcp is False
 
     def test_execute_script_not_in_allowed_tools(self):
         """The chat agent must not list mcp__scripts__execute_script — the tool
@@ -189,9 +195,11 @@ class TestNumaChatType:
         assert "agents" in config.enabled_numa_tools
         assert "memories" in config.enabled_numa_tools
 
-    def test_numa_mcp_enabled_with_all_operations(self):
+    def test_numa_operations_unrestricted(self):
+        # Phase 6: enable_numa_mcp is now False everywhere (MCP layer removed),
+        # but allowed_numa_operations stays None so the CLI surfaces all operations.
         config = get_agent_type_config("numa-chat")
-        assert config.enable_numa_mcp is True
+        assert config.enable_numa_mcp is False
         assert config.allowed_numa_operations is None  # None = all operations
 
     def test_no_restrictions(self):
@@ -231,28 +239,32 @@ class TestNumaSupportType:
         assert "customersuccess@arcanum.ai" in prompt
         assert "numa-environment.md" in prompt
 
-    def test_only_numa_mcp_enabled(self):
+    def test_no_mcp_surface(self):
+        # The MCP layer is gone on this branch — the numa CLI replaced it.
         config = get_agent_type_config("numa-chat-support")
-        assert config.enable_numa_mcp is True
+        assert config.enable_numa_mcp is False
         assert config.enable_scripts_mcp is False
         assert config.enable_integrations_mcp is False
         assert config.enable_connect_mcp is False
         assert config.enable_vault_mcp is False
+        assert not any(t.startswith("mcp__") for t in config.allowed_tools)
 
-    def test_numa_operations_scoped_to_support(self):
+    def test_cli_categories_scoped_to_support(self):
+        # Phase-5 server-side allow-list: KB search + web search only. No
+        # agents / memory / ops / integrations from a support conversation.
         config = get_agent_type_config("numa-chat-support")
-        assert config.allowed_numa_operations is not None
-        assert "numa_files" in config.allowed_numa_operations
-        assert "web_search" in config.allowed_numa_operations
-        # No agent management or memories from a support conversation
-        assert "agents" not in config.allowed_numa_operations
-        assert "memories" not in config.allowed_numa_operations
+        assert config.allowed_cli_commands == ["files", "web"]
 
-    def test_no_bash_or_code_execution(self):
+    def test_bash_is_numa_cli_only(self):
+        # Bash exists purely as the numa-CLI transport: the allowlist admits
+        # Bash(numa:*) and nothing else, and allowed_cli_commands being set
+        # forces acceptEdits (no bypassPermissions) — so arbitrary code
+        # execution stays off even though Bash is in the tool list.
         config = get_agent_type_config("numa-chat-support")
-        assert "Bash" not in config.tools
-        assert not any(t.startswith("Bash") for t in config.allowed_tools)
-        assert "mcp__scripts__execute_script" not in config.allowed_tools
+        assert "Bash" in config.tools
+        bash_entries = [t for t in config.allowed_tools if t.startswith("Bash")]
+        assert bash_entries == ["Bash(numa:*)"]
+        assert config.allowed_cli_commands is not None  # → acceptEdits
 
     def test_restricted_to_support_kb(self):
         config = get_agent_type_config("numa-chat-support")
@@ -281,13 +293,14 @@ class TestResearchAgentType:
         assert config.enable_integrations_mcp is False
         assert config.restrict_integrations is True
 
-    def test_numa_mcp_enabled(self):
+    def test_numa_mcp_disabled(self):
+        # Phase 6: the MCP tool layer was removed; enable_numa_mcp is now False.
         config = get_agent_type_config("research-agent")
-        assert config.enable_numa_mcp is True
+        assert config.enable_numa_mcp is False
 
     def test_no_tool_docs(self):
         config = get_agent_type_config("research-agent")
-        # Research agent has MCP access but no reference docs copied
+        # Research agent copies no reference docs
         assert config.enabled_numa_tools == []
 
 
@@ -380,3 +393,54 @@ class TestTonyComedianType:
             identity_override=config.identity_override,
         )
         assert "Comedy Rules" in prompt
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — per-agent-type CLI allow-list (allowed_cli_commands)
+# ---------------------------------------------------------------------------
+
+
+class TestCliAllowlist:
+    """The Nolia default-restriction declared in agent_types/__init__.py.
+
+    Parity anchor for the server-side enforcement in numa-cli-api
+    (lambdas/node/numa-cli-api/src/tools/policy.ts). Both sides restrict every
+    `nolia*` type to the `docs` category and leave everything else
+    unrestricted — keep them in sync.
+    """
+
+    def test_default_is_unrestricted(self):
+        assert (
+            AgentTypeConfig(type_id="x", display_name="X").allowed_cli_commands is None
+        )
+
+    def test_all_nolia_types_restricted_to_docs(self):
+        from numa_workspace_agent.agent_types import all_agent_configs
+
+        nolia = [c for c in all_agent_configs() if c.type_id.startswith("nolia")]
+        assert nolia, "expected nolia types to be registered"
+        for cfg in nolia:
+            assert cfg.allowed_cli_commands == ["docs"], (
+                f"{cfg.type_id} should be restricted to ['docs'], "
+                f"got {cfg.allowed_cli_commands}"
+            )
+
+    def test_non_nolia_types_unrestricted(self):
+        from numa_workspace_agent.agent_types import all_agent_configs
+
+        # Types may opt INTO a restriction explicitly (numa-chat-support
+        # scopes itself to KB + web search); this test guards against the
+        # Phase-5 Nolia default leaking onto everything else.
+        explicitly_restricted = {"numa-chat-support": ["files", "web"]}
+
+        for cfg in all_agent_configs():
+            if cfg.type_id.startswith("nolia"):
+                continue
+            expected = explicitly_restricted.get(cfg.type_id)
+            assert cfg.allowed_cli_commands == expected, (
+                f"{cfg.type_id} should have allowed_cli_commands={expected}, "
+                f"got {cfg.allowed_cli_commands}"
+            )
+
+    def test_numa_chat_unrestricted(self):
+        assert get_agent_type_config("numa-chat").allowed_cli_commands is None

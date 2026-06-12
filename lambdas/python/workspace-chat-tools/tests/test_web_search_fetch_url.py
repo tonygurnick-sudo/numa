@@ -49,6 +49,7 @@ class TestHandleFetchUrl(unittest.TestCase):
             "file_type": "",
             "file_size": 1234,
             "download_url": "https://signed.example/get?sig=abc",
+            "download_sha256": "a" * 64,
             "links_enqueued": 0,
         }
         with patch(
@@ -59,6 +60,9 @@ class TestHandleFetchUrl(unittest.TestCase):
         self.assertEqual(out["status"], "success")
         self.assertEqual(out["result_type"], "binary_file")
         self.assertEqual(out["download_url"], "https://signed.example/get?sig=abc")
+        # The sha256 browser-lambda stamped over the streamed bytes must reach
+        # the consumer — dropping it silently disables end-to-end verification.
+        self.assertEqual(out["download_sha256"], "a" * 64)
 
     def test_binary_file_without_download_url_omits_key(self):
         """Older browser-lambda omits download_url; the key must not be
@@ -80,6 +84,7 @@ class TestHandleFetchUrl(unittest.TestCase):
 
         self.assertEqual(out["status"], "success")
         self.assertNotIn("download_url", out)
+        self.assertNotIn("download_sha256", out)
 
     def test_text_page_result_is_unchanged(self):
         browser_result = {

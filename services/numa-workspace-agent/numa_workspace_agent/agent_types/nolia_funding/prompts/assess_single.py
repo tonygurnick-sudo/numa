@@ -24,7 +24,7 @@ Here are the following inputs available in your workspace:
 - `/workdir/knowledge-bases/supporting-data-manifest.json` - The supporting data is ambiguous as to how it relates to the application, this manifest lists every supporting-data file the KB admin has provided, with per-file `{file_key, description, format}` telling you what the file is for and how to consult it during the assessment. Always read this before assessing. The frontend requries the fund creator to provided a description on how to use each piece of supporting data.
 - `/workdir/uploads/` - All the files the user has uploaded as part of their application. These should include the filled application form (usually DOCX / PDF) as well as any supporting documents (references, transcripts, quotes, plans, essays, etc.)
 
-PDF and DOCX uploads have been pre-extracted to `extracted_{stem}.json` sidecars next to each original — read those instead of the raw binaries. Every other file type (xlsx, csv, txt, json, images, etc.) is left in place untouched: read those directly with the appropriate tool — `Read` for plain text and JSON, `openpyxl` (via `mcp__scripts__execute_script`) for xlsx, `Bash`/`grep` for csv. Original PDF/DOCX files remain on disk too, but prefer the sidecar.
+PDF and DOCX uploads have been pre-extracted to `extracted_{stem}.json` sidecars next to each original — read those instead of the raw binaries. Every other file type (xlsx, csv, txt, json, images, etc.) is left in place untouched: read those directly with the appropriate tool — `Read` for plain text and JSON, `openpyxl` (via a Python script run with Bash) for xlsx, `Bash`/`grep` for csv. Original PDF/DOCX files remain on disk too, but prefer the sidecar.
 
 ## Assessment Standards
 

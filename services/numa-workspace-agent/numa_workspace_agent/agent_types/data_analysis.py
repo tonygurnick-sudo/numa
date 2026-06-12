@@ -10,7 +10,7 @@ Key differences from V1:
     - SDK: Claude Agent SDK instead of Claude CLI
     - Persistence: Workspace S3 sync instead of manual S3 hydrate/upload
     - Paths: /workdir/uploads/ instead of ./user-inputs/, /workdir/outputs/ instead of ./outputs/
-    - Code execution: MCP execute_script tool instead of CLI-gated Bash
+    - Code execution: Write scripts + sandboxed Bash (execute_script is retired)
 """
 
 from ..prompts import build_workspace_system_prompt
@@ -238,14 +238,7 @@ DATA_ANALYSIS_V2 = AgentTypeConfig(
         "KillShell",
         # Sub-agent task delegation
         "Task",
-        # MCP tools: execute_script for sandboxed code execution
-        "mcp__scripts__execute_script",
-        # Numa platform tools (KB, web search, extract, convert)
-        "mcp__numa__numa_tool",
-        # Pipedream integration tools
-        "mcp__integrations__run_action",
-        "mcp__integrations__configure_props",
-        "mcp__integrations__proxy_request",
+        "Bash(numa:*)",  # Numa platform CLI (replaces the numa/integrations/connectors MCP)
         # Bash with allowed commands (same as numa-chat for data analysis)
         "Bash(python:*)",
         "Bash(python3:*)",
@@ -283,9 +276,9 @@ DATA_ANALYSIS_V2 = AgentTypeConfig(
         "Bash(pandoc:*)",
     ],
     # Layer 2 MCP tools
-    enable_scripts_mcp=True,  # Sandboxed Python/Bash execution
-    enable_integrations_mcp=True,  # Pipedream integration tools (user-configurable per run)
-    enable_numa_mcp=True,  # KB queries, web search, content extraction, document conversion
+    enable_scripts_mcp=False,  # Sandboxed Python/Bash execution
+    enable_integrations_mcp=False,  # Pipedream integration tools (user-configurable per run)
+    enable_numa_mcp=False,  # KB queries, web search, content extraction, document conversion
     # Scope Numa operations to what's relevant for data analysis (exclude agents/memories)
     allowed_numa_operations=[
         "numa_files",

@@ -129,6 +129,9 @@ async def run_pipeline(
     kb_listings: Optional[dict[str, dict]] = None,
     external_user_id: Optional[str] = None,
     enabled_integrations: Optional[list[str]] = None,
+    approval_mode: str = "always",
+    numa_tool_approval_mode: Optional[dict[str, str]] = None,
+    integration_approval_modes: Optional[dict[str, str]] = None,
 ) -> dict[str, Any]:
     """Run a sequence of agent type steps in the same workspace.
 
@@ -155,6 +158,9 @@ async def run_pipeline(
         kb_listings: Pre-fetched KB listing data.
         external_user_id: External user ID for integrations.
         enabled_integrations: Enabled integration IDs.
+        approval_mode: Resolved integrations-category approval mode.
+        numa_tool_approval_mode: Resolved per-category numa tool approval modes.
+        integration_approval_modes: Resolved per-slug integration overrides.
 
     Returns:
         dict with status, text, artifacts, usage, and steps.
@@ -299,6 +305,9 @@ async def run_pipeline(
                 agent_config=None,
                 external_user_id=step_external_user_id,
                 enabled_integrations=step_integrations,
+                approval_mode=approval_mode,
+                numa_tool_approval_mode=numa_tool_approval_mode,
+                integration_approval_modes=integration_approval_modes,
                 agent_type_config=step_config,
                 system_dir=step_system_dir,
             )

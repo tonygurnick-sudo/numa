@@ -342,6 +342,83 @@ export async function fetchS3WorkspaceJson<T = unknown>(
 }
 
 /**
+ * Fetch a RAW (non-JSON) workspace file from S3 by its /workdir/ path.
+ *
+ * Used to reconstruct a `numa render --file-path <file>` on page reload: the
+ * file is the raw HTML/SVG/image (not a JSON sidecar like `useS3FileResult`
+ * expects). HTML/SVG is returned as UTF-8 text; images are base64-encoded so
+ * the renderer can build a `data:` URI. Returns `loaded:false` with `content:
+ * null` when the object isn't there (e.g. a /workdir/tmp/ file that was never
+ * S3-synced) so the caller can show a graceful "no longer available" message.
+ */
+export function useS3WorkspaceRawFile(
+  filePath: string | undefined,
+  conversationId: string | undefined,
+  sub: string | undefined,
+  getCredentials: () => Promise<{ accessKeyId: string; secretAccessKey: string; sessionToken: string }>,
+  renderType: 'html' | 'image' | undefined
+): { content: string | null; loading: boolean; failed: boolean } {
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const stableGetCredentials = useCallback(getCredentials, [getCredentials]);
+
+  useEffect(() => {
+    if (!filePath || !conversationId || !sub) return;
+    let cancelled = false;
+    setLoading(true);
+    setFailed(false);
+
+    (async () => {
+      const relativePath = filePath.replace(/^\/workdir\//, '');
+      const bucket = window.sessionStorage.getItem('OUTPUTS_BUCKET_NAME');
+      const region = window.sessionStorage.getItem('REGION');
+      if (!bucket || !region) {
+        if (!cancelled) {
+          setFailed(true);
+          setLoading(false);
+        }
+        return;
+      }
+      const s3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${relativePath}`;
+      try {
+        const { S3Client, GetObjectCommand } = await import('@aws-sdk/client-s3');
+        const credentials = await stableGetCredentials();
+        const client = new S3Client({ region, credentials });
+        const resp = await client.send(new GetObjectCommand({ Bucket: bucket, Key: s3Key }));
+        const data =
+          renderType === 'image'
+            ? bytesToBase64((await resp.Body?.transformToByteArray()) ?? new Uint8Array())
+            : ((await resp.Body?.transformToString()) ?? '');
+        if (!cancelled) setContent(data || null);
+        if (!cancelled && !data) setFailed(true);
+      } catch {
+        if (!cancelled) setFailed(true);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filePath, conversationId, sub, stableGetCredentials, renderType]);
+
+  return { content, loading, failed };
+}
+
+/** Base64-encode bytes in the browser (chunked to avoid call-stack limits on large images). */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+/**
  * Fetch a file from S3 by its /workdir/ path.
  *
  * The workspace agent syncs files to S3 immediately for large tool results,

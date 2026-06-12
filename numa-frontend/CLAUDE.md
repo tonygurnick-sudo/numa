@@ -262,14 +262,13 @@ Workspace chat uses HTTP streaming to the workspace agent proxy with NDJSON fram
 
 Tool results flow through segments. Each tool_use creates a segment (`inline_tool` or `tool_card`), and the renderer displays it based on segment kind and tool name.
 
-**IMPORTANT: There are TWO segment renderers -- both must be updated when adding tool rendering:**
+**Segment rendering — single dispatcher:**
 
-| Renderer                         | File                                                            | Used by                                                                                                                                              |
-| -------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **ChatMessages** (primary)       | `src/Components/Chat/ChatMessages.tsx`                          | The actual chat message component. Contains its own `tool_card` rendering with special cases for Ops, numa_tool, etc. **This is the one users see.** |
-| **WorkspaceChatSegmentRenderer** | `src/Components/WorkspaceChat/WorkspaceChatSegmentRenderer.tsx` | Exported but not directly imported by any page component. May be used as a secondary/alternative renderer.                                           |
+`src/Components/Chat/ChatMessages.tsx` is THE renderer. It groups consecutive inline tools, dispatches `tool_card` segments to `UnifiedToolCard`, and special-cases a few categories (Ops, numa_tool, etc.). Add new tool rendering here.
 
-When adding a new tool renderer or special-casing a tool's display, update `ChatMessages.tsx` first -- that's where the rendering actually happens.
+For new tool metadata (label / icon / inline-vs-card / describe-call / describe-result), edit `@numa/cli/metadata` (`numa-cli/src/metadata/tool-display.ts`) — the frontend imports that as the source of truth and resolves per-tool React renderers via the `rendererKey` field. Only add a new React component when a tool has a result shape no existing renderer can handle.
+
+(Previously there was a second `WorkspaceChatSegmentRenderer` component; it was dead and has been removed.)
 
 **Tool result format gotcha:** Results from `tool_card` segments arrive as the raw content array (`[{type: "text", text: "..."}]`), NOT wrapped in `{content: [...]}`. Payload parsers must handle both formats. Follow the pattern in `opsHelpers.ts` `extractText()`:
 

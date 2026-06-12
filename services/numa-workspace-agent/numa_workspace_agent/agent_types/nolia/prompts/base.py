@@ -76,9 +76,14 @@ call them ALL in parallel. If dependent, call them sequentially. Never use \
 placeholders or guess missing parameters.
 - Use specialized tools instead of bash: Read instead of cat, Edit instead of \
 sed, Write instead of echo redirection, Glob instead of find.
-- **For running scripts, ALWAYS prefer `mcp__scripts__execute_script`** with \
-interpreter="python3" or "bash". This is faster and does not require approval.
-- Only use Bash when the script file already exists on disk.
+- **For running scripts:** `Write` the script to `/workdir/tmp/<name>.py` (or \
+`.sh`) and run it with `Bash("python3 /workdir/tmp/<name>.py")`. Iterate with \
+`Edit` to patch the file in place rather than re-writing it. A one-off \
+`Bash("python3 -c '...'")` is fine for trivial snippets.
+- **Numa platform tools are on the `numa` CLI** (invoked via Bash). The one you \
+will need most is document extraction: \
+`Bash("numa docs extract /workdir/uploads/file.pdf -m 'Extracting document'")`. \
+Run `numa --help` to discover commands; every `numa` call needs a `-m "..."` caption.
 """
 
 NOLIA_ENV = """\
@@ -197,7 +202,7 @@ You are a pipeline agent with strict time and context constraints:
 - **Be direct and action-oriented.** Do not deliberate extensively. Read what you need, plan briefly, then act.
 - **Do not re-read files you have already read.** If you read a file once, trust that reading. Do not read it again to double-check.
 - **Do not re-read the document after subagents return.** The subagents have done the analysis. Trust their results and merge them.
-- **Keep scripts concise.** When writing execute_script calls, focus on the data transformation needed. Do not embed large data literals in scripts — read from temp files on disk instead.
+- **Keep scripts concise.** When writing scripts (Write to /workdir/tmp/, run with Bash), focus on the data transformation needed. Do not embed large data literals in scripts — read from temp files on disk instead.
 
 ## Using Subagents (Agent Tool)
 
@@ -222,9 +227,10 @@ Your prompt must contain ALL context needed.
 3. **Have subagents write results to temp files**: Each subagent should \
 write its full findings to a file (e.g., `/workdir/tmp/chunk_N.json`) \
 AND return a brief summary. This keeps your context lean.
-4. **Merge from disk, not from context**: After subagents complete, use \
-execute_script to read their temp files from disk and merge into final \
-outputs. Do NOT try to hold all subagent findings in your context window.
+4. **Merge from disk, not from context**: After subagents complete, use a \
+Python script (Write it to /workdir/tmp/, run it with Bash) to read their \
+temp files from disk and merge into final outputs. Do NOT try to hold all \
+subagent findings in your context window.
 5. **Do NOT re-read the source document after subagents return.** The \
 subagents have already done the reading. Trust their results.
 

@@ -67,8 +67,13 @@ services/numa-workspace-agent/
 |   +-- session.py               # Session state management
 |   +-- stream_logger.py         # Verbose stream logging for debugging
 |   +-- hooks/
-|   |   +-- __init__.py          # Exports: security_hook, audit_hook, compaction_hook
-|   |   +-- security.py          # PreToolUse/PostToolUse security validation
+|   |   +-- __init__.py          # Exports: security_hook, audit_hook, compaction_hook, image_resize_hook, param_aliases_hook, workflow_guard_hook, numa_call_counter_reset_hook
+|   |   +-- security.py          # PreToolUse/PostToolUse security validation (denylist)
+|   |   +-- numa_call_counter.py # PreToolUse Bash: resets the per-command numa-call cap counter
+|   |   +-- workflow_guard.py    # PreToolUse Write/Edit: validates saved-workflow writes
+|   |   +-- image_resize.py      # PreToolUse Read: downsamples oversized images
+|   |   +-- param_aliases.py     # PreToolUse Grep: normalises param-name slips
+|   +-- saved_workflows.py       # Saved Workflows format (parse/validate/secret-scan)
 |   +-- agent_types/
 |   |   +-- __init__.py          # Side-effect imports that register all types
 |   |   +-- base.py              # AgentTypeConfig dataclass, TOOL_FILE_MAP, ALWAYS_COPY
@@ -92,26 +97,18 @@ services/numa-workspace-agent/
 |   |       +-- phase_*.py       # Individual pipeline phases
 |   |       +-- prompts/         # Phase-specific system prompts
 |   |       +-- templates/       # Output templates
-|   +-- mcp_tools/
-|       +-- __init__.py          # Exports all MCP tools, conditional numa_ops_tool
-|       +-- execute_script.py    # Sandboxed Python/Bash/Node execution
-|       +-- numa_tool.py         # Unified Numa tool dispatcher (KB, web search, agents, etc.)
-|       +-- numa_ops.py          # Numa Ops tool (tickets, teams, CRM - feature-flagged)
-|       +-- integrations.py      # Pipedream integration tools (run_action, configure_props, proxy_request)
-|       +-- connect.py           # External connectors (OAuth cloud storage)
-|       +-- vault.py             # Secrets vault (user credentials with approval)
-|       +-- enhanced_vault.py    # Enhanced vault operations
-|       +-- lambda_client.py     # Shared Lambda invocation client (uses NUMA_LOCAL_AWS_* creds)
-|       +-- s3_helpers.py        # S3 helper functions for MCP tools
+|   +-- mcp_tools/               # MCP layer REMOVED (Phase 6) — agent runs with ZERO MCP servers
+|       +-- __init__.py          # Docstring only; the in-process MCP tools are gone
+|       +-- integration_preferences.py  # Surviving pure-Python helper (per-service preferred_method lookup), imported by prompts.py — NOT an MCP tool
 +-- tools/
-|   +-- numa/
-|       +-- knowledge_base.py    # Reference doc for KB operations
-|       +-- web_search.py        # Reference doc for web search
-|       +-- convert_document.py  # Reference doc for document conversion
-|       +-- extract_content.py   # Reference doc for content extraction
-|       +-- numa-agents.py       # Reference doc for agent management
-|       +-- numa-memories.py     # Reference doc for memory management
-|       +-- numa-ops.py          # Reference doc for Numa Ops
+|   +-- numa/                    # Reference docs copied to /workdir/tools/numa/ (parameter cheat-sheets for the numa CLI, not executable)
+|       +-- numa_files.py        # Reference doc for `numa files` (KB/file ops)
+|       +-- web_search.py        # Reference doc for `numa web`
+|       +-- convert_document.py  # Reference doc for `numa docs convert`
+|       +-- extract_content.py   # Reference doc for `numa docs extract`
+|       +-- numa-agents.py       # Reference doc for `numa agents`
+|       +-- numa-memories.py     # Reference doc for `numa memory`
+|       +-- numa-ops.py          # Reference doc for `numa ops`
 +-- plugins/
 |   +-- numa/
 |       +-- .claude-plugin/      # Plugin manifest
@@ -127,11 +124,14 @@ services/numa-workspace-agent/
 |   +-- test_agent_types.py
 |   +-- test_type_resolution.py
 |   +-- test_pipeline.py
-|   +-- test_numa_tool.py
-|   +-- test_lambda_client.py
 |   +-- test_security_hooks.py
 |   +-- test_registry.py
 |   +-- test_deserialization_blocking.py
+|   +-- test_integration_preferences_drift.py
+|   +-- test_interrupt_reclassification.py
+|   +-- test_quota_fallback.py
+|   +-- test_background_watching_state.py
+|   +-- test_image_resize_hook.py
 +-- pyproject.toml               # Poetry deps (Python 3.13, claude-agent-sdk==0.1.47)
 +-- Dockerfile                   # ARM64 production image
 +-- run.sh                       # Entrypoint (opentelemetry-instrument uvicorn)
@@ -194,18 +194,32 @@ class AgentTypeConfig:
 
     # Layer 1: Claude SDK Tools
     tools: list[str]                # Tools to enable
-    allowed_tools: list[str]        # Granular allow-list
+    allowed_tools: list[str]        # Granular allow-list. `Bash(numa:*)` here is
+                                    #   what grants the type the numa CLI.
     disallowed_tools: list[str]     # Granular deny-list
 
-    # Layer 2: MCP Tools
-    enable_scripts_mcp: bool = True         # Sandboxed Python/Bash execution
-    enable_integrations_mcp: bool = True    # SaaS integration tools
-    enable_numa_mcp: bool = True            # Unified Numa tool (KB, web search, etc.)
-    allowed_numa_operations: Optional[list[str]] = None  # None = all, list = restrict
-    enable_connect_mcp: bool = True         # External connectors (OAuth cloud storage)
-    enable_vault_mcp: bool = True           # Secrets vault
+    # Layer 2: numa CLI surface
+    # The numa CLI (Bash) is the platform tool surface. The two knobs that
+    # matter:
+    #   - `Bash(numa:*)` in allowed_tools  → grants the CLI at all
+    #   - allowed_cli_commands             → restricts which CLI *categories*
+    allowed_cli_commands: Optional[list[str]] = None  # None = all categories;
+        # e.g. ["docs"] for Nolia phases. Enforced server-side in numa-cli-api
+        # (keyed on NUMA_AGENT_TYPE) AND drives the dynamic prompt.
 
-    # Layer 3: Numa CLI Tools (reference docs copied to /workdir/tools/)
+    # Legacy MCP flags — VESTIGIAL. The MCP layer was deleted (Phase 6); the
+    # agent runs with ZERO MCP servers (sdk_config builds `mcp_servers = {}`).
+    # All default False and NOTHING opts back in. Kept only until they're
+    # removed from the dataclass.
+    enable_scripts_mcp: bool = False
+    enable_integrations_mcp: bool = False
+    enable_numa_mcp: bool = False
+    enable_connect_mcp: bool = False
+    enable_vault_mcp: bool = False
+    allowed_numa_operations: Optional[list[str]] = None  # still read by some
+        # configs; None = all, list = restrict (legacy numa-tool op names)
+
+    # Layer 3: Numa CLI reference docs (copied to /workdir/tools/numa/)
     enabled_numa_tools: list[str]   # Tool names from TOOL_FILE_MAP
     tools_source_dirs: list[str]    # Directories to copy from (default: ["numa"])
 
@@ -267,25 +281,34 @@ class AgentTypeConfig:
 - Shell: `Bash`, `KillShell` (with granular command allow-list like `Bash(python:*)`)
 - Tasks: `TodoWrite`, `Skill`
 
-**Layer 2: MCP Tools** — Server-side endpoints created via `create_sdk_mcp_server()`:
+**Layer 2: The numa CLI** — the platform tool surface. There are **no MCP servers** — the whole `numa`/`integrations`/`connectors`/`vault`/`scripts` MCP layer was deleted (Phase 6) and `sdk_config.py` builds `mcp_servers = {}`. Instead, the agent invokes capabilities by shelling out to the unified `numa` CLI via the Bash tool:
 
-- `enable_scripts_mcp=True` enables `mcp__scripts__execute_script` (sandboxed code execution)
-- `enable_integrations_mcp=True` enables `mcp__integrations__run_action`, `configure_props`, `proxy_request`
-- `enable_numa_mcp=True` enables `mcp__numa__numa_tool` (unified KB/web search/agents/memories/extract/convert)
-- `enable_connect_mcp=True` enables `mcp__connectors__connectors` (requires `OAUTH_INTEGRATIONS_ENABLED` feature flag)
-- `enable_vault_mcp=True` enables `mcp__vault__vault` (requires `SECRETS_VAULT_ENABLED` feature flag)
-- `NUMA_OPS_ENABLED` env var adds `mcp__numa__numa_ops_tool` to the numa MCP server
+```bash
+numa <category> <command> ... -m "user-visible caption"
+```
 
-**Layer 3: Numa Tool Reference Docs** — Documentation files copied to `/workdir/tools/` at startup. Claude reads these for parameter reference but cannot execute them. Controlled by `enabled_numa_tools` and `TOOL_FILE_MAP`:
+Categories: `files` (KB/file ops), `web` (search/fetch), `docs` (extract/convert/transcribe), `agents`, `memory`, `integrations`, `ops`, `render`. The CLI POSTs `{tool, params, context}` to the `numa-cli-api` Lambda, which routes to the kept Python handlers in `lambdas/python/workspace-chat-tools/tools/` and enforces the Ops gate, the per-agent-type CLI allow-list, and HITL approvals.
 
-| Tool Name          | File(s)               |
-| ------------------ | --------------------- |
-| `knowledge_search` | `knowledge_base.py`   |
-| `web_search`       | `web_search.py`       |
-| `agents`           | `numa-agents.py`      |
-| `memories`         | `numa-memories.py`    |
-| `convert_document` | `convert_document.py` |
-| `extract_content`  | `extract_content.py`  |
+Two config knobs control Layer 2:
+
+- **`Bash(numa:*)` in `allowed_tools`** grants the CLI at all. A type without it cannot reach the platform.
+- **`allowed_cli_commands`** restricts which categories the type may use. `None` = all; a list restricts (e.g. Nolia phases = `["docs"]`). Enforced server-side in `numa-cli-api` keyed on `NUMA_AGENT_TYPE`, and it also shapes the dynamic prompt (only permitted categories are described).
+
+The `enable_*_mcp` flags (`enable_scripts_mcp`, `enable_integrations_mcp`, `enable_numa_mcp`, `enable_connect_mcp`, `enable_vault_mcp`) are **vestigial** — all default `False`, nothing opts in. `allowed_numa_operations` still exists for legacy op-name restriction but the CLI/server gates are the live mechanism.
+
+**Code execution** is NOT an MCP tool either: the agent writes a Python/Bash script into `/workdir/tmp/` and runs it with the SDK `Bash` tool.
+
+**Layer 3: Numa Tool Reference Docs** — Documentation cheat-sheets copied to `/workdir/tools/numa/` at startup. Claude reads these for `numa` CLI parameter reference but cannot execute them directly. Controlled by `enabled_numa_tools` and `TOOL_FILE_MAP`:
+
+| Tool Name           | File(s)               | CLI it documents            |
+| ------------------- | --------------------- | --------------------------- |
+| `numa_files_search` | `numa_files.py`       | `numa files`                |
+| `knowledge_search`  | `numa_files.py`       | `numa files` (legacy alias) |
+| `web_search`        | `web_search.py`       | `numa web`                  |
+| `agents`            | `numa-agents.py`      | `numa agents`               |
+| `memories`          | `numa-memories.py`    | `numa memory`               |
+| `convert_document`  | `convert_document.py` | `numa docs convert`         |
+| `extract_content`   | `extract_content.py`  | `numa docs extract`         |
 
 **Note:** `numa-ops.py` exists in `tools/numa/` but is not in `TOOL_FILE_MAP` — it is referenced by name `"numa-ops"` in `enabled_numa_tools` in `numa_chat.py`.
 
@@ -388,11 +411,12 @@ QUOTING_AGENT = AgentTypeConfig(
     response_mode="stream",
     system_prompt_builder=build_quoting_prompt,
     identity_override=QUOTING_IDENTITY,
-    tools=["Read", "Glob", "Grep", "Write", "Edit", "TodoWrite"],
-    allowed_tools=["Read", "Glob", "Grep", "Write", "Edit", "TodoWrite"],
-    enable_scripts_mcp=False,
-    enable_integrations_mcp=False,
-    enabled_numa_tools=["knowledge_search"],
+    # `Bash(numa:*)` grants the numa CLI; allowed_cli_commands narrows it to
+    # just KB/file ops (no web, agents, memory, ops, etc.).
+    tools=["Read", "Glob", "Grep", "Write", "Edit", "TodoWrite", "Bash"],
+    allowed_tools=["Read", "Glob", "Grep", "Write", "Edit", "TodoWrite", "Bash(numa:*)"],
+    allowed_cli_commands=["files"],
+    enabled_numa_tools=["numa_files_search"],
     tools_source_dirs=["numa"],
     restrict_kbs=False,
     restrict_integrations=True,
@@ -443,30 +467,30 @@ For complex pipelines (parallel execution, conditional steps), use `pipeline_orc
 
 ---
 
-## Security Hooks
+## Hooks & permission model
 
-Two security layers validate tool calls:
+**Permission mode is conditional** (set in `sdk_config.py`):
 
-| Layer        | Source              | Error Pattern                                 | Configurable?                     |
-| ------------ | ------------------- | --------------------------------------------- | --------------------------------- |
-| SDK built-in | Claude Agent SDK    | "Command contains ${} parameter substitution" | No                                |
-| Custom hooks | `hooks/security.py` | "SECURITY_POLICY_VIOLATION: ..."              | Yes (via `enable_security_hooks`) |
+- **`bypassPermissions`** for interactive, unrestricted types (numa-chat, etc.) — so the agent isn't silently blocked by the `allowed_tools` allowlist on legitimate shell work (loops, scripts, uncommon tools). Numa surfaces no SDK-permission card (only HITL write-op cards), so a non-allowlisted command would otherwise just dead-end.
+- **`acceptEdits` + the tight allowlist** for locked-down / hooks-off types — the Nolia / nolia-funding pipeline phases (untrusted documents; several run with `enable_security_hooks=False`).
+- Gate: `bypassPermissions` only when `enable_security_hooks AND allowed_cli_commands is None`. In bypass mode the **security hook** is the guard (plus `disallowed_tools` + the MicroVM sandbox).
 
-**hooks/security.py exports:**
+**PreToolUse / PostToolUse hooks** (`hooks/`, registered in `sdk_config.py`):
 
-- `security_hook` — PreToolUse: blocks dangerous commands, directory traversal, env access, network calls
-- `audit_hook` — PreToolUse + PostToolUse: logs all tool invocations
-- `compaction_hook` — PreCompact: handles conversation compaction events
+| Hook                                      | Event / target         | Purpose                                                                                                          |
+| ----------------------------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `security_hook`                           | PreToolUse, all        | Denylist (dangerous commands/paths/patterns). Gated by `enable_security_hooks`.                                  |
+| `numa_call_counter_reset_hook`            | PreToolUse, Bash       | Resets the per-command `numa`-call counter (cost cap; a **side effect**, never modifies the command).            |
+| `workflow_guard_hook`                     | PreToolUse, Write/Edit | Validates saved-workflow writes to `/workdir/chat-workflows/` (deny malformed header, warn on hardcoded secret). |
+| `param_aliases_hook`, `image_resize_hook` | PreToolUse, Grep/Read  | Rewrite tool input (param slips, oversized images).                                                              |
+| `audit_hook`                              | Pre + Post             | Logs tool invocations.                                                                                           |
+| `compaction_hook`                         | PreCompact             | Conversation compaction events.                                                                                  |
 
-**What security_hook blocks:**
+**What `security_hook` blocks:** access to `/workdir/.system/`, `/workdir/secrets/`, `.env`; `rm -rf` of protected paths, `curl`/`wget`/`nc`, `sudo`/`su`; env-var / `/proc/*/environ` disclosure; privilege escalation. System-info commands (`whoami`/`uname`/…) are blocked at a **command boundary** (so `numa whoami` and quoted args are fine).
 
-- Access to `/workdir/.system/`, `/workdir/secrets/`, `.env` files
-- Dangerous bash commands: `rm -rf /`, `curl`, `wget`, `nc`, `sudo`, `su`, etc.
-- Environment variable access: `printenv`, `env`, `$AWS_*`, `$COGNITO_*`
-- Shell escapes: `bash -c`, `sh -c`, `/bin/bash`
-- Privilege escalation: `chmod +s`, `chown root`
+**SDK layer blocks:** `${...}` and `$'...'` patterns. Workaround: write Python scripts to files instead of inline execution.
 
-**SDK layer blocks:** `${...}` and `$'...'` patterns (even in inline Python). Workaround: write Python scripts to files instead of inline execution.
+> **The CLI features that wrap this — Phase-5 per-agent-type allow-list, the per-command rate limit, saved workflows, render-on-reload, the `numa-cli-api` gates, the identity model — are documented in [`documentation/numa-cli/README.md`](../../../documentation/numa-cli/README.md) (canonical) and the `numa-cli/CLAUDE.md` package guide.**
 
 ---
 
@@ -504,12 +528,12 @@ s3://{outputs_bucket}/workspaces/{user_sub}/{conversation_id}/
 
 ## Cross-Account Bedrock Credentials
 
-When using cross-account Bedrock (configured via `BEDROCK_ACCOUNT` env var), the SDK subprocess gets cross-account AWS credentials, but local services (Lambda, S3) still need local account credentials.
+When using cross-account Bedrock (configured via `BEDROCK_ACCOUNT` env var), the SDK subprocess gets cross-account AWS credentials, but local-account services (the `numa-cli-api` Lambda, S3) still need local account credentials.
 
 - `AWS_*` env vars — Cross-account Bedrock credentials (or local credentials if no cross-account)
 - `NUMA_LOCAL_AWS_*` env vars — Local account credentials for Lambda/S3 calls
 
-**Implementation:** `mcp_tools/lambda_client.py` uses `NUMA_LOCAL_AWS_*` env vars to create boto3 clients that target the local account. `sdk_config.py` captures local credentials before assuming the cross-account role.
+**Implementation:** `sdk_config.py` captures local credentials _before_ assuming the cross-account role and propagates them into the CLI subprocess env as `NUMA_LOCAL_AWS_*`. The `numa` CLI uses those to sign its invocation of the local-account `numa-cli-api` Lambda; in-process helpers that still touch the local account (e.g. `credit_metering.py`, `mcp_tools/integration_preferences.py`) read them too.
 
 ---
 
@@ -539,7 +563,7 @@ Browser --> CloudFront --> Lambda Function URL --> AgentCore MicroVM
 
 **Location:** `lambdas/python/workspace-chat-tools/`
 
-The support Lambda invoked by the workspace agent for operations that need direct AWS service access:
+The support Lambda that backs the `numa` CLI — the agent's `numa <category> <command>` calls flow through the `numa-cli-api` Lambda, which dispatches to this Lambda's `TOOL_HANDLERS` for operations that need direct AWS service access:
 
 - Knowledge base queries (Bedrock KB or Q Business)
 - Web search proxy
@@ -864,16 +888,16 @@ This single command loads the image, gets credentials, starts the container on `
 
 #### Feature Flags (env vars)
 
-| Variable           | Purpose                                       |
-| ------------------ | --------------------------------------------- |
-| `NUMA_OPS_ENABLED` | Enables Numa Ops MCP tool (`"1"` or `"true"`) |
-| `LOG_LEVEL`        | Set to `DEBUG` for live LLM messages          |
-| `LOCAL_DEV`        | Set to `1` for CORS and local dev mode        |
+| Variable           | Purpose                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NUMA_OPS_ENABLED` | Gates `numa ops` (`"1"` or `"true"`): server-side Ops entitlement gate in `numa-cli-api`, and includes the `numa ops` subsection in the system prompt (`build_numa_cli_section(ops_enabled=...)`) |
+| `LOG_LEVEL`        | Set to `DEBUG` for live LLM messages                                                                                                                                                              |
+| `LOCAL_DEV`        | Set to `1` for CORS and local dev mode                                                                                                                                                            |
 
 #### What works WITHOUT optional variables
 
 - Bedrock model calls (chat, thinking)
-- Code execution via `execute_script` MCP tool
+- Code execution — the agent writes a Python/Bash script to `/workdir/tmp/` and runs it with the `Bash` tool (no `numa-cli-api`/Lambda needed)
 - File operations (Read, Write, Edit, Glob, Grep)
 - All agent types and response modes
 
@@ -1001,21 +1025,15 @@ The production image is built on `python:3.13-slim` for ARM64 (Graviton):
 
 ## Common Tasks
 
-### Adding a New MCP Tool
+### Adding a numa CLI command
 
-1. Create the tool function in `mcp_tools/<tool_name>.py`
-2. Export it from `mcp_tools/__init__.py`
-3. Register it as an MCP server in `sdk_config.py` (in `create_agent_options()`)
-4. Add to `allowed_tools` in relevant agent types
-5. Add tests in `tests/`
+The MCP layer is gone — new capabilities are CLI commands, not MCP tools. See the `extending-numa-chat` skill for the full flow. In short:
 
-### Adding a New Numa Tool Operation
-
-1. Add the handler in `mcp_tools/numa_tool.py`
-2. Add reference documentation in `tools/numa/<tool>.py`
-3. Update `TOOL_FILE_MAP` in `agent_types/base.py`
-4. Add to `enabled_numa_tools` in relevant agent types
-5. Update `allowed_numa_operations` docs in `base.py`
+1. **CLI command** — add a Commander subcommand under `numa-cli/packages/cli/src/commands/actions/<category>.ts` that builds `{tool, params}` and calls `invokeTool()`. Require `-m/--user-message` (the approval/tool-card caption). Route writes through `gateWriteOp()` for HITL. Add typed metadata in `src/metadata/tool-types.ts` + `tool-display.ts`.
+2. **Lambda handler** — add a `TOOL_HANDLERS["<tool>"]` entry in `lambdas/python/workspace-chat-tools/tools/` (the default dispatch target). Pure in-workspace computation needs no Lambda — the agent just writes a script to `/workdir/tmp/` and runs it with Bash.
+3. **numa-cli-api registry** — only if the tool lives outside `workspace-chat-tools` (anything else defaults there). Add a `registry.ts` entry for `kb_manager` / `oauth_workspace_tools`, and update the gates in `src/tools/index.ts` / `policy.ts` for `ops_*` or per-agent-type restrictions.
+4. **Prompt + skill** — teach the agent the command exists: add the category to `build_numa_cli_section()` in `prompts.py` (for a new top-level category) and/or a skill under `plugins/numa/skills/<name>/SKILL.md`. The CLI doesn't self-document schemas the way MCP did.
+5. **Agent-type config** — ensure relevant types have `Bash(numa:*)` in `allowed_tools`, and set `allowed_cli_commands` if the category should be restricted per type. Add reference docs via `enabled_numa_tools` / `TOOL_FILE_MAP` if useful.
 
 ### Adding a New Skill/Plugin
 
