@@ -115,6 +115,6 @@ Numa integrations page like any user account.
 
 ## Published components
 
-| Component            | Key (Connect)          | Version | Environments | Published | Notes                                                                                            |
-| -------------------- | ---------------------- | ------- | ------------ | --------- | ------------------------------------------------------------------------------------------------ |
-| Pipedrive — Add File | `~/pipedrive-add-file` | 0.0.1   | — (pending)  | —         | Fills missing upload action; built for TAB NZ (see `dev-notes/tasks/tab-pipedrive-file-upload/`) |
+| Component            | Key (Connect)          | Version | Environments            | Published  | Notes                                                                                            |
+| -------------------- | ---------------------- | ------- | ----------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| Pipedrive — Add File | `~/pipedrive-add-file` | 0.0.1   | development, production | 2026-06-12 | Fills missing upload action; built for TAB NZ (see `dev-notes/tasks/tab-pipedrive-file-upload/`) |
