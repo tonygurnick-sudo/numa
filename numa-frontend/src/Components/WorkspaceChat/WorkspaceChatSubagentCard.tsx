@@ -88,6 +88,7 @@ function getSubagentSummary(events: SDKEvent[]): ToolSummary[] {
             const catAndIcon = getToolCategoryAndIcon(toolBlock.name, input);
             text = display.text;
             icon = catAndIcon.iconName;
+            iconImage = catAndIcon.iconImage;
             category = catAndIcon.category;
           }
         } else {
@@ -96,6 +97,7 @@ function getSubagentSummary(events: SDKEvent[]): ToolSummary[] {
           const catAndIcon = getToolCategoryAndIcon(toolBlock.name, input);
           text = display.text;
           icon = catAndIcon.iconName;
+          iconImage = catAndIcon.iconImage;
           category = catAndIcon.category;
         }
 

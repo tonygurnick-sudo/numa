@@ -2,7 +2,7 @@
 
 Numa uses [Pipedream Connect](https://pipedream.com/connect) for two distinct features:
 
-1. **Integrations (actions, MCP tools)** — outbound calls to SaaS APIs from the workspace agent and apps. "Send a Slack message", "create a Jira issue", "search Gmail", etc. 35+ apps supported.
+1. **Integrations (actions via the `numa integrations` CLI)** — outbound calls to SaaS APIs from the workspace agent and apps. "Send a Slack message", "create a Jira issue", "search Gmail", etc. 35+ apps supported.
 2. **Triggers (deployed components)** — inbound events from SaaS apps that fire Numa agents. "When `@Numa` is mentioned in Slack", "when a new email arrives in Outlook", etc. Slack today, more on the way.
 
 Both features share the same Pipedream Connect project, the same OAuth grants, and the same cross-account proxy/relay infrastructure described in [`architecture.md`](./architecture.md). The two surfaces differ in WHERE Pipedream calls live in our system:

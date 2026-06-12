@@ -613,3 +613,39 @@ class TestSdkToolResultsAllowlist:
             "ls /workdir/.system/.claude/projects/abc/tool-results/"
         )
         assert blocked
+
+
+# ── System-info commands: boundary match, not substring ──────────────────────
+# Regression: bare "whoami"/"uname"/... in DANGEROUS_COMMANDS substring-matched
+# `numa whoami` (a vetted CLI subcommand) and quoted args. They're now anchored
+# to a command boundary in ENV_VAR_PATTERNS.
+
+
+class TestSystemInfoCommandBoundary:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "numa whoami -m x",
+            "numa whoami --json -m hi",
+            'numa files search "whoami tool" -m x',
+            'numa memory add "check my uname later" -m x',
+        ],
+    )
+    def test_numa_subcommands_and_args_allowed(self, cmd):
+        blocked, _ = check_bash_command(cmd)
+        assert not blocked, f"should be allowed: {cmd}"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "whoami",
+            "foo; whoami",
+            "uname -a",
+            "echo hi | hostname",
+            "groups",
+            "$(whoami)",
+        ],
+    )
+    def test_bare_system_info_commands_blocked(self, cmd):
+        blocked, _ = check_bash_command(cmd)
+        assert blocked, f"should be blocked: {cmd}"

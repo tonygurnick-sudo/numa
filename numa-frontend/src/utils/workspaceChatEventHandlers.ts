@@ -28,6 +28,7 @@ import type {
   WorkspaceChatCompactionSegment,
   WorkspaceChatMessageHelpers,
   SDKToolApprovalEvent,
+  SDKToolRenderEvent,
   TaskInput,
   TodoWriteInput,
   BashInput,
@@ -43,7 +44,7 @@ import type {
 
 // Document processing utilities
 import { parseChunkWithoutDocComments, extractSingleDocBlock, createDocStripState } from './streamingProcessors';
-import { resolveToolVisual, getToolActionSteps, resolveToolDescriptor } from './ToolConfig';
+import { resolveToolVisual } from './ToolConfig';
 import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
 
 // Type guards (runtime functions, not types)
@@ -61,12 +62,22 @@ import {
   isCompactBoundaryEvent,
 } from '@/types/workspaceChatTypes';
 
+import { isInlineTool as isInlineNumaTool } from '@numa/cli/metadata';
+
 // ============================================================
 // Tool Categorization
 // ============================================================
 
-/** Tools that show as inline indicators (minimal UI) */
-const INLINE_TOOLS = new Set([
+/**
+ * Claude Agent SDK built-in tools that render as inline indicators (minimal
+ * UI). These are NOT Numa-specific — they're emitted by the SDK regardless
+ * of our tool registry, so we keep them hardcoded here. Numa-specific tools
+ * (query_knowledgebase, add_to_kb, etc.) are NOT in this set; their inline-
+ * vs-card preference comes from `@numa/cli/metadata` via `isInlineTool()`
+ * below — adding a new Numa tool to that registry with `display: 'inline'`
+ * automatically picks up here.
+ */
+const SDK_INLINE_TOOLS = new Set([
   'Read',
   'Write',
   'Edit',
@@ -86,6 +97,21 @@ const INLINE_TOOLS = new Set([
   'TaskStop',
   'KillShell',
 ]);
+
+/**
+ * True if a tool should render as an inline indicator. Combines the
+ * SDK-builtin set (above) with the per-tool `display: 'inline'` field in
+ * @numa/cli/metadata so we don't have two places to edit for Numa-specific
+ * tools.
+ */
+const isInline = (toolName: string): boolean => SDK_INLINE_TOOLS.has(toolName) || isInlineNumaTool(toolName);
+
+/**
+ * Backwards-compatible Set-like surface so existing `.has(toolName)` call
+ * sites in this file keep working without touching every line. New code
+ * should call `isInline()` directly.
+ */
+const INLINE_TOOLS = { has: isInline };
 
 /** Tools that are internal plumbing (hidden from UI) - kept for future use */
 const PLUMBING_TOOLS = new Set<string>();
@@ -127,8 +153,6 @@ const IMPORTANT_TOOLS = new Map<string, { icon: string; name: string }>([
   ['Edit', { icon: 'bi-pencil-square', name: 'Edited' }],
   // Script execution (MCP tool)
   ['mcp__scripts__execute_script', { icon: 'bi-terminal', name: 'Running script' }],
-  // Numa Ops tool
-  ['mcp__numa__numa_ops_tool', { icon: 'bi-card-checklist', name: 'Numa Ops' }],
 ]);
 
 /**
@@ -172,6 +196,68 @@ function isBashTransient(cmd: string): boolean {
   return /^(ls|find|cat|head|tail|wc|du|df)\s/.test(cmd.toLowerCase());
 }
 
+/** numa CLI category → inline icon (mirrors the numa_tool sub-tool icons). */
+const NUMA_CATEGORY_ICONS: Record<string, string> = {
+  files: 'bi-folder2-open',
+  web: 'bi-search',
+  ops: 'bi-card-checklist',
+  agents: 'bi-robot',
+  memory: 'bi-lightbulb',
+  docs: 'bi-file-earmark-text',
+  integrations: 'bi-plug',
+  whoami: 'bi-person',
+  bootstrap: 'bi-box-arrow-in-down',
+};
+
+/**
+ * Parse a `numa <category> ... -m "<caption>"` CLI invocation out of a Bash
+ * command string. The numa CLI is how the agent reaches platform tools, so a
+ * `numa files search ... -m "..."` Bash call should render with the category
+ * icon + the model's caption rather than a generic shell line. Best-effort:
+ * matches the first numa invocation in command position; only the known
+ * categories qualify (so ordinary Bash and unknown sub-commands fall through).
+ */
+function parseNumaCliCommand(cmd: string): { category: string; description?: string; slug?: string } | null {
+  const m =
+    /(?:^|[|&;(]\s*|\s)(?:[A-Z_]+=\S+\s+)*(?:\S*\/)?numa\s+(?:--?\S+\s+)*(files|web|ops|agents|memory|docs|integrations|whoami|bootstrap)\b/.exec(
+      cmd
+    );
+  if (!m) return null;
+  const q = /(?:^|\s)(?:-m|--user-message)\s+(?:"([^"]*)"|'([^']*)'|(\S+))/.exec(cmd);
+  const description = (q?.[1] ?? q?.[2] ?? q?.[3])?.trim() || undefined;
+  const slug = m[1] === 'integrations' ? extractIntegrationSlug(cmd) : undefined;
+  return { category: m[1], description, slug };
+}
+
+/**
+ * Best-effort: pull the targeted integration slug out of a `numa integrations
+ * <subcommand> <slug> ...` command, so the inline tool can show that
+ * integration's logo instead of the generic plug. Generic subcommands (`list`,
+ * `search`) target no specific integration → undefined (keep the plug). For
+ * `pipedream-call <action_key>` the slug is the part before the first dash
+ * (`gmail-send-email` → `gmail`). Returns undefined when nothing positional
+ * follows the subcommand.
+ */
+function extractIntegrationSlug(cmd: string): string | undefined {
+  const after = /\bintegrations\s+(.+)/.exec(cmd)?.[1];
+  if (!after) return undefined;
+  const tokens = after.split(/\s+/).filter(Boolean);
+  const sub = tokens[0];
+  if (!sub || sub === 'list' || sub === 'search') return undefined;
+  // First positional (non-flag) token after the subcommand = the slug/action-key.
+  // The slug always precedes flags in these commands, so a quoted `-m` caption
+  // (which whitespace-splitting would shred) never reaches here.
+  let arg: string | undefined;
+  for (let i = 1; i < tokens.length; i++) {
+    if (!tokens[i].startsWith('-')) {
+      arg = tokens[i];
+      break;
+    }
+  }
+  if (!arg) return undefined;
+  return sub === 'pipedream-call' ? arg.split('-')[0] || undefined : arg;
+}
+
 /**
  * Get tool category and optional icon for an inline tool.
  * Returns category for rendering decisions and icon for important tools.
@@ -179,7 +265,7 @@ function isBashTransient(cmd: string): boolean {
 export function getToolCategoryAndIcon(
   toolName: string,
   input: unknown
-): { category: ToolCategory; iconName?: string } {
+): { category: ToolCategory; iconName?: string; iconImage?: string } {
   // Handle Skill tool - check skill name for icon
   if (toolName === 'Skill') {
     const skillInput = input as SkillInput | undefined;
@@ -193,6 +279,22 @@ export function getToolCategoryAndIcon(
   if (toolName === 'Bash') {
     const bashInput = input as BashInput | undefined;
     const cmd = bashInput?.command || '';
+    const numa = parseNumaCliCommand(cmd);
+    if (numa) {
+      // For a command targeting a specific integration (e.g. `numa integrations
+      // pipedream-actions gmail`), show that integration's logo instead of the
+      // generic plug. Generic commands (list/search) have no slug → plug.
+      if (numa.category === 'integrations' && numa.slug) {
+        const visual = resolveToolVisual(`${numa.slug}_integration`);
+        const image = visual.kind === 'image' ? visual.src : undefined;
+        // Native connectors resolve via `<slug>_connector` instead.
+        const connectorVisual = image ? undefined : resolveToolVisual(`${numa.slug}_connector`);
+        const connectorImage = connectorVisual?.kind === 'image' ? connectorVisual.src : undefined;
+        const iconImage = image ?? connectorImage;
+        if (iconImage) return { category: 'important', iconImage };
+      }
+      return { category: 'important', iconName: NUMA_CATEGORY_ICONS[numa.category] || 'bi-tools' };
+    }
     if (isBashKBQuery(cmd)) {
       return { category: 'important', iconName: 'bi-folder2-open' };
     }
@@ -206,23 +308,6 @@ export function getToolCategoryAndIcon(
       return { category: 'transient' };
     }
     return { category: 'default' };
-  }
-
-  // Numa MCP tool: pick icon based on sub-tool name
-  if (toolName === 'mcp__numa__numa_tool') {
-    const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-    const subTool = (inputObj.name as string) || '';
-    const NUMA_SUB_TOOL_ICONS: Record<string, string> = {
-      numa_files: 'bi-folder2-open',
-      knowledge_base: 'bi-folder2-open', // legacy alias
-      web_search: 'bi-search',
-      extract_content: 'bi-file-earmark-text',
-      convert_document: 'bi-file-earmark-arrow-down',
-      agents: 'bi-robot',
-      memories: 'bi-lightbulb',
-      render: 'bi-eye',
-    };
-    return { category: 'important', iconName: NUMA_SUB_TOOL_ICONS[subTool] || 'bi-tools' };
   }
 
   // Check important tools map
@@ -414,12 +499,18 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
     }
     case 'Bash': {
       const bashInput = inputObj as unknown as BashInput;
+      const bashCmd = bashInput.command || '';
+      // Numa CLI calls: show the -m caption the model supplies on every numa
+      // call (consistent with the approval card) rather than the raw shell line.
+      const numa = parseNumaCliCommand(bashCmd);
+      if (numa) {
+        return { text: numa.description || `Numa ${numa.category}` };
+      }
       // Use description field if present (human-friendly)
       if (bashInput.description && typeof bashInput.description === 'string') {
         return { text: bashInput.description };
       }
       // Friendly labels for known Numa tool commands
-      const bashCmd = bashInput.command || '';
       if (bashCmd.includes('numa-memories.py')) {
         if (bashCmd.includes(' add ')) return { text: 'Saving memory — manage in Settings' };
         if (bashCmd.includes(' update ')) return { text: 'Updating memory — manage in Settings' };
@@ -463,28 +554,6 @@ export function getInlineToolDisplay(toolName: string, input: unknown): { text: 
       // Extract just the skill name from "numa-workspace:knowledge-search" format
       const shortName = skillName.includes(':') ? skillName.split(':').pop() : skillName;
       return { text: `Loading ${shortName} skill` };
-    }
-    case 'mcp__numa__numa_tool': {
-      // Use description field (human-friendly), fall back to sub-tool name
-      const numaInput = inputObj as { name?: string; description?: string };
-      if (numaInput.description && typeof numaInput.description === 'string') {
-        return { text: numaInput.description };
-      }
-      if (numaInput.name && typeof numaInput.name === 'string') {
-        return { text: numaInput.name.replace(/_/g, ' ') };
-      }
-      return { text: 'Running Numa tool...' };
-    }
-    case 'mcp__numa__numa_ops_tool': {
-      // Use description field (human-friendly), fall back to operation name
-      const opsInput = inputObj as { operation?: string; description?: string };
-      if (opsInput.description && typeof opsInput.description === 'string') {
-        return { text: opsInput.description };
-      }
-      if (opsInput.operation && typeof opsInput.operation === 'string') {
-        return { text: `Ops: ${opsInput.operation.replace(/_/g, ' ')}` };
-      }
-      return { text: 'Running Numa Ops...' };
     }
     default:
       return { text: `Using ${toolName}` };
@@ -550,13 +619,12 @@ export function createInitialToolSegment(toolName: string, toolUseId: string): W
     case 'tool_card': {
       // Integration MCP tools get a placeholder; real label set in updateSegmentWithInput
       const isIntegration = INTEGRATION_MCP_TOOLS.has(toolName);
-      const isNumaTool = toolName === 'mcp__numa__numa_tool';
       return {
         kind: 'tool_card',
         toolUseId,
         toolName,
-        label: isIntegration ? 'Integration' : isNumaTool ? 'Numa Tool' : toolName,
-        steps: isIntegration ? ['Connecting...'] : isNumaTool ? ['Loading...'] : [`Using ${toolName}`],
+        label: isIntegration ? 'Integration' : toolName,
+        steps: isIntegration ? ['Connecting...'] : [`Using ${toolName}`],
         isLoading: true,
       };
     }
@@ -621,13 +689,14 @@ export function updateSegmentWithInput(
       }
       const { text, filePath } = getInlineToolDisplay(toolName, input);
       // Refine category and icon now that we have actual input
-      const { category, iconName } = getToolCategoryAndIcon(toolName, input);
+      const { category, iconName, iconImage } = getToolCategoryAndIcon(toolName, input);
       return {
         ...segment,
         displayText: text,
         filePath,
         category,
         iconName,
+        iconImage,
       };
     }
     case 'tool_card': {
@@ -640,17 +709,6 @@ export function updateSegmentWithInput(
           toolName: integrationInfo.integrationToolName || segment.toolName,
           label: integrationInfo.label,
           steps: [integrationInfo.label],
-        };
-      }
-      // For mcp__numa__numa_tool, derive label and steps from the sub-tool name
-      if (toolName === 'mcp__numa__numa_tool') {
-        const subTool = inputObj2.name as string | undefined;
-        const label = subTool ? resolveToolDescriptor(subTool).label : segment.toolName;
-        return {
-          ...segment,
-          input,
-          label,
-          steps: getToolActionSteps(toolName, input),
         };
       }
       return {
@@ -1151,22 +1209,9 @@ function addToolCard(helpers: WorkspaceChatMessageHelpers, toolUseId: string, to
   const inputObj = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
   const integrationInfo = formatIntegrationToolLabel(toolName, inputObj);
 
-  let effectiveToolName = integrationInfo?.integrationToolName || toolName;
-  let effectiveLabel = integrationInfo?.label || toolName;
-  let effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
-
-  // For mcp__numa__numa_tool, derive label and steps from the sub-tool name
-  if (toolName === 'mcp__numa__numa_tool' && !integrationInfo) {
-    const subTool = inputObj.name as string | undefined;
-    if (subTool) effectiveLabel = resolveToolDescriptor(subTool).label;
-    effectiveSteps = getToolActionSteps(toolName, input);
-  }
-
-  // For mcp__numa__numa_ops_tool, derive label and steps from the operation
-  if (toolName === 'mcp__numa__numa_ops_tool' && !integrationInfo) {
-    effectiveLabel = resolveToolDescriptor(toolName).label;
-    effectiveSteps = getToolActionSteps(toolName, input);
-  }
+  const effectiveToolName = integrationInfo?.integrationToolName || toolName;
+  const effectiveLabel = integrationInfo?.label || toolName;
+  const effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
 
   helpers.setMessages((prev) => {
     const updated = ensureAssistantMessage(prev);
@@ -2556,6 +2601,49 @@ function handleSubagentToolApprovalEvent(event: SDKToolApprovalEvent, helpers: W
 }
 
 /**
+ * Handle a `tool_render` event from the `numa render` CLI command.
+ *
+ * The event is out-of-band (same SSE rail as HITL approvals) and carries an
+ * HTML/SVG/image payload to display inline. We append a standalone `tool_card`
+ * segment with the sentinel `toolName: 'numa_render'`, re-wrapping the payload
+ * into the `ToolResultLike` content shape that `RenderToolRenderer` /
+ * `getRenderPayload` parse (`content: [{ text: JSON.stringify({...}) }]`).
+ */
+function handleCliRenderEvent(event: SDKToolRenderEvent, helpers: WorkspaceChatMessageHelpers): void {
+  helpers.setMessages((prev) => {
+    const updated = ensureAssistantMessage(prev);
+    const lastIdx = updated.length - 1;
+    const lastMsg = { ...updated[lastIdx] };
+    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+
+    const renderPayload = JSON.stringify({
+      render_type: event.render_type,
+      content: event.content,
+      title: event.title ?? undefined,
+      height: event.height,
+      mime_type: event.mime_type ?? undefined,
+      file_path: event.file_path ?? undefined,
+    });
+
+    const renderSegment: WorkspaceChatToolCardSegment = {
+      kind: 'tool_card',
+      toolName: 'numa_render',
+      toolUseId: event.tool_use_id,
+      label: '',
+      steps: [],
+      result: { content: [{ text: renderPayload }] },
+      isLoading: false,
+    };
+
+    segments.push(renderSegment);
+    lastMsg.segments = segments;
+    updated[lastIdx] = lastMsg;
+
+    return updated;
+  });
+}
+
+/**
  * Process a single SDK event.
  *
  * Routes the event to the appropriate handler based on type.
@@ -2565,13 +2653,25 @@ export function processSDKEvent(event: SDKEvent, context: SDKEventContext, helpe
   // need a standalone UI card even when the tool runs inside a subagent.
   if (event.type === 'tool_approval') {
     const approval = event as SDKToolApprovalEvent;
-    if (approval.parent_tool_use_id) {
-      // Sub-agent approval: create standalone tool_approval segment at message level
+    if (approval.parent_tool_use_id || approval.tool_use_id?.startsWith('cli_')) {
+      // Sub-agent OR CLI-emitted approval: render as standalone card.
+      // CLI-emitted approvals carry tool_use_id like "cli_<uuid>" because
+      // no SDK ToolUseBlock corresponds to them — they came from a `numa`
+      // subprocess fired by a Bash tool call.
       handleSubagentToolApprovalEvent(approval, helpers);
     } else {
-      // Main agent approval: attach to existing inline_tool segment
+      // Main agent MCP approval: attach to existing inline_tool segment
       handleToolApprovalEvent(approval, helpers);
     }
+    return;
+  }
+
+  // CLI render events (`numa render`) — out-of-band, same SSE rail as
+  // approvals. Append a standalone render segment to the current assistant
+  // message. Handled BEFORE subagent/generic routing so it always lands on
+  // the main message regardless of parent_tool_use_id.
+  if (event.type === 'tool_render') {
+    handleCliRenderEvent(event as SDKToolRenderEvent, helpers);
     return;
   }
 
@@ -3331,6 +3431,150 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
   return messages;
 }
 
+/** Image file extension → MIME type, for reconstructing `numa render --file-path <image>`. */
+const RENDER_IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+};
+const RENDER_HTML_EXTS = new Set(['html', 'htm', 'svg']);
+
+/**
+ * Minimal POSIX shell tokenizer — splits on unquoted whitespace, honours single
+ * and double quotes (and backslash escapes inside double / unquoted). Returns
+ * null on unbalanced quotes so callers can fail soft. Just enough to recover
+ * the args of a `numa render` call whose `--content '<html>'` may itself
+ * contain spaces and quotes; a naïve `split(' ')` would shred it.
+ */
+function tokenizeShellCommand(cmd: string): string[] | null {
+  const tokens: string[] = [];
+  let cur = '';
+  let hasToken = false;
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i];
+    if (inSingle) {
+      if (c === "'") inSingle = false;
+      else cur += c;
+    } else if (inDouble) {
+      if (c === '"') inDouble = false;
+      else if (c === '\\' && i + 1 < cmd.length && '"\\$`'.includes(cmd[i + 1])) cur += cmd[++i];
+      else cur += c;
+    } else if (c === "'") {
+      inSingle = true;
+      hasToken = true;
+    } else if (c === '"') {
+      inDouble = true;
+      hasToken = true;
+    } else if (c === '\\' && i + 1 < cmd.length) {
+      cur += cmd[++i];
+      hasToken = true;
+    } else if (/\s/.test(c)) {
+      if (hasToken) {
+        tokens.push(cur);
+        cur = '';
+        hasToken = false;
+      }
+    } else {
+      cur += c;
+      hasToken = true;
+    }
+  }
+  if (inSingle || inDouble) return null;
+  if (hasToken) tokens.push(cur);
+  return tokens;
+}
+
+export interface ReconstructedRender {
+  render_type: 'html' | 'image';
+  /** Inline content (the `--content` case). Absent for `--file-path` — the
+   * renderer fetches the raw file from S3 on demand. */
+  content?: string;
+  title?: string;
+  height?: number;
+  mime_type?: string;
+  file_path?: string;
+}
+
+/**
+ * Recover a render payload from a `numa render ...` Bash command in the trace,
+ * so an inline visual survives a page reload (the live `tool_render` SSE event
+ * is out-of-band and never written to trace.jsonl). Returns null when the
+ * command isn't a parseable `numa render` (→ fall back to the plain bash
+ * indicator). Scans for the `numa render` token pair anywhere in the command,
+ * so a leading `export NUMA_BASH_CALL_ID=…;` prefix (added by the rate-limit
+ * hook) or other chaining doesn't trip it up.
+ */
+export function parseNumaRenderCommand(cmd: string): ReconstructedRender | null {
+  if (!/\bnuma\s+render\b/.test(cmd)) return null;
+  const tokens = tokenizeShellCommand(cmd);
+  if (!tokens) return null;
+
+  let start = -1;
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (tokens[i] === 'numa' && tokens[i + 1] === 'render') {
+      start = i + 2;
+      break;
+    }
+  }
+  if (start === -1) return null;
+
+  let type: string | undefined;
+  let content: string | undefined;
+  let filePath: string | undefined;
+  let title: string | undefined;
+  let height: number | undefined;
+
+  const valueOf = (arg: string, flag: string, args: string[], i: number): string | undefined =>
+    arg.startsWith(`${flag}=`) ? arg.slice(flag.length + 1) : args[i + 1];
+
+  for (let i = start; i < tokens.length; i++) {
+    const a = tokens[i];
+    if (a === '&&' || a === '||' || a === ';' || a === '|') break; // stop at a chained command
+    if (a === '--type' || a.startsWith('--type=')) {
+      type = valueOf(a, '--type', tokens, i);
+      if (!a.includes('=')) i++;
+    } else if (a === '--content' || a.startsWith('--content=')) {
+      content = valueOf(a, '--content', tokens, i);
+      if (!a.includes('=')) i++;
+    } else if (a === '--file-path' || a.startsWith('--file-path=')) {
+      filePath = valueOf(a, '--file-path', tokens, i);
+      if (!a.includes('=')) i++;
+    } else if (a === '--title' || a.startsWith('--title=')) {
+      title = valueOf(a, '--title', tokens, i);
+      if (!a.includes('=')) i++;
+    } else if (a === '--height' || a.startsWith('--height=')) {
+      const n = parseInt(valueOf(a, '--height', tokens, i) ?? '', 10);
+      if (!Number.isNaN(n)) height = n;
+      if (!a.includes('=')) i++;
+    } else if (a === '-m' || a === '--user-message') {
+      i++; // skip the caption value
+    }
+    // other flags (--json, --standard, --debug) are ignored
+  }
+
+  if (content === undefined && filePath === undefined) return null;
+
+  let renderType: 'html' | 'image';
+  let mimeType: string | undefined;
+  const ext = filePath ? (filePath.split('.').pop() || '').toLowerCase() : '';
+  if (type === 'html' || type === 'image') {
+    renderType = type;
+  } else if (filePath) {
+    if (RENDER_HTML_EXTS.has(ext)) renderType = 'html';
+    else if (ext in RENDER_IMAGE_MIME) renderType = 'image';
+    else return null; // can't infer a type → fall back to the bash indicator
+  } else {
+    renderType = 'html'; // --content defaults to html (can't inline an image)
+  }
+  if (renderType === 'image' && ext in RENDER_IMAGE_MIME) mimeType = RENDER_IMAGE_MIME[ext];
+
+  return { render_type: renderType, content, title, height, mime_type: mimeType, file_path: filePath };
+}
+
 /**
  * Process assistant message content into segments.
  * Handles both streaming format (event.message.content) and trace format (event.content).
@@ -3379,6 +3623,33 @@ function processAssistantContent(
       const input = block.input as Record<string, unknown>;
       const result = toolResults.get(block.id);
 
+      // `numa render` -> reconstruct the inline visual from the bash command so
+      // it survives a page reload. The live `tool_render` SSE event is
+      // out-of-band and never written to trace.jsonl, so on replay the only
+      // record is this Bash call — which carries everything (`--content` inline
+      // or `--file-path` re-fetchable from S3). Emit the SAME `numa_render`
+      // tool_card segment the live path (handleCliRenderEvent) produces, so the
+      // visual replaces the plain "Running: numa render…" indicator (no double).
+      // Replay-only: processAssistantContent runs solely from
+      // parseRawTraceToMessages, never on the live stream, so there's no clash
+      // with the live event.
+      if (toolName === 'Bash') {
+        const command = typeof input.command === 'string' ? input.command : '';
+        const render = parseNumaRenderCommand(command);
+        if (render) {
+          segments.push({
+            kind: 'tool_card',
+            toolName: 'numa_render',
+            toolUseId: block.id,
+            label: '',
+            steps: [],
+            result: { content: [{ text: JSON.stringify(render) }] },
+            isLoading: false,
+          } as WorkspaceChatToolCardSegment);
+          continue;
+        }
+      }
+
       // Task tool -> subagent segment (include collected subagent events)
       if (toolName === 'Task') {
         const taskInput = input as unknown as TaskInput;
@@ -3414,7 +3685,7 @@ function processAssistantContent(
       // Inline tools
       if (INLINE_TOOLS.has(toolName)) {
         const { text, filePath } = getInlineToolDisplay(toolName, input);
-        const { category, iconName } = getToolCategoryAndIcon(toolName, input);
+        const { category, iconName, iconImage } = getToolCategoryAndIcon(toolName, input);
 
         // Skip transient tools in history (they've done their job)
         if (category === 'transient') {
@@ -3431,6 +3702,7 @@ function processAssistantContent(
           isError: result?.isError || false,
           category,
           iconName,
+          iconImage,
         });
         continue;
       }
@@ -3461,22 +3733,9 @@ function processAssistantContent(
 
       // Fallback: tool card for other tools
       const integrationInfo = formatIntegrationToolLabel(toolName, input);
-      let effectiveToolName = integrationInfo?.integrationToolName || toolName;
-      let effectiveLabel = integrationInfo?.label || toolName;
-      let effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
-
-      // For mcp__numa__numa_tool, derive label and steps from the sub-tool name
-      if (toolName === 'mcp__numa__numa_tool' && !integrationInfo) {
-        const subTool = input?.name as string | undefined;
-        if (subTool) effectiveLabel = resolveToolDescriptor(subTool).label;
-        effectiveSteps = getToolActionSteps(toolName, input);
-      }
-
-      // For mcp__numa__numa_ops_tool, derive label and steps from the operation
-      if (toolName === 'mcp__numa__numa_ops_tool' && !integrationInfo) {
-        effectiveLabel = resolveToolDescriptor(toolName).label;
-        effectiveSteps = getToolActionSteps(toolName, input);
-      }
+      const effectiveToolName = integrationInfo?.integrationToolName || toolName;
+      const effectiveLabel = integrationInfo?.label || toolName;
+      const effectiveSteps = integrationInfo ? [integrationInfo.label] : [`Using ${toolName}`];
 
       segments.push({
         kind: 'tool_card',

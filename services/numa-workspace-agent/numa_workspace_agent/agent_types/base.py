@@ -130,13 +130,31 @@ class AgentTypeConfig:
     allowed_tools: list[str] = field(default_factory=list)
     disallowed_tools: list[str] = field(default_factory=list)
 
-    # ── Layer 2: MCP Tools ────────────────────────────────────────────────
-    enable_scripts_mcp: bool = True
-    enable_integrations_mcp: bool = True
-    enable_numa_mcp: bool = True
+    # ── Layer 2: MCP Tools (legacy — being retired) ───────────────────────
+    # Default OFF since the full CLI cutover. The Numa platform tool surface
+    # (numa / integrations / connectors / ops), code execution, and vault all
+    # run through the `numa` CLI + Write/Bash now — NOT MCP. No agent type
+    # enables these anymore; the flags + mcp_tools/ wrappers remain only until
+    # Phase 6 deletes them. A type must explicitly opt back in to register an
+    # MCP server (nothing does today).
+    enable_scripts_mcp: bool = False
+    enable_integrations_mcp: bool = False
+    enable_numa_mcp: bool = False
     allowed_numa_operations: Optional[list[str]] = None  # None = all, list = only these
-    enable_connect_mcp: bool = True
-    enable_vault_mcp: bool = True
+    enable_connect_mcp: bool = False
+    enable_vault_mcp: bool = False
+
+    # Per-agent-type allow-list of numa CLI categories (Phase 5). ``None``
+    # (default) = unrestricted — the type may run any `numa <category>`. A list
+    # restricts to only those categories, e.g. ``["docs"]`` for the Nolia
+    # phases (which should only `numa docs extract/convert`, never touch ops /
+    # agents / memory). This drives the dynamic prompt (only permitted
+    # categories are described) AND is enforced server-side in numa-cli-api,
+    # keyed on the agent type conveyed via NUMA_AGENT_TYPE. The authoritative
+    # server policy lives in numa-cli-api's policy map; a parity test keeps the
+    # two in sync. Categories use the CLI command names: files, web, docs,
+    # agents, memory, integrations, ops, render.
+    allowed_cli_commands: Optional[list[str]] = None
 
     # ── Layer 3: Numa tool reference docs ─────────────────────────────────
     enabled_numa_tools: list[str] = field(default_factory=list)

@@ -84,53 +84,25 @@ class TestCreateAgentOptionsWithType:
         options = create_agent_options(agent_type_config=config)
         assert options.allowed_tools == ["Read", "Glob"]
 
-    def test_mcp_scripts_disabled(self):
+    def test_no_mcp_servers_registered_regardless_of_flags(self):
+        # Phase 6: the in-process MCP tool layer was deleted. create_agent_options
+        # now always builds an empty mcp_servers dict — the legacy enable_*_mcp
+        # flags no longer register any server (capabilities are served via the
+        # `numa` CLI / Bash instead). Even with every flag forced on, the agent
+        # runs with zero MCP servers.
         config = AgentTypeConfig(
-            type_id="test-no-scripts",
-            display_name="No Scripts",
-            enable_scripts_mcp=False,
-            enable_integrations_mcp=False,
-        )
-        register_agent_type(config)
-
-        options = create_agent_options(agent_type_config=config)
-        assert "scripts" not in options.mcp_servers
-
-    def test_mcp_scripts_enabled(self):
-        config = AgentTypeConfig(
-            type_id="test-with-scripts",
-            display_name="With Scripts",
+            type_id="test-mcp-flags-noop",
+            display_name="MCP Flags No-op",
             enable_scripts_mcp=True,
-            enable_integrations_mcp=False,
-        )
-        register_agent_type(config)
-
-        options = create_agent_options(agent_type_config=config)
-        assert "scripts" in options.mcp_servers
-
-    def test_mcp_integrations_disabled(self):
-        config = AgentTypeConfig(
-            type_id="test-no-int",
-            display_name="No Int",
-            enable_scripts_mcp=False,
-            enable_integrations_mcp=False,
-        )
-        register_agent_type(config)
-
-        options = create_agent_options(agent_type_config=config)
-        assert "integrations" not in options.mcp_servers
-
-    def test_mcp_integrations_enabled(self):
-        config = AgentTypeConfig(
-            type_id="test-with-int",
-            display_name="With Int",
-            enable_scripts_mcp=False,
             enable_integrations_mcp=True,
+            enable_numa_mcp=True,
+            enable_connect_mcp=True,
+            enable_vault_mcp=True,
         )
         register_agent_type(config)
 
         options = create_agent_options(agent_type_config=config)
-        assert "integrations" in options.mcp_servers
+        assert options.mcp_servers == {}
 
     def test_custom_max_turns(self):
         config = AgentTypeConfig(

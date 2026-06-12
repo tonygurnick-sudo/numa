@@ -657,5 +657,8 @@
       "high": "High",
       "very_high": "Very high"
     }
+  },
+  "render": {
+    "unavailable": "This visual is no longer available."
   }
 }

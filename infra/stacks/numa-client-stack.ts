@@ -289,6 +289,21 @@ export class NumaClientStack extends TerraformStack {
       provider: hostedZoneProvider,
     });
 
+    // HMAC secret the workspace-chat-agent-proxy uses to sign short-lived
+    // "service identity" tokens for non-interactive runs (scheduled agents,
+    // V2 apps, Nolia) — runs that have no user Cognito token. numa-cli-api
+    // verifies these tokens with the same secret. Shared ONLY between the
+    // proxy and numa-cli-api; deliberately never injected into the workspace
+    // agent container, so the LLM inside a MicroVM has no path to it and
+    // cannot forge an identity. See lambdas/node/numa-cli-api/src/shared/auth.ts.
+    const cliIdentitySecretParam = new SsmParameter(this, 'numa-cli-identity-secret', {
+      name: clientConfig.clientName + '_' + 'numa-cli-identity-secret',
+      type: 'String',
+      value: uuidv4(),
+      lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
+      provider: hostedZoneProvider,
+    });
+
     // Chat Agent – HTTP streaming via Lambda Function URL (created first to pass URL into FE)
     const chatAgent = new NumaChatAgent(this, 'chat-agent', {
       clientName: props.clientName,
@@ -402,6 +417,13 @@ export class NumaClientStack extends TerraformStack {
         : undefined;
       const opsCrmApiLambdaArn = clientConfig.numaOps
         ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_ops-crm-api', 64)}`
+        : undefined;
+
+      // numa-cli-api Lambda ARN — created later in AppAgnosticApiGatewayLambdaCollection
+      // when numaCliApi is enabled. Computed here so the workspace agent
+      // role can be granted invoke permission at construct time.
+      const numaCliApiLambdaArn = clientConfig.numaCliApi
+        ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_numa-cli-api', 64)}`
         : undefined;
 
       // Shared secret for file redirect HMAC tokens (used by both tools and proxy Lambdas)
@@ -530,6 +552,11 @@ export class NumaClientStack extends TerraformStack {
         creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
         creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
         creditMeteringEnabled: true,
+        // numa-cli-api Lambda — workspace IAM role gets InvokeFunction so
+        // the @numa/cli binary in the MicroVM can call the dispatcher.
+        // Only set when numaCliApi feature flag is on; otherwise the
+        // policy statement is skipped.
+        numaCliApiLambdaArn,
         // Centralized email sender — V2 app run-completion emails (FEAT-174)
         emailSenderLambdaArn,
       });
@@ -555,6 +582,9 @@ export class NumaClientStack extends TerraformStack {
         // Schedule runner secret so the proxy can authenticate server-to-server calls
         // from the agent-schedule-runner Lambda (scheduled agents use V2 sync mode)
         scheduleRunnerSecret: agentScheduleSecretParam.value,
+        // HMAC secret the proxy signs service-identity tokens with for
+        // non-interactive runs; numa-cli-api verifies them with the same secret.
+        cliIdentitySecret: cliIdentitySecretParam.value,
         // Workspace chat tools Lambda for document conversion preview (DOCX → PDF)
         workspaceToolsLambdaArn: workspaceChatTools.lambdaArn,
         workspaceToolsLambdaName: workspaceChatTools.lambdaName,
@@ -677,6 +707,9 @@ export class NumaClientStack extends TerraformStack {
       },
       mfaSettingsTableName: core.mfaSettingsTable.name,
       userPoolId: core.userPoolId,
+      additionalCognitoClientIds: clientConfig.additionalCognitoClientIds,
+      // Verifies proxy-minted service tokens for non-interactive numa CLI calls.
+      cliIdentitySecret: cliIdentitySecretParam.value,
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
@@ -736,6 +769,27 @@ export class NumaClientStack extends TerraformStack {
       recoveryBucketName: disasterRecovery?.recoveryBucketName,
       recoveryBucketArn: disasterRecovery?.recoveryBucketArn,
       pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
+      // Numa CLI API — backend for the `numa` CLI binary (/numa-cli/).
+      // Per-client opt-in. The bootstrap route aggregates the canonical
+      // user-context surface (agents, integrations, KBs, chat settings,
+      // company profile, client config) the workspace agent also consumes.
+      // Phase 3 will add tool-execution routes (/api/cli/tools/*) that reuse
+      // this Lambda + same gate. Customer stacks should leave this off
+      // until the CLI ships externally.
+      numaCliApiEnabled: clientConfig.numaCliApi ?? false,
+      // Numa Ops entitlement — forwarded to numa-cli-api as NUMA_OPS_ENABLED so
+      // it can hard-gate `ops_*` CLI tool calls server-side (the old MCP-
+      // registration gate is gone now the CLI has broad `Bash(numa:*)`). Same
+      // flag source the workspace agent construct uses (line ~542).
+      numaOpsEnabled: clientConfig.numaOps,
+      // numa-cli-api reads `company-data.json` from the company bucket for
+      // bootstrap's `company_profile` field. Optional — not every stack
+      // provisions the company bucket.
+      companyBucketName: core.companyBucket?.bucket.bucket,
+      companyBucketArn: core.companyBucket?.bucket.arn,
+      // Phase 2 centralised approval orchestrator — DDB create + poll.
+      integrationsApprovalTableName: core.integrationsApprovalTable?.name,
+      integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -1630,6 +1684,17 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         synergyFileParity: z.boolean().optional().default(false),
+
+        /**
+         * Whether to enable the Numa CLI API Lambda (`numa-cli-api`).
+         * Backend for the `numa` CLI binary in `/numa-cli/`. Per-client
+         * opt-in — keep off on customer stacks until the CLI ships externally.
+         * Phase 1 ships only `/api/cli/bootstrap`; Phase 3 will add tool-execution
+         * routes that reuse the same Lambda + same gate.
+         *
+         * @default false
+         */
+        numaCliApi: z.boolean().optional().default(false),
 
         /**
          * Whether to enable site-wide search (DynamoDB search index + /api/search).

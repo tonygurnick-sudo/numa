@@ -11,12 +11,8 @@ Search the internet and fetch web pages for current information not available in
 
 ### 1. search (default) -- Find URLs with previews
 
-```
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Searching for relevant pages",
-  params={"query": "search terms", "max_results": 5}
-)
+```bash
+numa web search "search terms" --json -m "Searching for relevant pages"
 ```
 
 | Parameter     | Required | Default | Description                           |
@@ -26,57 +22,40 @@ mcp__numa__numa_tool(
 
 **Returns:** `results` (list of `{url, title, snippet}`), `query`, `results_count`
 
-### 2. fetch_url -- Get full page content as markdown
+### 2. fetch -- Get full page content as markdown
 
-```
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Fetching full content from page",
-  params={"operation": "fetch_url", "url": "https://example.com/page"}
-)
+```bash
+numa web fetch "https://example.com/page" --json -m "Fetching full content from page"
 ```
 
 | Parameter          | Required | Default | Description                       |
 | ------------------ | -------- | ------- | --------------------------------- |
-| `operation`        | Yes      | -       | Must be `"fetch_url"`             |
 | `url`              | Yes      | -       | The URL to fetch                  |
 | `force_playwright` | No       | true    | Force JS rendering via Playwright |
 
 **Returns:** `url`, `title`, `content` (full markdown), `content_type`, `status`
 
-**PDFs:** If the URL is a PDF, fetch_url downloads it directly to the workspace and returns a `file_path` instead of `content`. Read the PDF using the `Read` tool on that path.
+**PDFs:** If the URL is a PDF, fetch downloads it directly to the workspace and returns a `file_path` instead of `content`. Read the PDF using the `Read` tool on that path.
 
 ## Recommended Workflow
 
 1. Use **search** to find relevant URLs with previews
 2. Review the snippets to identify the most useful results
-3. Use **fetch_url** on the best results to get full page content
+3. Use **fetch** on the best results to get full page content
 
 This two-step approach is more efficient than fetching every result.
 
 ## Examples
 
-```
+```bash
 # Step 1: Search for URLs with previews
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Searching for AWS Lambda pricing info",
-  params={"query": "AWS Lambda pricing 2025", "max_results": 5}
-)
+numa web search "AWS Lambda pricing 2025" --json -m "Searching for AWS Lambda pricing info"
 
 # Step 2: Fetch full content from the most relevant result
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Fetching full content from AWS pricing page",
-  params={"operation": "fetch_url", "url": "https://aws.amazon.com/lambda/pricing/"}
-)
+numa web fetch "https://aws.amazon.com/lambda/pricing/" --json -m "Fetching full content from AWS pricing page"
 
 # Broader research with more results
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Researching microservices architecture patterns",
-  params={"query": "best practices microservices architecture", "max_results": 8}
-)
+numa web search "best practices microservices architecture" --json -m "Researching microservices architecture patterns"
 ```
 
 ## When to Use

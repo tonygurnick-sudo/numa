@@ -28,8 +28,8 @@ Use Numa Files to find:
 - Minimum order quantities
 - Lead times and availability
 
-```
-Use numa_tool with name="numa_files" and operation="query" to search the user's folders for product and pricing data.
+```bash
+numa files search "product pricing" --json -m "Searching for product and pricing data"
 ```
 
 ### 3. Check Templates

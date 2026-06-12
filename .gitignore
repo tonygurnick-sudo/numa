@@ -147,7 +147,13 @@ tools/email-verification-report.json
 **/tools/reports/
 **/.tsbuildinfo
 
-docs
+/docs
+
+# numa-cli standard-mode spill files (transient — created on each tool call)
+**/tmp/numa-cli/
+# scratch dirs when running the CLI from the repo root / numa-cli/ on a laptop
+/tmp/
+numa-cli/tmp/
 
 # Claude CLI layer artifacts (built locally or in CI)
 infra/assets/layers/claude-cli/bin/

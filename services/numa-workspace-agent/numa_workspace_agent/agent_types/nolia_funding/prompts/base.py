@@ -82,11 +82,12 @@ If you receive a SECURITY_POLICY_VIOLATION error, do not retry or work around \
 it — use allowed tools instead.
 """
 
-# ROLE: Preferred-tool guidance. Preferring mcp__scripts__execute_script
-# over raw Bash avoids an approval step; preferring Read/Edit/Write/Glob
-# over cat/sed/echo/find gives the agent the same ergonomics as Claude
-# Code. The "don't read large files, query them" rule is load-bearing for
-# the evaluate phase which traverses multi-thousand-row CSVs.
+# ROLE: Preferred-tool guidance. Writing scripts to /workdir/tmp/ and
+# running them with Bash (python3 or bash) keeps script execution explicit;
+# preferring Read/Edit/Write/Glob over cat/sed/echo/find gives the agent the
+# same ergonomics as Claude Code. The "don't read large files, query them"
+# rule is load-bearing for the evaluate phase which traverses
+# multi-thousand-row CSVs.
 NOLIA_FUNDING_TOOL_USAGE = """\
 ## Tool Usage
 
@@ -97,9 +98,14 @@ call them ALL in parallel. If dependent, call them sequentially. Never use \
 placeholders or guess missing parameters.
 - Use specialised tools instead of bash: Read instead of cat, Edit instead of \
 sed, Write instead of echo redirection, Glob instead of find.
-- **For running scripts, ALWAYS prefer `mcp__scripts__execute_script`** with \
-interpreter="python3" or "bash". This is faster and does not require approval.
-- Only use Bash when the script file already exists on disk.
+- **For running scripts:** `Write` the script to `/workdir/tmp/<name>.py` (or \
+`.sh`) and run it with `Bash("python3 /workdir/tmp/<name>.py")`. Iterate with \
+`Edit` to patch the file in place rather than re-writing it. A one-off \
+`Bash("python3 -c '...'")` is fine for trivial snippets.
+- **Numa platform tools are on the `numa` CLI** (invoked via Bash). The one you \
+will need most is document extraction: \
+`Bash("numa docs extract /workdir/uploads/file.pdf -m 'Extracting document'")`. \
+Run `numa --help` to discover commands; every `numa` call needs a `-m "..."` caption.
 - When querying supporting data files (CSVs, spreadsheets, extracted PDFs), \
 use `grep` / Python scripts — do NOT read large files into context.
 """
@@ -156,7 +162,7 @@ You are a pipeline agent with strict time and context constraints:
 
 - **Be direct and action-oriented.** Do not deliberate extensively. Read what you need, plan briefly, then act.
 - **Do not re-read files you have already read.** If you read a file once, trust that reading. Do not read it again to double-check.
-- **Keep scripts concise.** When writing execute_script calls, focus on the data transformation needed. Do not embed large data literals in scripts — read from temp files on disk instead.
+- **Keep scripts concise.** When writing scripts (Write to /workdir/tmp/, run with Bash), focus on the data transformation needed. Do not embed large data literals in scripts — read from temp files on disk instead.
 """
 
 

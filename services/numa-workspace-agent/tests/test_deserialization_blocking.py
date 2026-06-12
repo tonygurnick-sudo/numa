@@ -1,6 +1,5 @@
 import pytest
 from numa_workspace_agent.hooks.security import check_bash_command
-from numa_workspace_agent.mcp_tools.execute_script import validate_python_code
 
 BLOCKED_SNIPPETS = [
     "import pickle; pickle.load(open('/workdir/uploads/a.pkl', 'rb'))",
@@ -31,22 +30,6 @@ def test_security_hook_blocks_unsafe_deserialization(snippet: str) -> None:
 
     assert blocked is True
     assert reason is not None
-
-
-@pytest.mark.parametrize("snippet", BLOCKED_SNIPPETS)
-def test_execute_script_validator_blocks_unsafe_deserialization(snippet: str) -> None:
-    is_valid, reason = validate_python_code(snippet)
-
-    assert is_valid is False
-    assert reason is not None
-
-
-@pytest.mark.parametrize("snippet", SAFE_SNIPPETS)
-def test_execute_script_validator_keeps_safe_data_operations(snippet: str) -> None:
-    is_valid, reason = validate_python_code(snippet)
-
-    assert is_valid is True
-    assert reason is None
 
 
 @pytest.mark.parametrize("snippet", SAFE_SNIPPETS)

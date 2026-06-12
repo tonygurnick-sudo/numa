@@ -23,7 +23,25 @@ from . import quoting as _quoting  # noqa: F401
 from . import research_agent as _research_agent  # noqa: F401
 from . import tony_comedian as _tony_comedian  # noqa: F401
 from .base import ALWAYS_COPY, TOOL_FILE_MAP, AgentTypeConfig
-from .registry import get_agent_type_config, list_agent_types, register_agent_type
+from .registry import (
+    all_agent_configs,
+    get_agent_type_config,
+    list_agent_types,
+    register_agent_type,
+)
+
+# ── Phase 5: Nolia default CLI restriction ────────────────────────────────────
+# Nolia (and nolia_funding) process UNTRUSTED documents — a prompt-injection in
+# an uploaded tender/application must not be able to reach `numa ops`, `numa
+# agents`, or `numa memory`. Restrict every Nolia agent type to the `docs` CLI
+# category (extract/convert) unless its config sets allowed_cli_commands
+# explicitly. Declared here in one place so new Nolia phases inherit it by
+# default. This declares intent on the Python config; the authoritative control
+# is server-side in numa-cli-api (keyed on NUMA_AGENT_TYPE) — keep the two in
+# sync (see test_cli_allowlist parity test). type_ids: "nolia-*" + "nolia-funding-*".
+for _cfg in all_agent_configs():
+    if _cfg.type_id.startswith("nolia") and _cfg.allowed_cli_commands is None:
+        _cfg.allowed_cli_commands = ["docs"]
 
 __all__ = [
     "AgentTypeConfig",
@@ -32,4 +50,5 @@ __all__ = [
     "get_agent_type_config",
     "list_agent_types",
     "register_agent_type",
+    "all_agent_configs",
 ]

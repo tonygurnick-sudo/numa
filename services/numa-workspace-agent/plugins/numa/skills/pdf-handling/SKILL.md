@@ -21,17 +21,17 @@ Create, read, manipulate, and convert PDF files.
 
 ## Decision Matrix
 
-| Need                               | Best Tool                                    | Why                                 |
-| ---------------------------------- | -------------------------------------------- | ----------------------------------- |
-| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF)                    | Write HTML+CSS, professional output |
-| Precise layout control, subscripts | **reportlab**                                | Pixel-perfect positioning           |
-| Quick data tables, simple PDFs     | **fpdf2**                                    | Lightweight, fast                   |
-| Read text/tables from PDFs         | **pdfplumber**                               | Best layout-aware text extraction   |
-| Merge, split, rotate PDFs          | **PyPDF2**                                   | Best for manipulation operations    |
-| Extract images from PDFs           | **PyMuPDF (fitz)**                           | Access embedded images directly     |
-| Render pages as images             | **pdf2image** or **PyMuPDF**                 | Page-to-image conversion            |
-| Scanned/complex documents          | `extract_content` tool (via `numa_tool` MCP) | Vision AI — better than local OCR   |
-| Convert DOCX/PPTX → PDF            | `convert_document` tool (mode="file")        | Lambda-based LibreOffice conversion |
+| Need                               | Best Tool                    | Why                                 |
+| ---------------------------------- | ---------------------------- | ----------------------------------- |
+| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF)    | Write HTML+CSS, professional output |
+| Precise layout control, subscripts | **reportlab**                | Pixel-perfect positioning           |
+| Quick data tables, simple PDFs     | **fpdf2**                    | Lightweight, fast                   |
+| Read text/tables from PDFs         | **pdfplumber**               | Best layout-aware text extraction   |
+| Merge, split, rotate PDFs          | **PyPDF2**                   | Best for manipulation operations    |
+| Extract images from PDFs           | **PyMuPDF (fitz)**           | Access embedded images directly     |
+| Render pages as images             | **pdf2image** or **PyMuPDF** | Page-to-image conversion            |
+| Scanned/complex documents          | `numa docs extract` CLI      | Vision AI — better than local OCR   |
+| Convert DOCX/PPTX → PDF            | `numa docs convert` CLI      | Lambda-based LibreOffice conversion |
 
 ---
 
@@ -570,10 +570,10 @@ pandoc /workdir/uploads/document.docx --pdf-engine=weasyprint --extract-media=/w
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
-### MCP Tool Fallback
+### CLI Fallback
 
-```
-mcp__numa__numa_tool(name="convert_document", description="Converting markdown report to PDF", params={"file_path": "/workdir/outputs/report.md", "format": "pdf", "mode": "markdown"})
+```bash
+numa docs convert /workdir/outputs/report.md --format pdf -m "Converting markdown report to PDF"
 ```
 
 ---
@@ -744,14 +744,14 @@ with open("/workdir/outputs/filled.pdf", "wb") as f:
 
 ## Document Conversion to PDF
 
-Convert DOCX, PPTX, XLSX, and other Office formats to PDF using the `convert_document` tool:
+Convert DOCX, PPTX, XLSX, and other Office formats to PDF using the `numa docs convert` CLI:
 
-```
+```bash
 # DOCX → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/document.docx --format pdf -m "Converting DOCX to PDF"
 
 # PPTX → PDF (useful for visual QA of presentations)
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/presentation.pptx --format pdf -m "Converting PPTX to PDF for visual QA"
 ```
 
 Supported input formats: `.doc`, `.docx`, `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.odp`, `.ods`, `.odt`, `.rtf`, `.key`, `.numbers`, `.pages`
@@ -760,25 +760,25 @@ Supported input formats: `.doc`, `.docx`, `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.od
 
 ## When to Use the extract_content Tool vs Local Tools
 
-| Scenario                      | Recommended Tool                                              |
-| ----------------------------- | ------------------------------------------------------------- |
-| Text-based PDFs, simple text  | **pdfplumber** (local, fast, layout-aware)                    |
-| Tables in PDFs                | **pdfplumber** (local, `extract_tables()`)                    |
-| Scanned PDFs, images of text  | `extract_content` tool via `numa_tool` MCP (uses vision AI)   |
-| Handwritten text, forms       | `extract_content` tool via `numa_tool` MCP                    |
-| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content` tool     |
-| Large documents (>50 pages)   | `extract_content` tool via `numa_tool` MCP (handles chunking) |
-| Extract embedded images       | **PyMuPDF (fitz)**                                            |
-| Render pages as images        | **pdf2image** or **PyMuPDF**                                  |
-| Merge/split/rotate            | **PyPDF2**                                                    |
-| Create from HTML+CSS          | **WeasyPrint**                                                |
-| Create with precise layout    | **reportlab**                                                 |
-| Quick simple PDFs             | **fpdf2**                                                     |
+| Scenario                      | Recommended Tool                                       |
+| ----------------------------- | ------------------------------------------------------ |
+| Text-based PDFs, simple text  | **pdfplumber** (local, fast, layout-aware)             |
+| Tables in PDFs                | **pdfplumber** (local, `extract_tables()`)             |
+| Scanned PDFs, images of text  | `numa docs extract` CLI (uses vision AI)               |
+| Handwritten text, forms       | `numa docs extract` CLI                                |
+| Complex layouts, multi-column | Try pdfplumber first, fall back to `numa docs extract` |
+| Large documents (>50 pages)   | `numa docs extract` CLI (handles chunking)             |
+| Extract embedded images       | **PyMuPDF (fitz)**                                     |
+| Render pages as images        | **pdf2image** or **PyMuPDF**                           |
+| Merge/split/rotate            | **PyPDF2**                                             |
+| Create from HTML+CSS          | **WeasyPrint**                                         |
+| Create with precise layout    | **reportlab**                                          |
+| Quick simple PDFs             | **fpdf2**                                              |
 
 **Example — Extract from scanned PDF:**
 
-```
-mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned invoice", params={"file_path": "/workdir/uploads/scanned_invoice.pdf"})
+```bash
+numa docs extract /workdir/uploads/scanned_invoice.pdf -m "Extracting content from scanned invoice"
 ```
 
 **When pdfplumber or PyPDF2 return empty or garbled text**, it's usually because:
@@ -787,20 +787,20 @@ mcp__numa__numa_tool(name="extract_content", description="Extracting content fro
 - The PDF uses custom fonts without proper encoding
 - The text is embedded in graphics
 
-In these cases, switch to the `extract_content` tool (via `numa_tool` MCP) which uses vision AI to "read" the document visually.
+In these cases, switch to the `numa docs extract` CLI which uses vision AI to "read" the document visually.
 
 ---
 
 ## Document Conversion (PDF ↔ DOCX)
 
-Use the `convert_document` tool for all document format conversions:
+Use the `numa docs convert` CLI for all document format conversions:
 
-```
+```bash
 # DOCX → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/document.docx --format pdf -m "Converting DOCX to PDF"
 
 # PDF → DOCX
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
+numa docs convert /workdir/uploads/document.pdf --format docx -m "Converting PDF to DOCX"
 ```
 
 ---
@@ -818,7 +818,7 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/docume
 
 | Issue                             | Solution                                                                          |
 | --------------------------------- | --------------------------------------------------------------------------------- |
-| Empty text extraction             | PDF may be scanned — use the `extract_content` tool (via `numa_tool` MCP) instead |
+| Empty text extraction             | PDF may be scanned — use `numa docs extract` CLI instead                          |
 | Font not found (fpdf2)            | Use built-in fonts: Helvetica, Times, Courier                                     |
 | Large file size                   | Compress images before embedding; use JPEG over PNG                               |
 | WeasyPrint missing fonts          | System fonts are available; use common font families                              |

@@ -11,24 +11,20 @@ Manage work items on the Numa Ops kanban boards. Create tickets, search and filt
 
 > **Use names, not IDs.** Pass human-readable names (e.g. `stageName: "Funnel"`, `customerName: "Acme Corp"`, `assigneeName: "Tom Wiltshire"`) and the bridge will resolve them to IDs automatically. You only need to call `get_board` / `get_config` / `list_*` first if you need to _show_ the data to the user, or if a name lookup fails and you need to disambiguate. **Never invent IDs** -- if you don't already know the ID, pass the name and let the bridge resolve it. See [Name-based parameters](#name-based-parameters) below.
 
-## Available MCP Tool
+## Available Command
 
-| Tool                       | Purpose                                                                        | Approval            |
-| -------------------------- | ------------------------------------------------------------------------------ | ------------------- |
-| `mcp__numa__numa_ops_tool` | Perform any Numa Ops operation (tickets, boards, customers, suppliers, config) | Required for writes |
+| Command                | Purpose                                                                        | Approval            |
+| ---------------------- | ------------------------------------------------------------------------------ | ------------------- |
+| `numa ops <operation>` | Perform any Numa Ops operation (tickets, boards, customers, suppliers, config) | Required for writes |
 
 ---
 
 ## How It Works
 
-The `numa_ops_tool` accepts an `operation` string and a `params` JSON string. The operation determines what action is taken and which parameters are required.
+The `numa ops` command accepts an `operation` and a `--params` JSON string. The operation determines what action is taken and which parameters are required.
 
 ```
-mcp__numa__numa_ops_tool(
-    operation="list_tickets",
-    params='{"boardName": "Engineering"}',
-    description="List all tickets for the Engineering board"
-)
+Bash("numa ops list_tickets --params '{\"boardName\": \"Engineering\"}' --json -m 'List all tickets for the Engineering board'")
 ```
 
 You can pass either an ID (`boardId`) or the human-readable name (`boardName`) -- the bridge resolves names to IDs automatically.
@@ -90,11 +86,7 @@ Anywhere an operation accepts an entity ID, you can pass the entity's name inste
 Returns ticket types, statuses, custom fields, staff members, projects, CRM config, and supplier config in a single call. **Always call this first** to understand the board structure before creating or updating tickets or mutating config.
 
 ```
-mcp__numa__numa_ops_tool(
-    operation="get_config",
-    params='{}',
-    description="Load Numa Ops configuration"
-)
+Bash("numa ops get_config --params '{}' --json -m 'Load Numa Ops configuration'")
 ```
 
 #### create_project
@@ -271,9 +263,9 @@ Valid `statusType` values per zone type:
 **Example flow** when the user says _"find tickets about SSO"_ and you don't already know the board:
 
 ```
-1. list_boards                       → returns user's accessible boards
+1. Bash("numa ops list_boards --params '{}' --json -m 'List boards'")
 2. (pick obvious board from chat context, or ask: "Which board?")
-3. search_tickets(query="SSO", boardId=<id-or-name-from-step-2>)
+3. Bash("numa ops search_tickets --params '{\"query\":\"SSO\",\"boardId\":\"<id-or-name-from-step-2>\"}' --json -m 'Search for SSO tickets'")
 ```
 
 #### create_ticket
@@ -604,7 +596,7 @@ Parameters are identical to customer activity operations, but use `supplierId` i
 | ------------------- | -------------------------------------------------------------------------- | -------- |
 | `upload_attachment` | Upload a file from the workspace to a ticket as an attachment on a comment | Yes      |
 
-The file at `workspaceFilePath` is PUT to S3 via a presigned URL, and a system comment (`📎 Attached: <name>`) is added to the ticket carrying the attachment record. The attachment shows up under the ticket's Attachments section in the UI and in `get_ticket` under `comments[].attachments`.
+The file at `workspaceFilePath` is PUT to S3 via a presigned URL, and a system comment is added to the ticket carrying the attachment record. The attachment shows up under the ticket's Attachments section in the UI and in `get_ticket` under `comments[].attachments`.
 
 | Parameter           | Type   | Required | Description                                                                                                      |
 | ------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -710,24 +702,16 @@ The CRM config is a single document that the backend **shallow-merges** on PUT. 
 
 ```
 # 1. Load config — capture current customerRecord.sections and field ids.
-get_config -> note crmConfig.customerRecord.sections + existing fields
+Bash("numa ops get_config --params '{}' --json -m 'Load config'")
+# → note crmConfig.customerRecord.sections + existing fields
 
 # 2. Create the new CRM field (category must be "crm").
-create_field(name="Renewal Likelihood", fieldType="select", category="crm",
-             options=["High", "Medium", "Low"])
+Bash("numa ops create_field --params '{\"name\":\"Renewal Likelihood\",\"fieldType\":\"select\",\"category\":\"crm\",\"options\":[\"High\",\"Medium\",\"Low\"]}' --json -m 'Create Renewal Likelihood field'")
 # → returns { id: "field-7f8a9b", ... }
 
 # 3. Add the new field id to the desired section of customerRecord.
 #    Send the FULL customerRecord (all sections) back — it's replaced whole.
-update_crm_config(customerRecord={
-    "sections": [
-        { "id": "section-company-details", "name": "Company Details",
-          "fieldIds": [...original ids...] },
-        { "id": "section-contract", "name": "Contract",
-          "fieldIds": [...original ids..., "field-7f8a9b"],
-          "requiredFieldIds": ["field-7f8a9b"] }
-    ]
-})
+Bash("numa ops update_crm_config --params '{\"customerRecord\":{\"sections\":[{\"id\":\"section-company-details\",\"name\":\"Company Details\",\"fieldIds\":[\"...original ids...\"]},{\"id\":\"section-contract\",\"name\":\"Contract\",\"fieldIds\":[\"...original ids...\",\"field-7f8a9b\"],\"requiredFieldIds\":[\"field-7f8a9b\"]}]}}' --json -m 'Add Renewal Likelihood to Contract section'")
 ```
 
 ### Custom fields on customer/supplier records
@@ -737,11 +721,7 @@ update_crm_config(customerRecord={
 **Note:** Tickets use `fields` (no underscore suffix); customers and suppliers use `customFields` which maps to `customFields` on the persisted record. Don't confuse the two.
 
 ```
-create_customer(
-    companyName="Acme Corp",
-    lifecycleStage="stage-prospect",
-    customFields={"field-7f8a9b": "High", "field-deal-value": 50000}
-)
+Bash("numa ops create_customer --params '{\"companyName\":\"Acme Corp\",\"lifecycleStage\":\"stage-prospect\",\"customFields\":{\"field-7f8a9b\":\"High\",\"field-deal-value\":50000}}' --json -m 'Create Acme Corp customer'")
 ```
 
 ---
@@ -753,49 +733,29 @@ create_customer(
 ```
 # One call. The bridge resolves boardName, stageName, ticketTypeName, and
 # assigneeName to IDs automatically.
-mcp__numa__numa_ops_tool(
-    operation="create_ticket",
-    params='{"boardName":"Engineering","stageName":"Triage","title":"Fix login bug","ticketTypeName":"Bug","priority":"high","assigneeName":"Tom Wiltshire","description":"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>"}',
-    description="Create ticket: Fix login bug (high priority) in Engineering board, assigned to Tom Wiltshire"
-)
+Bash("numa ops create_ticket --params '{\"boardName\":\"Engineering\",\"stageName\":\"Triage\",\"title\":\"Fix login bug\",\"ticketTypeName\":\"Bug\",\"priority\":\"high\",\"assigneeName\":\"Tom Wiltshire\",\"description\":\"<p>Users report <strong>500 errors</strong> on the login page.</p><ul><li>Affects all browsers</li><li>Started after last deploy</li></ul>\"}' --json -m 'Create ticket: Fix login bug (high priority) in Engineering board, assigned to Tom Wiltshire'")
 ```
 
 ### Search and update
 
 ```
 # Search for tickets by board name
-mcp__numa__numa_ops_tool(
-    operation="search_tickets",
-    params='{"query":"login bug","boardName":"Engineering"}',
-    description="Search for login bug tickets in Engineering board"
-)
+Bash("numa ops search_tickets --params '{\"query\":\"login bug\",\"boardName\":\"Engineering\"}' --json -m 'Search for login bug tickets in Engineering board'")
 
 # Move ticket to a different stage by name
-mcp__numa__numa_ops_tool(
-    operation="update_ticket",
-    params='{"displayId":"BUG-081","stageName":"In Progress"}',
-    description='Move BUG-081 to "In Progress" stage'
-)
+Bash("numa ops update_ticket --params '{\"displayId\":\"BUG-081\",\"stageName\":\"In Progress\"}' --json -m 'Move BUG-081 to In Progress stage'")
 ```
 
 ### Move a customer through their lifecycle
 
 ```
-mcp__numa__numa_ops_tool(
-    operation="update_customer",
-    params='{"customerName":"Acme Corp","lifecycleStageName":"At Risk"}',
-    description='Move Acme Corp to "At Risk" lifecycle stage'
-)
+Bash("numa ops update_customer --params '{\"customerName\":\"Acme Corp\",\"lifecycleStageName\":\"At Risk\"}' --json -m 'Move Acme Corp to At Risk lifecycle stage'")
 ```
 
 ### Bulk reassign by name
 
 ```
-mcp__numa__numa_ops_tool(
-    operation="bulk_update_tickets",
-    params='{"ticketIds":["t-1","t-2","t-3"],"changes":{"boardName":"Engineering","assigneeName":"Tom Wiltshire"}}',
-    description="Reassign 3 tickets to Tom Wiltshire"
-)
+Bash("numa ops bulk_update_tickets --params '{\"ticketIds\":[\"t-1\",\"t-2\",\"t-3\"],\"changes\":{\"boardName\":\"Engineering\",\"assigneeName\":\"Tom Wiltshire\"}}' --json -m 'Reassign 3 tickets to Tom Wiltshire'")
 ```
 
 ---

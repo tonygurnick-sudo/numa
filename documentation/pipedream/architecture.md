@@ -165,7 +165,7 @@ event Triggers, and Triggers without releasing the full Pipedream system.
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SCHEDULING`             | Master switch for the entire `/automations` route + the scheduling/triggers wizard. When off: no Automations page at all.                                                                                                              |
 | `EVENT_TRIGGERS`         | The "When something happens" path of the wizard. When off: only cron schedules are offerable; the event tile is shown disabled with an admin-contact hint. Existing event automations keep firing — this gates creation, not delivery. |
-| `PIPEDREAM_INTEGRATIONS` | Master switch for the Pipedream system as a whole. When off: no `/integrations` page, no Pipedream-backed triggers in the source picker (rendered disabled with reason), no Pipedream MCP tools in chat.                               |
+| `PIPEDREAM_INTEGRATIONS` | Master switch for the Pipedream system as a whole. When off: no `/integrations` page, no Pipedream-backed triggers in the source picker (rendered disabled with reason), no Pipedream integration tools (`numa integrations`) in chat. |
 
 Composition:
 
@@ -211,7 +211,7 @@ In practice this is well within budget at internal-rollout scale. The reconcilia
 | Pipedream-app trigger registry     | `lib/pipedream-trigger-apps.ts`                                                |
 | Supported-integrations registry    | `infra/config/integrations.ts`                                                 |
 | Per-integration agent prompts      | `services/numa-workspace-agent/integration-prompts/`                           |
-| Workspace agent MCP tools          | `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/integrations.py` |
+| Workspace agent integration tool   | `numa integrations` CLI (server-side handler in workspace-chat-tools, below)   |
 | Workspace-chat tools (HITL)        | `lambdas/python/workspace-chat-tools/tools/pipedream_integration.py`           |
 | Proxy infra stack                  | `infra/stacks/pipedream-proxy-stack.ts`                                        |
 | Per-client relay wiring            | `infra/constructs/core-numa-infra-construct.ts` (relay Lambda + policy tables) |

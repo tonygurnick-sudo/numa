@@ -800,6 +800,7 @@ export type SDKEventType =
   | 'completion'
   | 'assistant_advice'
   | 'tool_approval'
+  | 'tool_render'
   | 'background_tasks_pending';
 
 /** Base SDK event with common fields */
@@ -979,6 +980,7 @@ export type SDKEvent =
   | SDKCompletionEvent
   | SDKAssistantAdviceEvent
   | SDKToolApprovalEvent
+  | SDKToolRenderEvent
   | SDKBackgroundTasksPendingEvent;
 
 /**
@@ -1016,6 +1018,32 @@ export interface SDKToolApprovalEvent {
   auto_approved?: boolean;
   /** Category of the approval: "integration", "numa_tool", etc. Used by frontend for label rendering. */
   approval_category?: string;
+  parent_tool_use_id?: string | null;
+}
+
+/**
+ * SDK Tool Render event — emitted out-of-band (same SSE rail as `tool_approval`)
+ * when the `numa render` CLI command pushes HTML/SVG/image content to display
+ * inline in chat. The backend POSTs `/internal/emit-render`, which enqueues this
+ * onto the active conversation's approval queue; the SSE stream drains it.
+ *
+ * The frontend appends a standalone `tool_card` segment (sentinel
+ * `toolName: 'numa_render'`) carrying this payload re-wrapped into the
+ * `ToolResultLike` content shape `RenderToolRenderer` / `getRenderPayload` expect.
+ *
+ * NOTE: like `tool_approval`, this event is transient — it is NOT written to the
+ * SDK trace.jsonl, so it does not survive a page refresh / trace replay.
+ */
+export interface SDKToolRenderEvent {
+  type: 'tool_render';
+  timestamp?: string;
+  tool_use_id: string;
+  render_type: 'html' | 'image';
+  content: string;
+  title?: string | null;
+  height?: number;
+  mime_type?: string | null;
+  file_path?: string | null;
   parent_tool_use_id?: string | null;
 }
 

@@ -117,6 +117,131 @@ if os.environ.get("LOCAL_DEV") == "1":
 logger.info("FastAPI app created successfully")
 
 
+# ── Per-conversation approval-event queue ────────────────────────────────────
+# Populated by POST /internal/emit-approval (called by `numa` CLI subprocesses
+# in workspace-IAM mode). Drained by the active stream_with_sync() generator
+# interleaved with SDK events. One slot per active conversation; the SSE
+# generator unregisters on completion.
+_approval_queues: dict[str, asyncio.Queue[dict]] = {}
+_approval_queues_lock = asyncio.Lock()
+
+
+async def register_approval_queue(cid: str) -> asyncio.Queue[dict]:
+    async with _approval_queues_lock:
+        q = _approval_queues.get(cid)
+        if q is None:
+            q = asyncio.Queue(maxsize=64)
+            _approval_queues[cid] = q
+        return q
+
+
+async def unregister_approval_queue(cid: str) -> None:
+    async with _approval_queues_lock:
+        _approval_queues.pop(cid, None)
+
+
+async def get_approval_queue(cid: str) -> "asyncio.Queue[dict] | None":
+    async with _approval_queues_lock:
+        return _approval_queues.get(cid)
+
+
+@app.post("/internal/emit-approval")
+async def emit_approval(request: Request):
+    """CLI-driven HITL approval emission. Localhost-only.
+
+    The @numa/cli binary inside the MicroVM POSTs here when it detects a
+    write-op. The agent pushes the event onto the active conversation's
+    asyncio.Queue; the SSE stream drains it (interleaved with SDK events)
+    and flushes through AgentCore's transport buffer.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="localhost only")
+
+    body = await request.json()
+    cid = body.get("conversation_id")
+    rid = body.get("request_id")
+    tuid = body.get("tool_use_id")
+    if not (cid and rid and tuid):
+        raise HTTPException(status_code=400, detail="missing required fields")
+
+    q = await get_approval_queue(cid)
+    if q is None:
+        raise HTTPException(status_code=409, detail="no active stream for conversation")
+
+    event = {
+        "type": "tool_approval",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "created_at": int(time.time()),
+        "tool_use_id": tuid,
+        "tool_name": body.get("tool_name", "numa_cli"),
+        "action_key": body.get("action_key", ""),
+        "description": body.get("description", ""),
+        "props_preview": body.get("props_preview", {}),
+        "request_id": rid,
+        "auto_approved": False,
+        "approval_category": body.get("approval_category", "numa_tool"),
+        "parent_tool_use_id": body.get("parent_tool_use_id"),
+    }
+
+    try:
+        q.put_nowait(event)
+    except asyncio.QueueFull:
+        raise HTTPException(status_code=503, detail="approval queue full")
+
+    return {"status": "queued"}
+
+
+@app.post("/internal/emit-render")
+async def emit_render(request: Request):
+    """CLI-driven inline render emission. Localhost-only.
+
+    The `numa render` CLI command POSTs here to display HTML/SVG/image content
+    inline in the chat. Render is not a data call — it pushes a `tool_render`
+    event onto the active conversation's queue, drained by the SSE stream (the
+    SAME rail as HITL approvals). The frontend renders it via RenderToolRenderer.
+    Only works while a stream is active (streaming agent types); non-streaming
+    runs have no queue drained, so the CLI gets a 409.
+    """
+    client_host = request.client.host if request.client else ""
+    if client_host not in ("127.0.0.1", "::1", "localhost"):
+        raise HTTPException(status_code=403, detail="localhost only")
+
+    body = await request.json()
+    cid = body.get("conversation_id")
+    tuid = body.get("tool_use_id")
+    render_type = body.get("render_type")
+    content = body.get("content")
+    file_path = body.get("file_path")
+    if not (cid and tuid and render_type):
+        raise HTTPException(status_code=400, detail="missing required fields")
+    if not (content or file_path):
+        raise HTTPException(status_code=400, detail="content or file_path required")
+
+    q = await get_approval_queue(cid)
+    if q is None:
+        raise HTTPException(status_code=409, detail="no active stream for conversation")
+
+    event = {
+        "type": "tool_render",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool_use_id": tuid,
+        "render_type": render_type,
+        "content": content or "",
+        "title": body.get("title"),
+        "height": body.get("height", 400),
+        "mime_type": body.get("mime_type"),
+        "file_path": file_path,
+    }
+
+    try:
+        q.put_nowait(event)
+    except asyncio.QueueFull:
+        raise HTTPException(status_code=503, detail="render queue full")
+
+    return {"status": "queued"}
+
+
 # Note: Hooks removed - using absolute paths directly now
 # The path_transformer.py hook is no longer needed since we use absolute paths like /chat-workflows/
 
@@ -409,7 +534,7 @@ def _fetch_kb_listings(
         # Resolve it losslessly here (download + sha256-verify) so the system
         # prompt sees the COMPLETE listings. Backward-compatible: a non-oversized
         # result passes through unchanged.
-        from .mcp_tools.lambda_client import resolve_oversized_result
+        from .oversized_results import resolve_oversized_result
 
         result = resolve_oversized_result(response_payload.get("result", {}))
         listings = result.get("listings", {}) if isinstance(result, dict) else {}
@@ -1434,6 +1559,15 @@ async def invocations(request: Request):
     os.environ["NUMA_USER_ID_TOKEN"] = id_token
     os.environ["NUMA_CONVERSATION_ID"] = conversation_id
 
+    # Identity credential the numa CLI presents to numa-cli-api. The proxy sets
+    # x-numa-identity-token: the user's Cognito id token for interactive chat,
+    # or a signed service token for non-interactive runs (which have no user
+    # token). Fall back to the raw id token for local/direct invocations that
+    # bypass the proxy. Distinct from NUMA_USER_ID_TOKEN, which stays the real
+    # Cognito id token used for Q Business AssumeRoleWithWebIdentity.
+    identity_token = (payload_headers or {}).get("x-numa-identity-token") or id_token
+    os.environ["NUMA_IDENTITY_TOKEN"] = identity_token
+
     logger.info(
         "Invocation received",
         _name="INVOCATION",
@@ -2264,6 +2398,10 @@ async def _handle_chat(
                 }
             )
 
+        # Register the approval queue for this conversation so CLI
+        # subprocesses can POST approval events into the active SSE stream.
+        approval_q = await register_approval_queue(conversation_id)
+
         stream_error: Exception | None = None
         try:
             sdk_stream = stream_claude_sdk(
@@ -2301,9 +2439,44 @@ async def _handle_chat(
                 thinking_override=thinking_override,  # @<suffix> override from modelId
                 accessible_kbs=accessible_kbs,  # All folders the user can toggle (for awareness in prompt)
             )
-            async for chunk in sdk_stream:
-                # Stream chunk directly to frontend via HTTP SSE
-                yield chunk
+
+            # Interleave SDK stream chunks with CLI-emitted approval events.
+            # asyncio.wait on two tasks: (1) next SDK chunk, (2) next queue item.
+            # Whichever completes first gets yielded; the other keeps waiting.
+            sdk_iter = sdk_stream.__aiter__()
+            sdk_task: asyncio.Task | None = asyncio.ensure_future(sdk_iter.__anext__())
+            q_task: asyncio.Task = asyncio.ensure_future(approval_q.get())
+
+            try:
+                while sdk_task is not None:
+                    done, _ = await asyncio.wait(
+                        {sdk_task, q_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if q_task in done:
+                        ev = q_task.result()
+                        yield format_sse_event(ev)
+                        # 128 KB padding flush to force AgentCore transport buffer
+                        yield b": " + b"x" * 131072 + b"\n\n"
+                        q_task = asyncio.ensure_future(approval_q.get())
+                    if sdk_task in done:
+                        try:
+                            chunk = sdk_task.result()
+                        except StopAsyncIteration:
+                            sdk_task = None
+                            break
+                        yield chunk
+                        sdk_task = asyncio.ensure_future(sdk_iter.__anext__())
+            finally:
+                q_task.cancel()
+                if sdk_task is not None:
+                    sdk_task.cancel()
+                # Drain any tail events emitted after the SDK loop finished
+                while not approval_q.empty():
+                    ev = approval_q.get_nowait()
+                    yield format_sse_event(ev)
+                    yield b": " + b"x" * 131072 + b"\n\n"
+
         except Exception as e:
             stream_error = e
             logger.error(
@@ -2317,6 +2490,8 @@ async def _handle_chat(
             # Re-raise to propagate error in HTTP response
             raise
         finally:
+            await unregister_approval_queue(conversation_id)
+
             # Update conversation meta in DynamoDB
             update_conversation_meta(
                 user_sub=user_sub,
@@ -2568,6 +2743,11 @@ async def _handle_sync(
             kb_listings=kb_listings,
             external_user_id=external_user_id,
             enabled_integrations=enabled_integrations,
+            approval_mode=effective_approval_mode,
+            numa_tool_approval_mode={
+                k: v for k, v in all_approval_modes_sync.items() if k != "integrations"
+            },
+            integration_approval_modes=integration_approval_modes_sync,
         )
     else:
         numa_tool_approval_mode_sync = {
@@ -2912,6 +3092,13 @@ async def _handle_fire_and_forget(
                     kb_listings=kb_listings,
                     external_user_id=external_user_id,
                     enabled_integrations=enabled_integrations,
+                    approval_mode=effective_approval_mode,
+                    numa_tool_approval_mode={
+                        k: v
+                        for k, v in all_approval_modes_async.items()
+                        if k != "integrations"
+                    },
+                    integration_approval_modes=integration_approval_modes_async,
                 )
             else:
                 numa_tool_approval_mode_async = {

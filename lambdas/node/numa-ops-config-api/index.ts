@@ -799,6 +799,19 @@ const handleProjects = async (
     return jsonResponse(200, { projects: filtered });
   }
 
+  if (method === 'GET' && segments.length === 1) {
+    const id = segments[0];
+    const item = await getConfigItem(`PROJECT#${id}`);
+    if (!item) return errorResponse(404, 'Project not found');
+    // Mirror the access filter applied by the list route — projects scoped
+    // to teams the caller isn't on should look as if they don't exist
+    // (404, not 403) to avoid leaking project existence across teams.
+    const accessibleTeamIds = await getAccessibleTeamIds(auth);
+    const filtered = filterProjectsByAccess([item], accessibleTeamIds);
+    if (filtered.length === 0) return errorResponse(404, 'Project not found');
+    return jsonResponse(200, { project: filtered[0] });
+  }
+
   if (method === 'POST' && segments.length === 0) {
     const { name } = body;
     if (!name) return errorResponse(400, 'Missing required field: name');

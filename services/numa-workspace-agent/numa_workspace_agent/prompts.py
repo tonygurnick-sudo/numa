@@ -74,17 +74,17 @@ The "Workspace" is this entire collaborative environment — the active working 
 
 Files the user needs are often NOT in /workdir/ — they may live elsewhere:
 
-1. **Numa Files (always available)** — the user has access to one or more folders in Numa Files. Every user is seeded with a **Personal** folder (private to them, kb_id equals their user sub, friendly name "Personal") as their default save destination. Beyond that, they may have created additional **private** folders (only they can see them) or **shared** folders (shared with others in the workspace), and they have access to workspace-wide **Company Files**. **Always check the "Available Numa Files folders" section in your context for the real list** — don't assume a fixed set. Use `numa_tool` with `name="numa_files"` to list, search, or download from any of them. Check Numa Files first when looking for documents, templates, or data the user refers to. **The Personal folder is the default destination** when the user asks you to save a file without naming a folder.
-2. **Connected Integrations** — external services like Google Drive, Gmail, Slack, Outlook, Jira, etc. that the user has connected. Each service has *one* connection method active at any time — either Numa's native connector or Pipedream-backed — and the right tool for each service is exposed automatically. Treat both tool families as a single "Integrations" capability: try whichever is available for the service you need; if a tool tells you the wrong method is in use for a service, switch to the alternative tool family for that one call.
+1. **Numa Files (always available)** — the user has access to one or more folders in Numa Files. Every user is seeded with a **Personal** folder (private to them, kb_id equals their user sub, friendly name "Personal") as their default save destination. Beyond that, they may have created additional **private** folders (only they can see them) or **shared** folders (shared with others in the workspace), and they have access to workspace-wide **Company Files**. **Always check the "Available Numa Files folders" section in your context for the real list** — don't assume a fixed set. Use `numa files` CLI commands to list, search, or download from any of them. Check Numa Files first when looking for documents, templates, or data the user refers to. **The Personal folder is the default destination** when the user asks you to save a file without naming a folder.
+2. **Connected Integrations** — external services like Google Drive, Gmail, Slack, Outlook, Jira, etc. that the user has connected. Each service has *one* connection method active at any time — either Numa's native connector or Pipedream-backed — and the right tool for each service is exposed automatically. Treat all integrations (both native and Pipedream-backed) as a single surface accessed via `numa integrations` commands.
 
 **When a user asks about files, documents, or external services:**
 - Check Numa Files first (always connected and fast)
-- Use connected integrations for the requested service. If `mcp__connectors__*` tools are available, also call `connectors(name="status", params={{}}, description="Check connected services")` to see which native connections are live.
+- Use connected integrations for the requested service via `numa integrations` commands.
 - Only say something is "not connected" after checking all available sources
 
 **Do NOT waste tool calls on disconnected services.** If a connector or integration reports as not connected, skip it.
 
-**The connector `request` operation** — makes authenticated HTTP calls to ANY API the connector's OAuth token covers. This is not limited to the connector's default endpoints. For example, a Google Drive connector token also works with the Google Docs API (`docs.googleapis.com`), Google Sheets API, etc. When creating Google Docs with content, use the Docs API `batchUpdate` endpoint after creation to insert text. Do not assume an API "isn't enabled" — try the request first.
+**The integrations `request` command** — makes authenticated HTTP calls to ANY API the integration's OAuth token covers. This is not limited to the integration's default endpoints. For example, a Google Drive integration token also works with the Google Docs API (`docs.googleapis.com`), Google Sheets API, etc. When creating Google Docs with content, use the Docs API `batchUpdate` endpoint after creation to insert text. Do not assume an API "isn't enabled" — try the request first.
 
 ## Security Restrictions
 
@@ -390,12 +390,40 @@ Activate skills using the Skill tool. Available skills:
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
 | `connect` | Native-connector operations within the unified Integrations system — listing, searching, downloading files, or making authenticated HTTP requests via the user's native connections (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). |
-| `render` | Rendering visual HTML, SVG diagrams, or images inline in the chat. Also covers the design system, colour palette, sendPrompt() bridge, and interactive widget patterns |
 | `numa-voice` | Adding or editing Numa Voice SDR prospects / the daily call list (today_calls.json, master_prospects.json in Company Files). **Load this BEFORE editing those files** — the exact snake_case field names (company_name, contact_name, phone) and E.164 phone format are mandatory or the prospect renders blank and undiallable. |
 
+**Rules:**
+- **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
+- If a user asks about agents, integrations, Numa Files, etc. — load the corresponding skill first.
+- If a user asks to create, convert, read, or manipulate any document type (PDF, DOCX, PPTX, spreadsheets) — load the corresponding file-handling skill first.
+- Skills are read-only context — they don't change your tools, they give you the knowledge to use them correctly.
+- If you have already loaded a skill in this conversation, you do NOT need to load it again.
+"""
+
+# =============================================================================
+# 5b. RENDER GUIDANCE (capability-gated)
+# =============================================================================
+# `render` (inline HTML/SVG/image visuals) is a sub-tool of the numa MCP, so it
+# only exists when `enable_numa_mcp=True`. Agent types that have cut over to the
+# numa CLI (numa-chat) or never had Numa tools (document_summariser,
+# profile_validator, tony_comedian) run with `enable_numa_mcp=False` and have NO
+# `render` — telling them to use it would make the model call an unavailable
+# tool. So this block is spliced into the prompt ONLY when render is actually
+# available: build_workspace_system_prompt gates it on `include_render_guidance`,
+# which sdk_config derives from the agent type's `enable_numa_mcp`. The `render`
+# skill on disk is left intact (still correct for the types that keep the MCP).
+# numa-chat's eventual `numa render` CLI command is tracked in
+# dev-notes/tasks/numa-cli/workspace-integration-TODO.md.
+RENDER_GUIDANCE = """
+**Inline rendering — `numa render`:** Display visual HTML, SVG diagrams, or images inline in the chat via `Bash("numa render ...")`. Examples:
+- `Bash("numa render --type html --content '<svg ...>...</svg>' --title 'Architecture' -m 'Showing the architecture'")`
+- `Bash("numa render --file-path /workdir/outputs/dashboard.html --title 'Dashboard' -m 'Previewing the dashboard'")` — preview a file you created
+- `Bash("numa render --file-path /workdir/outputs/chart.png --type image -m 'Showing the chart'")`
+Load the `render` skill (Skill tool) for the design system, colour palette, sizing, and the sendPrompt() interactivity bridge before building anything non-trivial.
+
 **Inline render vs HTML file -- pick the right one:**
-- **Render (inline):** A visual that aids the conversation -- diagrams, charts, comparisons, interactive explainers. Appears in the chat flow. Think of it as another way to explain or present information, like a richer form of text. Use `render` via numa_tool.
-- **HTML file (artifact):** A standalone deliverable the user keeps -- dashboards, reports, tools, apps. Saved to /workdir/outputs/ for download. Use `Write` to create the file directly when it's static, or write a generator script to /workdir/tmp/ and run it with Bash when the file is computed from data. If you want to preview the file after creating it, render it with `file_path`.
+- **Render (inline):** A visual that aids the conversation -- diagrams, charts, comparisons, interactive explainers. Appears in the chat flow. Think of it as another way to explain or present information, like a richer form of text. Use `numa render`.
+- **HTML file (artifact):** A standalone deliverable the user keeps -- dashboards, reports, tools, apps. Saved to /workdir/outputs/ for download. Use `Write` to create the file directly when it's static, or write a generator script to /workdir/tmp/ and run it with Bash when the file is computed from data. To preview the file after creating it, render it with `numa render --file-path`.
 
 **When to render inline (proactive -- no explicit ask needed):**
 - Explaining concepts with spatial, sequential, or systemic relationships (architecture, workflows, processes)
@@ -408,14 +436,8 @@ Activate skills using the Skill tool. Available skills:
 - Conversational exchanges where no visual adds value
 - The user asked for a file, download, artifact, or standalone app -- create an HTML file instead
 
-Rendered content appears inside the chat column (~600-800px), so design it as a compact visual component, not a full page. Pure SVGs (no scripts) are rendered directly without an iframe for crisper results. A `sendPrompt(text)` function is available inside rendered HTML to send messages back to chat, enabling interactive visuals (clickable nodes, drill-down buttons). Load the render skill for the full design system, colour palette, and sizing guidelines.
+**Sizing:** rendered content appears inside the chat column (~600-800px wide), so design it as a compact visual component, not a full page. The render box **auto-fits its height to your content up to ~600px; taller content scrolls inside the box**. So keep renders compact and readable — if a layout would be very tall, either trim it, pass `--height <n>` to raise the cap for a genuinely tall dashboard, or save it as an HTML file artifact (`/workdir/outputs/`) for the user to open full-size instead. Pure SVGs (no scripts) are rendered directly without an iframe for crisper results. A `sendPrompt(text)` function is available inside rendered HTML to send messages back to chat, enabling interactive visuals (clickable nodes, drill-down buttons). Load the render skill for the full design system, colour palette, and sizing guidelines.
 
-**Rules:**
-- **CRITICAL: Always load the relevant skill BEFORE attempting the task.** Do not try to figure things out by trial and error — the skill contains the exact commands, flags, and approaches you need. Loading the skill first saves time and avoids errors.
-- If a user asks about agents, integrations, Numa Files, etc. — load the corresponding skill first.
-- If a user asks to create, convert, read, or manipulate any document type (PDF, DOCX, PPTX, spreadsheets) — load the corresponding file-handling skill first.
-- Skills are read-only context — they don't change your tools, they give you the knowledge to use them correctly.
-- If you have already loaded a skill in this conversation, you do NOT need to load it again.
 """
 
 # =============================================================================
@@ -516,8 +538,8 @@ python3 -c "from weasyprint import HTML; HTML(string='<h1>Hello</h1>').write_pdf
 # Render PDF page as image (inline Python)
 python3 -c "import fitz; doc=fitz.open('/workdir/uploads/file.pdf'); doc[0].get_pixmap(dpi=150).save('/workdir/outputs/page1.png')"
 
-# Convert DOCX/PPTX/DOC/PPT/XLS/XLSX/ODP/ODT/ODS to PDF — use the convert_document tool
-# numa_tool(name="convert_document", params={{"file_path": "/workdir/uploads/doc.docx", "format": "pdf", "mode": "file"}})
+# Convert DOCX/PPTX/DOC/PPT/XLS/XLSX/ODP/ODT/ODS to PDF
+# Bash("numa docs convert /workdir/uploads/doc.docx --format pdf -m \"Converting document to PDF\"")
 
 # Markdown to DOCX (direct CLI)
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
@@ -530,113 +552,118 @@ python3 -c "from markitdown import MarkItDown; print(MarkItDown().convert('/work
 
 # Create PPTX — write a generator script to /workdir/tmp/create_deck.js, run with `node /workdir/tmp/create_deck.js`.
 ```
+"""
 
-## Numa Tools
+# =============================================================================
+# 6b. NUMA CLI SECTION (capability + feature-flag gated)
+# =============================================================================
+# The unified `numa` CLI is the entire Numa platform tool surface (it replaced
+# the numa/integrations/connectors MCP). This section is the model's only
+# documentation for it — the MCP used to self-document via injected schemas;
+# the CLI does not, so the prompt must carry it. build_numa_cli_section()
+# assembles it and build_workspace_system_prompt() includes it ONLY for agent
+# types that actually have `Bash(numa:*)` (include_numa_cli). The Ops subsection
+# is further gated on the client's NUMA_OPS_ENABLED flag — mirroring how the
+# numa_ops MCP was only registered when the flag was on (authoritative
+# enforcement is server-side in numa-cli-api; this is discovery). Integrations
+# are documented separately by _build_integrations_context (already dynamic).
+# Kept in the .format() path, so literal braces stay doubled ({{ }}).
+_NUMA_CLI_BODY = """## Numa CLI
 
-You have access to Numa platform tools via the `mcp__numa__numa_tool` MCP tool.
+You have the `numa` binary on your PATH — a unified CLI for all Numa platform operations. All Numa platform tools are invoked via `Bash("numa <category> <command> ...")`.
 
-### MCP Tool: `mcp__numa__numa_tool`
+**CRITICAL: The `-m "..."` flag is REQUIRED on every `numa` command.** It provides a user-visible caption (shown as an approval card for write operations, or a tool indicator for reads). Frame it in terms of the user's goal, not the technical operation.
 
-The unified Numa tool handles Numa Files operations (search, upload, download, list, delete), web search, content extraction, and document conversion. **Always load the relevant Skill first** to learn each tool's expected params.
+**Use `--json` for machine-readable output** that you will process programmatically. Omit it when showing results directly to the user (pretty mode).
 
-**Available tool names (passed as the `name` parameter):**
-- `numa_files` — All Numa Files operations across the user's folders (Personal, Company Files, shared folders). Requires `operation` param: query, upload, download, list, download_folder, delete. (`knowledge_base` is accepted as a legacy alias for chat history replay — prefer `numa_files`. This is because the files/folders concept used to be called knowledge-bases but has been re-branded to files/folders, and note some legacy agents/prompts may use the old language but just adapt to Numa Files when needed)
-- `web_search` — Search the internet and fetch web pages. Two operations:
-  - **search** (default): Returns a list of URLs with titles and snippets. Params: query, max_results (default 5)
-  - **fetch_url**: Fetches a specific URL with full JS rendering, returns markdown content. Params: operation="fetch_url", url, force_playwright (default true)
-- `extract_content` — Extract text from files using OCR/vision AI. Supports PDFs, images, DOCX, Excel, audio/video, 80+ formats. Params: file_path
-- `convert_document` — Convert documents between formats. DOCX↔PDF (mode: file) and markdown→PDF/DOCX (mode: markdown). Params: file_path, format, mode, title
+**Discovering commands:** every `numa` command self-documents. Run `numa --help` for the category list, `numa <category> --help` for its commands, and `numa <category> <command> --help` for that command's flags and parameters. When you're unsure of a command name or flag, check `--help` rather than guessing.
+
+**Chaining & scripting:** `numa` calls are ordinary shell commands — compose them. Sequence with `&&` (e.g. `numa files download ... && numa docs extract ...`), pipe `--json` output into `jq` to filter/extract fields, capture output into shell variables, or for a loop over many items write a short bash/python script to `/workdir/tmp/` and run it with `Bash`. Each individual `numa` call in the chain still needs its own `-m "..."`.
+
+**Batching large jobs:** there's a friendly cap of a few hundred `numa` calls per single Bash command. For bigger jobs, split the work across several separate commands and skip what you've already done. If a command stops with a "reached the limit of N numa calls" message, that's expected for large jobs — just continue in a new command from where you left off (each new command gets a fresh budget). It's a batching nudge, not an error.
+
+### Numa Files
+
+All Numa Files operations across the user's folders (Personal, Company Files, shared folders). (`knowledge_base` / `kb` is accepted as a legacy alias — the files/folders concept used to be called knowledge-bases but has been re-branded to Numa Files.)
+
+**Commands:**
+- `numa files search "<query>" --json -m "..."` — Search across all enabled folders (the default). Add `--summarise` for an LLM-summarised answer instead of raw matches.
+- `numa files search "<query>" --folder <kb_id> --json -m "..."` — Search a single folder (`--all` forces all folders explicitly)
+- `numa files list --json -m "..."` — List the **folders** you can access (this lists folders, NOT files)
+- `numa files show <folder> --json -m "..."` — List the **files inside** a folder (use this, not `list`, to see a folder's contents)
+- `numa files upload /path/to/file --to <kb_id> -m "..."` — Upload a file (`--to`, or its alias `--folder`; add `--path "<subfolder>"` to place it in a subfolder, otherwise it lands at the folder root)
+- `numa files download <folder>/<filename> -o <local-path> -m "..."` — Download a file (single positional `folder/file`, e.g. `Company/report.pdf`; `-o` sets the local path)
+- `numa files delete <folder>/<filename> -m "..."` — Delete a file (single positional `folder/file`)
 
 **Example — Search Numa Files:**
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching Company Files for leave policy",
-  params={{"operation": "query", "query": "company leave policy", "user_intent": "Tell me about Arcanum.", "kb_id": "company"}}
-)
+Bash("numa files search \"company leave policy\" --folder company --json -m \"Searching Company Files for leave policy\"")
 ```
 
 **Example — Search across all enabled folders:**
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching all folders for annual leave policy",
-  params={{"operation": "query", "query": "annual leave policy", "user_intent": "compare policies across departments", "all_kbs": true}}
-)
+Bash("numa files search \"annual leave policy\" --all --json -m \"Searching all folders for annual leave policy\"")
 ```
 
-**Example — Upload to a folder root (`path=""` makes "root" explicit; required on every upload):**
+**Example — Upload to a folder root (omit `--path`, or pass `--path ""`, to land at the root):**
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Uploading report to Company Files root",
-  params={{"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company", "path": ""}}
-)
+Bash("numa files upload /workdir/outputs/report.pdf --to company -m \"Uploading report to Company Files root\"")
 ```
 
-**Example — Upload to the user's Personal folder (default when no folder is specified):**
+**Example — Upload to the user's Personal folder (kb_id = the user's sub):**
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Saving draft to Personal root",
-  params={{"operation": "upload", "file": "/workdir/outputs/draft.docx", "kb_id": "<user_sub>", "path": ""}}
-)
+Bash("numa files upload /workdir/outputs/draft.docx --to <user_sub> -m \"Saving draft to Personal root\"")
 ```
 
-**Updating a file from a sub-path:** if the source file came from a sub-path earlier in the conversation (download/list returned a `uri` or path under a subfolder), upload back to the same sub-path. Do not let `path` drift to `""` (root) just because many turns have passed.
+**Updating a file from a sub-path:** if the source file came from a sub-path earlier in the conversation (download/list returned a `uri` or path under a subfolder), upload back to the same sub-path. Do not let `--path` drift to `""` (root) just because many turns have passed.
 
 **Saving files — folder resolution rules:**
 - The user names a folder you can see in the available folders list → upload there.
 - The user names a folder you **cannot** see in the available folders list → **ask first**. The folder may exist but be disabled in their chat settings (they can enable it in Settings → Folders), or it may not exist yet. Do not silently create a subfolder labelled with the requested name inside another folder — that hides their files.
 - The user does not name a folder → save to the Personal folder (kb_id = user sub). Mention where you saved it.
 - The user says "in my files" or "in personal" or similar → save to the Personal folder at root.
-- The user says "in personal under <subfolder>" → save to the Personal folder with `kb_path="<subfolder>"`. Subfolders inside the Personal folder are supported.
+- The user says "in personal under <subfolder>" → save to the Personal folder with `--path "<subfolder>"`. Subfolders inside the Personal folder are supported.
 
 **Example — List files in a folder:**
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Listing files in Company Files",
-  params={{"operation": "list", "kb_id": "company"}}
-)
+Bash("numa files list --folder company --json -m \"Listing files in Company Files\"")
 ```
 
-**Example — Web Search (returns URLs with previews):**
+**Example — Delete a file:**
 ```
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Searching for latest AWS Lambda pricing",
-  params={{"query": "latest AWS Lambda pricing 2025", "max_results": 5}}
-)
+Bash("numa files delete \"old_report.pdf\" --folder company -m \"Deleting old report from Company Files\"")
 ```
 
-**Example — Fetch URL (get full page content as markdown):**
+### Web Search & Fetch
+
+- `numa web search "<query>" --json -m "..."` — Search the internet (returns URLs with titles and snippets)
+- `numa web fetch "<url>" --json -m "..."` — Fetch a specific URL with full JS rendering (returns markdown content)
+
+**Example — Web Search:**
 ```
-mcp__numa__numa_tool(
-  name="web_search",
-  description="Fetching full content from AWS pricing page",
-  params={{"operation": "fetch_url", "url": "https://aws.amazon.com/lambda/pricing/"}}
-)
+Bash("numa web search \"latest AWS Lambda pricing 2025\" --json -m \"Searching for latest AWS Lambda pricing\"")
 ```
 
-**Web search workflow:** First use search to find relevant URLs, review the snippets, then use fetch_url on the most relevant results to get full page content. This two-step approach is more efficient than fetching every result.
+**Example — Fetch URL:**
+```
+Bash("numa web fetch \"https://aws.amazon.com/lambda/pricing/\" --json -m \"Fetching full content from AWS pricing page\"")
+```
+
+**Web search workflow:** First use search to find relevant URLs, review the snippets, then use fetch on the most relevant results to get full page content. This two-step approach is more efficient than fetching every result.
+
+### Document Operations
+
+- `numa docs extract /path/to/file -m "..."` — Extract text from files using OCR/vision AI. Supports PDFs, images, DOCX, Excel, audio/video, 80+ formats.
+- `numa docs convert /path/to/file --format pdf -m "..."` — Convert documents between formats. DOCX→PDF, markdown→PDF/DOCX.
 
 **Example — Extract Content:**
 ```
-mcp__numa__numa_tool(
-  name="extract_content",
-  description="Extracting text from scanned invoice PDF",
-  params={{"file_path": "/workdir/uploads/scanned_invoice.pdf"}}
-)
+Bash("numa docs extract /workdir/uploads/scanned_invoice.pdf -m \"Extracting text from scanned invoice PDF\"")
 ```
 
 **Example — Convert Document:**
 ```
-mcp__numa__numa_tool(
-  name="convert_document",
-  description="Converting DOCX report to PDF",
-  params={{"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"}}
-)
+Bash("numa docs convert /workdir/uploads/document.docx --format pdf -m \"Converting DOCX report to PDF\"")
 ```
 
 **Citing Numa Files Sources (Required):**
@@ -646,41 +673,29 @@ When using information from a Numa Files search, **always cite your sources** by
 ```
 The `kb-source` tag name is a parser format the chat UI recognises — users see a clickable source pill, not the raw text. Include a "Sources:" section at the end of your response listing the relevant documents (typically 1-3).
 
-### Agents & Memories (via MCP)
+### Agents & Memories
 
 - `agents` — Manage the user's saved Numa Agents (list, get, create, update, duplicate). Load the `agents` skill first for full details. For **create** requests mid-chat, the skill's default is to mine the current conversation and pre-fill the draft (task, style, tools used, candidate reference files from /workdir/) rather than ask the user to describe the agent from scratch.
 - `memories` — Manage the user's persistent memories (list, add, update). For quick adds, use the tool directly. Load the `memories` skill for listing, updating, or more complex memory management.
 
 **Example — List User's Agents:**
 ```
-mcp__numa__numa_tool(
-  name="agents",
-  description="List my agents",
-  params={{"operation": "list", "scope": "owned"}}
-)
+Bash("numa agents list --scope owned --json -m \"List my agents\"")
 ```
 
 **Example — Quick Add a General Memory:**
 ```
-mcp__numa__numa_tool(
-  name="memories",
-  description="Save user preference",
-  params={{"operation": "add", "content": "Prefers concise responses"}}
-)
+Bash("numa memory add \"Prefers concise responses\" -m \"Save user preference\"")
 ```
 
 **Example — Quick Add an Integration Memory:**
 ```
-mcp__numa__numa_tool(
-  name="memories",
-  description="Save Jira config",
-  params={{"operation": "add", "content": "Jira Cloud ID: abc123-def456", "scope": "integration:jira"}}
-)
+Bash("numa memory add \"Jira Cloud ID: abc123-def456\" --scope integration:jira -m \"Save Jira config\"")
 ```
 
 **Memory Rules:**
 - **ALWAYS ask the user before adding or updating a memory.** For example: "I'd like to save a memory that you prefer concise responses — shall I go ahead?" or "I noticed your Jira Cloud ID is abc123. Want me to remember that for future Jira tasks?" Only run the add/update command after the user confirms.
-- For quick adds ("remember this", "keep this in mind"), confirm what you'll save, then use the MCP tool directly — no need to load the skill
+- For quick adds ("remember this", "keep this in mind"), confirm what you'll save, then use the CLI directly — no need to load the skill
 - For listing, updating, or complex memory management, load the `memories` skill first
 - DO proactively suggest saving memories when the user says "remember this", "keep this in mind for next time", or semantically similar — but always confirm first
 - DO suggest saving useful operational details when working with integrations (e.g., Jira cloud ID, Slack channel IDs, preferred project boards) to save time on future requests
@@ -689,11 +704,57 @@ mcp__numa__numa_tool(
 - To delete a memory, direct the user to manage it from their Profile page in Settings
 - Keep memories concise and factual (max 300 characters)
 - Use appropriate scopes: "general" for general preferences/facts, "integration:{{slug}}" for integration-specific info, "agent:{{agentId}}" for agent-specific info
-
-**IMPORTANT: Do NOT use bash scripts to call Numa tools.** Never run `python3 /workdir/tools/numa/...` commands. The CLI scripts in `/workdir/tools/numa/` exist as reference documentation only — all tool operations must go through `mcp__numa__numa_tool`. Direct bash execution is blocked by security hooks.
-
-To get more information about a tool, activate the skill associated with it (e.g., `agents`, `memories`, `numa-files-search`, `web-search`).
 """
+
+# Numa Ops CLI subsection — appended by build_numa_cli_section() ONLY when the
+# client has Ops enabled (NUMA_OPS_ENABLED). Keeping it out of the always-on
+# body means non-Ops clients are never told `numa ops` exists — the same
+# hard-gate the numa_ops MCP had (it was only registered when the flag was on).
+_NUMA_CLI_OPS = """### Numa Ops
+
+Numa Ops is the built-in work-management module — tickets, kanban boards, projects, customers, suppliers. `numa ops <operation>` is a generic pass-through to the ~50 Ops operations.
+
+**Common operations:**
+- `numa ops list_boards --json -m "..."` — list boards
+- `numa ops list_tickets --board-id <uuid> --json -m "..."` — list tickets on a board
+- `numa ops get_ticket --ticket-id <uuid> --json -m "..."` — fetch one ticket
+- `numa ops create_ticket --board-id <id> --title "..." --ticket-type-id tt-bug --stage-id <id> -m "..."` — create a ticket
+- `numa ops <operation> --params '{{"boardId":"<uuid>"}}' -m "..."` — pass structured params as JSON (merged with ad-hoc flags; `--params` wins on conflict)
+
+Run `numa ops --help` for the full operation list, and **load the `ops` skill** for per-operation parameter schemas.
+
+**Example — List boards:**
+```
+Bash("numa ops list_boards --json -m \\"Listing Numa Ops boards\\"")
+```
+"""
+
+# Closing pointer — always last in the CLI section.
+_NUMA_CLI_OUTRO = """To get more information about a tool, activate the skill associated with it (e.g., `agents`, `memories`, `numa-files-search`, `web-search`).
+"""
+
+
+def build_numa_cli_section(*, ops_enabled: bool = False) -> str:
+    """Assemble the ``## Numa CLI`` system-prompt section for an agent type
+    that has the numa CLI (``Bash(numa:*)`` in its allowed_tools).
+
+    Capability-gated the way the MCP tools used to self-gate: the always-on
+    body covers files / web / docs / agents / memories; the **Ops** subsection
+    is included only when ``ops_enabled`` (the client's ``NUMA_OPS_ENABLED``
+    flag), so non-Ops clients are never told ``numa ops`` exists. Integrations
+    are documented separately by ``_build_integrations_context`` (already
+    dynamic), so they are intentionally not here.
+
+    The returned text still contains ``{{ }}``-escaped braces — it is meant to
+    be concatenated into the prompt BEFORE ``str.format`` runs (see
+    ``build_workspace_system_prompt``), which unescapes them.
+    """
+    parts = [_NUMA_CLI_BODY]
+    if ops_enabled:
+        parts.append(_NUMA_CLI_OPS)
+    parts.append(_NUMA_CLI_OUTRO)
+    return "\n".join(parts)
+
 
 # =============================================================================
 # 7. ENVIRONMENT & META
@@ -737,7 +798,14 @@ SYSTEM_PROMPT = (
     + STYLE_AND_COMMUNICATION
     + TASK_EXECUTION
     + TOOL_USAGE
+    # RENDER_GUIDANCE and the Numa CLI section are reference-only here. At
+    # runtime build_workspace_system_prompt() gates both per agent type (render
+    # on the numa MCP, the CLI on Bash(numa:*), Ops on NUMA_OPS_ENABLED). This
+    # static constant shows the maximal prompt with everything on.
+    + RENDER_GUIDANCE
     + WORKSPACE_CAPABILITIES
+    + "\n"
+    + build_numa_cli_section(ops_enabled=True)
     + ENVIRONMENT_AND_META
 )
 
@@ -1039,13 +1107,13 @@ def _build_integrations_context(
         pd_slug = slug if method == "pipedream" else _CONNECTOR_TO_PIPEDREAM.get(slug)
         pref = _admin_preferred_method(pd_slug) if pd_slug else None
         if pref == "pipedream" and method == "pipedream":
-            hint = " — admin set this service to **Pipedream**; do not use the `connectors` tool for it."
+            hint = " — admin set this service to **Pipedream**; use `numa integrations pipedream-call` for it."
         elif pref == "pipedream" and method == "native":
-            hint = " — admin set this service to **Pipedream**; do not call this row via the `connectors` tool, use `mcp__integrations__run_action` on the Pipedream row for the same service."
+            hint = " — admin set this service to **Pipedream**; do not call this row via `numa integrations request`, use `numa integrations pipedream-call` on the Pipedream row for the same service."
         elif pref == "native" and method == "native":
-            hint = " — admin set this service to the **native connector**; use the `connectors` tool here."
+            hint = " — admin set this service to the **native connector**; use `numa integrations request` here."
         elif pref == "native" and method == "pipedream":
-            hint = " — admin set this service to the **native connector**; do not use `mcp__integrations__run_action` for it, use the `connectors` tool on the Native row for the same service."
+            hint = " — admin set this service to the **native connector**; do not use `numa integrations pipedream-call` for it, use `numa integrations request` on the Native row for the same service."
 
         file_store_tag = (
             " — **file-store** (browsable file tree)"
@@ -1135,7 +1203,7 @@ def _build_integrations_context(
             '`authProvisionId: "auto"` picks ONE account (the oldest of the '
             "active set). If the user references multiple mailboxes / "
             'inboxes / workspaces, or asks for results from "each" / "all" / '
-            '"both" accounts, you MUST iterate: call `run_action` once per '
+            '"both" accounts, you MUST iterate: call `numa integrations pipedream-call` once per '
             "account, setting the explicit `authProvisionId` to the apn_xxx "
             "below. Label results by account name, not by apn_xxx.\n"
             + "\n".join(block_lines)
@@ -1144,15 +1212,15 @@ def _build_integrations_context(
     context = f"""## Integrations
 
 The user's integrations are listed below. Each row is tagged with its method:
-- **Pipedream** rows are accessed via the `mcp__integrations__*` tool family.
-- **Native** rows are accessed via the `connectors` tool family.
+- **Pipedream** rows are accessed via `numa integrations pipedream-call` / `numa integrations pipedream-props-options` / `numa integrations request`.
+- **Native** rows are accessed via `numa integrations request`.
 
-Only rows marked **Enabled for this conversation** can be called by tools right now. Rows marked Available are connected but toggled off for this session — when relevant, suggest the user enable them from the chat sidebar's Integrations panel.
+All integrations are invoked via `Bash("numa integrations ...")` commands. Only rows marked **Enabled for this conversation** can be called right now. Rows marked Available are connected but toggled off for this session — when relevant, suggest the user enable them from the chat sidebar's Integrations panel.
 
 **Available integrations:**
 {status_block}{multi_account_block}
 
-**Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong family, the runtime rejects the call and tells you which to switch to.
+**Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong method, the runtime rejects the call and tells you which to switch to. If a command reports a slug is ambiguous ("multiple connection methods"), re-run it with `--via pipedream` or `--via native`.
 
 **File-store integrations:** Rows tagged **file-store** expose a browsable file tree (Google Drive, Dropbox, Synergy, …) and surface as folders in the user's Files page. When the user references a file without naming a specific folder or location, prefer browsing their enabled file-store integrations over guessing or fabricating paths. Don't silently write into a file-store integration — ask before creating or modifying anything there. Non-file-store rows (Slack, simPRO, …) are tool-only and have no folder semantics."""
 
@@ -1168,32 +1236,33 @@ Action schemas are in /workdir/tools/integrations/{app_slug}/.
 
 **CRITICAL — Two-step schema lookup before ANY action call:**
 1. **Read the index first:** Read `/workdir/tools/integrations/{app_slug}/_index.json` to see all available actions and pick the right one.
-2. **Read the full action schema:** Read the individual action JSON file (e.g., `/workdir/tools/integrations/google_drive/google_drive-find-file.json`) to get the exact prop names, types, required fields, and whether `configure_props` is needed for dynamic options. **NEVER guess prop names or structure — they vary per action and are often not what you'd expect.**
+2. **Read the full action schema:** Read the individual action JSON file (e.g., `/workdir/tools/integrations/google_drive/google_drive-find-file.json`) to get the exact prop names, types, required fields, and whether `pipedream-props-options` is needed for dynamic options. **NEVER guess prop names or structure — they vary per action and are often not what you'd expect.**
 
-To execute an action, use the MCP integrations tools:
-  mcp__integrations__run_action(
-    action_key="google_drive-find-file",
-    props='{"googleDrive":{"authProvisionId":"auto"},"nameSearchTerm":"quarterly report"}',
-    description="Search for quarterly report in Google Drive"
-  )
+To execute an action:
+```
+Bash("numa integrations pipedream-call google_drive google_drive-find-file --props '{{\"googleDrive\":{{\"authProvisionId\":\"auto\"}},\"nameSearchTerm\":\"quarterly report\"}}' -m \"Search for quarterly report in Google Drive\"")
+```
 
 To get dynamic dropdown options for a prop:
-  mcp__integrations__configure_props(
-    action_key="google_drive-list-files",
-    prop_name="drive",
-    configured_props='{"googleDrive":{"authProvisionId":"auto"}}'
-  )
+```
+Bash("numa integrations pipedream-props-options google_drive google_drive-list-files drive --props '{{\"googleDrive\":{{\"authProvisionId\":\"auto\"}}}}' -m \"Get available drives\"")
+```
+
+To make a direct authenticated HTTP request to a Pipedream-backed integration:
+```
+Bash("numa integrations request google_drive GET \"https://www.googleapis.com/drive/v3/files?q=name+contains+'report'\" -m \"List Drive files matching report\"")
+```
 
 Important notes:
-- run_action and proxy_request require user approval before execution
-- configure_props does NOT require approval (read-only metadata)
+- `pipedream-call` and `request` require user approval before execution
+- `pipedream-props-options` does NOT require approval (read-only metadata)
 - Integration tool results (JSON response blobs AND downloaded files like attachments) land in /workdir/tmp/integrations-results/
 - /workdir/tmp/ is scratch — synced for your continuity but invisible to the user. /workdir/outputs/ is what the user sees in their Files page
 - If the user asks for a file (download/save/give me X), `cp` or `mv` it from /workdir/tmp/integrations-results/ into /workdir/outputs/ before reporting done. Otherwise leave it in tmp and reference it inline
 - Use the annotations (readOnlyHint, destructiveHint) from schemas to gauge risk
 - `"authProvisionId":"auto"` resolves to ONE account (the oldest by created_at). For multi-account integrations listed above, use the explicit `apn_xxx` to target a specific account, and iterate when the user wants "each" / "all" / "both" mailboxes/workspaces. Do NOT claim "only one account is connected" without checking the multi-account roster.
 - Always read the action schema first to understand required and optional props
-- **Bulk / paginated fetches:** Use `proxy_request` directly and follow the API's pagination token (`@odata.nextLink` for Microsoft Graph, `nextPageToken` for Google APIs, `next` URLs for most REST APIs). NEVER iterate `$skip` / `offset` / `pageNumber` manually — that's a linear scan that costs one round-trip + one approval per page. Pipedream's built-in actions strip pagination tokens before returning, so you cannot paginate past page 1 via `run_action` — only `proxy_request` preserves them. Decide your full field selection (`$select` etc.) up front so you don't have to re-walk the same window with different params.
+- **Bulk / paginated fetches:** Use `numa integrations request` directly and follow the API's pagination token (`@odata.nextLink` for Microsoft Graph, `nextPageToken` for Google APIs, `next` URLs for most REST APIs). NEVER iterate `$skip` / `offset` / `pageNumber` manually — that's a linear scan that costs one round-trip + one approval per page. Pipedream's built-in actions strip pagination tokens before returning, so you cannot paginate past page 1 via `pipedream-call` — only `request` preserves them. Decide your full field selection (`$select` etc.) up front so you don't have to re-walk the same window with different params.
 """
 
         # Append per-integration prompt files if they exist
@@ -1227,7 +1296,7 @@ The following tools have been restricted by administrator or user policy. They h
 
 {denied_list}
 
-**Do NOT attempt to work around these restrictions** by using `proxy_request` to call the underlying API directly, or by any other means. These tools are intentionally disabled. If the user asks you to perform an action covered by a restricted tool, explain that the tool is restricted by their integration policy and suggest they update their settings if needed.
+**Do NOT attempt to work around these restrictions** by using `numa integrations request` to call the underlying API directly, or by any other means. These tools are intentionally disabled. If the user asks you to perform an action covered by a restricted tool, explain that the tool is restricted by their integration policy and suggest they update their settings if needed.
 """
 
         # Email signature when any email integration is enabled (Pipedream side).
@@ -1250,26 +1319,22 @@ The following tools have been restricted by administrator or user policy. They h
 
 ### Native connector tool usage
 
-Access native rows via the `connectors` tool (NOT `mcp__integrations__*`). Operations:
-- `connectors(name="status", params={}, description="...")` — check detailed status
-- `connectors(name="list_files", params={"connector": "<id>"}, description="...")` — list files
-- `connectors(name="search_files", params={"connector": "<id>", "query": "..."}, description="...")` — search
-- `connectors(name="download_file", params={"connector": "<id>", "file_id": "..."}, description="...")` — download
-- `connectors(name="request", params={"connector": "<id>", "method": "GET", "url": "..."}, description="...")` — authenticated HTTP request (requires approval)
+Access native rows via `numa integrations request <slug> ...`. Operations:
+- `numa integrations request <slug> GET <url> -m "..."` — authenticated HTTP request (requires approval)
 
-The `request` operation makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
+The `request` command makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
 
 **Handling disconnected connectors — READ CAREFULLY:**
 
-When the `status` tool returns `Awaiting credential: <Name>` for a connector, the chat UI has **already shown the user an inline credential form for that connector** — the credential-request prompt is live on their screen right now.
+When a native integration reports `Awaiting credential: <Name>`, the chat UI has **already shown the user an inline credential form for that connector** — the credential-request prompt is live on their screen right now.
 
 In this case you MUST:
 1. Acknowledge briefly (one sentence): "I've opened a credential prompt for <Name> above — fill it in and I'll retry your request."
 2. **STOP.** Do NOT call any further tools. Do NOT ask the user to paste their credential into chat. Do NOT tell them to go to Integrations or Settings. Do NOT suggest any manual route — the inline prompt is the ONLY correct path.
 
-When the status tool returns `Not connected: <Name> — connect at /integrations#<slug>`, the connector is an OAuth file provider that needs a browser redirect. Tell the user: "Please connect <Name> on the Integrations page, then ask me again." (The page deep-links to the relevant card automatically.)
+When a native integration reports `Not connected: <Name> — connect at /integrations#<slug>`, the connector is an OAuth file provider that needs a browser redirect. Tell the user: "Please connect <Name> on the Integrations page, then ask me again." (The page deep-links to the relevant card automatically.)
 
-When the connector is truly absent (not in the status output at all), tell the user the connector isn't configured and to contact their admin.
+When the connector is truly absent (not in the output at all), tell the user the connector isn't configured and to contact their admin.
 
 Never: paste-the-token-in-chat. Never: go-to-settings for a chat-only connector showing *Awaiting credential*. The inline form stores the credential securely in the user's personal vault; any other path bypasses that."""
 
@@ -1463,6 +1528,104 @@ def _format_company_profile_for_prompt(
     return "\n\n".join(parts), was_truncated
 
 
+def _build_saved_workflows_context() -> str:
+    """Build the dynamic ``## Saved Workflows`` section.
+
+    Saved workflows are reusable scripts the agent has written to
+    ``/workdir/chat-workflows/`` in past conversations; they persist at the
+    user level and sync into every future conversation. This injects their
+    name + description (read from the local synced folder — no S3 round-trip)
+    so the agent rediscovers them, plus a short note on the capability so it
+    starts saving useful recurring jobs. Returned text is plain (no ``{}``
+    format placeholders) — append it AFTER ``str.format`` runs.
+    """
+    from numa_workspace_agent.saved_workflows import list_saved_workflows
+
+    try:
+        workflows = list_saved_workflows()
+    except Exception:  # noqa: BLE001 — never let prompt assembly fail on this
+        workflows = []
+
+    lines = [
+        "## Saved Workflows",
+        "",
+        "This is **your** library of reusable workflows for **this specific user** — "
+        "scripts saved under `/workdir/chat-workflows/` that persist across every "
+        "conversation you have with them (everything else in the workspace is wiped "
+        "between chats). It's the main way you get tuned to one person over time: when "
+        "you work out how to do a recurring job they care about, save it here so next "
+        "time it's a single step. Grow this library as you learn what they like done.",
+        "",
+    ]
+
+    if workflows:
+        lines.append("Your saved workflows for this user:")
+        lines.append("")
+        lines.append("| File | What it does / when to use it | Needs |")
+        lines.append("| --- | --- | --- |")
+        for wf in workflows:
+            fname = (wf.get("path") or "").replace("|", "\\|")
+            title = (wf.get("title") or "").replace("|", "\\|").replace("\n", " ")
+            desc = (wf.get("description") or "").replace("|", "\\|").replace("\n", " ")
+            needs = ", ".join(wf.get("required_integrations") or []) or "—"
+            lines.append(f"| `{fname}` — **{title}** | {desc} | {needs} |")
+        lines.append("")
+        lines.append(
+            "Run one with `python3 /workdir/chat-workflows/<file>` (or `bash` for shell "
+            "workflows) — read it first if you need to adapt it to the current request. "
+            "If a workflow lists required integrations, check they're enabled before "
+            "running it."
+        )
+    else:
+        lines.append(
+            "You have no saved workflows for this user yet. When you complete a useful, "
+            "repeatable job, consider saving it here for next time."
+        )
+
+    lines.append("")
+    lines.append(
+        "To save a new workflow, `Write` an executable script (Python by default, Bash "
+        "works too) to `/workdir/chat-workflows/<kebab-name>.py`. It MUST start with this "
+        "header (a write without it is rejected) — set `created` on first save, bump "
+        "`updated` whenever you change it, and list any integrations it depends on:"
+    )
+    lines.append("")
+    lines.append("```python")
+    lines.append("#!/usr/bin/env python3")
+    lines.append("# --- numa-workflow ---")
+    lines.append("# title: Weekly Finance Summary")
+    lines.append("# description: Pull this week's transactions and render a summary.")
+    lines.append("#   Use when the user asks for their weekly finance update.")
+    lines.append("# created: <YYYY-MM-DD>")
+    lines.append("# updated: <YYYY-MM-DD>")
+    lines.append("# required_integrations: gmail        # optional; omit if none")
+    lines.append("# --- end ---")
+    lines.append("import json, subprocess")
+    lines.append("")
+    lines.append("def numa(*args):")
+    lines.append(
+        '    """Run a numa CLI command from Python and parse its JSON output."""'
+    )
+    lines.append(
+        '    p = subprocess.run(["numa", *args, "--json"], capture_output=True, text=True)'
+    )
+    lines.append("    p.check_returncode()")
+    lines.append('    return json.loads(p.stdout or "{}")')
+    lines.append("")
+    lines.append(
+        'hits = numa("files", "search", "transactions this week", "--all", "-m", "weekly finance")'
+    )
+    lines.append("# ...process in Python, then e.g. numa render the result...")
+    lines.append("```")
+    lines.append(
+        "You can call any `numa` command from a workflow this way (it's on PATH). Never "
+        "hardcode secrets — integration credentials are injected at runtime outside the "
+        "workspace, so just call the integration via `numa` and they're applied for you."
+    )
+
+    return "\n".join(lines)
+
+
 def build_workspace_system_prompt(
     working_dir: str = ".",
     user_timezone: Optional[str] = None,
@@ -1478,6 +1641,9 @@ def build_workspace_system_prompt(
     user_profile: Optional[dict] = None,
     company_profile: Optional[dict | str] = None,
     feature_flags: Optional[dict[str, bool]] = None,
+    include_render_guidance: bool = True,  # False when the agent type has no `render` (numa MCP off)
+    include_numa_cli: bool = True,  # False when the agent type has no `Bash(numa:*)`
+    numa_cli_ops_enabled: bool = False,  # True only when the client's NUMA_OPS_ENABLED flag is set
     **_kwargs,
 ) -> str:
     """
@@ -1517,14 +1683,25 @@ def build_workspace_system_prompt(
         identity_override if identity_override is not None else IDENTITY_AND_ROLE
     )
 
-    # Compose prompt from modular sections (same order as SYSTEM_PROMPT)
+    # Compose prompt from modular sections (same order as SYSTEM_PROMPT).
+    # Two sections are capability-gated so the prompt matches what the agent
+    # type can actually do (the MCP tools used to self-gate this way):
+    #   - RENDER_GUIDANCE: only when `render` is available (numa MCP on).
+    #   - Numa CLI section: only when the type has `Bash(numa:*)`; its Ops
+    #     subsection is further gated on the client's NUMA_OPS_ENABLED flag.
     composed = (
         identity_section
         + WORKSPACE_ENVIRONMENT
         + STYLE_AND_COMMUNICATION
         + TASK_EXECUTION
         + TOOL_USAGE
+        + (RENDER_GUIDANCE if include_render_guidance else "")
         + WORKSPACE_CAPABILITIES
+        + (
+            "\n" + build_numa_cli_section(ops_enabled=numa_cli_ops_enabled)
+            if include_numa_cli
+            else ""
+        )
         + ENVIRONMENT_AND_META
     )
 
@@ -1582,6 +1759,15 @@ def build_workspace_system_prompt(
         )
         if profile_context:
             base_prompt = f"{base_prompt}\n\n{profile_context}"
+
+    # Append the Saved Workflows section for CLI-enabled conversational types
+    # (the ones that can write workflows that call `numa`). Always shown when
+    # the CLI is available — even empty — so the agent knows the capability
+    # exists and starts saving useful recurring jobs. Nolia/pipeline types use
+    # their own prompt and never reach here, which is correct (they don't author
+    # user workflows).
+    if include_numa_cli:
+        base_prompt = f"{base_prompt}\n\n{_build_saved_workflows_context()}"
 
     # Append agent context if agent config is provided
     if agent_config:
@@ -1811,7 +1997,7 @@ def build_kb_context(
                 if truncated:
                     lines.append(
                         f"  Top-level contents (showing {shown_count} of {total_count} items - "
-                        f"use numa_tool numa_files with operation=list and kb_id={kb_id} to see all):"
+                        f"use `numa files list --folder {kb_id} --json` to see all):"
                     )
                 else:
                     lines.append(f"  Top-level contents ({total_count} items):")

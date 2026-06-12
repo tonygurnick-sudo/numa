@@ -364,6 +364,66 @@ def handle_add_memory(params: Dict[str, Any]) -> Dict[str, Any]:
     return {"memory": new_memory, "total_count": len(valid_memories)}
 
 
+def handle_delete_memory(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Delete an existing memory by id.
+
+    Returns the deleted memory so callers can show what was removed (and
+    so the CLI's self-test can verify the round-trip). Idempotent on a
+    second call: missing id -> ValueError, never silently succeeds (we
+    want callers to know they targeted a stale id).
+    """
+    if not CHAT_SETTINGS_TABLE_NAME:
+        raise ValueError("CHAT_SETTINGS_TABLE_NAME not configured")
+
+    user_sub = params.get("__user_sub", "")
+    memory_id = params.get("memory_id", "").strip()
+
+    # HITL approval gate
+    denial = _check_memory_approval(
+        params,
+        action_key="numa_memories_delete",
+        description=f"Delete memory: {memory_id}",
+        props_preview={"memory_id": memory_id},
+    )
+    if denial:
+        return denial
+
+    if not memory_id:
+        raise ValueError("memory_id is required")
+
+    logger.info(
+        "Deleting memory",
+        user_sub=user_sub[:8] + "...",
+        memory_id=memory_id,
+    )
+
+    profile = _load_user_profile(user_sub)
+    memories = profile.get("memories", [])
+
+    # Find the memory and capture it before removing
+    deleted: Optional[Dict[str, Any]] = None
+    remaining: List[Dict[str, Any]] = []
+    for mem in memories:
+        if mem.get("id") == memory_id and deleted is None:
+            deleted = mem
+        else:
+            remaining.append(mem)
+
+    if deleted is None:
+        raise ValueError(f"Memory '{memory_id}' not found")
+
+    profile["memories"] = remaining
+    _save_user_profile(user_sub, profile)
+
+    logger.info(
+        "Memory deleted",
+        memory_id=memory_id,
+        remaining_count=len(remaining),
+    )
+
+    return {"memory": deleted, "total_count": len(remaining)}
+
+
 def handle_update_memory(params: Dict[str, Any]) -> Dict[str, Any]:
     """Update an existing memory's content."""
     if not CHAT_SETTINGS_TABLE_NAME:

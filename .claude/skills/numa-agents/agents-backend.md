@@ -131,15 +131,15 @@ AGENTS_SETTINGS_TABLE_NAME={client}-agents-settings
 
 When a chat request includes an `agentId`, the workspace agent fetches the agent config from DynamoDB and applies it (system prompt, tools config, reference files, integrations).
 
-### Agent Creation from Chat (MCP Tool)
+### Agent Creation from Chat (numa CLI)
 
-**Location:** `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/numa_tool.py`
+**Location:** `lambdas/python/workspace-chat-tools/tools/` (invoked server-side via the `numa-cli-api` Lambda)
 
-Agents can be created/managed from within workspace chat via the `numa_tool` MCP tool:
+Agents can be created/managed from within workspace chat via the `numa agents` CLI (run through the Bash tool):
 
-```python
-# Operations: list, get, create, update, duplicate
-mcp__numa__numa_tool(name="agents", operation="create", ...)
+```bash
+# Commands: list, get, create, update, duplicate
+numa agents create ... -m "Creating a new agent"
 ```
 
 ### Agent Scheduling
@@ -224,15 +224,15 @@ The agents Lambda needs:
 
 ## Key Files Summary
 
-| File                                                              | Purpose              |
-| ----------------------------------------------------------------- | -------------------- |
-| `/lambdas/node/agents/index.ts`                                   | Main agents CRUD API |
-| `/lambdas/node/admin-agents-settings/index.ts`                    | Policy management    |
-| `services/numa-workspace-agent/.../agent_config.py`               | Agent config loading |
-| `services/numa-workspace-agent/.../mcp_tools/numa_tool.py`        | Chat agent CRUD tool |
-| `/lambdas/node/agent-schedules/index.ts`                          | Agent scheduling API |
-| `/infra/constructs/core-numa-infra-construct.ts`                  | Table definitions    |
-| `/infra/constructs/app-agnostic-api-gateway-lambda-collection.ts` | API routing          |
+| File                                                              | Purpose                    |
+| ----------------------------------------------------------------- | -------------------------- |
+| `/lambdas/node/agents/index.ts`                                   | Main agents CRUD API       |
+| `/lambdas/node/admin-agents-settings/index.ts`                    | Policy management          |
+| `services/numa-workspace-agent/.../agent_config.py`               | Agent config loading       |
+| `lambdas/python/workspace-chat-tools/tools/` (via `numa-cli-api`) | Chat agent CRUD (numa CLI) |
+| `/lambdas/node/agent-schedules/index.ts`                          | Agent scheduling API       |
+| `/infra/constructs/core-numa-infra-construct.ts`                  | Table definitions          |
+| `/infra/constructs/app-agnostic-api-gateway-lambda-collection.ts` | API routing                |
 
 ---
 

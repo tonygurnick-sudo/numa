@@ -45,18 +45,13 @@ NUMA_CHAT = AgentTypeConfig(
         # to Write to /workdir/tmp/ and run with Bash, then Edit to iterate.
         # See prompts.py "Bash Best Practices" and the security-hook loosening
         # commits that made the Bash path actually work for legitimate scripts.
-        # Numa platform tools (KB, web search, files, agents, memories)
-        "mcp__numa__numa_tool",  # Unified Numa tool dispatcher
-        "mcp__numa__numa_ops_tool",  # Numa Ops tool (tickets, teams, CRM — feature-flagged)
-        # Pipedream integration tools
-        "mcp__integrations__run_action",  # Execute integration actions (with approval)
-        "mcp__integrations__configure_props",  # Get dynamic prop options (no approval)
-        "mcp__integrations__proxy_request",  # Raw API proxy calls (with approval)
-        # External connectors (OAuth cloud storage, Synergy, generic HTTP)
-        "mcp__connectors__connectors",
-        "mcp__connectors__ns_*",  # NetSuite Native Tools
-        # Secrets vault (user credentials with approval flow)
-        "mcp__vault__vault",
+        # Full CLI cutover: numa_chat reaches ALL Numa platform tools via the
+        # numa CLI (`Bash("numa <category> ...")`). NO MCP tools — numa,
+        # integrations, connectors, scripts (execute_script) and vault have all
+        # been retired in favour of the CLI + Write/Bash. `render` is temporarily
+        # UNAVAILABLE until the `numa render` CLI command ships, and vault's
+        # secret-retrieval will return as a CLI command with secret-safe output
+        # (both tracked in workspace-integration-TODO).
         # Bash with allowed commands
         "Bash(python:*)",
         "Bash(python3:*)",
@@ -96,14 +91,18 @@ NUMA_CHAT = AgentTypeConfig(
         "Bash(pdfimages:*)",  # PDF image extraction
         "Bash(pandoc:*)",  # Document format conversion
         "Bash(qpdf:*)",  # PDF manipulation (merge, split)
+        # Numa CLI — unified tool surface (ops/files/integrations/agents/etc.).
+        # Auth via workspace IAM (NUMA_AUTH_MODE=workspace-iam, set in env).
+        "Bash(numa:*)",
     ],
     # Layer 2: MCP tools.
     # Note: scripts MCP (execute_script) disabled for chat — model now uses
     # Write+Bash+Edit instead. See agent_types/numa_chat.py allowed_tools comment.
     enable_scripts_mcp=False,
-    enable_integrations_mcp=True,
-    enable_numa_mcp=True,
-    enable_connect_mcp=True,
+    enable_integrations_mcp=False,  # CLI cutover: `numa integrations`
+    enable_numa_mcp=False,  # full CLI cutover; `render` deferred to the numa CLI
+    enable_connect_mcp=False,  # CLI cutover: `numa integrations request <native>`
+    enable_vault_mcp=False,  # vault MCP retired — secret retrieval returns as a CLI command later
     # Layer 3: Numa tool reference docs (copied to /workdir/tools/ for Claude to read)
     enabled_numa_tools=[
         "agents",

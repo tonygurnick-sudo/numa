@@ -14,23 +14,17 @@ from typing import TYPE_CHECKING, Any, Optional
 # X-Ray requires CloudWatch Logs as trace destination for OTLP, which isn't configured
 os.environ["OTEL_SDK_DISABLED"] = "true"
 
-from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, create_sdk_mcp_server
+from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
 from numa_workspace_agent.agent_types import AgentTypeConfig, get_agent_type_config
 from numa_workspace_agent.hooks import (
     audit_hook,
     compaction_hook,
     image_resize_hook,
+    numa_call_counter_reset_hook,
+    numa_call_limit_notice_hook,
     param_aliases_hook,
     security_hook,
-)
-from numa_workspace_agent.mcp_tools import (
-    configure_props,
-    connectors,
-    execute_script,
-    numa_tool,
-    proxy_request,
-    run_action,
-    vault,
+    workflow_guard_hook,
 )
 from numa_workspace_agent.prompts import build_workspace_system_prompt
 
@@ -550,6 +544,10 @@ ALLOWED_TOOLS = [
     "Bash(node:*)",
     "Bash(npm:*)",
     "Bash(npx:*)",
+    # numa CLI — the unified tool-execution surface (`numa ops`, `numa files`,
+    # `numa integrations`, etc.). Replaces the MCP layer for these categories;
+    # auth is via workspace IAM (NUMA_AUTH_MODE=workspace-iam, injected above).
+    "Bash(numa:*)",
     # Common data analysis tools
     "Bash(sqlite3:*)",  # Database queries
     "Bash(jq:*)",  # JSON processing
@@ -592,6 +590,9 @@ def create_agent_options(
     enabled_integrations: Optional[list[dict]] = None,
     available_integrations: Optional[list[dict]] = None,
     request_id: Optional[str] = None,
+    approval_mode: Optional[str] = None,
+    numa_tool_approval_mode: Optional[dict[str, str]] = None,
+    integration_approval_modes: Optional[dict[str, str]] = None,
     email_signature: Optional[dict] = None,
     agent_type_config: Optional[AgentTypeConfig] = None,
     user_profile: Optional[dict] = None,
@@ -637,6 +638,29 @@ def create_agent_options(
     prompt_builder = type_config.system_prompt_builder or build_workspace_system_prompt
     flags = feature_flags or {}
 
+    # The Numa CLI prompt section is shown only to agent types that actually
+    # have the CLI (`Bash(numa:*)` in allowed_tools) — the MCP tools used to
+    # self-gate this way. Its Ops subsection is further gated on the client's
+    # NUMA_OPS_ENABLED flag (the same env the numa_ops MCP was registered on),
+    # so non-Ops clients are never told `numa ops` exists.
+    include_numa_cli = any(
+        t == "Bash(numa:*)" or t.startswith("Bash(numa")
+        for t in type_config.allowed_tools
+    )
+    numa_cli_ops_enabled = os.environ.get("NUMA_OPS_ENABLED", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    # `render` (inline HTML/SVG/image viz) is now a CLI command (`numa render`)
+    # that pushes a frame onto the conversation's SSE stream, so it needs BOTH
+    # the numa CLI AND an active stream. Only advertise it to streaming agent
+    # types that have the CLI — non-streaming runs (Nolia/pipelines/sync) have no
+    # stream draining the queue, so `numa render` would 409 there. Custom builders
+    # (Nolia, data-analysis, etc.) accept and ignore this kwarg via **kwargs.
+    include_render_guidance = include_numa_cli and type_config.response_mode == "stream"
+
     # NOTE: today_string is intentionally NOT passed to the default prompt builder.
     # It is prepended to each user message instead (see augment_prompt_with_context)
     # to keep the system prompt stable for prompt caching. Custom prompt builders
@@ -656,6 +680,9 @@ def create_agent_options(
         user_profile=user_profile,
         company_profile=company_profile,
         feature_flags=flags,
+        include_render_guidance=include_render_guidance,
+        include_numa_cli=include_numa_cli,
+        numa_cli_ops_enabled=numa_cli_ops_enabled,
     )
 
     # Build environment variables for SDK subprocess
@@ -810,6 +837,53 @@ def create_agent_options(
     if conversation_id:
         env["NUMA_CONVERSATION_ID"] = conversation_id
 
+    # Agent type — the CLI forwards this to numa-cli-api as request context, so
+    # the server can enforce the per-type CLI-category allow-list (Phase 5,
+    # `allowed_cli_commands`). This is the trusted-env channel: we rely on the
+    # agent not overwriting NUMA_AGENT_TYPE rather than a signed claim. The
+    # authoritative policy (type → allowed categories) lives server-side in
+    # numa-cli-api; conveying the opaque type (not the allow-list itself) means
+    # a prompt-injected agent would also have to know which type is unprivileged
+    # to escape. Defence-in-depth alongside the dynamic-prompt gating below.
+    if type_config.type_id:
+        env["NUMA_AGENT_TYPE"] = type_config.type_id
+
+    # numa-cli workspace-IAM auth. The CLI invokes numa-cli-api directly,
+    # signed by the workspace IAM role (a second factor proving the call came
+    # from a real MicroVM). Identity is the VERIFIED token in NUMA_IDENTITY_TOKEN
+    # — the user's Cognito id token for interactive chat, or a proxy-minted
+    # signed service token for non-interactive runs. numa-cli-api verifies it
+    # and derives the user from the verified claims; a plaintext sub is never
+    # trusted. main.py refreshes NUMA_IDENTITY_TOKEN in os.environ before options
+    # are built, so it's fresh each turn.
+    env["NUMA_ACCOUNT"] = CLIENT_NAME
+    env["NUMA_AUTH_MODE"] = "workspace-iam"
+    _identity_token = os.environ.get("NUMA_IDENTITY_TOKEN", "")
+    if _identity_token:
+        env["NUMA_IDENTITY_TOKEN"] = _identity_token
+
+    # Resolved HITL approval modes for the numa CLI's client-side gate. In
+    # workspace-IAM mode the CLI has no bootstrap context on disk, so without
+    # this it falls back to `non_destructive` and gates every write op
+    # regardless of the user's saved settings. `categories` is the resolved
+    # per-category map (agent override > user setting > default — includes
+    # `integrations` and its `connectors` mirror); `integration_overrides` is
+    # the per-slug TASK-127 map (already empty when an agent-level
+    # Integrations mode suppresses it). Both arrive pre-resolved from
+    # main.py — never re-fetch from chat-settings here, or agent-level
+    # precedence is lost. UX-layer only: the env is model-visible, the
+    # server-side gates in numa-cli-api remain the security boundary.
+    _approval_categories: dict[str, str] = dict(numa_tool_approval_mode or {})
+    if approval_mode:
+        _approval_categories["integrations"] = approval_mode
+    if _approval_categories or integration_approval_modes:
+        env["NUMA_APPROVAL_MODES"] = json.dumps(
+            {
+                "categories": _approval_categories,
+                "integration_overrides": integration_approval_modes or {},
+            }
+        )
+
     # Pipedream external user ID for integration tools
     if external_user_id:
         env["NUMA_EXTERNAL_USER_ID"] = external_user_id
@@ -914,6 +988,26 @@ def create_agent_options(
         for it in (enabled_integrations or [])
         if isinstance(it, dict) and it.get("method") == "native" and it.get("slug")
     ]
+    # A slug must resolve to exactly ONE method per conversation — the CLI
+    # routes `numa integrations <cmd> <slug>` off these two lists and a dual
+    # entry makes that routing ambiguous (first-match wins silently). The
+    # frontend sends each slug under its connected/effective method, so an
+    # overlap here means a stale or double-enabled payload. Convention:
+    # pipedream wins (mirrors the CLI's resolution order); drop the native
+    # duplicate loudly so the payload bug stays visible.
+    _dual_method_slugs = set(_enabled_pipedream_slugs) & set(_enabled_native_slugs)
+    if _dual_method_slugs:
+        import structlog
+
+        structlog.get_logger().warning(
+            "Integration slug(s) enabled via BOTH pipedream and native; "
+            "keeping pipedream, dropping native duplicate",
+            _name="DUAL_METHOD_SLUG_DEDUP",
+            slugs=sorted(_dual_method_slugs),
+        )
+        _enabled_native_slugs = [
+            s for s in _enabled_native_slugs if s not in _dual_method_slugs
+        ]
     env["NUMA_ENABLED_NATIVE_CONNECTORS"] = json.dumps(_enabled_native_slugs)
 
     # IMPORTANT: Capture local credentials BEFORE cross-account assume.
@@ -976,73 +1070,12 @@ def create_agent_options(
         logger = structlog.get_logger()
         logger.warning("SDK CLI stderr", message=msg)
 
-    # Build MCP servers conditionally based on agent type config and feature flags
+    # MCP tool layer removed (Phase 6): all agent types are MCP-free
+    # (enable_*_mcp=False everywhere, zero `mcp__` in any allowed_tools). The
+    # agent now runs with ZERO MCP servers — workspace capabilities are served
+    # via the `numa` CLI / Bash instead. Kept as an empty dict so the
+    # ClaudeAgentOptions references below still resolve.
     mcp_servers: dict[str, Any] = {}
-
-    if type_config.enable_scripts_mcp:
-        mcp_servers["scripts"] = create_sdk_mcp_server(
-            name="scripts",
-            version="1.0.0",
-            tools=[execute_script],
-        )
-
-    if type_config.enable_integrations_mcp:
-        mcp_servers["integrations"] = create_sdk_mcp_server(
-            name="integrations",
-            version="1.0.0",
-            tools=[run_action, configure_props, proxy_request],
-        )
-
-    if type_config.enable_numa_mcp:
-        numa_tools = [numa_tool]
-        # Add the ops tool when the feature flag is enabled
-        if os.environ.get("NUMA_OPS_ENABLED", "").lower() in ("1", "true", "yes"):
-            from numa_workspace_agent.mcp_tools import numa_ops_tool
-
-            numa_tools.append(numa_ops_tool)
-        mcp_servers["numa"] = create_sdk_mcp_server(
-            name="numa",
-            version="1.0.0",
-            tools=numa_tools,
-        )
-
-    # Connectors MCP — register iff any enabled item is method=native.
-    # The unified Integrations list is the single source of truth: if the
-    # user has at least one native row enabled for this chat, the agent
-    # gets the `connectors` tool. Otherwise it isn't registered, so the
-    # agent literally can't call it. Per-integration enforcement (within
-    # the registered tool) uses NUMA_ENABLED_NATIVE_CONNECTORS, set above.
-    #
-    # Admin gating: DATA_CONNECTORS_CHAT_ENABLED no longer controls per-chat
-    # registration — it only controls whether the unified catalog surfaces
-    # natives to admins/users in the first place. When off, no native row
-    # ever reaches this code path, so the MCP is naturally not registered.
-    _has_native_enabled = any(
-        isinstance(it, dict) and it.get("method") == "native"
-        for it in (enabled_integrations or [])
-    )
-
-    if (
-        type_config.enable_connect_mcp
-        and flags.get("OAUTH_INTEGRATIONS_ENABLED", False)
-        and _has_native_enabled
-    ):
-        mcp_servers["connectors"] = create_sdk_mcp_server(
-            name="connectors",
-            version="1.0.0",
-            tools=[connectors],
-        )
-
-    # Vault: register when native data connectors are enabled. The vault and
-    # connectors travel together — connectors are the only thing that auto-
-    # populates secrets, so gating both on DATA_CONNECTORS_ENABLED keeps a
-    # single switch for admins (TASK-146).
-    if type_config.enable_vault_mcp and flags.get("DATA_CONNECTORS_ENABLED", False):
-        mcp_servers["vault"] = create_sdk_mcp_server(
-            name="vault",
-            version="1.0.0",
-            tools=[vault],
-        )
 
     import structlog as _structlog
 
@@ -1066,6 +1099,30 @@ def create_agent_options(
         _regionalize(_strip_prefix(raw_model)) if raw_model else DEFAULT_MODEL
     )
 
+    # Permission mode.
+    #
+    # Interactive, unrestricted types run in **bypassPermissions** so the agent
+    # isn't silently blocked by the `allowed_tools` allowlist on legitimate
+    # shell work — loops, scripts, less-common tools (the allowlist denials are
+    # invisible in Numa: there's no SDK-permission card, only our HITL write-op
+    # cards, so a non-allowlisted command just dead-ends). The guardrails that
+    # remain in bypass mode: the **security_hook** denylist (rm -rf, curl/wget,
+    # /proc/environ, path traversal, dangerous python/node — still runs, it's a
+    # PreToolUse hook independent of permission_mode), **disallowed_tools**, and
+    # the **MicroVM sandbox** (non-root, per-conversation, ephemeral). HITL
+    # write-op approval cards are unaffected (a separate mechanism).
+    #
+    # Locked-down or hooks-off types KEEP **acceptEdits** + the tight allowlist
+    # as defence-in-depth: the Nolia / nolia-funding pipeline phases process
+    # UNTRUSTED documents, and several run with security hooks OFF, so bypass
+    # would leave them with no denylist. Two conditions gate bypass — the
+    # security_hook must be active (it's the guard) AND the type must be
+    # unrestricted (`allowed_cli_commands is None`; the Phase-5 lockdown marks
+    # the untrusted pipelines). Set either and the type stays on the allowlist.
+    _allow_bypass = (
+        type_config.enable_security_hooks and type_config.allowed_cli_commands is None
+    )
+
     # Build options dict, conditionally including agents if defined
     options_kwargs: dict[str, Any] = {
         # Core settings
@@ -1080,9 +1137,10 @@ def create_agent_options(
         "tools": type_config.tools if type_config.tools else TOOLS,
         # MCP servers — conditionally built above based on feature flags
         "mcp_servers": mcp_servers,
-        # Permissions - use acceptEdits mode with Python hooks for security
-        # acceptEdits auto-approves file operations; hooks handle deny logic
-        "permission_mode": "acceptEdits",
+        # Permissions — see the _allow_bypass derivation above. bypassPermissions
+        # for interactive/unrestricted types (security_hook is the guard);
+        # acceptEdits + tight allowlist for locked-down/hooks-off pipelines.
+        "permission_mode": "bypassPermissions" if _allow_bypass else "acceptEdits",
         "allowed_tools": type_config.allowed_tools,
         "disallowed_tools": type_config.disallowed_tools,
         # Session management
@@ -1092,14 +1150,18 @@ def create_agent_options(
         "setting_sources": ["project"],
         # Python hooks for security (can be disabled for closed pipelines).
         # Order matters in PreToolUse: security_hook denies first to avoid
-        # wasted work; param_aliases_hook + image_resize_hook may rewrite
-        # tool input; audit_hook logs the rewritten path for forensics.
+        # wasted work; numa_call_counter_reset_hook resets the per-command CLI
+        # call budget; workflow_guard_hook validates saved-workflow writes;
+        # param_aliases_hook + image_resize_hook may rewrite tool input;
+        # audit_hook logs the rewritten path for forensics.
         "hooks": (
             {
                 "PreToolUse": [
                     HookMatcher(
                         hooks=[
                             security_hook,
+                            numa_call_counter_reset_hook,
+                            workflow_guard_hook,
                             param_aliases_hook,
                             image_resize_hook,
                             audit_hook,
@@ -1107,7 +1169,7 @@ def create_agent_options(
                     ),
                 ],
                 "PostToolUse": [
-                    HookMatcher(hooks=[audit_hook]),
+                    HookMatcher(hooks=[numa_call_limit_notice_hook, audit_hook]),
                 ],
                 "PreCompact": [
                     HookMatcher(hooks=[compaction_hook]),
@@ -1117,11 +1179,17 @@ def create_agent_options(
             else {
                 "PreToolUse": [
                     HookMatcher(
-                        hooks=[param_aliases_hook, image_resize_hook, audit_hook]
+                        hooks=[
+                            numa_call_counter_reset_hook,
+                            workflow_guard_hook,
+                            param_aliases_hook,
+                            image_resize_hook,
+                            audit_hook,
+                        ]
                     ),
                 ],
                 "PostToolUse": [
-                    HookMatcher(hooks=[audit_hook]),
+                    HookMatcher(hooks=[numa_call_limit_notice_hook, audit_hook]),
                 ],
                 "PreCompact": [
                     HookMatcher(hooks=[compaction_hook]),

@@ -74,8 +74,8 @@ Keep each Edit to roughly one major section's worth of content \
 nothing was missed.
 
 The key constraint is: never generate the full translation in one \
-tool call. Use Write/Edit tools directly — do NOT use Python scripts \
-or `mcp__scripts__execute_script` for the translation.
+tool call. Use Write/Edit tools directly — do NOT use a Python script \
+(written to /workdir/tmp/ and run with Bash) for the translation.
 
 ## Task
 

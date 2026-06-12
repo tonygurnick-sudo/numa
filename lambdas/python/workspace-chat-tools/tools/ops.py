@@ -984,6 +984,18 @@ def _resolve_lambda_and_request(
             None,
         )
 
+    if operation == "get_project":
+        # Read-only — backend filters by team access (404 if scoped out, no
+        # 403 leak). Symmetric with `list_projects` which already filters.
+        project_id = _p(params, "projectId", "project_id") or ""
+        return (
+            OPS_CONFIG_API_LAMBDA,
+            "GET",
+            f"ops/config/projects/{project_id}",
+            None,
+            None,
+        )
+
     # ── Custom fields (admin-only backend) ──
     if operation == "create_field":
         body = _build_body(
@@ -1165,6 +1177,35 @@ def _resolve_lambda_and_request(
         )
         return (OPS_CRM_API_LAMBDA, "GET", "ops/customers", None, qp)
 
+    if operation == "search_customers":
+        # Thin alias over list_customers with a required `search` param.
+        # Backend's `applyFilters` matches `companyName` + `notes` substring
+        # case-insensitively. Kept as a distinct op (vs just list_customers
+        # with --params '{"search":"..."}') so the LLM has a clear "search"
+        # tool name — mirrors search_tickets.
+        search_term = _p(params, "search", "query", "q") or ""
+        if not search_term:
+            raise ValueError(
+                "search_customers requires a 'search' param " "(or 'query' / 'q' alias)"
+            )
+        qp = (
+            _build_qp(
+                params,
+                [
+                    ("stage", "stage", "lifecycleStage", "lifecycle_stage"),
+                    ("ownerId", "ownerId", "owner_id"),
+                    ("territory", "territory"),
+                    ("industry", "industry"),
+                    ("flags", "flags"),
+                    ("limit", "limit"),
+                    ("cursor", "cursor"),
+                ],
+            )
+            or {}
+        )
+        qp["search"] = search_term
+        return (OPS_CRM_API_LAMBDA, "GET", "ops/customers", None, qp)
+
     if operation == "get_customer":
         customer_id = _p(params, "customerId", "customer_id") or ""
         return (OPS_CRM_API_LAMBDA, "GET", f"ops/customers/{customer_id}", None, None)
@@ -1269,6 +1310,33 @@ def _resolve_lambda_and_request(
                 ("cursor", "cursor"),
             ],
         )
+        return (OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", None, qp)
+
+    if operation == "search_suppliers":
+        # Mirror of search_customers — required `search` term over the same
+        # GET /ops/suppliers endpoint, which already supports `qp.search`
+        # via the shared applyFilters helper in numa-ops-crm-api.
+        search_term = _p(params, "search", "query", "q") or ""
+        if not search_term:
+            raise ValueError(
+                "search_suppliers requires a 'search' param " "(or 'query' / 'q' alias)"
+            )
+        qp = (
+            _build_qp(
+                params,
+                [
+                    ("stage", "stage", "lifecycleStage", "lifecycle_stage"),
+                    ("ownerId", "ownerId", "owner_id"),
+                    ("territory", "territory"),
+                    ("industry", "industry"),
+                    ("flags", "flags"),
+                    ("limit", "limit"),
+                    ("cursor", "cursor"),
+                ],
+            )
+            or {}
+        )
+        qp["search"] = search_term
         return (OPS_CRM_API_LAMBDA, "GET", "ops/suppliers", None, qp)
 
     if operation == "get_supplier":
@@ -1606,7 +1674,11 @@ def _resolve_lambda_and_request(
                 ("targetZoneId", "targetZoneId", "target_zone_id"),
                 # On completion (status=completed): where to roll incomplete tickets.
                 # 'next' resolves to the next planning sprint by order.
-                ("rolloverToWorkUnitId", "rolloverToWorkUnitId", "rollover_to_work_unit_id"),
+                (
+                    "rolloverToWorkUnitId",
+                    "rolloverToWorkUnitId",
+                    "rollover_to_work_unit_id",
+                ),
             ],
         )
         return (
@@ -1807,6 +1879,52 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
                 "Approval table not configured, executing without approval",
                 error=str(e),
             )
+
+    # ── Default stage for create_ticket ─────────────────────────────────
+    # Every board has a `defaultStageId` (and `defaultZoneId`) set at
+    # creation, surfaced in the board's meta item by numa-ops-api. If the
+    # caller didn't supply a stageId/stageName for create_ticket, fall
+    # back to the board's default. Numa Ops UI uses the same default for
+    # "Create New Ticket" without picking a stage manually.
+    if operation == "create_ticket":
+        has_stage = bool(op_params.get("stageId") or op_params.get("stage_id"))
+        has_stage_name = bool(op_params.get("stageName") or op_params.get("stage_name"))
+        board_id = op_params.get("boardId") or op_params.get("board_id")
+        if not has_stage and not has_stage_name and board_id:
+            try:
+                cache = _LookupCache(
+                    user_sub=user_sub,
+                    user_email=user_email,
+                    user_name=user_name,
+                    user_groups=user_groups,
+                )
+                # board_details() returns the raw API shape:
+                #   {"team": {...meta..., defaultStageId, defaultZoneId}, "zones": [...], "stages": [...]}
+                # Translation to API names ("team" → "board") happens later
+                # in the response path the caller sees — internally we read
+                # from .team for the meta fields.
+                board_resp = cache.board_details(str(board_id)) or {}
+                meta = board_resp.get("team") or board_resp.get("board") or {}
+                default_stage_id = meta.get("defaultStageId")
+                if default_stage_id:
+                    op_params["stageId"] = default_stage_id
+                    logger.info(
+                        "create_ticket: applied board default stage",
+                        board_id=board_id,
+                        default_stage_id=default_stage_id,
+                    )
+                else:
+                    logger.warning(
+                        "create_ticket: board has no defaultStageId — caller "
+                        "must supply stageId or stageName",
+                        board_id=board_id,
+                    )
+            except Exception as e:
+                logger.warning(
+                    "create_ticket: failed to resolve board default stage",
+                    board_id=board_id,
+                    error=str(e),
+                )
 
     # ── Resolve display IDs for mutation operations ─────────────────────
     # If the caller provided a displayId (e.g. 'BUG-002') instead of a

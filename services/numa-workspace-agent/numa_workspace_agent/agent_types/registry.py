@@ -78,6 +78,15 @@ def get_agent_type_config(type_id: str) -> AgentTypeConfig:
     return config
 
 
+def all_agent_configs() -> list[AgentTypeConfig]:
+    """Return every registered agent type config (live objects, not copies).
+
+    Used at import time to apply cross-cutting defaults (e.g. the Phase 5 Nolia
+    CLI restriction in ``agent_types/__init__.py``).
+    """
+    return list(_registry.values())
+
+
 def list_agent_types() -> list[dict]:
     """List all registered agent types.
 

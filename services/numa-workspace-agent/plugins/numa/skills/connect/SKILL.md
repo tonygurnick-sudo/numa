@@ -1,11 +1,11 @@
 ---
 name: connect
-description: Find files beyond the workspace — check the user's Numa Files (Personal / Company Files / shared folders) via numa_tool with name="numa_files", and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the connectors tool. Use when a user asks about files not in /workdir/
+description: Find files beyond the workspace — check the user's Numa Files (Personal / Company Files / shared folders) via numa files commands, and connected drives (Google Drive, OneDrive, Dropbox, Synergy 12d) via the integrations request command. Use when a user asks about files not in /workdir/
 ---
 
 # Connect Skill
 
-Access files from external sources using the **connectors** MCP tool (OAuth cloud storage, Synergy 12d, generic HTTP). For Numa Files (Personal / Company Files / shared folders) use the **numa_files** operation in **numa_tool** — see the `numa-files-search` skill for the full reference.
+Access files from external sources using the `numa integrations request` command (OAuth cloud storage, Synergy 12d, generic HTTP). For Numa Files (Personal / Company Files / shared folders) use `numa files` commands — see the `numa-files-search` skill for the full reference.
 
 ## When to Use
 
@@ -17,23 +17,23 @@ Use these tools when:
 
 **Strategy — check in this order:**
 
-1. **Numa Files first** (always connected, fast) — use `numa_tool` with `name="numa_files"` (see the `numa-files-search` skill)
-2. **Connected drives** — use `connectors` tool, only if Numa Files doesn't have what you need
+1. **Numa Files first** (always connected, fast) — use `numa files search` (see the `numa-files-search` skill)
+2. **Connected drives** — use `numa integrations request`, only if Numa Files doesn't have what you need
 3. **Skip disconnected connectors** — don't waste tool calls; tell the user where to connect instead
 
-Always call `connectors` with `name="status"` first to see what external connectors are available.
+Always check what external connectors are available via `numa integrations list` first.
 
 ---
 
-## External Connectors (connectors tool)
+## External Connectors (integrations request)
 
-Use `connectors` with an operation name to access OAuth cloud storage, Synergy 12d, and authenticated HTTP APIs.
+Use `numa integrations request` to access OAuth cloud storage, Synergy 12d, and authenticated HTTP APIs.
 
 ### Operations
 
 | Operation       | Purpose                                            |
 | --------------- | -------------------------------------------------- |
-| `status`        | Check which connectors are available and connected |
+| `list`          | Check which connectors are available and connected |
 | `list_files`    | Browse files and folders from a connector          |
 | `search_files`  | Search for files across a connector                |
 | `download_file` | Download a file to the workspace                   |
@@ -53,12 +53,10 @@ Use `connectors` with an operation name to access OAuth cloud storage, Synergy 1
 ### Examples
 
 ```
-connectors(name="status", params={})
-connectors(name="list_files", params={connector: "googledrive"})
-connectors(name="list_files", params={connector: "googledrive", folder_id: "abc123"})
-connectors(name="search_files", params={connector: "googledrive", query: "quarterly report"})
-connectors(name="download_file", params={connector: "googledrive", file_id: "abc123"})
-connectors(name="get_file_info", params={connector: "googledrive", file_id: "abc123"})
+Bash("numa integrations list --json -m 'Check connected integrations'")
+Bash("numa integrations request googledrive GET 'https://www.googleapis.com/drive/v3/files' -m 'List Google Drive files'")
+Bash("numa integrations request googledrive GET 'https://www.googleapis.com/drive/v3/files?q=name+contains+%27quarterly+report%27' -m 'Search Google Drive for quarterly report'")
+Bash("numa integrations request synergy GET '/api/v1/projects' -m 'List Synergy projects'")
 ```
 
 Downloaded files land in `/workdir/uploads/connect-{connector}/`. Max file size: 50MB.
@@ -71,7 +69,7 @@ Downloaded files land in `/workdir/uploads/connect-{connector}/`. Max file size:
 | Job    | `job:{job_id}`       | Folders within the job |
 | Folder | `folder:{folder_id}` | Subfolders + files     |
 
-### Authenticated HTTP (request operation)
+### Authenticated HTTP (request)
 
 Make ad-hoc API calls to any connected service — works for **both** OAuth
 providers (Google Drive, Gmail, …) **and** PAT connectors (Synergy, Fergus,
@@ -86,11 +84,11 @@ customer-hosted HTTP API. You never have to discover or store the instance URL.
 **NetSuite supports two surfaces depending on the integration record's scope:**
 
 - **REST scope** (`rest_webservices` / `restlets` / `suite_analytics`): use the
-  `request` op. Pass a relative path like `/services/rest/record/v1/customer?limit=1`
+  `request` command. Pass a relative path like `/services/rest/record/v1/customer?limit=1`
   or `/services/rest/query/v1/suiteql` — the backend prepends
   `https://<accountId>.suitetalk.api.netsuite.com` from the saved Account ID.
   See `ext-api-doc/netsuite/01-llm-api-rest-rules.md`.
-- **MCP scope** (`mcp`): use the `mcp_call` op (see MCP section below). MCP and
+- **MCP scope** (`mcp`): use the `mcp_call` operation (see MCP section below). MCP and
   REST scopes are mutually exclusive on one integration record — a given
   NetSuite connection supports one or the other, not both.
 
@@ -101,25 +99,13 @@ returns the same error, the integration record is REST-scoped — switch to
 
 ```
 # Fully-qualified URL (OAuth providers — their API hosts are fixed):
-connectors(name="request", params={
-    connector: "googledrive",
-    url: "https://www.googleapis.com/drive/v3/about?fields=user",
-    description: "Get Google Drive user info"
-})
+Bash("numa integrations request googledrive GET 'https://www.googleapis.com/drive/v3/about?fields=user' -m 'Get Google Drive user info'")
 
 # Relative path (PAT connectors with customer-hosted APIs):
-connectors(name="request", params={
-    connector: "synergy",
-    url: "/api/v1/projects",
-    description: "List Synergy projects"
-})
+Bash("numa integrations request synergy GET '/api/v1/projects' -m 'List Synergy projects'")
 
 # Absolute URL for a PAT connector also works if you need it:
-connectors(name="request", params={
-    connector: "fergus",
-    url: "https://api.fergus.com/api/v2/customers",
-    description: "List Fergus customers"
-})
+Bash("numa integrations request fergus GET 'https://api.fergus.com/api/v2/customers' -m 'List Fergus customers'")
 ```
 
 If you pass a relative path for a connector whose admin hasn't configured
@@ -133,14 +119,7 @@ rather than plain REST — today that's NetSuite via the AI Connector Service
 SuiteApp. Pass `connector`, `method`, and `arguments`:
 
 ```
-connectors(name="mcp_call", params={
-    connector: "netsuite",
-    method: "ns_runCustomSuiteQL",
-    arguments: {
-        sqlQuery: "SELECT id, companyname FROM customer WHERE ROWNUM <= 10",
-        description: "List 10 customers"
-    }
-}, description: "Query NetSuite customers")
+Bash("numa integrations request netsuite MCP --method ns_runCustomSuiteQL --arguments '{\"sqlQuery\":\"SELECT id, companyname FROM customer WHERE ROWNUM <= 10\",\"description\":\"List 10 customers\"}' -m 'Query NetSuite customers'")
 ```
 
 Available NetSuite MCP methods: `ns_getRecordTypeMetadata`, `ns_getRecord`,

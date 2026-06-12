@@ -154,25 +154,26 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
         "numa-codebase",
     }
 
-    # DISABLED: chat-workflows feature temporarily disabled
-    # Scan chat-workflows (globally persistent)
-    # workflows_dir = paths["workflows"]
-    # if workflows_dir.exists():
-    #     for file_path in workflows_dir.rglob("*"):
-    #         if not file_path.is_file():
-    #             continue
-    #         try:
-    #             rel_path = str(file_path.relative_to(root))
-    #             checksums[rel_path] = FileChecksum(
-    #                 path=rel_path,
-    #                 checksum=_compute_file_checksum(file_path),
-    #                 size=file_path.stat().st_size,
-    #                 mtime=file_path.stat().st_mtime,
-    #             )
-    #         except (OSError, IOError) as e:
-    #             logger.warning(
-    #                 "Failed to checksum file", path=str(file_path), error=str(e)
-    #             )
+    # Scan chat-workflows (globally persistent — syncs to the user's root S3
+    # path, not the conversation path, so saved workflows survive across all
+    # of the user's conversations).
+    workflows_dir = paths["workflows"]
+    if workflows_dir.exists():
+        for file_path in workflows_dir.rglob("*"):
+            if not file_path.is_file():
+                continue
+            try:
+                rel_path = str(file_path.relative_to(root))
+                checksums[rel_path] = FileChecksum(
+                    path=rel_path,
+                    checksum=_compute_file_checksum(file_path),
+                    size=file_path.stat().st_size,
+                    mtime=file_path.stat().st_mtime,
+                )
+            except (OSError, IOError) as e:
+                logger.warning(
+                    "Failed to checksum file", path=str(file_path), error=str(e)
+                )
 
     # Scan uploads and outputs (per-conversation)
     for dir_key in ["uploads", "outputs"]:
@@ -309,10 +310,11 @@ def sync_from_s3(
         ]
     else:
         # Default: standard chat workspace prefix
-        # DISABLED: chat-workflows feature temporarily disabled
         prefixes = [
-            # Globally persistent chat-workflows (DISABLED)
-            # (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
+            # Globally persistent saved workflows (user-level, not per-conversation).
+            # Synced down on cold start so the user's saved workflows are present
+            # in every conversation.
+            (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
             # Conversation-specific files (uploads, outputs, root files, _system)
             (f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", root),
         ]

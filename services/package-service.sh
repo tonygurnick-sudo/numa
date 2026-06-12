@@ -38,6 +38,61 @@ echo "Service directory: $SERVICE_DIR"
 echo "Output directory: $OUTPUT_DIR"
 echo "Git hash: $GIT_HASH"
 
+# ────────────────────────────────────────────────────────────────────
+# numa-cli prep (workspace-agent only)
+# Build the @numa/cli package, npm-pack it, and stage the tgz into the
+# service dir so the Dockerfile's COPY numa-cli.tgz step finds it.
+# Only @numa/cli is packed — @numa/cli-dev (which carries --d-hum/--yes
+# bypass flags) MUST NEVER ship into a workspace MicroVM. Hermetic by
+# physical absence of the dev addon from the image.
+# Cleanup of the staged tgz is registered via trap so it runs even if
+# docker buildx fails.
+# ────────────────────────────────────────────────────────────────────
+CLI_TGZ_STAGED=""
+cleanup_cli_tgz() {
+    if [ -n "$CLI_TGZ_STAGED" ] && [ -f "$CLI_TGZ_STAGED" ]; then
+        echo "Cleaning up staged numa-cli tarball: $CLI_TGZ_STAGED"
+        rm -f "$CLI_TGZ_STAGED"
+    fi
+}
+trap cleanup_cli_tgz EXIT
+
+if [ "$SERVICE_NAME" = "numa-workspace-agent" ]; then
+    echo ""
+    echo "=== Building @numa/cli for MicroVM install ==="
+    CLI_WORKSPACE_DIR="$REPO_ROOT/numa-cli"
+    CLI_PROD_DIR="$REPO_ROOT/numa-cli/packages/cli"
+    if [ ! -d "$CLI_PROD_DIR" ]; then
+        echo "Error: $CLI_PROD_DIR not found — was numa-cli moved?"
+        exit 1
+    fi
+    # Build the prod CLI (and its workspace deps) deterministically.
+    # Uses yarn (workspace-aware) at numa-cli/ root, which builds @numa/cli
+    # and any local deps it has. @numa/cli-dev is built too but we don't
+    # pack it — the tgz only carries @numa/cli's `files` glob (dist/).
+    ( cd "$CLI_WORKSPACE_DIR" && yarn build )
+    # `npm pack` honours the package.json `files` field, so only `dist/`
+    # plus the manifest ship in the tarball (no src/, no tests, no
+    # cli-dev). Output filename: numa-cli-<version>.tgz (npm drops the @
+    # scope from filenames).
+    ( cd "$CLI_PROD_DIR" && npm pack --pack-destination "$SERVICE_DIR" >/dev/null )
+    # The tgz name embeds @numa/cli's version. Resolve it via package.json
+    # rather than wildcard-globbing so we fail loudly if the version
+    # encoding ever changes.
+    CLI_VERSION=$(node -p "require('$CLI_PROD_DIR/package.json').version")
+    CLI_TGZ_STAGED="$SERVICE_DIR/numa-cli-${CLI_VERSION}.tgz"
+    if [ ! -f "$CLI_TGZ_STAGED" ]; then
+        echo "Error: expected $CLI_TGZ_STAGED to exist after npm pack"
+        exit 1
+    fi
+    # Dockerfile references the file as numa-cli.tgz (version-agnostic).
+    # Rename so the COPY directive doesn't need to track @numa/cli's
+    # version bumps.
+    mv "$CLI_TGZ_STAGED" "$SERVICE_DIR/numa-cli.tgz"
+    CLI_TGZ_STAGED="$SERVICE_DIR/numa-cli.tgz"
+    echo "Staged: $CLI_TGZ_STAGED ($(ls -lh "$CLI_TGZ_STAGED" | awk '{print $5}'))"
+fi
+
 # Build the Docker image using buildx for cross-platform support
 # AgentCore requires ARM64 (Graviton) architecture
 # The docker-container driver properly integrates with QEMU emulation
@@ -79,7 +134,6 @@ echo "=== Building Docker image (ARM64) ==="
 # to force a full rebuild when needed.
 docker buildx build \
     --platform linux/arm64 \
-    --no-cache \
     ${DOCKER_BUILD_OPTS:-} \
     --load \
     --build-arg GIT_HASH="$GIT_HASH" \

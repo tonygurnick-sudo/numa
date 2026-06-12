@@ -142,6 +142,7 @@ export const clientConfigSchema = z.object({
   requireApprovalAboveUserCap: z.boolean().optional(),
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
+  numaCliApi: z.boolean().optional(), // default: false — gates the numa-cli-api Lambda + /api/cli/* routes
   numaDropZones: z.boolean().optional(), // default: false
   numaSharing: z.boolean().optional(), // default: false
   developerMode: z.boolean().optional(), // default: false
@@ -306,6 +307,7 @@ export const getDefaultClientConfigValues = () => ({
   eventTriggers: false,
   workspaceChatModelSelection: false,
   numaOps: false,
+  numaCliApi: false,
   numaDropZones: false,
   numaSharing: false,
   developerMode: false,
@@ -363,6 +365,7 @@ export const getFieldDisplayName = (key: keyof ClientConfig): string => {
     mfa: 'Multi-Factor Authentication (MFA)',
     numaDropZones: 'Drop Zones',
     numaSharing: 'Sharing',
+    numaCliApi: 'Numa CLI API (dev/Numa-only)',
     ssoEnabled: 'SSO Self-Service',
     ssoEnterprise: 'SSO Enterprise (SCIM/OIDC)',
     developerMode: 'Developer Mode',
