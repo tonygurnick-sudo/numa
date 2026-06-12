@@ -880,6 +880,11 @@ class PipedreamOperations:
 
         Paginates through results to get all actions with their configurable_props.
 
+        Fetches the default (public-registry) listing plus the workspace's
+        privately published custom tools (``registry=private``) — Pipedream
+        excludes custom tools from the default listing, so without the second
+        fetch keys like ``~/pipedrive-add-file`` are undiscoverable.
+
         Args:
             app_slug: The app slug (e.g., "google_drive")
 
@@ -891,20 +896,22 @@ class PipedreamOperations:
         project_id = credentials["project_id"]
         environment = credentials["environment"]
 
-        all_actions: List[Dict[str, Any]] = []
-        after_cursor: Optional[str] = None
-        limit = 100
+        def _fetch_all_pages(registry: Optional[str]) -> List[Dict[str, Any]]:
+            collected: List[Dict[str, Any]] = []
+            after_cursor: Optional[str] = None
+            limit = 100
 
-        while True:
-            params: Dict[str, Any] = {
-                "app": app_slug,
-                "component_type": "action",
-                "limit": limit,
-            }
-            if after_cursor:
-                params["after"] = after_cursor
+            while True:
+                params: Dict[str, Any] = {
+                    "app": app_slug,
+                    "component_type": "action",
+                    "limit": limit,
+                }
+                if registry:
+                    params["registry"] = registry
+                if after_cursor:
+                    params["after"] = after_cursor
 
-            try:
                 response = requests.get(
                     f"https://api.pipedream.com/v1/connect/{project_id}/components",
                     headers={
@@ -916,31 +923,49 @@ class PipedreamOperations:
                 )
                 response.raise_for_status()
                 data = response.json()
-            except Exception as e:
-                logger.error(
-                    "Failed to list actions",
-                    error=str(e),
-                    app_slug=app_slug,
-                    exc_info=True,
-                )
-                raise Exception(
-                    f"Failed to list actions for {app_slug}: {str(e)}"
-                ) from e
 
-            actions = data.get("data", [])
-            all_actions.extend(actions)
+                collected.extend(data.get("data", []))
 
-            page_info = data.get("page_info", {})
-            if page_info.get("count", 0) < limit:
-                break
-            after_cursor = page_info.get("end_cursor")
-            if not after_cursor:
-                break
+                page_info = data.get("page_info", {})
+                if page_info.get("count", 0) < limit:
+                    break
+                after_cursor = page_info.get("end_cursor")
+                if not after_cursor:
+                    break
+
+            return collected
+
+        try:
+            all_actions = _fetch_all_pages(None)
+        except Exception as e:
+            logger.error(
+                "Failed to list actions",
+                error=str(e),
+                app_slug=app_slug,
+                exc_info=True,
+            )
+            raise Exception(f"Failed to list actions for {app_slug}: {str(e)}") from e
+
+        # The registry param is undocumented — if Pipedream changes it, custom
+        # tools drop out but the public listing must keep working.
+        try:
+            private_actions = _fetch_all_pages("private")
+        except Exception as e:
+            logger.warning(
+                "Failed to list private-registry actions",
+                error=str(e),
+                app_slug=app_slug,
+            )
+            private_actions = []
+
+        seen_keys = {a.get("key") for a in all_actions}
+        all_actions.extend(a for a in private_actions if a.get("key") not in seen_keys)
 
         logger.info(
             "Listed actions",
             app_slug=app_slug,
             count=len(all_actions),
+            private_count=len(private_actions),
         )
         return all_actions
 
@@ -1965,9 +1990,15 @@ class PipedreamOperations:
         if cached and cached[1] > now:
             return cached[0]
 
+        # Custom tools are keyed "~/{app_slug}-{action}" — strip the private-
+        # registry prefix so app-slug derivation works for them; list_actions
+        # includes registry=private results, and the schema match below still
+        # uses the full key.
+        lookup_key = action_key[2:] if action_key.startswith("~/") else action_key
+
         # Extract app_slug from action_key (e.g., "jira-create-issue" -> "jira")
         # Handle compound slugs like "microsoft_outlook_calendar-list-events"
-        parts = action_key.split("-")
+        parts = lookup_key.split("-")
         if not parts:
             return None
 

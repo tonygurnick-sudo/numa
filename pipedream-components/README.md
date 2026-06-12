@@ -13,6 +13,14 @@ Docs: [Connect custom tools](https://pipedream.com/docs/connect/components/custo
 **Requires a Pipedream Business plan or higher** (failure mode on publish/run:
 "Private Component API Not Enabled").
 
+> ⚠️ **Discovery requires `registry=private`** (verified empirically 2026-06-12,
+> undocumented): Pipedream EXCLUDES custom tools from the default
+> `GET …/components?app=X` listing. They only list with `registry=private`, and
+> only in the environment they were published to (direct GET by key works in
+> both envs). The Numa proxy + schema-refresh Lambdas merge the private
+> registry into every listing — custom tools require that code (branch
+> `feat/pipedream-custom-components` onward) deployed to the proxy account.
+
 ## Layout
 
 Mirrors [PipedreamHQ/pipedream](https://github.com/PipedreamHQ/pipedream/tree/master/components)
@@ -69,8 +77,11 @@ environment and vice versa. Numa runs `environment=production`
 (`pipedream/credentials-prod` secret), so end-to-end testing through Numa chat
 requires the production publish.
 
-## Post-publish (Numa side — no deploys needed)
+## Post-publish (Numa side)
 
+0. One-time prerequisite: the `pipedream-proxy-stack` must be running code with
+   the private-registry merge (see warning above). After that, no deploys per
+   component.
 1. Refresh the schema cache (otherwise it updates on the weekly EventBridge run):
    ```bash
    AWS_PROFILE=pipedream-proxy aws lambda invoke --function-name pipedream-schema-refresh \
@@ -85,9 +96,12 @@ requires the production publish.
 ## Verify
 
 ```bash
-# appears in the app-filtered listing?
-GET /v1/connect/{project_id}/components?app=pipedrive&component_type=action
-#   → expect "~/pipedrive-add-file" alongside the 26 public actions
+# registered in the target environment? (x-pd-environment header on all calls)
+GET /v1/connect/{project_id}/components?app=pipedrive&component_type=action&registry=private
+#   → expect "~/pipedrive-add-file" (the DEFAULT listing will NOT include it)
+
+# retrievable by key?
+GET /v1/connect/{project_id}/components/~/pipedrive-add-file
 
 # runs? (same endpoint the proxy uses)
 POST /v1/connect/{project_id}/actions/run

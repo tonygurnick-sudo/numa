@@ -65,41 +65,69 @@ def _list_actions(
     environment: str,
     access_token: str,
 ) -> List[Dict[str, Any]]:
-    """Fetch all actions for an integration from Pipedream API with pagination."""
-    all_actions: List[Dict[str, Any]] = []
-    after_cursor: Optional[str] = None
-    limit = 100
+    """Fetch all actions for an integration from Pipedream API with pagination.
 
-    while True:
-        params: Dict[str, Any] = {
-            "app": app_slug,
-            "component_type": "action",
-            "limit": limit,
-        }
-        if after_cursor:
-            params["after"] = after_cursor
+    Fetches the default (public-registry) listing plus the workspace's
+    privately published custom tools (``registry=private``) — Pipedream
+    excludes custom tools from the default listing, so without the second
+    fetch keys like ``~/pipedrive-add-file`` never reach the schema cache.
+    """
 
-        response = requests.get(
-            f"https://api.pipedream.com/v1/connect/{project_id}/components",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "x-pd-environment": environment,
-            },
-            params=params,
-            timeout=30,
+    def _fetch_all_pages(registry: Optional[str]) -> List[Dict[str, Any]]:
+        collected: List[Dict[str, Any]] = []
+        after_cursor: Optional[str] = None
+        limit = 100
+
+        while True:
+            params: Dict[str, Any] = {
+                "app": app_slug,
+                "component_type": "action",
+                "limit": limit,
+            }
+            if registry:
+                params["registry"] = registry
+            if after_cursor:
+                params["after"] = after_cursor
+
+            response = requests.get(
+                f"https://api.pipedream.com/v1/connect/{project_id}/components",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "x-pd-environment": environment,
+                },
+                params=params,
+                timeout=30,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            collected.extend(data.get("data", []))
+
+            page_info = data.get("page_info", {})
+            if page_info.get("count", 0) < limit:
+                break
+            after_cursor = page_info.get("end_cursor")
+            if not after_cursor:
+                break
+
+        return collected
+
+    all_actions = _fetch_all_pages(None)
+
+    # The registry param is undocumented — if Pipedream changes it, custom
+    # tools drop out of the cache but public schemas must keep refreshing.
+    try:
+        private_actions = _fetch_all_pages("private")
+    except Exception as e:
+        logger.warning(
+            "Failed to list private-registry actions",
+            app_slug=app_slug,
+            error=str(e),
         )
-        response.raise_for_status()
-        data = response.json()
+        private_actions = []
 
-        actions = data.get("data", [])
-        all_actions.extend(actions)
-
-        page_info = data.get("page_info", {})
-        if page_info.get("count", 0) < limit:
-            break
-        after_cursor = page_info.get("end_cursor")
-        if not after_cursor:
-            break
+    seen_keys = {a.get("key") for a in all_actions}
+    all_actions.extend(a for a in private_actions if a.get("key") not in seen_keys)
 
     return all_actions
 
