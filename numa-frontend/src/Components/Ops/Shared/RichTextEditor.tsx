@@ -652,9 +652,15 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
 
   useImperativeHandle(ref, () => ({ flush }), [flush]);
 
-  // Keep editability in sync with the disabled prop.
+  // Keep editability in sync with the disabled prop. emitUpdate must be false:
+  // setEditable fires the editor's `update` event by default, which reaches
+  // onChange with the editor's CURRENT content. Consumers treat onChange as a
+  // user edit, so when `disabled` flips while `value` is mid-update (e.g. a
+  // form unlocking as its data fetch lands), the stale editor content
+  // overwrites the freshly loaded value in parent state (BUG-357: email
+  // signatures replaced by the placeholder default and then saved over).
   useEffect(() => {
-    editor?.setEditable(!disabled);
+    editor?.setEditable(!disabled, false);
   }, [editor, disabled]);
 
   // Seed / re-sync from external value changes (e.g. ticket reloaded remotely)

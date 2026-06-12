@@ -125,6 +125,26 @@
   }
 }
 
+// Support popup variant (FEAT-204) — the Support tab lives in the nav
+// sidebar footer (bottom-left), so anchor the popup beside it instead of
+// the Ask Numa FAB corner. Offsets = sidebar width (240px / 60px) + 16px gap.
+.ask-numa-popup--nav-left {
+  right: auto;
+  left: 256px;
+  bottom: 24px;
+
+  &.ask-numa-popup--nav-collapsed {
+    left: 76px;
+  }
+
+  // Mobile keeps the standard full-width bottom placement
+  @media (max-width: 768px) {
+    right: 16px;
+    left: 16px;
+    bottom: 72px;
+  }
+}
+
 // Header
 .ask-numa-popup-header {
   display: flex;

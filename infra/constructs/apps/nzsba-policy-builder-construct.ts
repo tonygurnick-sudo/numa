@@ -97,7 +97,9 @@ export class NZSBAPolicyBuilder extends BaseNumaApp {
     super(scope, name, { ...props, appId: 'policy-builder', enableJobs: true });
 
     this.manifest = {
-      appName: 'Policy Designer',
+      // V1 pipeline retained during the FEAT-174 V2 migration — the new
+      // manifest-only 'policy-designer' app is the current version.
+      appName: 'Policy Designer (old version)',
       id: this.appId,
       type: AppType.NZSBA_POLICY_DESIGNER,
       category: AppCategory.COMPLIANCE,

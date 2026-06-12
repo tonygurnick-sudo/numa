@@ -23,6 +23,9 @@ type AddMessageOptions = {
   agentVisibility?: string;
   isAgentConversation?: boolean;
   isWorkspaceConversation?: boolean;
+  /** Workspace agent TYPE pinned to the conversation (e.g. "numa-chat-support").
+   *  Distinct from agentType, which is the agent-builder taxonomy of a saved agent. */
+  workspaceAgentType?: string;
   latestTimestamp?: number;
 };
 
@@ -76,6 +79,7 @@ class NumaChatDynamoUtils {
     agentVisibility,
     isAgentConversation,
     isWorkspaceConversation,
+    workspaceAgentType,
     latestTimestamp,
   }: AddMessageOptions) {
     try {
@@ -104,6 +108,7 @@ class NumaChatDynamoUtils {
         agentVisibility,
         isAgentConversation,
         isWorkspaceConversation,
+        workspaceAgentType,
         latestTimestamp,
       };
 
@@ -360,7 +365,7 @@ class NumaChatDynamoUtils {
             ? { ExpressionAttributeNames: expressionAttributeNames }
             : {}),
           ProjectionExpression:
-            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',
+            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation, workspaceAgentType',
           ScanIndexForward: false,
           ConsistentRead: true,
           ExclusiveStartKey: lastEvaluatedKey || undefined,
@@ -390,6 +395,7 @@ class NumaChatDynamoUtils {
         agentVersion: it.agentVersion || null,
         isAgentConversation: Boolean(it.isAgentConversation),
         isWorkspaceConversation: Boolean(it.isWorkspaceConversation),
+        workspaceAgentType: it.workspaceAgentType || null,
       }));
 
       conversations.sort((a, b) => (b.latestTimestamp as number) - (a.latestTimestamp as number));
@@ -426,7 +432,7 @@ class NumaChatDynamoUtils {
             ':schedPrefix': 'schedule-',
           }),
           ProjectionExpression:
-            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation',
+            'sk, conversation_id, user_id, conversationName, latestTimestamp, content, agentId, agentTitle, agentIcon, agentType, agentVisibility, agentVersion, isAgentConversation, isWorkspaceConversation, workspaceAgentType',
           ScanIndexForward: false, // Sort descending by sort key (newest first)
           ExclusiveStartKey: lastEvaluatedKey,
         });
@@ -462,6 +468,7 @@ class NumaChatDynamoUtils {
         agentVersion: it.agentVersion || null,
         isAgentConversation: Boolean(it.isAgentConversation),
         isWorkspaceConversation: Boolean(it.isWorkspaceConversation),
+        workspaceAgentType: it.workspaceAgentType || null,
       }));
 
       // Sort by latestTimestamp (most recent activity first) to provide better UX

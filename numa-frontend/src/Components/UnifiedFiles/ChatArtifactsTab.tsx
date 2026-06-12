@@ -24,6 +24,7 @@ import { downloadFileFromS3 } from '../../utils/s3Utils';
 import { formatRelativeTime } from '../../utils/automationUtils';
 import { useFilePreviewProcessor, type FileReference } from '../../hooks/useFilePreviewProcessor';
 import { FilePreviewPanel } from '../FilePreviewPanel';
+import ResizableSplitView from '../ResizableSplitView';
 
 interface ChatArtifactsTabProps {
   onActionChange?: (actions: React.ReactNode) => void;
@@ -123,9 +124,24 @@ export function ChatArtifactsTab({ onActionChange }: ChatArtifactsTabProps): Rea
   const [sortColumn, setSortColumn] = useState<SortColumn>('chatUpdated');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
+  // Desktop opens previews in a resizable split view (consistent with the
+  // User/Company Files tabs); the modal is mobile-only.
+  const {
+    filePreview,
+    showFilePreview,
+    leftFraction: filePreviewLeftFraction,
+    setLeftFraction: setFilePreviewLeftFraction,
+    openFilePreview,
+    closeFilePreview,
+  } = useFilePreviewProcessor();
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  const { filePreview, openFilePreview, closeFilePreview } = useFilePreviewProcessor();
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // The parent page reserves a slot for tab actions; this tab keeps actions in
   // its own finder-toolbar (consistent with UserFilesTab) so clear it.
@@ -298,9 +314,9 @@ export function ChatArtifactsTab({ onActionChange }: ChatArtifactsTabProps): Rea
         extension: getExtension(row.artifact.name),
       };
       openFilePreview(ref);
-      setShowPreviewModal(true);
+      if (isMobile) setShowPreviewModal(true);
     },
-    [openFilePreview]
+    [openFilePreview, isMobile]
   );
 
   const handleClosePreview = useCallback(() => {
@@ -341,7 +357,7 @@ export function ChatArtifactsTab({ onActionChange }: ChatArtifactsTabProps): Rea
       <i className={`bi bi-arrow-${sortDirection === 'asc' ? 'up' : 'down'}`} aria-hidden="true" />
     ) : null;
 
-  return (
+  const mainContent = (
     <div className="finder-files chat-artifacts">
       <div className="finder-toolbar">
         <div className="finder-toolbar__location">
@@ -504,11 +520,18 @@ export function ChatArtifactsTab({ onActionChange }: ChatArtifactsTabProps): Rea
         )}
       </div>
 
-      <Modal show={showPreviewModal && Boolean(filePreview)} onHide={handleClosePreview} size="xl" centered>
+      {/* Mobile file preview modal */}
+      <Modal
+        show={isMobile && showPreviewModal && Boolean(filePreview)}
+        onHide={handleClosePreview}
+        fullscreen
+        centered
+        scrollable
+      >
         <Modal.Header closeButton>
           <Modal.Title>{filePreview?.type === 'file' ? filePreview.filename : ''}</Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-0" style={{ minHeight: '70vh' }}>
+        <Modal.Body className="p-0">
           {filePreview && (
             <FilePreviewPanel
               preview={filePreview}
@@ -522,6 +545,31 @@ export function ChatArtifactsTab({ onActionChange }: ChatArtifactsTabProps): Rea
         </Modal.Body>
       </Modal>
     </div>
+  );
+
+  return (
+    <ResizableSplitView
+      left={mainContent}
+      right={
+        showFilePreview && filePreview ? (
+          <FilePreviewPanel
+            preview={filePreview}
+            onClose={closeFilePreview}
+            bucket={outputsBucket}
+            region={region}
+            getCredentials={getCredentials}
+          />
+        ) : (
+          <div />
+        )
+      }
+      showRight={showFilePreview && !!filePreview && !isMobile}
+      leftFraction={filePreviewLeftFraction}
+      onLeftFractionChange={setFilePreviewLeftFraction}
+      minLeft={300}
+      minRight={300}
+      rightPadding="0"
+    />
   );
 }
 

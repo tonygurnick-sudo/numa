@@ -102,6 +102,10 @@ function sanitizeUserKB(kb: UserKB | null | undefined): UserKB | null {
     is_shared: isShared,
     is_root: kb.is_root === true,
     document_count: kb.document_count,
+    // FEAT-127: carry persona/industry tags through so the chat KB picker can
+    // filter shared KBs by the user's audience. Omitted = untagged = visible.
+    personas: Array.isArray(kb.personas) ? kb.personas : undefined,
+    industries: Array.isArray(kb.industries) ? kb.industries : undefined,
   };
 }
 

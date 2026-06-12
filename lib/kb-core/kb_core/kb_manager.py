@@ -358,6 +358,10 @@ class KnowledgeBaseManager:
                     memberships[kb_id]["is_public"] = visibility["is_public"]
                     memberships[kb_id]["kb_name"] = kb.get("kb_name", kb_id)
                     memberships[kb_id]["document_count"] = kb.get("document_count")
+                    # FEAT-127: surface persona/industry tags so the chat KB
+                    # picker can filter shared KBs by the user's audience.
+                    memberships[kb_id]["personas"] = kb.get("personas", [])
+                    memberships[kb_id]["industries"] = kb.get("industries", [])
                 else:
                     memberships[kb_id] = {
                         "kb_id": kb_id,
@@ -366,6 +370,9 @@ class KnowledgeBaseManager:
                         "is_shared": visibility["is_shared"],
                         "is_public": visibility["is_public"],
                         "document_count": kb.get("document_count"),
+                        # FEAT-127: persona/industry tags for audience filtering.
+                        "personas": kb.get("personas", []),
+                        "industries": kb.get("industries", []),
                     }
 
         # Always include the user's root KB (virtual, no DynamoDB record).

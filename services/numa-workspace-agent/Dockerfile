@@ -44,6 +44,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # WeasyPrint system dependencies (HTML→PDF)
     libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
     libgdk-pixbuf-2.0-0 libffi-dev libxml2 libxslt1.1 \
+    # Fonts for PDF rendering — DejaVu covers Latin Extended-A (te reo Māori
+    # macrons ā ē ī ō ū) required by policy-designer document rendering
+    fonts-dejavu-core \
     # PDF manipulation CLI
     qpdf \
     && rm -rf /var/lib/apt/lists/*

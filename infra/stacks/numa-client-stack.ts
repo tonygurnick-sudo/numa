@@ -530,6 +530,8 @@ export class NumaClientStack extends TerraformStack {
         creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
         creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
         creditMeteringEnabled: true,
+        // Centralized email sender — V2 app run-completion emails (FEAT-174)
+        emailSenderLambdaArn,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -1837,6 +1839,13 @@ const V2_MIGRATED_APPS: Record<
     appName: 'Nolia',
     category: AppCategory.COMPLIANCE,
     description: 'AI-powered procurement compliance review for government agencies.',
+    isProdApp: false,
+  },
+  'policy-designer': {
+    appName: 'Policy Designer',
+    category: AppCategory.COMPLIANCE,
+    description:
+      "Generate a complete school governance policy suite from your school's context, based on the NZSBA exemplar.",
     isProdApp: false,
   },
 };

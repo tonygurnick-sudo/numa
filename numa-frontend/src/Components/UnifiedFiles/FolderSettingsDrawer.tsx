@@ -86,10 +86,14 @@ export function FolderSettingsDrawer({
   const { user } = useAuth();
   const isAdmin = Boolean(user?.groups?.includes('admin'));
   const isOwner = role === 'OWNER';
-  // The Company KB is a system-managed singleton — admins can edit only its
-  // taxonomy tags, not its name/visibility/membership.
   const isCompanyKb = kbDetails?.is_default === true;
-  const canEditTaxonomy = isOwner || (isCompanyKb && isAdmin);
+  // Owners edit everything. Workspace admins can edit the persona/industry
+  // taxonomy on any folder they can see (FEAT-127) — incl. the system-owned
+  // Company KB — but not name/visibility/membership. Backend enforces the same.
+  const canEditTaxonomy = isOwner || isAdmin;
+  // Admin-but-not-owner saves send a taxonomy-only payload; the Company KB is
+  // always taxonomy-only (nobody owns it — created_by is 'system').
+  const taxonomyOnlySave = isCompanyKb || !isOwner;
 
   // Map workspace users to StaffProfile for UserPicker
   const staffProfiles = useMemo(() => workspaceUsers.map(toStaffProfile), [workspaceUsers]);
@@ -177,8 +181,8 @@ export function FolderSettingsDrawer({
     const currIndustries = new Set(editIndustries);
     const industriesChanged =
       origIndustries.size !== currIndustries.size || [...origIndustries].some((i) => !currIndustries.has(i));
-    // For the Company KB only taxonomy is editable, so other fields cannot have changed.
-    if (isCompanyKb) return personasChanged || industriesChanged;
+    // Taxonomy-only contexts (Company KB, admin-but-not-owner) can't change other fields.
+    if (taxonomyOnlySave) return personasChanged || industriesChanged;
 
     if (editName.trim() !== kbDetails.kb_name) return true;
     if (editVisibility !== deriveVisibility(kbDetails)) return true;
@@ -189,22 +193,32 @@ export function FolderSettingsDrawer({
     if (origViewers.size !== currViewers.size || [...origViewers].some((v) => !currViewers.has(v))) return true;
     if (origEditors.size !== currEditors.size || [...origEditors].some((e) => !currEditors.has(e))) return true;
     return personasChanged || industriesChanged;
-  }, [kbDetails, isCompanyKb, editName, editVisibility, editViewerIds, editEditorIds, editPersonas, editIndustries]);
+  }, [
+    kbDetails,
+    taxonomyOnlySave,
+    editName,
+    editVisibility,
+    editViewerIds,
+    editEditorIds,
+    editPersonas,
+    editIndustries,
+  ]);
 
   const handleSave = async () => {
     setError(null);
     setSaveSuccess(false);
     const trimmedName = editName.trim();
-    if (!isCompanyKb && !trimmedName) {
+    if (!taxonomyOnlySave && !trimmedName) {
       setError(t('createFolder.errors.nameRequired'));
       return;
     }
 
     setSaving(true);
     try {
-      // For the Company KB only taxonomy is mutable; omit name/visibility/membership
-      // so we don't accidentally overwrite system-managed values.
-      const payload = isCompanyKb
+      // Taxonomy-only contexts (Company KB, admin-but-not-owner) must omit
+      // name/visibility/membership — the backend rejects non-taxonomy fields
+      // from non-owners, and we mustn't overwrite system-managed values.
+      const payload = taxonomyOnlySave
         ? { personas: editPersonas, industries: editIndustries }
         : {
             name: trimmedName,
@@ -380,7 +394,7 @@ export function FolderSettingsDrawer({
               </div>
             )}
 
-            {/* Personas (owner or admin-on-company-KB; viewers see read-only badges below) */}
+            {/* Personas — editable by the owner, or by workspace admins on any visible folder */}
             {canEditTaxonomy && (
               <div className="folder-settings-drawer__section">
                 <label className="folder-settings-drawer__label">{t('createFolder.personasLabel')}</label>
@@ -491,8 +505,8 @@ export function FolderSettingsDrawer({
               </div>
             )}
 
-            {/* Save button */}
-            {isOwner && (
+            {/* Save button — owners always; admins for taxonomy-only edits */}
+            {canEditTaxonomy && (
               <div className="folder-settings-drawer__actions">
                 <button
                   className="folder-settings-drawer__save-btn"

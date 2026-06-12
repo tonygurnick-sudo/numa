@@ -46,6 +46,7 @@ import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/wo
 import { getVariantExtension, type OutputFileGroup } from '../../utils/outputFileGroups';
 import { getFlag } from '../../utils/featureFlags';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
+import { useResourceAudience } from '../../hooks/useResourceAudience';
 import { sortKnowledgeBases } from '../../constants/knowledgeBase';
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { knowledgeBaseService } from '../../Services/knowledgeBaseService';
@@ -56,6 +57,9 @@ type KnowledgeBase = {
   role?: string;
   is_root?: boolean;
   is_shared?: boolean;
+  // FEAT-127 audience tags — used to filter shared KBs by the user's persona/industry.
+  personas?: string[];
+  industries?: string[];
 };
 
 type ConnectionOption = {
@@ -242,6 +246,9 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   // Connected integrations only
   const connectedIntegrations = availableConnections.filter((conn) => conn.isConnected);
 
+  // FEAT-127: the user's persona/industry, used to filter shared KBs below.
+  const { isFiltering: audienceActive, matches: matchesAudience } = useResourceAudience();
+
   // Pin root first, then company / numa-support / shared KBs. Stable
   // sort preserves the backend's alphabetical order within the user KB tier.
   const sortedKBs = useMemo(() => sortKnowledgeBases(availableKBs), [availableKBs]);
@@ -260,8 +267,22 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
       else if (kb.is_shared) shared.push(kb);
       else myFiles.push(kb);
     }
-    return { systemKBs: system, myFilesGroupKBs: myFiles, sharedSectionKBs: shared };
-  }, [sortedKBs, SYSTEM_KB_ID_SET]);
+    // FEAT-127: persona/industry filtering applies to SHARED KBs only — system
+    // KBs (Company/Support/SharePoint) and the user's own My Files are always
+    // shown. A currently-enabled shared KB is also kept so the user never loses
+    // a source they've selected.
+    const filteredShared = audienceActive
+      ? shared.filter((kb) => enabledKBIds.includes(kb.kb_id) || matchesAudience(kb))
+      : shared;
+    return { systemKBs: system, myFilesGroupKBs: myFiles, sharedSectionKBs: filteredShared };
+  }, [sortedKBs, SYSTEM_KB_ID_SET, audienceActive, matchesAudience, enabledKBIds]);
+
+  // The KBs actually rendered in the picker (after audience filtering). Used by
+  // "Select all" / "all selected" so they don't reach hidden shared KBs.
+  const visibleKBs = useMemo(
+    () => [...systemKBs, ...myFilesGroupKBs, ...sharedSectionKBs],
+    [systemKBs, myFilesGroupKBs, sharedSectionKBs]
+  );
 
   // FEAT-219 #3: all file groups open collapsed.
   const [myFilesGroupExpanded, setMyFilesGroupExpanded] = useState(false);
@@ -563,13 +584,13 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                 <div className="text-muted small fst-italic">{t('workspaceSettings.noKBs')}</div>
               ) : (
                 <>
-                  {sortedKBs.length > 1 && (
+                  {visibleKBs.length > 1 && (
                     <div className="workspace-settings-kb-actions">
                       <button
                         type="button"
                         className="workspace-settings-kb-action-link"
                         onClick={() => {
-                          setEnabledKBIds(sortedKBs.map((kb) => kb.kb_id));
+                          setEnabledKBIds(visibleKBs.map((kb) => kb.kb_id));
                           if (remoteFilesGroupSlugs.length > 0) {
                             setEnabledNativeConnectorIds((prev) =>
                               Array.from(new Set([...prev, ...remoteFilesGroupSlugs]))
@@ -578,7 +599,7 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                         }}
                         disabled={
                           isDisabled ||
-                          (sortedKBs.every((kb) => enabledKBIds.includes(kb.kb_id)) && remoteFilesGroupAllSelected)
+                          (visibleKBs.every((kb) => enabledKBIds.includes(kb.kb_id)) && remoteFilesGroupAllSelected)
                         }
                       >
                         {t('workspaceSettings.selectAll')}

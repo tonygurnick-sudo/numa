@@ -13,8 +13,8 @@ import {
   filterTree,
   filterTreeByPredicate,
   collectFoldersToExpand,
-} from './KBFileExplorer';
-import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExplorer';
+} from './fileExplorerUtils';
+import type { S3Object, TableRow, SortColumn, SortDirection } from './fileExplorerUtils';
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
 import DestinationFolderPicker, { type DestinationFolderPickerValue } from './DestinationFolderPicker';
@@ -52,6 +52,7 @@ import { FolderContextMenu, type FolderContextAction, type FolderContextTarget }
 import { FolderSettingsDrawer } from './FolderSettingsDrawer';
 import { extractDroppedUploadBatch, isExternalFileDrag, type DroppedUploadBatch } from './dropUploadUtils';
 import { useConnectedIntegrations, type ConnectedIntegration } from '../../hooks/useConnectedIntegrations';
+import { useResourceAudience } from '../../hooks/useResourceAudience';
 import { RemoteProviderBrowser, type SubFolderBreadcrumb } from './Remote/RemoteProviderBrowser';
 import { RemoteProviderInlineRows } from './Remote/RemoteProviderInlineRows';
 import { ComposeEmailModal } from '../Files/ComposeEmailModal';
@@ -117,7 +118,12 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
   const { t } = useTranslation('unifiedFiles');
   const { t: tKb } = useTranslation('knowledgeBase');
   const { availableKBs, isLoadingKBs, refreshKBs, fetchKBDetails } = useKnowledgeBase();
+  // FEAT-127: persona/industry filtering for shared folders (My Files unaffected).
+  const { isFiltering: audienceActive, matches: matchesAudience } = useResourceAudience();
   const { getCredentials, region: authRegion, user } = useAuth();
+  // Workspace admins can open folder settings on any visible folder to curate
+  // persona/industry tags (FEAT-127) — the drawer + backend limit them to taxonomy.
+  const isWorkspaceAdmin = Boolean(user?.groups?.includes('admin'));
   const { showToast } = useToast();
 
   // Navigation: null = root, set = inside a KB
@@ -1888,7 +1894,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
     if (kbState?.isLoading || isSubfolderLoading) {
       rows.push({
-        row: { id: 'loading', type: 'file', name: '', depth: 0, uploadDate: '', size: '', status: 'pending' },
+        row: { id: 'loading', type: 'file', name: '', depth: 0, uploadDate: '', size: '' },
         kbId: currentFolder.kbId,
         isKbFolder: false,
         special: 'loading',
@@ -1913,7 +1919,7 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
 
       if (childRows.length === 0 && kbState) {
         rows.push({
-          row: { id: 'empty', type: 'file', name: '', depth: 0, uploadDate: '', size: '', status: 'indexed' },
+          row: { id: 'empty', type: 'file', name: '', depth: 0, uploadDate: '', size: '' },
           kbId: currentFolder.kbId,
           isKbFolder: false,
           special: 'empty',
@@ -1935,7 +1941,11 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     // the user sees in the row aligns with which section it's grouped under.
     // The root KB is never shared so it always lands in My Files.
     const privateKBs = allUserKBs.filter((kb) => !kb.is_shared);
-    const sharedSectionKBs = allUserKBs.filter((kb) => kb.is_shared);
+    // FEAT-127: hide shared folders whose persona/industry tags don't match the
+    // user's profile. My Files (private + root) is never filtered.
+    const sharedSectionKBs = allUserKBs
+      .filter((kb) => kb.is_shared)
+      .filter((kb) => !audienceActive || matchesAudience(kb));
     const myFilesKBs: UserKB[] = rootKB ? [rootKB, ...privateKBs] : privateKBs;
 
     const pushKbRows = (kb: UserKB) => {
@@ -1959,7 +1969,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           depth: 0,
           uploadDate: '\u2014',
           size: '\u2014',
-          status: 'indexed',
         },
         kbId: kb.kb_id,
         isKbFolder: true,
@@ -1976,7 +1985,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
               depth: 1,
               uploadDate: '',
               size: '',
-              status: 'pending',
             },
             kbId: kb.kb_id,
             isKbFolder: false,
@@ -1992,7 +2000,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                 depth: 1,
                 uploadDate: '',
                 size: '',
-                status: 'indexed',
               },
               kbId: kb.kb_id,
               isKbFolder: false,
@@ -2013,7 +2020,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         depth: 0,
         uploadDate: '',
         size: '',
-        status: 'indexed',
       },
       kbId: `section-${key}`,
       isKbFolder: false,
@@ -2030,7 +2036,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         depth: 0,
         uploadDate: '',
         size: '',
-        status: 'indexed',
       },
       kbId: `create-folder-${visibility}`,
       isKbFolder: false,
@@ -2046,7 +2051,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
         depth: 0,
         uploadDate: '',
         size: '',
-        status: 'indexed',
       },
       kbId: 'connect-integration',
       isKbFolder: false,
@@ -2062,7 +2066,6 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
           depth: 0,
           uploadDate: '—',
           size: '—',
-          status: 'indexed',
         },
         kbId: `integration-${integration.id}`,
         isKbFolder: false,
@@ -2899,16 +2902,15 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
                             )}
                           </button>
                           {canEdit && (
-                            <>
-                              <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
-                                <i className="bi bi-upload" />
-                              </button>
-                              {!isRootRow && (
-                                <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
-                                  <i className="bi bi-gear" />
-                                </button>
-                              )}
-                            </>
+                            <button onClick={(e) => openUploadForKb(kb, e)} title={t('actions.uploadFiles')}>
+                              <i className="bi bi-upload" />
+                            </button>
+                          )}
+                          {/* Settings: editors/owners, plus workspace admins (taxonomy-only editing, FEAT-127) */}
+                          {(canEdit || isWorkspaceAdmin) && !isRootRow && (
+                            <button onClick={(e) => openSettings(kb, e)} title={t('folderList.settings')}>
+                              <i className="bi bi-gear" />
+                            </button>
                           )}
                         </div>
                       </div>

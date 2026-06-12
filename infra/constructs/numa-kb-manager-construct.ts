@@ -55,9 +55,8 @@ export class NumaKbManager extends Construct {
       lambdaDirectory: 'python/numa-kb-manager/',
       handler: 'numa_kb_manager.lambda_handler.handler',
       runtime: 'python3.13',
-      // GET /api/kb/{id}/state paginates the full Bedrock document list and
-      // does a HeadObject per web-crawler file — large company KBs push the
-      // tail latency up, so we give it comfortable headroom.
+      // Recursive file listings and move/delete operations on large KBs can
+      // run long, so we give it comfortable headroom.
       memorySize: 1024,
       timeout: 120,
       environment: {

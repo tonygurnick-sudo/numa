@@ -59,6 +59,14 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
   // Track last loaded conversation to avoid redundant fetches
   const lastLoadedConversationRef = useRef<string | null>(null);
 
+  // Monotonic sequence for in-flight loads. /files/{cid} cold-starts the
+  // conversation's MicroVM, so the FIRST fetch for a new conversation can take
+  // seconds and resolve AFTER a later (warm, fast) refresh — e.g. the
+  // popup-draft flow: load-on-conversation-change returns an empty workspace
+  // after the post-stream refresh already listed the uploaded context files,
+  // wiping them from the panel. Stale responses are dropped.
+  const loadSeqRef = useRef(0);
+
   // Panel controls — persist preference to localStorage
   const openPanel = useCallback(() => {
     setIsPanelOpen(true);
@@ -88,10 +96,12 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
 
     setFilesLoading(true);
     setFilesError(null);
+    const seq = ++loadSeqRef.current;
 
     try {
       // Fetch files for this specific conversation's uploads/ and outputs/ directories
       const response = await listConversationFiles(conversationId);
+      if (seq !== loadSeqRef.current) return; // Stale response — a newer load owns the state
       const files = response.files || [];
       lastLoadedConversationRef.current = conversationId;
 
@@ -127,12 +137,15 @@ export function useWorkspaceChatSettingsPanel(conversationId: string | null): Us
       setUploadsFiles(uploads.sort(sortByDate));
       setOutputFiles(output.sort(sortByDate));
     } catch (err) {
+      if (seq !== loadSeqRef.current) return; // Stale failure — ignore
       console.error('[useWorkspaceChatSettingsPanel] Error loading files:', err);
       setFilesError('Failed to load files');
       setUploadsFiles([]);
       setOutputFiles([]);
     } finally {
-      setFilesLoading(false);
+      if (seq === loadSeqRef.current) {
+        setFilesLoading(false);
+      }
     }
   }, [conversationId]);
 

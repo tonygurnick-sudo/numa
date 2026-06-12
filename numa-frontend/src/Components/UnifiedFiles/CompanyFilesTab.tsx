@@ -12,8 +12,8 @@ import {
   filterTree,
   filterTreeByPredicate,
   collectFoldersToExpand,
-} from './KBFileExplorer';
-import type { S3Object, TableRow, SortColumn, SortDirection } from './KBFileExplorer';
+} from './fileExplorerUtils';
+import type { S3Object, TableRow, SortColumn, SortDirection } from './fileExplorerUtils';
 import { FileUploader } from '../FileUploader';
 import { NotificationModal } from '../NotificationModal';
 import DestinationFolderPicker, { type DestinationFolderPickerValue } from './DestinationFolderPicker';

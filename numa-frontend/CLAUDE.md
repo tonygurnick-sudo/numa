@@ -144,6 +144,29 @@ const { lambdaClient, dynamoDBClient, bedrockRuntimeClient } = useAuth();
 
 **Key file:** `src/Providers/AuthProvider.tsx`
 
+### Markdown → DOCX/PDF Downloads (document-converter)
+
+**When a feature produces markdown and users need DOCX/PDF, convert on demand through the document-converter Lambda.** Do not pre-render binaries per feature and do not convert client-side.
+
+```tsx
+import { downloadDocx, downloadPdf } from '../Services/documentConverterService';
+
+await downloadDocx(numaPost, markdownString, title); // POST /api/document-converter → presigned URL → download
+await downloadPdf(numaPost, markdownString, title);
+```
+
+The Lambda converts server-side (consistent quality, fonts, page layout) and returns a presigned download URL. Used by chat's `ResultActions` and `PolicyDesignerDetail`.
+
+**Legacy paths — do not use for new code:**
+
+- `createDocxBlob` (`Services/fileConverter.ts`) — client-side DOCX assembly, V1 policy-builder era.
+- jsPDF styled-blob rendering in `ResultActions` — legacy client-side PDF fallback.
+
+**Gotchas when fetching the source markdown from S3:**
+
+- `RunRecord.s3Prefix` (V2 apps API) is an **unformatted template** — substitute `{user_sub}` → `run.userId` and `{conversation_id}` → `run.conversationId || run.runId` before building keys. Using it verbatim requests a non-existent key, which S3 reports as a misleading `AccessDenied ... s3:ListBucket` 403.
+- `downloadFileWithSignedUrl` (`utils/s3Utils.ts`) does not check `response.ok` — a failed presigned fetch saves the S3 error XML as the requested file (corrupt "PDF"/"DOCX"). Check keys carefully or guard the response.
+
 ---
 
 ## Internationalization (i18n)

@@ -383,7 +383,8 @@
       "hide": "Hide agent",
       "unhide": "Show agent",
       "delete": "Delete agent",
-      "chat": "Chat"
+      "chat": "Chat",
+      "edit": "Edit"
     },
     "stats": {
       "total": "All Agents",

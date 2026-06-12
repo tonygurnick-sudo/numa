@@ -23,6 +23,7 @@ export const CONNECTOR_TO_PIPEDREAM: Record<string, string> = {
   podio: 'podio',
   getjobber: 'jobber',
   'zoho-crm': 'zoho_crm',
+  rentman: 'rentman',
 };
 
 /** Return the Pipedream slug paired with a native connector, or null. */

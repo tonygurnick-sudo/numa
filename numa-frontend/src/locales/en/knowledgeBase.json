@@ -179,7 +179,9 @@
     "errorLabel": "Error:",
     "loading": "Loading...",
     "loadingList": "Loading crawled URLs...",
+    "partialLoadError": "Couldn't load crawled URLs for {{count}} folder(s)",
     "emptyTitle": "No web crawls found for this folder",
+    "emptyTitleAll": "No web crawls found",
     "emptyHint": "Start a new crawl above to add web content",
     "table": {
       "seedUrl": "Seed URL",

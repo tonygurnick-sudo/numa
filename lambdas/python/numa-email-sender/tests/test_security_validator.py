@@ -32,6 +32,9 @@ class TestRoleNameRegex:
             "nd-labs_workspace-chat-tools",
             "nd-labs_workspace_chat_tools",
             "my-client123_schedule-runner",
+            # AgentCore runtime role — V2 app completion emails (FEAT-174)
+            "numa-nd-labs-workspace-chat-agentcore",
+            "numa-arcanum-demo-sydney-workspace-chat-agentcore",
         ],
     )
     def test_valid_roles(self, role_name: str):
@@ -46,6 +49,10 @@ class TestRoleNameRegex:
             "nd-labs_",
             "_schedule-runner",
             "",
+            # AgentCore pattern must anchor exactly — no prefix/suffix abuse
+            "numa-nd-labs-workspace-chat-agentcore-evil",
+            "evil-numa-nd-labs-workspace-chat-agentcore",
+            "numa--workspace-chat-agentcore_extra",
         ],
     )
     def test_invalid_roles(self, role_name: str):

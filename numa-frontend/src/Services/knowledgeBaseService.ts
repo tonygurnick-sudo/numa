@@ -100,6 +100,8 @@ export interface KBDataSource {
   lastCrawled?: string;
   lastSynced?: string;
   lastUpdated?: string;
+  crawlDepth?: number;
+  limitToPath?: boolean;
 }
 
 export interface KBState {
@@ -108,7 +110,6 @@ export interface KBState {
   syncJobStatus?: string;
   lastSuccessfulSync?: string | null;
   lastUpdated?: string | null;
-  syncMetrics?: Record<string, number>;
   documents: KBDocument[];
   dataSources: KBDataSource[];
   failedDocuments: KBDocument[];
@@ -568,8 +569,9 @@ class KnowledgeBaseService {
   }
 
   /**
-   * Get KB state including documents, sync status, and ingestion jobs
-   * This replaces the frontend AWS SDK calls for KB state
+   * Get KB sync state: data sources (including web crawls) + sync job status.
+   * Deliberately excludes per-document indexing detail — listing every
+   * document took minutes on large KBs and nothing in the UI consumes it.
    */
   async getKBState(kbId: string): Promise<KBState> {
     try {

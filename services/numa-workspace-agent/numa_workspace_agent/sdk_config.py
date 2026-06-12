@@ -181,6 +181,12 @@ MAX_OUTPUT_TOKENS = int(os.environ.get("NUMA_MAX_OUTPUT_TOKENS", "32000"))
 #   https://aws.amazon.com/bedrock/pricing/
 #
 # Keep keys in sync with REGIONAL_MODEL_MAP keys (bare ids, no regional prefix).
+#
+# NO 1M-long-context premium tier — this function is fed the ResultMessage's usage, which is
+# summed across every API call in the agentic loop, so a >200K threshold check would fire on
+# cumulative cache reads AWS bills at standard rates (that bug inflated costs ~1.6-1.8x, June
+# 2026). The premium only applies per API call on the 1M-context variant, which Numa doesn't use.
+# MUST stay identical to lib/credit-pricing (drift-guarded by test_pricing_drift.py).
 ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
     "anthropic.claude-sonnet-4-6": {
         "input": 3.00,
@@ -188,12 +194,6 @@ ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
         "cache_write_5m": 3.75,
         "cache_write_1h": 6.00,
         "cache_read": 0.30,
-        # Long-context tier (>200K-token prompt, 1M-context). MUST stay identical to lib/credit-pricing.
-        "input_200k": 6.00,
-        "output_200k": 22.50,
-        "cache_write_5m_200k": 7.50,
-        "cache_write_1h_200k": 12.00,
-        "cache_read_200k": 0.60,
     },
     "anthropic.claude-opus-4-6-v1": {
         "input": 15.00,
@@ -215,12 +215,6 @@ ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
         "cache_write_5m": 3.75,
         "cache_write_1h": 6.00,
         "cache_read": 0.30,
-        # Long-context tier (>200K-token prompt, 1M-context). MUST stay identical to lib/credit-pricing.
-        "input_200k": 6.00,
-        "output_200k": 22.50,
-        "cache_write_5m_200k": 7.50,
-        "cache_write_1h_200k": 12.00,
-        "cache_read_200k": 0.60,
     },
     "anthropic.claude-sonnet-4-20250514-v1:0": {
         "input": 3.00,
@@ -228,12 +222,6 @@ ANTHROPIC_MODEL_PRICING: dict[str, dict[str, float]] = {
         "cache_write_5m": 3.75,
         "cache_write_1h": 6.00,
         "cache_read": 0.30,
-        # Long-context tier (>200K-token prompt, 1M-context). MUST stay identical to lib/credit-pricing.
-        "input_200k": 6.00,
-        "output_200k": 22.50,
-        "cache_write_5m_200k": 7.50,
-        "cache_write_1h_200k": 12.00,
-        "cache_read_200k": 0.60,
     },
 }
 
@@ -263,17 +251,13 @@ def recalculate_anthropic_cost(
     rates = ANTHROPIC_MODEL_PRICING.get(bare)
     if rates is None:
         return None
-    # Long-context (1M) tier: prompts over 200K tokens bill the whole request at premium rates.
-    long_ctx = (input_tokens + cache_read_tokens + cache_creation_tokens) > 200_000
-
-    def _r(key: str) -> float:
-        return rates.get(key + "_200k", rates[key]) if long_ctx else rates[key]
-
-    write_rate = _r("cache_write_1h") if cache_ttl == "1h" else _r("cache_write_5m")
+    write_rate = (
+        rates["cache_write_1h"] if cache_ttl == "1h" else rates["cache_write_5m"]
+    )
     return (
-        input_tokens * _r("input")
-        + output_tokens * _r("output")
-        + cache_read_tokens * _r("cache_read")
+        input_tokens * rates["input"]
+        + output_tokens * rates["output"]
+        + cache_read_tokens * rates["cache_read"]
         + cache_creation_tokens * write_rate
     ) / 1_000_000
 

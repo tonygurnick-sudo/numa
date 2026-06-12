@@ -82,8 +82,8 @@ async function isBillingAdmin(event: { headers?: Record<string, string | undefin
 }
 
 // ── Pricing-policy defaults — MUST mirror lib/credit-pricing (credits.py + tiers.py). The Credit
-// Admin tab edits these; the debit Lambda reads the CONFIG row at meter time. AWS token rates and
-// the 200K long-context threshold are deliberately NOT editable (billing facts, not policy knobs).
+// Admin tab edits these; the debit Lambda reads the CONFIG row at meter time. AWS token rates are
+// deliberately NOT editable (billing facts, not policy knobs).
 const TIERS = ['low', 'medium', 'high', 'very_high'] as const;
 const CONTEXTS = ['chat', 'agent'] as const;
 const DEFAULT_CONFIG = {

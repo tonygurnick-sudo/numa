@@ -247,11 +247,22 @@ async def update_kb(request: Request, kb_id: str) -> Response:
     try:
         user_id = user["sub"]
         kb_manager = KnowledgeBaseManager()
-
-        if not kb_manager.check_owner(kb_id, user_id):
-            return JSONResponse({"error": "Access denied"}, status_code=403)
-
         body = await request.json()
+
+        # Owners get full update rights. Workspace admins (Cognito `admin`
+        # group) may additionally update the persona/industry taxonomy tags —
+        # and ONLY those — on any KB they can see (FEAT-127: lets admins curate
+        # audience tags across shared folders, incl. the system-owned Company
+        # KB). Name/visibility/membership remain owner-only.
+        if not kb_manager.check_owner(kb_id, user_id):
+            user_groups = user.get("cognito:groups", []) or []
+            taxonomy_only = set(body.keys()) <= {"personas", "industries"}
+            can_see = kb_id == "company" or kb_manager.check_permission(
+                kb_id, user_id, "VIEWER"
+            )
+            if not ("admin" in user_groups and taxonomy_only and can_see):
+                return JSONResponse({"error": "Access denied"}, status_code=403)
+
         name = body.get("name")
         viewers = body.get("viewers")
         editors = body.get("editors")
@@ -1428,123 +1439,11 @@ async def delete_kb_folder(request: Request, kb_id: str) -> Response:
 
 
 # ── KB sync state (Bedrock or Q Business) ─────────────────────────────────
-
-
-def _sanitize_failed_s3_uri(uri: str) -> Optional[str]:
-    """Strip diagnostic suffixes from an S3 URI mentioned in a failure reason."""
-    if not uri:
-        return None
-    trimmed = uri.strip()
-    if not trimmed:
-        return None
-    without_suffix = re.sub(r"\s+\([^)]*\)$", "", trimmed)
-    cleaned = re.sub(r"[;.,]+$", "", without_suffix)
-    return cleaned if cleaned.startswith("s3://") else None
-
-
-def _extract_failed_doc_from_uri(
-    uri: str, job_updated_at: Any
-) -> Optional[Dict[str, Any]]:
-    sanitized = _sanitize_failed_s3_uri(uri)
-    if not sanitized:
-        return None
-
-    key_match = re.search(r"[^/]+$", sanitized)
-    filename = key_match.group(0) if key_match else sanitized
-
-    return {
-        "documentId": sanitized,
-        "status": "FAILED",
-        "updatedAt": (
-            job_updated_at.isoformat()
-            if hasattr(job_updated_at, "isoformat")
-            else str(job_updated_at)
-        ),
-        "error": {
-            "errorMessage": "File format not supported or processing failed during ingestion"
-        },
-        "fileName": filename,
-    }
-
-
-def _collect_failed_docs_from_job(
-    bedrock_agent: Any,
-    kb_id: str,
-    data_source_id: str,
-    job: Dict[str, Any],
-    s3_uri_pattern: re.Pattern,
-) -> List[Dict[str, Any]]:
-    try:
-        job_details = bedrock_agent.get_ingestion_job(
-            knowledgeBaseId=kb_id,
-            dataSourceId=data_source_id,
-            ingestionJobId=job.get("ingestionJobId"),
-        )
-        failure_reasons = (
-            job_details.get("ingestionJob", {}).get("failureReasons") or []
-        )
-        job_updated = job.get("updatedAt", "")
-        failed_docs: List[Dict[str, Any]] = []
-
-        for reason in failure_reasons:
-            for uri in s3_uri_pattern.findall(reason):
-                failed_doc = _extract_failed_doc_from_uri(uri, job_updated)
-                if failed_doc:
-                    failed_docs.append(failed_doc)
-        return failed_docs
-    except Exception as job_err:  # pylint: disable=broad-except
-        logger.debug(
-            "Error fetching ingestion job details",
-            job_id=job.get("ingestionJobId"),
-            error=str(job_err),
-        )
-        return []
-
-
-def _filter_documents_by_prefix(
-    documents: List[Dict[str, Any]], s3_prefix_filter: str, kb_type: str
-) -> List[Dict[str, Any]]:
-    """Restrict a global Bedrock/Q document list to a single KB's documents."""
-    if not documents:
-        return []
-    if not s3_prefix_filter or not kb_type:
-        return documents
-
-    filtered: List[Dict[str, Any]] = []
-    for doc in documents:
-        s3_uri = doc.get("documentId", "")
-        if kb_type == "user":
-            if s3_prefix_filter in s3_uri:
-                filtered.append(doc)
-        elif kb_type == "company":
-            # Company KB lives at documents/company/ — exclude per-user kb-* prefixes.
-            if s3_prefix_filter in s3_uri or (
-                "documents/company/" in s3_uri and "documents/kb-" not in s3_uri
-            ):
-                filtered.append(doc)
-        else:
-            filtered.append(doc)
-    return filtered
-
-
-def _compute_kb_metrics(
-    filtered_docs: List[Dict[str, Any]], failed_docs: List[Dict[str, Any]]
-) -> Dict[str, int]:
-    """Compute per-KB metrics from the already-filtered document list.
-
-    Job-level statistics from Bedrock are global across all data sources, so
-    we recount from the filtered slice to get accurate per-KB numbers.
-    """
-    indexed = sum(1 for d in filtered_docs if d.get("status") == "INDEXED")
-    failed = len(failed_docs)
-    pending = len(filtered_docs) - indexed
-
-    return {
-        "documentsIndexed": indexed,
-        "documentsFailed": failed,
-        "documentsPending": pending,
-        "totalDocuments": len(filtered_docs),
-    }
+#
+# Note: the state endpoint deliberately does NOT list per-document indexing
+# status. The only consumer is the Web Crawler tab (data sources + crawler
+# stats); paginating ListKnowledgeBaseDocuments on large KBs took minutes and
+# timed out at CloudFront — see fix/web-crawl-state-timeout.
 
 
 def _serialize_datetime(obj: Any) -> Any:
@@ -1729,10 +1628,8 @@ def _get_web_crawler_stats(kb_id: str) -> List[Dict[str, Any]]:
         return []
 
 
-def _get_bedrock_kb_state(
-    kb_id: str, s3_prefix_filter: str, kb_type: str
-) -> Dict[str, Any]:
-    """Get KB state from a Bedrock Knowledge Base (data sources, jobs, docs)."""
+def _get_bedrock_kb_state(kb_id: str) -> Dict[str, Any]:
+    """Get KB state from a Bedrock Knowledge Base (data sources + sync jobs)."""
     if not BEDROCK_KNOWLEDGE_BASE_ID:
         return {"error": "Bedrock Knowledge Base ID not configured"}
 
@@ -1781,60 +1678,12 @@ def _get_bedrock_kb_state(
             (j for j in ingestion_jobs if j.get("status") == "COMPLETE"), None
         )
 
-        # Pull failed-doc URIs from the failureReasons of the 3 most recent jobs.
-        failed_documents_map: Dict[str, Dict[str, Any]] = {}
-        recent_jobs = ingestion_jobs[:3]
-        s3_uri_pattern = re.compile(r"s3://[^,;\]]+")
-
-        for job in recent_jobs:
-            job_failed_docs = _collect_failed_docs_from_job(
-                bedrock_agent,
-                BEDROCK_KNOWLEDGE_BASE_ID,
-                data_source_id,
-                job,
-                s3_uri_pattern,
-            )
-            for doc in job_failed_docs:
-                if doc["documentId"] not in failed_documents_map:
-                    failed_documents_map[doc["documentId"]] = doc
-
-        failed_documents = list(failed_documents_map.values())
-
-        docs: List[Dict[str, Any]] = []
-        next_token = None
-        while True:
-            list_params: Dict[str, Any] = {
-                "knowledgeBaseId": BEDROCK_KNOWLEDGE_BASE_ID,
-                "dataSourceId": data_source_id,
-            }
-            if next_token:
-                list_params["nextToken"] = next_token
-
-            doc_resp = bedrock_agent.list_knowledge_base_documents(**list_params)
-            raw_docs = doc_resp.get("documentDetails", [])
-
-            for doc in raw_docs:
-                identifier = doc.get("identifier", {})
-                s3_info = identifier.get("s3", {})
-                if s3_info.get("uri"):
-                    doc["documentId"] = s3_info["uri"]
-                docs.append(doc)
-
-            next_token = doc_resp.get("nextToken")
-            if not next_token:
-                break
-
         def map_status(status: Optional[str]) -> Optional[str]:
             if status == "IN_PROGRESS":
                 return "SYNCING"
             if status == "COMPLETE":
                 return "SUCCEEDED"
             return status
-
-        filtered_docs = _filter_documents_by_prefix(docs, s3_prefix_filter, kb_type)
-        filtered_failed = _filter_documents_by_prefix(
-            failed_documents, s3_prefix_filter, kb_type
-        )
 
         return {
             "dataSourceId": data_source_id,
@@ -1856,11 +1705,10 @@ def _get_bedrock_kb_state(
                 )
                 else str(latest_job.get("updatedAt", "")) if latest_job else None
             ),
-            "syncMetrics": _compute_kb_metrics(filtered_docs, filtered_failed),
-            "documents": _serialize_datetime(filtered_docs),
+            "documents": [],
             "dataSources": _serialize_data_sources(summaries)
             + _get_web_crawler_stats(kb_id),
-            "failedDocuments": _serialize_datetime(filtered_failed),
+            "failedDocuments": [],
             "source": "bedrock",
         }
 
@@ -1869,10 +1717,8 @@ def _get_bedrock_kb_state(
         return {"error": str(e), "source": "bedrock"}
 
 
-def _get_qbusiness_kb_state(
-    kb_id: str, s3_prefix_filter: str, kb_type: str
-) -> Dict[str, Any]:
-    """Get KB state from Amazon Q Business (data sources, sync jobs, docs)."""
+def _get_qbusiness_kb_state(kb_id: str) -> Dict[str, Any]:
+    """Get KB state from Amazon Q Business (data sources + sync jobs)."""
     if not Q_APPLICATION_ID or not Q_INDEX_ID:
         return {"error": "Q Business Application or Index ID not configured"}
 
@@ -1917,26 +1763,6 @@ def _get_qbusiness_kb_state(
             None,
         )
 
-        docs: List[Dict[str, Any]] = []
-        next_token = None
-        while True:
-            list_params: Dict[str, Any] = {
-                "applicationId": Q_APPLICATION_ID,
-                "indexId": Q_INDEX_ID,
-                "dataSourceIds": [data_source_id],
-            }
-            if next_token:
-                list_params["nextToken"] = next_token
-
-            doc_resp = qbusiness.list_documents(**list_params)
-            docs.extend(doc_resp.get("documentDetailList", []))
-
-            next_token = doc_resp.get("nextToken")
-            if not next_token:
-                break
-
-        filtered_docs = _filter_documents_by_prefix(docs, s3_prefix_filter, kb_type)
-
         return {
             "dataSourceId": data_source_id,
             "syncStatus": ds.get("status"),
@@ -1955,11 +1781,10 @@ def _get_qbusiness_kb_state(
                 )
                 else str(latest_job.get("endTime", "")) if latest_job else None
             ),
-            "syncMetrics": _compute_kb_metrics(filtered_docs, []),
-            "documents": _serialize_datetime(filtered_docs),
+            "documents": [],
             "dataSources": _serialize_data_sources(all_data_sources)
             + _get_web_crawler_stats(kb_id),
-            "failedDocuments": [],  # Q Business doesn't expose this yet
+            "failedDocuments": [],
             "source": "q-business",
         }
 
@@ -1970,7 +1795,7 @@ def _get_qbusiness_kb_state(
 
 @app.get("/api/kb/{kb_id}/state")
 async def get_kb_state(request: Request, kb_id: str) -> Response:
-    """Get KB sync state, indexed documents, ingestion jobs."""
+    """Get KB sync state: data sources (incl. web crawls) + sync job status."""
     guard, user = _guard_request(request)
     if guard is not None:
         return guard
@@ -1986,26 +1811,21 @@ async def get_kb_state(request: Request, kb_id: str) -> Response:
         if not kb:
             return JSONResponse({"error": "KB not found"}, status_code=404)
 
-        s3_prefix = kb.get("s3_prefix", "")
-        kb_type = "company" if kb_id == "company" else "user"
-        s3_prefix_filter = s3_prefix
-
         # Per-KB user data is only indexed in Bedrock (Q Business has no per-KB
         # isolation), so user KBs always read state from Bedrock even on Q-preferred
         # stacks. Only the company KB respects PREFERRED_KNOWLEDGE_BASE.
-        if kb_type == "user" and PREFERRED_KNOWLEDGE_BASE == "q":
-            state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)
-        elif PREFERRED_KNOWLEDGE_BASE == "q":
-            state = _get_qbusiness_kb_state(kb_id, s3_prefix_filter, kb_type)
+        kb_type = "company" if kb_id == "company" else "user"
+        if PREFERRED_KNOWLEDGE_BASE == "q" and kb_type == "company":
+            state = _get_qbusiness_kb_state(kb_id)
         else:
-            state = _get_bedrock_kb_state(kb_id, s3_prefix_filter, kb_type)
+            state = _get_bedrock_kb_state(kb_id)
 
         logger.info(
             "Got KB state",
             kb_id=kb_id,
             user_id=user_id,
             source=state.get("source"),
-            doc_count=len(state.get("documents", [])),
+            data_source_count=len(state.get("dataSources", [])),
         )
 
         return JSONResponse(state, status_code=200)

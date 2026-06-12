@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useCallback, useMemo } from 'react';
 import { NumaRequestContext } from './NumaRequestContext';
+import { useAuth } from './AuthProvider';
 
 // Move parseNestedJson completely outside component - pure function
 const parseNestedJson = (data) => {
@@ -29,17 +30,25 @@ const parseNestedJson = (data) => {
 };
 
 export const NumaRequestProvider = ({ children }) => {
-  // Read access token directly from localStorage at request time.
-  // localStorage is always kept fresh by AuthProvider.refreshTokens(),
-  // so this avoids depending on user state (which would cascade re-renders).
-  const getHeaders = useCallback((extra = {}) => {
-    const accessToken = localStorage.getItem('accessToken');
-    return {
-      'Content-Type': 'application/json',
-      ...(accessToken && { authorization: accessToken }),
-      ...extra,
-    };
-  }, []);
+  // getAccessToken reads from AuthProvider's refs (always fresh, no re-render
+  // cascade) and refreshes on demand when the token is expired — without this,
+  // background polling after laptop wake fires requests with a stale token and
+  // 401-storms until the interval-based refresh catches up.
+  const { getAccessToken } = useAuth();
+
+  const getHeaders = useCallback(
+    async (extra = {}) => {
+      // Fall back to localStorage if AuthProvider has no token in memory yet
+      // (e.g. first render after a hard reload).
+      const accessToken = (await getAccessToken()) || localStorage.getItem('accessToken');
+      return {
+        'Content-Type': 'application/json',
+        ...(accessToken && { authorization: accessToken }),
+        ...extra,
+      };
+    },
+    [getAccessToken]
+  );
 
   const axiosConfig = useMemo(
     () => ({
@@ -56,7 +65,7 @@ export const NumaRequestProvider = ({ children }) => {
         const response = await axios.get(url, {
           ...axiosConfig,
           params,
-          headers: getHeaders(headers),
+          headers: await getHeaders(headers),
         });
         return response.data;
       } catch (error) {
@@ -74,7 +83,7 @@ export const NumaRequestProvider = ({ children }) => {
       try {
         const response = await axios.post(url, data, {
           ...axiosConfig,
-          headers: getHeaders(headers),
+          headers: await getHeaders(headers),
         });
         return response.data;
       } catch (error) {
@@ -91,7 +100,7 @@ export const NumaRequestProvider = ({ children }) => {
     async (url, data, headers = {}) => {
       const response = await axios.put(url, data, {
         ...axiosConfig,
-        headers: getHeaders(headers),
+        headers: await getHeaders(headers),
       });
       return response.data;
     },
@@ -102,7 +111,7 @@ export const NumaRequestProvider = ({ children }) => {
     async (url, headers = {}) => {
       const response = await axios.delete(url, {
         ...axiosConfig,
-        headers: getHeaders(headers),
+        headers: await getHeaders(headers),
       });
       return response.data;
     },

@@ -627,6 +627,18 @@
           "label": "Other Information",
           "placeholder": "Anything else that helps Numa work better for you — working style, preferences, context..."
         },
+        "relevance": {
+          "sectionTitle": "Relevance",
+          "description": "Pick your role and industry to focus Numa on what's relevant — agents, boards, and knowledge bases tagged for other audiences are hidden. Leave blank to see everything.",
+          "persona": {
+            "label": "Persona",
+            "help": "Your role. Select one or more."
+          },
+          "industry": {
+            "label": "Industry",
+            "help": "Your industry. Select one or more."
+          }
+        },
         "customInstructions": {
           "sectionTitle": "Custom Instructions",
           "placeholder": "How would you like Numa to behave? e.g. always respond formally, prefer bullet points, focus on conciseness...",
@@ -863,7 +875,8 @@
       "saving": "Saving...",
       "save": "Save Changes",
       "reset": "Reset to company defaults",
-      "resetBrowser": "Reset to browser defaults"
+      "resetBrowser": "Reset to browser defaults",
+      "retry": "Retry"
     },
     "errors": {
       "loadDefaults": "Failed to load defaults",

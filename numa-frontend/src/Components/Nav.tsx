@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Navbar, Button, Dropdown } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import {
@@ -38,6 +39,7 @@ import { VersionDisplay } from './VersionDisplay';
 import { CAPABILITIES_CHANGED_EVENT } from '../utils/adminCapabilityGating';
 import { getFlag } from '../utils/featureFlags';
 import { useNotificationStream } from '../hooks/useNotificationStream';
+import { SupportNumaPopup } from './Support/SupportNumaPopup';
 
 interface NavProps {
   isCollapsed?: boolean;
@@ -174,6 +176,34 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
     skipBackOnMobileCloseRef.current = true;
     setShowMobileDropdown(false);
   }, []);
+
+  // Support popup (FEAT-204) — the Support nav tab opens a popup Numa bound
+  // to the dedicated support agent type instead of navigating to /support.
+  // Falls back to the static support page when workspace chat is disabled.
+  const [showSupportPopup, setShowSupportPopup] = useState(false);
+  const supportPopupEnabled = getFlag('NUMA_WORKSPACE_CHAT');
+  const handleNavItemClick = useCallback(
+    (to: string): boolean => {
+      if (to === '/support' && supportPopupEnabled) {
+        setShowSupportPopup(true);
+        return true; // handled — do not navigate
+      }
+      return false;
+    },
+    [supportPopupEnabled]
+  );
+
+  // Close the support popup on Escape and on route change
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSupportPopup(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+  useEffect(() => {
+    setShowSupportPopup(false);
+  }, [location.pathname]);
 
   // Re-render counter — incremented when admin capability gating changes
   const [capVersion, setCapVersion] = useState(0);
@@ -402,7 +432,9 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                 <FeatureWrapper key={item.to} requiredFeature={item.feature}>
                   <Dropdown.Item
                     onClick={() => {
-                      navigate(item.to);
+                      if (!handleNavItemClick(item.to)) {
+                        navigate(item.to);
+                      }
                       closeMobileDropdownForNavigation();
                     }}
                     className={isNavActive(location.pathname, item.to) ? 'nav-dropdown-item-active' : undefined}
@@ -546,7 +578,11 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
                   <li>
                     <div
                       className={`nav-link ${isNavActive(location.pathname, item.to) ? 'active' : ''}`}
-                      onClick={() => navigate(item.to)}
+                      onClick={() => {
+                        if (!handleNavItemClick(item.to)) {
+                          navigate(item.to);
+                        }
+                      }}
                       title={item.labelKey ? t(item.labelKey) : item.label}
                       role="button"
                     >
@@ -612,6 +648,19 @@ const Nav = ({ isCollapsed = false, onToggleCollapse }: NavProps) => {
           </div>
         </footer>
       </nav>
+
+      {/* Support popup (FEAT-204) — opened by the Support nav tab. Rendered
+          through a portal: Nav lives inside .app-layout-sidebar (stacking
+          context at z-index 1030), which would otherwise paint the popup
+          below fixed chat drawers like the settings panel (z-index 1035). */}
+      {showSupportPopup &&
+        createPortal(
+          <>
+            <div className="ask-numa-overlay" onClick={() => setShowSupportPopup(false)} />
+            <SupportNumaPopup onClose={() => setShowSupportPopup(false)} sidebarCollapsed={isCollapsed} />
+          </>,
+          document.body
+        )}
     </div>
   );
 };

@@ -282,7 +282,10 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
                 style={{ flexDirection: 'column', alignItems: 'stretch' }}
               >
                 <label className="approval-detail-label" htmlFor={`cred-${credentialRequest.connectorId}-${f.key}`}>
-                  {f.label}
+                  {/* Older connector-config snapshots stored raw i18n keys as
+                      labels — t() resolves those and passes already-resolved
+                      text through unchanged. */}
+                  {t(f.label)}
                   {f.required && <span className="text-danger ms-1">*</span>}
                 </label>
                 <Form.Control

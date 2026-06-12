@@ -35,6 +35,7 @@ const APP_ICON_MAP: Record<string, string> = {
   'infringement-review': 'bi bi-exclamation-triangle',
   nolia: 'bi bi-lightbulb',
   'nzsba-policy-builder': 'bi bi-journal-check',
+  'policy-designer': 'bi bi-journal-check',
   'rfp-response-comparison': 'bi bi-files',
   'procurement-rfp-assessment': 'bi bi-cart-check',
   'structured-data-query': 'bi bi-database',

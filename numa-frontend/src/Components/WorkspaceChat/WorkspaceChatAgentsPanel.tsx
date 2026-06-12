@@ -6,6 +6,7 @@ import AgentAvatar from '../Agents/AgentAvatar';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { getAgentPrefs, setAgentPref, listTeams, listTeamAgents } from '../../Services/AgentsService';
 import type { AgentSummary, AgentUserPref, Team } from '../../types/agents';
+import { useResourceAudience } from '../../hooks/useResourceAudience';
 
 export interface WorkspaceChatAgentsPanelProps {
   isOpen: boolean;
@@ -31,6 +32,8 @@ export const WorkspaceChatAgentsPanel: React.FC<WorkspaceChatAgentsPanelProps> =
 }) => {
   const { t } = useTranslation('chat');
   const { numaGet, numaPut } = useNumaRequest();
+  // FEAT-127: persona/industry filtering for shared (team/company) agents.
+  const { isFiltering: audienceActive, matches: matchesAudience } = useResourceAudience();
 
   const [prefs, setPrefs] = useState<AgentUserPref[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -140,9 +143,12 @@ export const WorkspaceChatAgentsPanel: React.FC<WorkspaceChatAgentsPanelProps> =
   }, [teamAgents]);
 
   const sections = useMemo<Section[]>(() => {
-    const applyFilters = (list: AgentSummary[]) => {
+    // `applyAudience` is opt-in: shared (team/company) agents are persona/industry
+    // filtered; the user's own personal agents and favourites are never hidden.
+    const applyFilters = (list: AgentSummary[], applyAudience = false) => {
       let result = list.filter((a) => !isAgentHidden(a));
       if (searchQuery) result = result.filter(matchesSearch);
+      if (applyAudience && audienceActive) result = result.filter(matchesAudience);
       return result;
     };
 
@@ -171,7 +177,7 @@ export const WorkspaceChatAgentsPanel: React.FC<WorkspaceChatAgentsPanelProps> =
 
     for (const team of teams) {
       const members = teamAgents.get(team.teamId) ?? [];
-      const filtered = applyFilters(members);
+      const filtered = applyFilters(members, true);
       if (filtered.length > 0) {
         result.push({
           key: `team-${team.teamId}`,
@@ -186,13 +192,25 @@ export const WorkspaceChatAgentsPanel: React.FC<WorkspaceChatAgentsPanelProps> =
     const companyAgents = agents.filter(
       (a) => a.scope !== 'user' && !teamAgentIds.has(a.agentId) && !personalIds.has(a.agentId)
     );
-    const company = applyFilters(companyAgents);
+    const company = applyFilters(companyAgents, true);
     if (company.length > 0) {
       result.push({ key: 'company', label: t('agentsPanel.sections.company'), agents: company });
     }
 
     return result;
-  }, [agents, teams, teamAgents, teamAgentIds, isAgentFavorite, isAgentHidden, matchesSearch, searchQuery, t]);
+  }, [
+    agents,
+    teams,
+    teamAgents,
+    teamAgentIds,
+    isAgentFavorite,
+    isAgentHidden,
+    matchesSearch,
+    searchQuery,
+    audienceActive,
+    matchesAudience,
+    t,
+  ]);
 
   if (!isOpen) return null;
 

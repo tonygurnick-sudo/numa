@@ -204,6 +204,71 @@ class TestNumaChatType:
         assert config.pipeline_steps is None
 
 
+class TestNumaSupportType:
+    """Tests for the numa-chat-support built-in type (FEAT-204)."""
+
+    def test_registered(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.type_id == "numa-chat-support"
+        assert config.display_name == "Numa Support"
+
+    def test_stream_mode(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.response_mode == "stream"
+
+    def test_custom_prompt_and_identity(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.system_prompt_builder is not None
+        assert config.identity_override is not None
+        assert "Numa Support" in config.identity_override
+
+    def test_prompt_builder_includes_support_workflow(self):
+        config = get_agent_type_config("numa-chat-support")
+        prompt = config.system_prompt_builder(
+            identity_override=config.identity_override
+        )
+        assert "Support Workflow" in prompt
+        assert "customersuccess@arcanum.ai" in prompt
+        assert "numa-environment.md" in prompt
+
+    def test_only_numa_mcp_enabled(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.enable_numa_mcp is True
+        assert config.enable_scripts_mcp is False
+        assert config.enable_integrations_mcp is False
+        assert config.enable_connect_mcp is False
+        assert config.enable_vault_mcp is False
+
+    def test_numa_operations_scoped_to_support(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.allowed_numa_operations is not None
+        assert "numa_files" in config.allowed_numa_operations
+        assert "web_search" in config.allowed_numa_operations
+        # No agent management or memories from a support conversation
+        assert "agents" not in config.allowed_numa_operations
+        assert "memories" not in config.allowed_numa_operations
+
+    def test_no_bash_or_code_execution(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert "Bash" not in config.tools
+        assert not any(t.startswith("Bash") for t in config.allowed_tools)
+        assert "mcp__scripts__execute_script" not in config.allowed_tools
+
+    def test_restricted_to_support_kb(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.restrict_kbs is True
+        assert config.default_kbs == [{"id": "numa-support", "name": "Numa Support"}]
+
+    def test_no_integrations(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert config.restrict_integrations is True
+
+    def test_tool_docs_resolve_in_tool_file_map(self):
+        config = get_agent_type_config("numa-chat-support")
+        for tool_name in config.enabled_numa_tools:
+            assert tool_name in TOOL_FILE_MAP
+
+
 class TestResearchAgentType:
     """Tests for the research-agent built-in type."""
 

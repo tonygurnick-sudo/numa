@@ -39,6 +39,7 @@ import {
 import { getConnectionConfig } from '../config/integrationsConfig';
 import { useBranding } from '../Providers/BrandingContext';
 import { isScheduleCompleted, calculateNextRun } from '../utils/cronUtils';
+import { useResourceAudience } from '../hooks/useResourceAudience';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
@@ -104,6 +105,9 @@ export const AgentsManagement = () => {
     return owned.filter((a) => a.scope === 'user');
   });
   const [workspaceAgents, setWorkspaceAgents] = useState<AgentSummary[]>(() => getCachedAgents('public') ?? []);
+  // FEAT-127: persona/industry filtering. Applied to public/company agents only —
+  // the user's own personal agents are never hidden.
+  const { isFiltering: audienceActive, matches: matchesAudience } = useResourceAudience();
   const [filter, setFilter] = useState<FilterOption>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [agentsMode, setAgentsMode] = useState<AgentsMode>('full');
@@ -158,6 +162,15 @@ export const AgentsManagement = () => {
   const [activeSchedules, setActiveSchedules] = useState<AgentSchedule[]>([]);
 
   const userId = user?.decoded_tokens?.idToken?.sub ?? '';
+  // Workspace admins can edit/delete any workspace (public/team) agent — the
+  // agents API already grants the `admin` group this; the UI just hid it.
+  // Personal agents remain editable only by their owner.
+  const isWorkspaceAdmin = Boolean(user?.groups?.includes('admin'));
+  const canModifyAgent = useCallback(
+    (agent: AgentSummary) =>
+      agent.scope === 'user' || agent.createdBy.userId === userId || (agent.scope === 'workspace' && isWorkspaceAdmin),
+    [userId, isWorkspaceAdmin]
+  );
 
   const loadSchedules = async () => {
     try {
@@ -411,9 +424,11 @@ export const AgentsManagement = () => {
 
   const filteredWorkspaceAgents = useMemo(() => {
     if (filter === 'personal' || filter === 'team') return [];
+    // Favourites is an explicit "show me these" view — don't audience-filter it.
     if (filter === 'favourites') return sortAgents(applyFilters(workspaceAgents.filter((a) => isAgentFavorite(a))));
-    return sortAgents(applyFilters(workspaceAgents));
-  }, [filter, workspaceAgents, applyFilters, sortAgents, isAgentFavorite]);
+    const audienceScoped = audienceActive ? workspaceAgents.filter(matchesAudience) : workspaceAgents;
+    return sortAgents(applyFilters(audienceScoped));
+  }, [filter, workspaceAgents, applyFilters, sortAgents, isAgentFavorite, audienceActive, matchesAudience]);
 
   // Favourite agents across all sections
   const favouriteAgents = useMemo(() => {
@@ -787,9 +802,9 @@ export const AgentsManagement = () => {
               isHidden={isAgentHidden(agent)}
               roleBadge={roleBadgeMap?.get(agent.agentId)}
               onChat={handleStartChat}
-              onEdit={agent.scope === 'user' || agent.createdBy.userId === userId ? handleEdit : undefined}
+              onEdit={canModifyAgent(agent) ? handleEdit : undefined}
               onDuplicate={handleDuplicate}
-              onDelete={agent.scope === 'user' || agent.createdBy.userId === userId ? handleDelete : undefined}
+              onDelete={canModifyAgent(agent) ? handleDelete : undefined}
               onToggleFavorite={handleToggleFavorite}
               onToggleHidden={agent.scope !== 'user' ? handleToggleHidden : undefined}
               onShare={handleShare}
@@ -808,9 +823,9 @@ export const AgentsManagement = () => {
               agent={agent}
               isFavorite={isAgentFavorite(agent)}
               onChat={handleStartChat}
-              onEdit={agent.scope === 'user' || agent.createdBy.userId === userId ? handleEdit : undefined}
+              onEdit={canModifyAgent(agent) ? handleEdit : undefined}
               onDuplicate={handleDuplicate}
-              onDelete={agent.scope === 'user' || agent.createdBy.userId === userId ? handleDelete : undefined}
+              onDelete={canModifyAgent(agent) ? handleDelete : undefined}
               onSchedule={schedulingEnabled ? handleScheduleAgent : undefined}
               onToggleFavorite={handleToggleFavorite}
               hasSchedules={schedulingEnabled && (agentScheduleMap.get(agent.agentId) ?? 0) > 0}
