@@ -113,6 +113,21 @@ export interface WorkspaceChatAgentConstructProps {
    * invoke permission and the env var.
    */
   emailSenderLambdaArn?: string;
+  /**
+   * Function URL of the deployer-account Numa Standard Model relay. The
+   * in-container proxy POSTs to it (cross-account, STS-proof header) when the
+   * conversation is on the opaque `numa-standard-model`. The relay holds the
+   * real upstream + OpenRouter key — the container only knows this URL. The
+   * AgentCore role needs nothing new (it already signs STS proof + the relay
+   * Function URL is authorizationType: NONE).
+   */
+  numaStandardModelRelayUrl?: string;
+  /**
+   * Bedrock model id used by the `numa vision view` tool to read images the
+   * primary model can't see natively. Defaults to Haiku 4.5 (the bench A/B
+   * showed Nova reads layouts backwards — see contracts.md §6).
+   */
+  visionModelId?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -846,6 +861,16 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         ...(props.emailSenderLambdaArn && {
           EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
         }),
+        // Numa Standard Model — opaque id known to the container; the real
+        // upstream + OpenRouter key live ONLY in the deployer-account relay.
+        NUMA_STANDARD_MODEL_ID: 'numa-standard-model',
+        // Function URL of the deployer-account relay the in-container proxy
+        // forwards to (cross-account, STS-proof header) when on the standard model.
+        ...(props.numaStandardModelRelayUrl && {
+          NUMA_STANDARD_MODEL_RELAY_URL: props.numaStandardModelRelayUrl,
+        }),
+        // Vision model for the `numa vision view` tool (Haiku 4.5, not Nova).
+        VISION_MODEL_ID: props.visionModelId ?? 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
       },
     });
 

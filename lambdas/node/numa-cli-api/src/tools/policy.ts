@@ -22,7 +22,7 @@
  * same `nolia` type-id prefix rule; `policy.test.ts` pins the behaviour.
  */
 
-export type CliCategory = 'files' | 'web' | 'docs' | 'agents' | 'memory' | 'integrations' | 'ops' | 'render';
+export type CliCategory = 'files' | 'web' | 'docs' | 'agents' | 'memory' | 'integrations' | 'ops' | 'render' | 'vision';
 
 /**
  * Authoritative tool-name → CLI category map. Mirrors `@numa/cli`'s
@@ -49,6 +49,8 @@ const TOOL_CATEGORY: Record<string, CliCategory> = {
   extract_content: 'docs',
   transcribe: 'docs',
   convert_document: 'docs',
+  // vision (non-multimodal model's "eyes")
+  view_image: 'vision',
   // memory
   user_profile_list_memories: 'memory',
   user_profile_add_memory: 'memory',

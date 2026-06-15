@@ -74,6 +74,16 @@ const nextGenOrgId = 'o-apdsu3c1a7';
 // Dedicated account for secure Pipedream proxy operations
 const PIPEDREAM_PROXY_ACCOUNT_ID = '965745962688';
 
+// Numa Standard Model relay (deployer-account streaming egress). ONE relay
+// serves every client, reached at its Lambda Function URL. Unlike the Pipedream
+// proxy ARN above, a Function URL is AWS-generated and can't be derived — so set
+// this ONCE after the relay's first deploy (the `numa-standard-model-relay-
+// function-url` TerraformOutput). It's injected into the workspace container as
+// an env var only when workspaceChatModelSelection is on (see the construct call
+// below) — a global value gated by a per-client flag, never per-client config,
+// exactly like PIPEDREAM_PROXY_ACCOUNT_ID. Empty → standard-model path stays inert.
+const NUMA_STANDARD_MODEL_RELAY_URL: string = 'https://4b65jot6l6ogoif6n7f4siadqa0lyngv.lambda-url.us-east-1.on.aws/';
+
 export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
     const defaults = {
@@ -564,6 +574,13 @@ export class NumaClientStack extends TerraformStack {
         numaCliApiLambdaArn,
         // Centralized email sender — V2 app run-completion emails (FEAT-174)
         emailSenderLambdaArn,
+        // Numa Standard Model (opaque cheap model) — the relay URL is a single
+        // global constant (one relay serves all clients), injected as an env var
+        // only when the model-selection flag is on. Same shape as the Pipedream
+        // proxy ARN above: a global value gated by a per-client flag, never
+        // per-client config. visionModelId falls back to the construct default
+        // (Haiku 4.5), so it isn't wired here.
+        numaStandardModelRelayUrl: clientConfig.workspaceChatModelSelection ? NUMA_STANDARD_MODEL_RELAY_URL : undefined,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK

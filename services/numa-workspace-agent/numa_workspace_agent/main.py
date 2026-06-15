@@ -20,6 +20,7 @@ import subprocess
 import time
 import unicodedata
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -95,10 +96,43 @@ logger = structlog.get_logger()
 
 logger.info("numa-workspace-agent module loading", version="0.5.0")
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """App lifecycle hook.
+
+    Starts the in-container Numa Standard Model proxy (localhost:4100) as a
+    daemon thread at startup, so the Claude SDK can reach the opaque
+    non-Anthropic model via ANTHROPIC_BASE_URL the moment a request selects it.
+    The proxy binds loopback only and forwards (translated to OpenAI Chat
+    Completions, STS-proof authed) to the deployer-account relay. Mirrors the
+    existing localhost-only /internal/* endpoints' in-container HTTP model.
+
+    Starting it here (rather than lazily per request) means the first
+    standard-model turn doesn't pay the ~uvicorn-startup latency, and a startup
+    failure is visible immediately in the container logs. `ensure_running` is
+    idempotent and failure-tolerant (it still binds even if the relay URL is
+    unset), so it never blocks the agent from serving Anthropic traffic.
+    """
+    try:
+        from .bedrock_mantle_proxy import ensure_running
+
+        await ensure_running(region=os.environ.get("AWS_REGION", "us-east-1"))
+    except Exception as e:  # never let proxy startup take down the whole app
+        logger.error(
+            "Standard-model proxy failed to start at app startup",
+            _name="STANDARD_PROXY_BOOT_ERROR",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+    yield
+
+
 app = FastAPI(
     title="Numa Workspace Agent",
     description="AgentCore-based workspace agent with Claude Agent SDK",
     version="0.5.0",
+    lifespan=_lifespan,
 )
 
 # Local development CORS — only active when LOCAL_DEV=1

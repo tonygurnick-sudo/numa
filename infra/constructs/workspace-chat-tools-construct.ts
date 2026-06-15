@@ -133,7 +133,17 @@ export class WorkspaceChatToolsConstruct extends Construct {
       resources: [
         // Nova models for summarization (Nova 1 and Nova 2)
         'arn:aws:bedrock:*::foundation-model/amazon.nova-*',
-        // Cross-region inference profiles (for global.amazon.nova-2-lite-v1:0)
+        // Claude models for the `numa vision view` tool (VISION_MODEL_ID = Haiku
+        // 4.5) and any future Anthropic-backed tool helper. A cross-region
+        // inference profile (global.anthropic.claude-*) needs InvokeModel on BOTH
+        // the profile (below) AND the underlying foundation model (here).
+        'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/global.anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/apac.anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/au.anthropic.claude-*',
+        // Cross-region inference profiles (for global.amazon.nova-2-lite-v1:0
+        // and global.anthropic.claude-haiku-4-5)
         `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:inference-profile/*`,
       ],
     });

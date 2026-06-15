@@ -26,7 +26,12 @@ from numa_workspace_agent.hooks import (
     security_hook,
     workflow_guard_hook,
 )
-from numa_workspace_agent.prompts import build_workspace_system_prompt
+from numa_workspace_agent.prompts import (
+    ANTI_FABRICATION_ADDENDUM,
+    LANGUAGE_STEER,
+    VIEW_IMAGE_USAGE,
+    build_workspace_system_prompt,
+)
 
 if TYPE_CHECKING:
     from numa_workspace_agent.agent_config import AgentConfig
@@ -65,6 +70,15 @@ LOCAL_ROOT = Path(os.environ.get("LOCAL_WORKSPACE_ROOT", "/workdir"))
 # back to the global profile there regardless of the flag.
 _KNOWN_PREFIXES = ("us.", "au.", "apac.", "eu.", "global.")
 
+# Opaque id for the Numa Standard Model (a non-Anthropic model reached via the
+# in-container proxy → deployer relay). It is mapped to ITSELF in every region
+# below (identity), which (a) puts it in ALLOWED_MODELS so validate_model_id
+# accepts it instead of silently downgrading to Sonnet, and (b) makes
+# `_regionalize` a no-op for it — there is no Bedrock inference profile to
+# regionalize toward (contract §8). The string is intentionally opaque: the
+# container, trace, and credits never learn the real upstream model.
+NUMA_STANDARD_MODEL_ID = os.environ.get("NUMA_STANDARD_MODEL_ID", "numa-standard-model")
+
 GLOBAL_MODEL_MAP: dict[str, dict[str, str]] = {
     "us-east-1": {
         "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
@@ -72,6 +86,7 @@ GLOBAL_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-5-20250929-v1:0": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        NUMA_STANDARD_MODEL_ID: NUMA_STANDARD_MODEL_ID,
     },
     "ap-southeast-2": {
         "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
@@ -79,6 +94,7 @@ GLOBAL_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-5-20250929-v1:0": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+        NUMA_STANDARD_MODEL_ID: NUMA_STANDARD_MODEL_ID,
     },
     "ap-southeast-3": {
         "anthropic.claude-sonnet-4-6": "global.anthropic.claude-sonnet-4-6",
@@ -86,6 +102,7 @@ GLOBAL_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-haiku-4-5-20251001-v1:0": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-5-20250929-v1:0": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+        NUMA_STANDARD_MODEL_ID: NUMA_STANDARD_MODEL_ID,
     },
 }
 
@@ -96,6 +113,7 @@ REGIONAL_ONLY_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-haiku-4-5-20251001-v1:0": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-5-20250929-v1:0": "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+        NUMA_STANDARD_MODEL_ID: NUMA_STANDARD_MODEL_ID,
     },
     "ap-southeast-2": {
         "anthropic.claude-sonnet-4-6": "au.anthropic.claude-sonnet-4-6",
@@ -103,6 +121,7 @@ REGIONAL_ONLY_MODEL_MAP: dict[str, dict[str, str]] = {
         "anthropic.claude-haiku-4-5-20251001-v1:0": "au.anthropic.claude-haiku-4-5-20251001-v1:0",
         "anthropic.claude-sonnet-4-5-20250929-v1:0": "apac.anthropic.claude-sonnet-4-5-20250929-v1:0",
         "anthropic.claude-sonnet-4-20250514-v1:0": "apac.anthropic.claude-sonnet-4-20250514-v1:0",
+        NUMA_STANDARD_MODEL_ID: NUMA_STANDARD_MODEL_ID,
     },
     # ap-southeast-3 (Jakarta) has no local Bedrock — global is the only option.
     "ap-southeast-3": GLOBAL_MODEL_MAP["ap-southeast-3"],
@@ -1098,6 +1117,48 @@ def create_agent_options(
     effective_model = (
         _regionalize(_strip_prefix(raw_model)) if raw_model else DEFAULT_MODEL
     )
+
+    # ── Numa Standard Model branch (contract §3, §5, §8) ────────────────────
+    # When the resolved model is the opaque Numa Standard Model, route the SDK
+    # subprocess to the in-container proxy (localhost:4100) instead of Bedrock,
+    # and turn on the model-conditional capabilities. `effective_model` is
+    # already the un-regionalized opaque id (its map entry is identity), so
+    # nothing here re-regionalizes it. The default Anthropic/Premium path is
+    # untouched — it keeps CLAUDE_CODE_USE_BEDROCK=1 and gets neither addendum.
+    if effective_model == NUMA_STANDARD_MODEL_ID:
+        # Point the SDK at the proxy. The proxy speaks the Anthropic Messages
+        # API on loopback and forwards (translated to OpenAI, STS-proof authed)
+        # to the deployer relay. The API key is a loopback-only placeholder.
+        env["CLAUDE_CODE_USE_BEDROCK"] = "0"
+        env["ANTHROPIC_BASE_URL"] = "http://127.0.0.1:4100"
+        env["ANTHROPIC_API_KEY"] = os.environ.get(
+            "NUMA_STANDARD_MODEL_PROXY_TOKEN", "sk-numa-standard-local"
+        )
+        # Suppress the CLI's per-request billing-attribution header (its rewritten
+        # nonce would otherwise add request churn the proxy doesn't need).
+        env["CLAUDE_CODE_ATTRIBUTION_HEADER"] = "0"
+        # Bedrock-specific env is meaningless on the Anthropic-API path; drop the
+        # 1h prompt-cache toggle so the CLI doesn't send Bedrock cache controls.
+        env.pop("ENABLE_PROMPT_CACHING_1H_BEDROCK", None)
+
+        # Model-conditional capabilities: append the anti-fabrication addendum +
+        # the vision-tool advertisement. The `numa vision` command is permitted
+        # by the unrestricted numa-chat policy already; the gate here is purely
+        # whether the prompt advertises it.
+        system_prompt = (
+            f"{system_prompt}\n\n"
+            f"{ANTI_FABRICATION_ADDENDUM}\n\n{VIEW_IMAGE_USAGE}\n\n{LANGUAGE_STEER}"
+        )
+
+        import structlog
+
+        structlog.get_logger().info(
+            "Routing to Numa Standard Model proxy",
+            _name="STANDARD_MODEL_ROUTE",
+            phase="sdk",
+            agent_type=type_config.type_id,
+            model=effective_model,
+        )
 
     # Permission mode.
     #

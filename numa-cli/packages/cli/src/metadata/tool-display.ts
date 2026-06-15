@@ -82,6 +82,8 @@ import type {
   UserProfileListMemoriesResult,
   UserProfileUpdateMemoryParams,
   UserProfileUpdateMemoryResult,
+  ViewImageParams,
+  ViewImageResult,
   WebSearchParams,
   WebSearchResult,
 } from './tool-types.js';
@@ -442,6 +444,23 @@ export const TOOL_DISPLAY: { [T in ToolName]: ToolDisplayInfo<T> } = {
       const sizeLabel = typeof r.size === 'number' ? ` (${formatBytes(r.size)})` : '';
       return `${workspaceRelative(r.output_path)}${sizeLabel}`;
     },
+  },
+
+  view_image: {
+    tool: 'view_image',
+    rendererKey: 'DocumentRenderer',
+    i18nLabelKey: 'common:toolLabels.visionView',
+    fallbackLabel: 'Look at image',
+    icon: 'Eye',
+    category: 'documents',
+    display: 'card',
+    describeCall: (p: ViewImageParams) => {
+      if (!p.file_path) return null;
+      const rel = workspaceRelative(p.file_path);
+      return p.prompt ? `Looking at ${rel}: "${truncate(p.prompt, 50)}"` : `Looking at ${rel}`;
+    },
+    describeResult: (r: ViewImageResult) =>
+      typeof r.description === 'string' ? `${r.description.length.toLocaleString()} chars` : null,
   },
 
   // ─── memories (user_profile_*) ──────────────────────────────────────────

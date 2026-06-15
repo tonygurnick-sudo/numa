@@ -23,10 +23,14 @@ logger = structlog.get_logger().bind(domain="credits")
 
 
 def _enabled() -> bool:
-    return os.environ.get("CREDIT_METERING_ENABLED", "").strip().lower() in (
-        "1",
-        "true",
-        "yes",
+    # ON by default for every container: credit usage events always emit so the
+    # ledger accrues fleet-wide. The env only DISABLES it (explicit false/0/no);
+    # the admin-facing credit VIEW is gated separately in the frontend
+    # (SHOW_CREDITS), not here.
+    return os.environ.get("CREDIT_METERING_ENABLED", "").strip().lower() not in (
+        "0",
+        "false",
+        "no",
     )
 
 
@@ -41,7 +45,22 @@ def maybe_emit_credit_event(
     if not _enabled():
         return
     lambda_name = os.environ.get("CREDIT_DEBIT_LAMBDA_NAME", "")
+    if not lambda_name:
+        # Fall back to the deterministic per-client name so metering fires even if
+        # the env var wasn't wired through — the lambda is `{client}_credit-debit`.
+        client = os.environ.get("CLIENT_NAME", "")
+        if client:
+            lambda_name = f"{client}_credit-debit"
     if not lambda_name or not user_sub or not conversation_id:
+        # Log (don't silently swallow) so a non-firing meter is visible.
+        logger.warning(
+            "credit usage emit skipped — missing target/ids",
+            _name="CREDIT_METER_EMIT_SKIP",
+            phase="cleanup",
+            has_lambda=bool(lambda_name),
+            has_user=bool(user_sub),
+            has_conversation=bool(conversation_id),
+        )
         return
     try:
         import boto3
