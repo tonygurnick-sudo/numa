@@ -11,8 +11,6 @@ import {
   DisassociateApprovedOriginCommand,
   ListUsersCommand,
   CreateUserCommand,
-  DescribeUserCommand,
-  UpdateUserIdentityInfoCommand,
   ListRoutingProfilesCommand,
   ListSecurityProfilesCommand,
   ListQueuesCommand,
@@ -25,13 +23,16 @@ import {
   ListTagsForResourceCommand,
   ListContactFlowsCommand,
   AssociatePhoneNumberContactFlowCommand,
+  GetMetricDataV2Command,
+  type MetricResultV2,
 } from '@aws-sdk/client-connect';
 import {
-  CognitoIdentityProviderClient,
-  ListUsersCommand as CognitoListUsersCommand,
-} from '@aws-sdk/client-cognito-identity-provider';
+  ConnectContactLensClient,
+  ListRealtimeContactAnalysisSegmentsCommand,
+} from '@aws-sdk/client-connect-contact-lens';
 import { STSClient, AssumeRoleCommand } from '@aws-sdk/client-sts';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
+import { CognitoIdentityProviderClient, AdminGetUserCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { createHash } from 'node:crypto';
 import { withPRM } from '../../../lib/prm-node/prm';
 
@@ -65,18 +66,22 @@ type VoiceMode = 'personal' | 'shared';
 const VOICE_CONFIG_WRITER_LAMBDA_ARN = process.env.VOICE_CONFIG_WRITER_LAMBDA_ARN || '';
 const RECORDINGS_BUCKET = process.env.RECORDINGS_BUCKET || '';
 const CONNECT_INSTANCE_URL = process.env.CONNECT_INSTANCE_URL || '';
-// Cognito pool (CLIENT region = this Lambda's region) — used to resolve a Connect
-// agent username (which is the user's Cognito `sub`) back to a real email/name. The
-// Connect username is a sub because the FE sends the access token (no `email` claim),
-// so Connect IdentityInfo alone is junk; Cognito is the only source of real identity.
+// Cognito user pool (CLIENT region) — used to resolve the caller's email/name
+// from their sub, because the access token the FE sends carries NEITHER.
 const USER_POOL_ID = process.env.USER_POOL_ID || '';
+const CLIENT_REGION = process.env.CLIENT_REGION || process.env.AWS_REGION || 'us-east-1';
 
 const connect = withPRM(ConnectClient, { region: CONNECT_REGION });
+// Contact Lens real-time VOICE analysis (ListRealtimeContactAnalysisSegments) lives in
+// a SEPARATE SDK client/namespace from ConnectClient, in the Connect region.
+const contactLens = withPRM(ConnectContactLensClient, { region: CONNECT_REGION });
 const sts = withPRM(STSClient, { region: CONNECT_REGION });
 // The config-writer lives in the deployer account in us-east-1.
 const lambda = withPRM(LambdaClient, { region: 'us-east-1' });
-// Cognito runs in the CLIENT region (this Lambda's default region == the pool region).
-const cognito = USER_POOL_ID ? withPRM(CognitoIdentityProviderClient, {}) : undefined;
+// Cognito is in the CLIENT region (same as the API Gateway / user pool).
+const cognito = withPRM(CognitoIdentityProviderClient, { region: CLIENT_REGION });
+// Per-invocation cache so repeated AdminGetUser lookups for the same sub are cheap.
+const identityCache = new Map<string, JwtClaims>();
 
 const INSTANCE_ALIAS = `numa-${CLIENT_NAME}${ENV_SUFFIX}`;
 
@@ -114,70 +119,16 @@ const json = (statusCode: number, body: unknown): APIGatewayProxyStructuredResul
   body: JSON.stringify(body),
 });
 
-// ── Identity resolution (Connect username → human email/name) ────────────────
-// A Connect agent's Username is the user's Cognito `sub` (a UUID) — see the header
-// note on USER_POOL_ID. To render anything human in the admin panel we map the sub
-// back to its Cognito user. Cached per warm container (identities rarely change) so
-// the per-load lookups don't hammer Cognito.
-type Identity = { email?: string; displayName: string };
-const IDENTITY_TTL_MS = 10 * 60 * 1000;
-const identityCache = new Map<string, { v: Identity; at: number }>();
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** Turn an email local-part into a best-effort display name ("tony.gurnick" → "Tony Gurnick"). */
-function deriveName(email: string): string {
-  const local = email
-    .split('@')[0]
-    .replace(/[^A-Za-z0-9._-]/g, ' ')
-    .trim();
-  const parts = local.split(/[._-]+/).filter(Boolean);
-  const cap = (w: string): string => (w ? w[0].toUpperCase() + w.slice(1) : w);
-  return parts.map(cap).join(' ') || email;
-}
-
-/** Resolve one Connect username to {email, displayName}. Email-shaped usernames need
- *  no lookup; UUID (sub) usernames are looked up in Cognito by the `sub` attribute.
- *  Falls back to the raw username if Cognito is unconfigured or the user is gone. */
-async function resolveIdentity(username: string): Promise<Identity> {
-  if (!username) return { displayName: username };
-  if (username.includes('@')) return { email: username, displayName: deriveName(username) };
-  const cached = identityCache.get(username);
-  if (cached && Date.now() - cached.at < IDENTITY_TTL_MS) return cached.v;
-  let v: Identity = { displayName: username };
-  if (cognito && USER_POOL_ID && UUID_RE.test(username)) {
-    try {
-      const res = await cognito.send(
-        new CognitoListUsersCommand({ UserPoolId: USER_POOL_ID, Filter: `sub = "${username}"`, Limit: 1 })
-      );
-      const attrs = res.Users?.[0]?.Attributes ?? [];
-      const get = (n: string): string | undefined => attrs.find((a) => a.Name === n)?.Value;
-      const email = get('email');
-      const fullName =
-        get('name') ||
-        [get('given_name'), get('family_name')].filter(Boolean).join(' ') ||
-        (email ? deriveName(email) : undefined);
-      if (email || fullName) v = { email, displayName: fullName || email || username };
-    } catch (err: unknown) {
-      console.warn('cognito identity resolve failed', username, String(err));
-    }
-  }
-  identityCache.set(username, { v, at: Date.now() });
-  return v;
-}
-
-/** Resolve many usernames at once → Map<username, Identity> (de-duped, parallel). */
-async function resolveIdentities(usernames: Array<string | undefined>): Promise<Map<string, Identity>> {
-  const uniq = [...new Set(usernames.filter((u): u is string => !!u))];
-  const entries = await Promise.all(uniq.map(async (u) => [u, await resolveIdentity(u)] as const));
-  return new Map(entries);
-}
-
 /** Resolve this tenant's Connect instance id+arn by its deterministic alias. */
-async function resolveInstance(): Promise<{ id: string; arn: string } | null> {
+async function resolveInstance(): Promise<{ id: string; arn: string; identityManagementType?: string } | null> {
   const res = await connect.send(new ListInstancesCommand({}));
   const inst = res.InstanceSummaryList?.find((i) => i.InstanceAlias === INSTANCE_ALIAS);
-  return inst?.Id && inst.Arn ? { id: inst.Id, arn: inst.Arn } : null;
+  // IdentityManagementType is needed by ensureConnectUser: on a SAML instance,
+  // Connect's CreateUser REJECTS an Email in IdentityInfo ("Email is not required
+  // for this directory type"), so we must omit it for SAML directories.
+  return inst?.Id && inst.Arn
+    ? { id: inst.Id, arn: inst.Arn, identityManagementType: inst.IdentityManagementType }
+    : null;
 }
 
 /**
@@ -227,10 +178,8 @@ async function persistVoiceConfig(): Promise<void> {
     let didNumbers: string[] = [];
     const instance = await resolveInstance();
     if (instance) {
-      const numbers = await connect.send(new ListPhoneNumbersV2Command({ TargetArn: instance.arn }));
-      didNumbers = (numbers.ListPhoneNumbersSummaryList ?? [])
-        .map((n) => n.PhoneNumber)
-        .filter((p): p is string => typeof p === 'string' && p.length > 0);
+      const numbers = await listAllPhoneNumbers(instance.arn);
+      didNumbers = numbers.map((n) => n.PhoneNumber).filter((p): p is string => typeof p === 'string' && p.length > 0);
     }
     const stsProofUrl = await generateStsProofUrl();
     await lambda.send(
@@ -253,16 +202,18 @@ async function persistVoiceConfig(): Promise<void> {
   }
 }
 
-async function getStatus(claims: JwtClaims): Promise<APIGatewayProxyStructuredResultV2> {
+async function getStatus(claims: JwtClaims, isAdminCaller: boolean): Promise<APIGatewayProxyStructuredResultV2> {
   const instance = await resolveInstance();
   if (!instance) return json(200, { configured: false, instanceAlias: INSTANCE_ALIAS });
   // The caller's own Connect username, so we can flag THEIR lines server-side (the owner
   // tag is the hashed/sanitised username — the frontend can't reliably recompute it).
-  const callerUsername = connectUsernameFor(claims);
+  const callerUsername = connectUsernameFor(await resolveClaims(claims));
+  // listAllUsers (paginated) — a single-page ListUsers truncates the agents list
+  // at ~100 on large per-user-federation tenants.
   const [numbers, origins, users, queues] = await Promise.all([
-    connect.send(new ListPhoneNumbersV2Command({ TargetArn: instance.arn })),
+    listAllPhoneNumbers(instance.arn),
     connect.send(new ListApprovedOriginsCommand({ InstanceId: instance.id })),
-    connect.send(new ListUsersCommand({ InstanceId: instance.id })),
+    listAllUsers(instance.id),
     connect.send(new ListQueuesCommand({ InstanceId: instance.id, QueueTypes: ['STANDARD'] })),
   ]);
   // Resolve the agent's real outbound queue + its current caller-ID so the panel can
@@ -280,11 +231,11 @@ async function getStatus(claims: JwtClaims): Promise<APIGatewayProxyStructuredRe
   }
   // Per-DID owner (from its numa-owner tag) + tenant inbound mode, so the panel can show
   // personal vs shared lines. DescribePhoneNumber per number — fine for the handful of DIDs.
-  const [mode, inboundFlowId, rawNumbers] = await Promise.all([
+  const [mode, inboundFlowId, phoneNumbers] = await Promise.all([
     getMode(instance.arn),
     findContactFlowId(instance.id, INBOUND_FLOW_NAME).catch(() => undefined),
     Promise.all(
-      (numbers.ListPhoneNumbersSummaryList ?? []).map(async (n) => {
+      numbers.map(async (n) => {
         const owner = n.PhoneNumberId
           ? await describeNumber(n.PhoneNumberId)
               .then((d) => d.owner)
@@ -301,50 +252,27 @@ async function getStatus(claims: JwtClaims): Promise<APIGatewayProxyStructuredRe
       })
     ),
   ]);
-
-  // Resolve every agent username AND every DID owner (both are Cognito subs) to a real
-  // email/name in ONE batched pass, so the panel never shows a raw UUID.
-  const agentUsers = users.UserSummaryList ?? [];
-  const idMap = await resolveIdentities([...agentUsers.map((u) => u.Username), ...rawNumbers.map((n) => n.owner)]);
-
-  // Attach the resolved owner identity to each number (for the "unassigned" view).
-  const phoneNumbers = rawNumbers.map((n) => {
-    const id = n.owner ? idMap.get(n.owner) : undefined;
-    return { ...n, ownerEmail: id?.email, ownerDisplayName: id?.displayName };
-  });
-
-  // Agent-centric view: each Connect user joined to the DID they own (owner === username),
-  // with a human label resolved from Cognito. This is what the redesigned panel renders.
-  const numberByOwner = new Map(phoneNumbers.filter((n) => n.owner).map((n) => [n.owner as string, n]));
-  const agents = agentUsers.map((u) => {
-    const username = u.Username ?? '';
-    const id = idMap.get(username);
-    const owned = numberByOwner.get(username);
-    return {
-      id: u.Id,
-      username,
-      email: id?.email,
-      displayName: id?.displayName ?? username,
-      isSelf: !!callerUsername && username === callerUsername,
-      isBot: username === AGENT_USERNAME,
-      phoneNumberId: owned?.id,
-      phoneNumber: owned?.number,
-      countryCode: owned?.countryCode,
-      type: owned?.type,
-      isCallerId: !!owned?.id && owned.id === outboundCallerIdNumberId,
-    };
-  });
-
+  // Privacy: a non-admin SDR may still see WHICH lines are claimable and which is
+  // theirs (mine), but NOT every other agent's owner identity or the full roster —
+  // that's the same data /voice/usage is admin-gated to protect. Redact for them.
+  const visibleNumbers = isAdminCaller
+    ? phoneNumbers
+    : phoneNumbers.map((n) => ({ ...n, owner: n.mine ? n.owner : undefined }));
   return json(200, {
     configured: true,
     instanceId: instance.id,
     instanceAlias: INSTANCE_ALIAS,
     mode,
     inboundReady: !!inboundFlowId,
-    phoneNumbers,
+    phoneNumbers: visibleNumbers,
     approvedOrigins: origins.Origins ?? [],
     numaOriginPresent: (origins.Origins ?? []).includes(APPROVED_ORIGIN),
-    agents,
+    // [7] Authoritative approved-origin so the FE doesn't re-derive it from the
+    // instance alias (which is wrong for custom-domain tenants now that the
+    // backend uses the resolved frontend origin).
+    numaOrigin: APPROVED_ORIGIN,
+    // Full agent roster is admin-only.
+    agents: isAdminCaller ? users.map((u) => ({ id: u.Id, username: u.Username })) : [],
     queues: (queues.QueueSummaryList ?? []).map((q) => ({ id: q.Id, name: q.Name })),
     outboundCallerIdNumberId,
   });
@@ -463,6 +391,28 @@ async function setMode(instanceArn: string, mode: VoiceMode): Promise<APIGateway
 }
 
 async function releaseNumber(phoneNumberId: string): Promise<APIGatewayProxyStructuredResultV2> {
+  // If the DID being released is the outbound queue's caller-ID, clear that first —
+  // otherwise the queue is left pointing at a number that no longer belongs to the
+  // instance, and every outbound dial fails with InvalidConfigurationException.
+  try {
+    const instance = await resolveInstance();
+    const queueId = instance ? await resolveOutboundQueueId(instance.id) : undefined;
+    if (instance && queueId) {
+      const q = await connect.send(new DescribeQueueCommand({ InstanceId: instance.id, QueueId: queueId }));
+      if (q.Queue?.OutboundCallerConfig?.OutboundCallerIdNumberId === phoneNumberId) {
+        await connect.send(
+          new UpdateQueueOutboundCallerConfigCommand({
+            InstanceId: instance.id,
+            QueueId: queueId,
+            OutboundCallerConfig: { OutboundCallerIdNumberId: undefined },
+          })
+        );
+      }
+    }
+  } catch (err: unknown) {
+    // Best-effort: don't block the release on caller-id housekeeping, but log it.
+    console.warn('could not clear outbound caller-id before release', String(err));
+  }
   await connect.send(new ReleasePhoneNumberCommand({ PhoneNumberId: phoneNumberId }));
   await persistVoiceConfig(); // FEAT-169: DID set changed — write it back to tenant config.
   return json(200, { released: phoneNumberId });
@@ -485,6 +435,32 @@ async function listAllUsers(instanceId: string): Promise<Array<{ Id?: string; Us
   do {
     const res = await connect.send(new ListUsersCommand({ InstanceId: instanceId, NextToken: token }));
     out.push(...(res.UserSummaryList ?? []));
+    token = res.NextToken;
+  } while (token);
+  return out;
+}
+
+/** List ALL claimed phone numbers across pages — a single-page ListPhoneNumbersV2
+ *  silently drops DIDs beyond the first page (status/usage/write-back would then
+ *  miss them). Mirrors listAllUsers. */
+async function listAllPhoneNumbers(targetArn: string): Promise<
+  Array<{
+    PhoneNumberId?: string;
+    PhoneNumber?: string;
+    PhoneNumberCountryCode?: string;
+    PhoneNumberType?: string;
+  }>
+> {
+  const out: Array<{
+    PhoneNumberId?: string;
+    PhoneNumber?: string;
+    PhoneNumberCountryCode?: string;
+    PhoneNumberType?: string;
+  }> = [];
+  let token: string | undefined;
+  do {
+    const res = await connect.send(new ListPhoneNumbersV2Command({ TargetArn: targetArn, NextToken: token }));
+    out.push(...(res.ListPhoneNumbersSummaryList ?? []));
     token = res.NextToken;
   } while (token);
   return out;
@@ -592,7 +568,10 @@ async function getFederationToken(claims: JwtClaims): Promise<APIGatewayProxyStr
   // recordings and post-call attribution are isolated per person. A shared agent
   // meant two people on different machines were the SAME Connect agent — Connect
   // routes contacts per-agent, so one person's call surfaced on another's softphone.
-  const perUser = connectUsernameFor(claims);
+  // Resolve email/name from Cognito (the access token has neither) so the agent
+  // username + IdentityInfo are human-readable, not a raw sub UUID.
+  const resolved = await resolveClaims(claims);
+  const perUser = connectUsernameFor(resolved);
   if (!perUser) {
     // No usable email/sub on the token — fall back to the shared agent so login still
     // works, but warn: this caller is NOT isolated (shouldn't happen for a real session).
@@ -600,7 +579,7 @@ async function getFederationToken(claims: JwtClaims): Promise<APIGatewayProxyStr
   }
   const username = perUser ?? AGENT_USERNAME;
   try {
-    await ensureConnectUser(instance.id, username, claims);
+    await ensureConnectUser(instance.id, username, resolved, instance.identityManagementType);
   } catch (err: unknown) {
     console.error('voice agent provisioning failed', String(err));
     return json(500, {
@@ -645,6 +624,41 @@ async function getFederationToken(claims: JwtClaims): Promise<APIGatewayProxyStr
 /** Derive a stable, Connect-valid agent username from the Numa user's identity.
  *  Prefer email (how SAML maps subjects); fall back to sub. Connect usernames and
  *  STS RoleSessionName both allow [A-Za-z0-9_.@-]; RoleSessionName caps at 64. */
+/**
+ * Enrich claims with email/given_name/family_name resolved from Cognito.
+ *
+ * The frontend sends the Cognito ACCESS token, which carries sub + username +
+ * cognito:groups but NOT email/name. Without this, every per-user Connect agent
+ * username falls back to the raw sub UUID and the console identity is garbage.
+ * Resolve the real identity server-side via AdminGetUser (keyed on the token's
+ * `username` claim, which on email-alias pools is the user's Cognito username).
+ * Best-effort + cached: if the lookup fails or the pool isn't configured, we
+ * return the original claims (sub-based fallback) rather than failing the call.
+ */
+async function resolveClaims(claims: JwtClaims): Promise<JwtClaims> {
+  if (typeof claims.email === 'string' && claims.email.trim()) return claims;
+  const lookupKey =
+    (typeof claims.username === 'string' && claims.username) || (typeof claims.sub === 'string' && claims.sub) || '';
+  if (!USER_POOL_ID || !lookupKey) return claims;
+  const cached = identityCache.get(lookupKey);
+  if (cached) return cached;
+  try {
+    const res = await cognito.send(new AdminGetUserCommand({ UserPoolId: USER_POOL_ID, Username: lookupKey }));
+    const attrs = Object.fromEntries((res.UserAttributes ?? []).map((a) => [a.Name, a.Value]));
+    const enriched: JwtClaims = {
+      ...claims,
+      email: attrs.email ?? (claims.email as string | undefined),
+      given_name: attrs.given_name ?? (claims.given_name as string | undefined),
+      family_name: attrs.family_name ?? (claims.family_name as string | undefined),
+    };
+    identityCache.set(lookupKey, enriched);
+    return enriched;
+  } catch (err: unknown) {
+    console.warn('voice: AdminGetUser identity resolution failed; using sub fallback', String(err));
+    return claims;
+  }
+}
+
 function connectUsernameFor(claims: JwtClaims): string | undefined {
   const email = typeof claims.email === 'string' ? claims.email.trim() : '';
   const sub = typeof claims.sub === 'string' ? claims.sub.trim() : '';
@@ -656,7 +670,9 @@ function connectUsernameFor(claims: JwtClaims): string | undefined {
   // two distinct identities could collapse to the SAME username — and federation would
   // log one person in as another's agent. Append a short stable hash of the ORIGINAL
   // identity so usernames stay 1:1. Clean emails (the common case) are untouched/readable.
-  if (sanitized === raw) return sanitized.slice(0, 64);
+  // The hash path also covers plain TRUNCATION: a clean email > 64 chars sliced to 64
+  // could collide with another long email sharing the same first 64 chars.
+  if (sanitized === raw && raw.length <= 64) return sanitized;
   const hash = createHash('sha256').update(raw).digest('hex').slice(0, 10);
   const prefix = (sanitized || 'user').slice(0, 50).replace(/^[.@-]+/, '') || 'user';
   return `${prefix}-${hash}`.slice(0, 64);
@@ -665,7 +681,12 @@ function connectUsernameFor(claims: JwtClaims): string | undefined {
 /** Ensure a per-user Connect agent exists (idempotent). Each Numa user gets their
  *  own agent on the shared numa-voice-routing profile, so the outbound queue's
  *  caller-ID DID is reused but call/recording state is isolated per person. */
-async function ensureConnectUser(instanceId: string, username: string, claims: JwtClaims): Promise<void> {
+async function ensureConnectUser(
+  instanceId: string,
+  username: string,
+  claims: JwtClaims,
+  identityManagementType?: string
+): Promise<void> {
   // Paginated existence check — a single-page ListUsers would miss an existing user
   // beyond page 1 and wrongly try to recreate them.
   const users = await listAllUsers(instanceId);
@@ -678,26 +699,24 @@ async function ensureConnectUser(instanceId: string, username: string, claims: J
     throw new Error('Missing numa-voice-routing routing profile or Agent security profile');
   }
   // Always give the agent a COMPLETE identity in the Connect console (a half-populated
-  // IdentityInfo reads as a broken/anonymous agent). claims.email is absent on the
-  // access-token path (the root cause of UUID agents), so fall back to Cognito — the
-  // username IS the user's sub — to still record a real email + name. Derive first/last
-  // from the resolved name or the email local-part when the IdP gave no given/family name.
-  const claimEmail = typeof claims.email === 'string' && claims.email.trim() ? claims.email.trim() : undefined;
-  const resolved = claimEmail ? undefined : await resolveIdentity(username);
-  const email = claimEmail ?? resolved?.email;
-  const nameSource =
-    resolved?.displayName && resolved.displayName !== username ? resolved.displayName : (email ?? username);
-  const localPart = nameSource
+  // IdentityInfo reads as a broken/anonymous agent). Derive first/last from the email
+  // local-part when the IdP didn't supply given_name/family_name.
+  const email = typeof claims.email === 'string' ? claims.email.trim() : undefined;
+  const localPart = (email ?? username)
     .split('@')[0]
     .replace(/[^A-Za-z0-9._-]/g, ' ')
     .trim();
-  const [derivedFirst, ...derivedRest] = localPart.split(/[._\s-]+/).filter(Boolean);
+  const [derivedFirst, ...derivedRest] = localPart.split(/[._-]+/).filter(Boolean);
   const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
   const firstName = (typeof claims.given_name === 'string' && claims.given_name.trim()) || cap(derivedFirst) || 'Numa';
   const lastName =
     (typeof claims.family_name === 'string' && claims.family_name.trim()) || cap(derivedRest.join(' ')) || 'Voice';
+  // SAML instances reject IdentityInfo.Email ("Email is not required for this
+  // directory type") — email/login is owned by the IdP. Only send Email on
+  // CONNECT_MANAGED directories. FirstName/LastName are accepted on both.
+  const isSaml = identityManagementType === 'SAML';
   const identityInfo = {
-    ...(email ? { Email: email } : {}),
+    ...(email && !isSaml ? { Email: email } : {}),
     FirstName: firstName.slice(0, 100),
     LastName: lastName.slice(0, 100),
   };
@@ -718,55 +737,196 @@ async function ensureConnectUser(instanceId: string, username: string, claims: J
   }
 }
 
-/** Backfill IdentityInfo (Email + name) on EXISTING Connect agents from Cognito.
- *  Agents created before the forward fix have a UUID-derived junk identity and no
- *  email; this repairs the Connect console / CCP display for them. Idempotent: skips
- *  the bot, users with no resolvable email, and users already carrying the right email.
- *  The panel resolves names live regardless — this only fixes Connect's own records. */
-async function syncAgentIdentities(): Promise<APIGatewayProxyStructuredResultV2> {
+/**
+ * FEAT-170: month-to-date call usage, attributed per DID.
+ *
+ * Connect has no per-phone-number metric grouping, so we group GetMetricDataV2
+ * by AGENT and join each agent's talk time onto the DID they own (the
+ * numa-owner tag). In personal-line mode that IS per-number usage; usage by
+ * agents who own no line (shared mode / unassigned) is reported separately as
+ * `unattributed` rather than silently dropped.
+ */
+async function getUsage(): Promise<APIGatewayProxyStructuredResultV2> {
   const instance = await resolveInstance();
-  if (!instance) return json(409, { error: 'No Connect instance for this workspace' });
-  const users = await listAllUsers(instance.id);
-  let updated = 0;
-  let skipped = 0;
-  let failed = 0;
+  if (!instance) return json(200, { configured: false, numbers: [], totalMinutes: 0 });
+
+  // GetMetricDataV2 REQUIRES at least one resource-authorizing filter (QUEUE /
+  // ROUTING_PROFILE / AGENT / …) — a CHANNEL-only filter is rejected with
+  // InvalidParameterException, and CHANNEL is not even a permitted filter for
+  // SUM_CONTACT_TIME_AGENT. Scope by the voice routing profile (every voice
+  // agent sits on it), which both satisfies the requirement and restricts the
+  // result to voice agents. If the profile isn't provisioned yet, report empty.
+  const routingProfileId = await findRoutingProfileId(instance.id, VOICE_ROUTING_PROFILE);
+  if (!routingProfileId) {
+    return json(200, {
+      configured: true,
+      numbers: [],
+      unattributed: { minutes: 0, contacts: 0 },
+      totalMinutes: 0,
+      totalContacts: 0,
+    });
+  }
+
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  const results: MetricResultV2[] = [];
+  let nextToken: string | undefined;
+  do {
+    const page = await connect.send(
+      new GetMetricDataV2Command({
+        ResourceArn: instance.arn,
+        StartTime: monthStart,
+        EndTime: now,
+        Filters: [{ FilterKey: 'ROUTING_PROFILE', FilterValues: [routingProfileId] }],
+        Groupings: ['AGENT'],
+        Metrics: [{ Name: 'CONTACTS_HANDLED' }, { Name: 'SUM_CONTACT_TIME_AGENT' }],
+        NextToken: nextToken,
+        MaxResults: 100,
+      })
+    );
+    results.push(...(page.MetricResults ?? []));
+    nextToken = page.NextToken;
+  } while (nextToken);
+
+  // Agent resource id → { contacts, seconds } for the month so far.
+  const byAgent = new Map<string, { contacts: number; seconds: number }>();
+  for (const r of results) {
+    const agentId = r.Dimensions?.AGENT;
+    if (!agentId) continue;
+    const entry = byAgent.get(agentId) ?? { contacts: 0, seconds: 0 };
+    for (const c of r.Collections ?? []) {
+      if (c.Metric?.Name === 'CONTACTS_HANDLED') entry.contacts += c.Value ?? 0;
+      if (c.Metric?.Name === 'SUM_CONTACT_TIME_AGENT') entry.seconds += c.Value ?? 0;
+    }
+    byAgent.set(agentId, entry);
+  }
+
+  // Paginate users (listAllUsers) — a single-page ListUsers silently misses
+  // agents on instances with >100 users (realistic under per-user federation),
+  // dropping their minutes into `unattributed` and zeroing their DID rows.
+  const [users, numbers] = await Promise.all([listAllUsers(instance.id), listAllPhoneNumbers(instance.arn)]);
+  const usernameById = new Map<string, string>();
   for (const u of users) {
-    if (!u.Id || !u.Username || u.Username === AGENT_USERNAME) {
-      skipped++;
+    if (u.Id && u.Username) usernameById.set(u.Id, u.Username);
+  }
+  const usageByUsername = new Map<string, { contacts: number; seconds: number }>();
+  let unattributedSeconds = 0;
+  let unattributedContacts = 0;
+  for (const [agentId, usage] of byAgent) {
+    const username = usernameById.get(agentId);
+    if (!username) {
+      // Deleted/unknown agent — keep the minutes visible in the totals.
+      unattributedSeconds += usage.seconds;
+      unattributedContacts += usage.contacts;
       continue;
     }
-    const ident = await resolveIdentity(u.Username);
-    if (!ident.email) {
-      skipped++; // nothing better to write than the UUID we already have
-      continue;
-    }
-    try {
-      const cur = (await connect.send(new DescribeUserCommand({ InstanceId: instance.id, UserId: u.Id }))).User
-        ?.IdentityInfo;
-      if (cur?.Email === ident.email) {
-        skipped++; // already correct
-        continue;
-      }
-      const [first, ...rest] = ident.displayName.split(/[._\s-]+/).filter(Boolean);
-      const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
-      await connect.send(
-        new UpdateUserIdentityInfoCommand({
-          InstanceId: instance.id,
-          UserId: u.Id,
-          IdentityInfo: {
-            Email: ident.email,
-            FirstName: (cap(first) || 'Numa').slice(0, 100),
-            LastName: (rest.map(cap).join(' ') || 'Voice').slice(0, 100),
-          },
-        })
-      );
-      updated++;
-    } catch (err: unknown) {
-      console.warn('identity backfill failed', u.Username, String(err));
-      failed++;
+    const entry = usageByUsername.get(username) ?? { contacts: 0, seconds: 0 };
+    entry.contacts += usage.contacts;
+    entry.seconds += usage.seconds;
+    usageByUsername.set(username, entry);
+  }
+
+  const toMinutes = (seconds: number): number => Math.round(seconds / 6) / 10;
+  // Resolve owners first (parallel), THEN attribute sequentially so an agent who
+  // owns multiple DIDs has their usage assigned to ONE row (their first DID) — not
+  // double-counted across every DID they own (which made sum(perNumber) exceed the
+  // reported total).
+  const owners = await Promise.all(
+    numbers.map((n) =>
+      n.PhoneNumberId
+        ? describeNumber(n.PhoneNumberId)
+            .then((d) => d.owner)
+            .catch(() => undefined)
+        : Promise.resolve(undefined)
+    )
+  );
+  const attributedUsernames = new Set<string>();
+  const perNumber = numbers.map((n, i) => {
+    const owner = owners[i];
+    // Only the FIRST DID of an owner receives their usage; later DIDs show 0.
+    const usage = owner && !attributedUsernames.has(owner) ? usageByUsername.get(owner) : undefined;
+    if (owner && usage) attributedUsernames.add(owner);
+    return {
+      id: n.PhoneNumberId,
+      number: n.PhoneNumber,
+      owner,
+      minutes: toMinutes(usage?.seconds ?? 0),
+      contacts: usage?.contacts ?? 0,
+    };
+  });
+  // Usage by agents who own no DID (shared-mode callers etc.) — surfaced, not dropped.
+  for (const [username, usage] of usageByUsername) {
+    if (!attributedUsernames.has(username)) {
+      unattributedSeconds += usage.seconds;
+      unattributedContacts += usage.contacts;
     }
   }
-  return json(200, { updated, skipped, failed, total: users.length });
+  const totalSeconds = [...byAgent.values()].reduce((sum, u) => sum + u.seconds, 0);
+  const totalContacts = [...byAgent.values()].reduce((sum, u) => sum + u.contacts, 0);
+
+  return json(200, {
+    configured: true,
+    from: monthStart.toISOString(),
+    to: now.toISOString(),
+    numbers: perNumber,
+    unattributed: { minutes: toMinutes(unattributedSeconds), contacts: unattributedContacts },
+    totalMinutes: toMinutes(totalSeconds),
+    totalContacts,
+  });
+}
+
+/**
+ * FEAT-168: live transcript for the SDR assist sidebar (Stage 1).
+ *
+ * Real-time VOICE Contact Lens transcript IS available via a synchronous, pollable
+ * API: `ListRealtimeContactAnalysisSegments` (connect-contact-lens, API 2020-08-21) —
+ * the VOICE counterpart to the chat-only `...V2`. No Kinesis consumer needed: as long
+ * as the contact flow turned on real-time analytics (the liveAssist flow-swap in
+ * numa-voice-construct) the segments are queryable by {InstanceId, ContactId} for 24h.
+ *
+ * We page through the currently-available segments and return the prospect/agent
+ * utterances in the shape the FE matcher expects ({participant, text}). The FE polls
+ * this every 60s for the active call and keyword-matches CUSTOMER lines to surface the
+ * right objection card. Degrades to enabled:false (→ Stage-0 playbook) when analytics
+ * isn't running for the contact (CL off, or call ended/aged out) — never errors the UI.
+ */
+async function getLiveTranscript(contactId: string): Promise<APIGatewayProxyStructuredResultV2> {
+  if (!/^[a-zA-Z0-9-]{1,256}$/.test(contactId)) return json(400, { error: 'Invalid contactId' });
+  const instance = await resolveInstance();
+  if (!instance) return json(200, { enabled: false, segments: [], reason: 'no-instance' });
+  try {
+    const segments: { participant: string; text: string }[] = [];
+    let nextToken: string | undefined;
+    let pages = 0;
+    // NextToken is returned even at the live edge (more may arrive later), so we can't
+    // loop on it alone — stop when a page yields no segments (caught up) or hit the cap.
+    do {
+      const res = await contactLens.send(
+        new ListRealtimeContactAnalysisSegmentsCommand({
+          InstanceId: instance.id,
+          ContactId: contactId,
+          MaxResults: 100,
+          NextToken: nextToken,
+        })
+      );
+      const segs = res.Segments ?? [];
+      for (const seg of segs) {
+        const t = seg.Transcript;
+        if (t?.Content) segments.push({ participant: t.ParticipantRole ?? 'UNKNOWN', text: t.Content });
+      }
+      nextToken = res.NextToken;
+      pages += 1;
+      if (segs.length === 0) break;
+    } while (nextToken && pages < 20);
+    return json(200, { enabled: true, segments });
+  } catch (err) {
+    // InvalidRequestException (no real-time analysis on this contact) / ResourceNotFound
+    // (ended >24h) → degrade to the playbook rather than failing the sidebar poll.
+    const name = (err as { name?: string })?.name ?? 'error';
+    console.warn('[voice-admin] live transcript unavailable', name, String(err));
+    return json(200, { enabled: false, segments: [], reason: name });
+  }
 }
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
@@ -786,36 +946,47 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
 
   try {
     // ── Reads (any authenticated user) ──────────────────────────────────────
-    if (method === 'GET' && /\/voice\/admin\/status\/?$/.test(path)) return await getStatus(callerClaims(event));
+    if (method === 'GET' && /\/voice\/admin\/status\/?$/.test(path))
+      return await getStatus(callerClaims(event), isAdmin(event));
     // Federation token = password-free softphone login; any authenticated user.
     if (method === 'GET' && /\/voice\/federation-token\/?$/.test(path))
       return await getFederationToken(callerClaims(event));
+    // FEAT-170: month-to-date per-number usage — ADMIN ONLY. It discloses every
+    // agent's owner identity + call minutes, which non-admin SDRs must not see.
+    if (method === 'GET' && /\/voice\/usage\/?$/.test(path)) return requireAdmin() ?? (await getUsage());
+    // FEAT-168: realtime Contact Lens transcript (read; any authenticated user).
+    const liveTranscriptMatch = path.match(/\/voice\/contacts\/([^/]+?)\/live-transcript\/?$/);
+    if (method === 'GET' && liveTranscriptMatch)
+      return await getLiveTranscript(decodeURIComponent(liveTranscriptMatch[1]));
 
     // ── Mutations ───────────────────────────────────────────────────────────
-    const callerUser = connectUsernameFor(callerClaims(event));
+    const callerUser = connectUsernameFor(await resolveClaims(callerClaims(event)));
     const phoneOwnerMatch = path.match(/\/voice\/phone-numbers\/([^/]+?)\/owner\/?$/);
     const phoneIdMatch = path.match(/\/voice\/phone-numbers\/([^/]+?)(\/caller-id)?\/?$/);
 
-    // Claim a NEW DID — ADMIN ONLY (each claim costs money). Optional { owner } assigns
-    // it to a specific agent on claim (the per-agent "Claim" flow); without it the DID
-    // lands UNOWNED in the pool for later assignment via POST .../{id}/owner.
+    // Claim a NEW DID — ADMIN ONLY (each claim costs money). Claimed into the pool
+    // UNOWNED; users then self-assign an available number via POST .../{id}/owner.
     if (method === 'POST' && /\/voice\/phone-numbers\/?$/.test(path)) {
-      const denied = requireAdmin();
-      if (denied) return denied;
-      const owner = typeof body.owner === 'string' && body.owner ? body.owner : undefined;
-      return await claimNumber(body as { country?: string; type?: string }, owner);
+      return requireAdmin() ?? (await claimNumber(body as { country?: string; type?: string }));
     }
-    // Backfill existing agents' Connect IdentityInfo (Email/name) from Cognito — admin only.
-    if (method === 'POST' && /\/voice\/agents\/sync-identities\/?$/.test(path)) {
-      return requireAdmin() ?? (await syncAgentIdentities());
-    }
-    // Assign/reassign a DID's owner. Admins → anyone; a non-admin may only claim it for SELF.
+    // Assign/reassign a DID's owner. Admins → anyone; a non-admin may only claim
+    // an AVAILABLE line for SELF — never one already owned by someone else
+    // (assignOwner overwrites the tag, so without this guard any user could
+    // re-tag a colleague's personal DID to themselves and hijack their inbound
+    // calls + usage attribution).
     if (method === 'POST' && phoneOwnerMatch) {
       const instance = await resolveInstance();
       if (!instance) return json(409, { error: 'No Connect instance for this workspace' });
       const id = decodeURIComponent(phoneOwnerMatch[1]);
-      const owner = isAdmin(event) ? (typeof body.owner === 'string' ? body.owner : callerUser) : callerUser;
+      const admin = isAdmin(event);
+      const owner = admin ? (typeof body.owner === 'string' ? body.owner : callerUser) : callerUser;
       if (!owner) return json(400, { error: 'No owner to assign (admin must pass { owner })' });
+      if (!admin) {
+        const { owner: current } = await describeNumber(id);
+        if (current && current !== callerUser) {
+          return json(409, { error: 'This number is already assigned to another agent' });
+        }
+      }
       return await assignOwner(instance.id, id, owner);
     }
     // Unassign a DID's owner — admin, or the current owner releasing their own line.

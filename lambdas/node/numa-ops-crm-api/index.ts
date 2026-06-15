@@ -845,8 +845,25 @@ const applyFilters = (items: Item[], qp: Record<string, string | undefined>): It
       return name.includes(term) || notes.includes(term);
     });
   }
+  // Phone lookup (E.164) — find a customer by a contact's phone or the source_phone
+  // customField, compared on digits only so formatting differences don't miss. Used by
+  // Numa Voice to find-or-create the CRM customer for a dialled prospect.
+  if (qp.phone) {
+    const q = normalizePhone(qp.phone);
+    if (q) {
+      filtered = filtered.filter((i) => {
+        const cf = (i.customFields as Record<string, unknown> | undefined) ?? {};
+        if (normalizePhone(cf.source_phone) === q) return true;
+        const contacts = Array.isArray(i.contacts) ? (i.contacts as Array<Record<string, unknown>>) : [];
+        return contacts.some((c) => normalizePhone(c.phone) === q);
+      });
+    }
+  }
   return filtered;
 };
+
+/** Digits-only phone for tolerant matching (drops +, spaces, dashes, parens). */
+const normalizePhone = (p: unknown): string => String(p ?? '').replace(/\D/g, '');
 
 // ─── Main Handler ───────────────────────────────────────────────────────────────
 

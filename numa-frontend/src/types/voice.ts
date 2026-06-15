@@ -64,6 +64,19 @@ export interface Prospect {
   call_quality_justification?: string;
   /** Two suggested talking points for the next call (post-call processor). */
   follow_up_talking_points?: string[];
+  /** Prospect's AI maturity, assessed from the call (post-call processor).
+   *  One of: beginner | intermediate | advanced | enterprise. */
+  ai_maturity?: string;
+  /** The decision-maker / economic buyer identified on the call (name + title). */
+  champion?: string;
+  /** Recommended discovery questions for the AE to ask next (post-call processor). */
+  discovery_questions?: string[];
+  /** Pain points confirmed on the call (distinct from the pre-call pain_hypothesis). */
+  pain_points?: string[];
+  /** CRM lifecycle stage — set to "Prospect" on qualification promotion. */
+  lifecycle_stage?: string;
+  /** The AE this qualified prospect was handed to (name/email). */
+  assigned_ae?: string;
 }
 
 /**
@@ -99,6 +112,8 @@ export interface IndustryPanel {
   objections: PlaybookObjection[];
   /** Opening hook lines to grab attention. */
   hook_lines: string[];
+  /** Buying/deal signals to watch for and check off during the call. */
+  deal_signals?: string[];
 }
 
 /**
@@ -142,4 +157,44 @@ export interface WrapUpOutcome {
    *  call was being recorded. Persisted on the per-call outcome record (the audit
    *  artifact at voice/outcomes/{contactId}.json). */
   recording_disclosed?: boolean;
+  /** SDR (Connect agent) identity — the logged-in Numa user who placed the call.
+   *  The processor maps these into the vCon's SDR party, and they route the
+   *  post-call "summary ready" notification. Optional: legacy outcomes lack them
+   *  and the backend degrades gracefully. `agent_id` mirrors the Connect username
+   *  (derived from email under per-user federation). */
+  agent_id?: string;
+  agent_email?: string;
+  agent_name?: string;
+  /** Cognito sub of the SDR — stable id for notification routing. */
+  sdr_sub?: string;
+  /** Prospect identity, carried so the processor can populate the vCon's prospect
+   *  party (Company / contact columns in the call log) without re-matching. */
+  company_name?: string;
+  contact_name?: string;
+  /** Account Executive the SDR hands a qualified prospect to (Phase 2). Set the
+   *  CRM customer owner + routes the hand-off notification/email. Sub is the stable
+   *  routing id; email for the email; name for display. */
+  assigned_ae_sub?: string;
+  assigned_ae_name?: string;
+  assigned_ae_email?: string;
+}
+
+/**
+ * A pre-wrap-up STUB written to voice/outcomes/{contactId}.json the moment a call
+ * ends — so the dialled number, prospect company, and SDR identity are captured
+ * even when the SDR closes without completing the wrap-up (e.g. a voicemail). It
+ * deliberately omits the SDR's disposition/qualification: the processor treats a
+ * missing `outcome` as "wrap-up not captured" and never promotes. A later full
+ * {@link WrapUpOutcome} save overwrites the same key with the complete record.
+ */
+export interface CallOutcomeStub {
+  contactId: string;
+  prospect_phone: string;
+  company_name?: string;
+  contact_name?: string;
+  recording_disclosed?: boolean;
+  agent_id?: string;
+  agent_email?: string;
+  agent_name?: string;
+  sdr_sub?: string;
 }

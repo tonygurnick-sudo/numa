@@ -9,8 +9,10 @@ tenant config rather than only recomputed by convention or read live from Connec
 Security model (mirrors numa-email-sender): client-account callers cannot touch
 the table directly. The per-client `{client}_voice-admin` Lambda invokes THIS
 Lambda cross-account with an STS GetCallerIdentity presigned-URL proof; this
-handler validates the proof, resolves the caller's clientName SERVER-SIDE from
-its account (never from the request body), and writes ONLY that tenant's record.
+handler validates the proof, binds the claimed client_name to the proven caller
+role (the expected `{clientName}_voice-admin` role name is recomputed
+server-side and must match exactly), confirms the caller account owns the
+record, and writes ONLY that tenant's record.
 
 Invocation payload:
 {
@@ -53,7 +55,12 @@ def _get_validator() -> VoiceConfigSecurityValidator:
 
 
 def _clean_did_numbers(raw: Any) -> Optional[List[str]]:
-    """Coerce to a de-duplicated list of valid E.164 numbers, or None."""
+    """Coerce to a de-duplicated list of valid E.164 numbers.
+
+    Returns the cleaned list (possibly EMPTY) when ``raw`` is a list, so that
+    releasing every DID persists ``didNumbers: []`` instead of leaving the stale
+    list behind. Returns None only when the key is absent / not a list (=
+    "field not provided", don't touch it)."""
     if not isinstance(raw, list):
         return None
     seen: Dict[str, None] = {}
@@ -62,8 +69,7 @@ def _clean_did_numbers(raw: Any) -> Optional[List[str]]:
             num = item.strip()
             if E164_REGEX.match(num):
                 seen[num] = None
-    cleaned = list(seen.keys())[:MAX_DID_NUMBERS]
-    return cleaned if cleaned else None
+    return list(seen.keys())[:MAX_DID_NUMBERS]
 
 
 def _clean_str(raw: Any) -> Optional[str]:
@@ -98,13 +104,16 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         }
     structlog.contextvars.bind_contextvars(client_name=client_name)
 
-    # Security: validate the STS proof, then confirm the caller ACCOUNT owns the
-    # client record it is asking to write (1:1 in prod, N:1 for shared dev accounts).
+    # Security: validate the STS proof, then bind the claimed client_name to the
+    # proven caller ROLE ({clientName}_voice-admin — recomputed server-side, so a
+    # voice-admin in a shared dev account cannot write a SIBLING client's record),
+    # then confirm the caller ACCOUNT owns the client record (defense in depth).
     try:
         validator = _get_validator()
         validation = validator.validate_request(sts_proof_url)
         caller_account = validation["caller_account_id"]
         structlog.contextvars.bind_contextvars(caller_account=caller_account)
+        validator.authorize_role_for_client(client_name, validation["role_name"])
         validator.authorize_client_write(client_name, caller_account)
     except SecurityValidationError as e:
         logger.warning("Security validation failed", error=str(e))

@@ -69,6 +69,19 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
     }
   }, [searchParams, setSearchParams, setTopView]);
 
+  // ── Customer deep link (?customer=<id>) — e.g. an AE opening a Numa Voice hand-off
+  //    notification lands on the qualified prospect's CRM record (with call history).
+  const [deepLinkCustomerId, setDeepLinkCustomerId] = useState<string | null>(null);
+  useEffect(() => {
+    const customerParam = searchParams.get('customer');
+    if (customerParam) {
+      setDeepLinkCustomerId(customerParam);
+      setTopView('customers');
+      searchParams.delete('customer');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams, setTopView]);
+
   // ── Modal state ─────────────────────────────────────────────────────────
   const [showCreateBoard, setShowCreateBoard] = useState(false);
   const [showGlobalSettings, setShowGlobalSettings] = useState(false);
@@ -159,7 +172,7 @@ const OpsPageContent: React.FC<OpsPageContentProps> = ({ activityOpen, onToggleA
       <>
         <OpsHeader activityOpen={activityOpen} onToggleActivity={onToggleActivity} />
         <div className="flex-grow-1 overflow-auto">
-          <CrmMirrorView />
+          <CrmMirrorView initialCustomerId={deepLinkCustomerId} key={deepLinkCustomerId ?? 'customers'} />
         </div>
       </>
     );

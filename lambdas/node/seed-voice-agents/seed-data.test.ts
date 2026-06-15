@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { v5 as uuidv5, validate as uuidValidate } from 'uuid';
+import { ScheduleRecordSchema } from '../../../lib/scheduling-schemas';
 import {
   VOICE_UUID_NAMESPACE,
   AGENT_IDS,
@@ -99,6 +100,17 @@ describe('seeded agent + prompt contracts', () => {
     // A couple of canonical slugs from the shared map must be present.
     expect(sp).toMatch(/construction =/);
     expect(sp).toMatch(/healthcare =/);
+  });
+
+  // The seed lambda runs as a Terraform aws_lambda_invocation at the END of a
+  // client deploy — a prompt over the record-schema cap fails the whole deploy
+  // (validateScheduleRecord throws). Catch it here, not mid-deploy.
+  it('every seeded schedule prompt fits the ScheduleRecordSchema prompt_text cap', () => {
+    const promptTextField = ScheduleRecordSchema.innerType().shape.prompt_text;
+    for (const [name, prompt] of Object.entries({ POST_CALL_PROMPT, CALL_PREP_PROMPT, INGEST_PROMPT })) {
+      const parsed = promptTextField.safeParse(prompt);
+      expect(parsed.success, `${name} is ${prompt.length} chars — exceeds the schedule prompt_text cap`).toBe(true);
+    }
   });
 
   it('every voice agent has a non-empty system prompt + tools_config', () => {

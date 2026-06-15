@@ -13,6 +13,12 @@ const NumaWorkspaceChatAgents = lazy(() =>
 const AgentsManagement = lazy(() => import('../Pages/AgentsManagement').then((m) => ({ default: m.AgentsManagement })));
 const OpsPage = lazy(() => import('../Pages/OpsPage').then((m) => ({ default: m.OpsPage })));
 const VoicePage = lazy(() => import('../Pages/VoicePage').then((m) => ({ default: m.VoicePage })));
+const VoiceAnalyticsPage = lazy(() =>
+  import('../Pages/VoiceAnalyticsPage').then((m) => ({ default: m.VoiceAnalyticsPage }))
+);
+const VoiceCallRecordPage = lazy(() =>
+  import('../Pages/VoiceCallRecordPage').then((m) => ({ default: m.VoiceCallRecordPage }))
+);
 const CompanyInfo = lazy(() => import('../Pages/CompanyInfo').then((m) => ({ default: m.CompanyInfo })));
 const UnifiedIntegrationsPage = lazy(() =>
   import('../Pages/UnifiedIntegrationsPage').then((m) => ({ default: m.UnifiedIntegrationsPage }))
@@ -153,6 +159,30 @@ export const ROUTE_CONFIG = [
       featureFlag: 'NUMA_VOICE',
       order: 6.5,
     },
+  },
+  {
+    // Voice Analytics — contact-center dashboard + call logs + live monitoring.
+    // Gated by VOICE_ANALYTICS (depends on NUMA_VOICE; ships with Voice, admin-toggleable).
+    path: '/voice/analytics',
+    element: () => <VoiceAnalyticsPage />,
+    featureFlag: 'VOICE_ANALYTICS',
+    nav: {
+      label: 'Voice Analytics',
+      labelKey: 'nav.items.voiceAnalytics',
+      icon: 'bi bi-graph-up',
+      section: 'workflows',
+      sectionKey: 'nav.sections.workflows',
+      featureFlag: 'VOICE_ANALYTICS',
+      order: 6.6,
+    },
+  },
+  {
+    // Single call record (recording + transcript + AI insights + sentiment + cost).
+    // The deep-link target for the SDR "call summary ready" notification. No nav entry
+    // — reached from the notification or the Call Logs table.
+    path: '/voice/calls/:id',
+    element: () => <VoiceCallRecordPage />,
+    featureFlag: 'NUMA_VOICE',
   },
   {
     // Admin config for the Connect setup now lives inside Settings (Admin scope >

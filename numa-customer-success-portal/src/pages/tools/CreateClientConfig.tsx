@@ -125,6 +125,13 @@ export default function CreateClientConfig() {
   const [numaOps, setNumaOps] = useState(defaults.numaOps);
   const [numaDropZones, setNumaDropZones] = useState(defaults.numaDropZones);
   const [numaSharing, setNumaSharing] = useState(defaults.numaSharing);
+  // Numa Voice (FEAT-169). connectInstanceUrl is only relevant for manually
+  // created Connect instances; auto-provision derives the URL at deploy time.
+  const [numaVoice, setNumaVoice] = useState(defaults.numaVoice);
+  const [connectAutoProvision, setConnectAutoProvision] = useState(defaults.connectAutoProvision);
+  const [connectClaimDid, setConnectClaimDid] = useState(defaults.connectClaimDid);
+  const [voiceLiveAssist, setVoiceLiveAssist] = useState(defaults.voiceLiveAssist);
+  const [connectInstanceUrl, setConnectInstanceUrl] = useState('');
   const [ssoEnabled, setSsoEnabled] = useState(defaults.ssoEnabled);
   const [ssoEnterprise, setSsoEnterprise] = useState(defaults.ssoEnterprise);
   const [developerMode, setDeveloperMode] = useState(defaults.developerMode);
@@ -301,6 +308,13 @@ export default function CreateClientConfig() {
     if (numaOps) minimal['numaOps'] = true;
     if (numaDropZones !== defaults.numaDropZones) minimal['numaDropZones'] = numaDropZones;
     if (numaSharing !== defaults.numaSharing) minimal['numaSharing'] = numaSharing;
+    if (numaVoice) {
+      minimal['numaVoice'] = true;
+      if (connectAutoProvision) minimal['connectAutoProvision'] = true;
+      if (connectClaimDid) minimal['connectClaimDid'] = true;
+      if (voiceLiveAssist) minimal['voiceLiveAssist'] = true;
+      if (connectInstanceUrl.trim()) minimal['connectInstanceUrl'] = connectInstanceUrl.trim();
+    }
     if (ssoEnabled !== defaults.ssoEnabled) minimal['ssoEnabled'] = ssoEnabled;
     if (ssoEnterprise !== defaults.ssoEnterprise) minimal['ssoEnterprise'] = ssoEnterprise;
     if (developerMode !== defaults.developerMode) minimal['developerMode'] = developerMode;
@@ -618,6 +632,51 @@ export default function CreateClientConfig() {
                         type="switch"
                         helpText="Allow users to share documents externally for Q&A"
                       />
+                      <ConfigField
+                        label="Numa Voice"
+                        value={numaVoice}
+                        defaultValue={defaults.numaVoice}
+                        onChange={setNumaVoice}
+                        type="switch"
+                        helpText="Amazon Connect SDR telephony (softphone, recordings, AI call intelligence). Requires Numa Ops."
+                      />
+                      {numaVoice && (
+                        <>
+                          <ConfigField
+                            label="Connect Auto-Provision"
+                            value={connectAutoProvision}
+                            defaultValue={defaults.connectAutoProvision}
+                            onChange={setConnectAutoProvision}
+                            type="switch"
+                            helpText="Create the Amazon Connect instance via IaC on first deploy (Phase 2). Off = manually-created instance."
+                          />
+                          <ConfigField
+                            label="Connect Claim DID"
+                            value={connectClaimDid}
+                            defaultValue={defaults.connectClaimDid}
+                            onChange={setConnectClaimDid}
+                            type="switch"
+                            helpText="Claim a BILLABLE phone number at deploy time (only with auto-provision). Off = claim numbers via the in-app voice admin."
+                          />
+                          <ConfigField
+                            label="Connect Instance URL"
+                            value={connectInstanceUrl}
+                            defaultValue={''}
+                            onChange={setConnectInstanceUrl}
+                            type="text"
+                            placeholder="https://numa-<client>.my.connect.aws"
+                            helpText="Instance access URL — leave blank when auto-provision derives it. Do NOT paste the /ccp-v2 URL."
+                          />
+                          <ConfigField
+                            label="Live Assist (Contact Lens)"
+                            value={voiceLiveAssist}
+                            defaultValue={defaults.voiceLiveAssist}
+                            onChange={setVoiceLiveAssist}
+                            type="switch"
+                            helpText="Real-time Contact Lens analytics → live in-call SDR assist (suggested objection rebuttals). BILLED per analyzed minute (metered to credits). Off = post-call summary/sentiment only."
+                          />
+                        </>
+                      )}
                       <ConfigField
                         label="SSO Self-Service"
                         value={ssoEnabled}

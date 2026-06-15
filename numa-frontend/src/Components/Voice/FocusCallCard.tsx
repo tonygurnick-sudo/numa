@@ -4,7 +4,8 @@ import Button from 'react-bootstrap/Button';
 import Card from 'react-bootstrap/Card';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
-import { dialVoiceNumber } from '../../hooks/useConnectCcp';
+import { dialVoiceNumber, subscribeCcpStatus, VOICE_CALL_STATE_EVENT } from '../../hooks/useConnectCcp';
+import type { CcpStatus } from '../../hooks/useConnectCcp';
 import { isDiallable } from '../../Services/voiceData';
 import { formatDuration } from '../../utils/voiceFormat';
 import type { CallOutcome, Prospect } from '../../types/voice';
@@ -19,6 +20,12 @@ interface FocusCallCardProps {
   prospect?: Prospect;
   /** Human label for the prospect's position in the queue (e.g. "3 of 12"). */
   positionLabel?: string;
+  /** Amazon Connect contactId of the just-ended call (page callState) — passed
+   *  to the wrap-up panel as a prop because the panel mounts only AFTER the
+   *  'acw' event fired, so its own window listener attaches too late to catch it. */
+  contactId?: string;
+  /** Call duration (seconds) from the page callState, for the wrap-up header. */
+  durationSeconds?: number;
   /** Called after a wrap-up save completes, with the chosen disposition. */
   onSaved?: (result: { outcome: CallOutcome; qualified: boolean }) => void;
   /** Called when the SDR dismisses the wrap-up WITHOUT saving — lets the page
@@ -43,6 +50,8 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
   phase,
   prospect,
   positionLabel,
+  contactId,
+  durationSeconds,
   onSaved,
   onDismissed,
 }) => {
@@ -51,6 +60,38 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
   // Local live-call timer: starts when phase becomes 'connected', clears otherwise.
   const [elapsed, setElapsed] = useState(0);
   const startedAtRef = useRef<number | null>(null);
+
+  // Live softphone status (published by CcpSoftphoneWidget) — drives the CTA's
+  // truthfulness: we must not claim "ready" when the agent hasn't signed in.
+  // null = no signal yet (don't block; stay neutral).
+  const [ccpStatus, setCcpStatus] = useState<CcpStatus | null>(null);
+  useEffect(() => subscribeCcpStatus(setCcpStatus), []);
+
+  // Optimistic dial guard: the page phase only flips to 'connecting' once the CCP
+  // publishes a contact event, which lags the click — so without this a fast
+  // double-click fires two dials. Set on click, cleared once the phase leaves idle
+  // (or after a short safety window if no contact event ever arrives).
+  const [dialPending, setDialPending] = useState(false);
+  useEffect(() => {
+    if (phase !== 'idle') {
+      setDialPending(false);
+      return undefined;
+    }
+    if (!dialPending) return undefined;
+    const id = window.setTimeout(() => setDialPending(false), 5000);
+    return () => window.clearTimeout(id);
+  }, [phase, dialPending]);
+  // A failed/not-ready dial publishes call-state 'idle' (resetDial) without ever
+  // moving the page off 'idle' — clear the spinner immediately on that signal
+  // rather than stranding the button for the full 5s safety window.
+  useEffect(() => {
+    const onCallState = (event: Event): void => {
+      const detail = (event as CustomEvent<{ state?: string }>).detail;
+      if (detail?.state === 'idle') setDialPending(false);
+    };
+    window.addEventListener(VOICE_CALL_STATE_EVENT, onCallState);
+    return () => window.removeEventListener(VOICE_CALL_STATE_EVENT, onCallState);
+  }, []);
 
   useEffect(() => {
     if (phase !== 'connected') {
@@ -69,17 +110,41 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
   }, [phase]);
 
   // ── ACW: render the embedded wrap-up in this slot (no extra Card chrome). ──
+  // Seed the panel from props: it mounts here only once phase is already 'acw',
+  // so its own window listener attaches after the 'acw' event has fired and
+  // would otherwise never receive the contact context.
   if (phase === 'acw') {
-    return <PostCallWrapUpPanel embedded onSaved={onSaved} onDismissed={onDismissed} />;
+    return (
+      <PostCallWrapUpPanel
+        embedded
+        contactId={contactId}
+        prospect={prospect}
+        durationSeconds={durationSeconds}
+        onSaved={onSaved}
+        onDismissed={onDismissed}
+      />
+    );
   }
 
-  // ── No prospect to focus on → calm "all done" state. ──
-  // Guards BOTH the empty-queue idle case AND the defensive case where a call
-  // lifecycle event (connecting/connected) arrives without prospect context: we
-  // must render a safe state rather than dereference an undefined prospect, which
-  // would throw and make the whole focus card vanish mid-call. (acw is handled
-  // above and renders the wrap-up without needing a prospect.)
+  // ── No prospect to focus on. ──
+  // Defensive: a call lifecycle event (connecting/connected) can arrive without
+  // prospect context; we must render a safe state rather than dereference an
+  // undefined prospect (which would throw and make the card vanish mid-call).
+  // But the green "all done" celebration is ONLY correct when genuinely idle —
+  // showing it during a live connected call (prospect just missing) is a lie.
   if (!prospect) {
+    if (phase === 'connecting' || phase === 'connected') {
+      return (
+        <Card className="border-success mb-3">
+          <Card.Body className="text-center py-5">
+            <i className="bi bi-telephone-fill text-success fs-1" aria-hidden="true"></i>
+            <p className="text-body-secondary mb-0 mt-3">
+              {t('focus.callInProgress', { defaultValue: 'Call in progress…' })}
+            </p>
+          </Card.Body>
+        </Card>
+      );
+    }
     return (
       <Card className="border-success-subtle mb-3">
         <Card.Body className="text-center py-5">
@@ -94,7 +159,20 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
   const p = prospect;
   const isConnected = phase === 'connected';
   const isConnecting = phase === 'connecting';
-  const dialDisabled = phase !== 'idle' || !isDiallable(p.phone);
+  // The softphone genuinely can't place a call in these states, so block the
+  // dial (it would otherwise no-op silently) and explain why below.
+  const ccpBlocked =
+    ccpStatus === 'needs_login' ||
+    ccpStatus === 'not_configured' ||
+    ccpStatus === 'error' ||
+    ccpStatus === 'inactive_tab' ||
+    ccpStatus === 'unsupported';
+  // Only a genuinely READY softphone may dial. Disabling while null/initialising
+  // (the "Connecting your phone…" state) stops a click that would strand the
+  // button on 'Dialing…' for 5s and then silently no-op. The widget is mounted
+  // app-wide and re-announces its status on subscribe, so 'null' is brief.
+  const ccpReady = ccpStatus === 'ready';
+  const dialDisabled = phase !== 'idle' || dialPending || !isDiallable(p.phone) || ccpBlocked || !ccpReady;
   // Headline never renders empty — mirrors ProspectListTable's fallback so a
   // malformed record is visible/labelled rather than a silent blank.
   const displayName = p.company_name || p.contact_name || t('prospectTable.unknownContact');
@@ -179,9 +257,12 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
               size="lg"
               className="w-100 d-flex align-items-center justify-content-center gap-2"
               disabled={dialDisabled}
-              onClick={() => dialVoiceNumber(p.phone, p)}
+              onClick={() => {
+                setDialPending(true);
+                dialVoiceNumber(p.phone, p);
+              }}
             >
-              {isConnecting ? (
+              {isConnecting || dialPending ? (
                 <>
                   <Spinner as="span" animation="border" size="sm" aria-hidden="true" />
                   {t('focus.dialing')}
@@ -194,9 +275,14 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
               )}
             </Button>
 
-            {/* Microcopy under the CTA. */}
-            {phase !== 'idle' ? (
-              <p className="text-body-secondary small mb-0 mt-2">{t('focus.onAnotherCall')}</p>
+            {/* Microcopy under the CTA. In this branch a non-idle phase is always
+                'connecting' (connected → live strip, acw → wrap-up), so show a
+                connecting hint — NOT the "finish the current call" message, which
+                contradicted the "Dialing…" spinner for this very prospect. */}
+            {isConnecting ? (
+              <p className="text-body-secondary small mb-0 mt-2">
+                {t('focus.connectingHint', { defaultValue: 'Connecting your call…' })}
+              </p>
             ) : !p.phone ? (
               <p className="text-warning-emphasis small mb-0 mt-2">
                 <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
@@ -206,6 +292,49 @@ export const FocusCallCard: React.FC<FocusCallCardProps> = ({
               <p className="text-warning-emphasis small mb-0 mt-2">
                 <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
                 {t('focus.phoneNotDiallable')}
+              </p>
+            ) : ccpStatus === 'needs_login' ? (
+              <p className="text-warning-emphasis small mb-0 mt-2">
+                <i className="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>
+                {t('focus.ccpNeedsLogin', {
+                  defaultValue: 'Connect your phone first — sign in via the softphone panel.',
+                })}
+              </p>
+            ) : ccpStatus === 'not_configured' ? (
+              <p className="text-warning-emphasis small mb-0 mt-2">
+                <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                {t('focus.ccpNotConfigured', { defaultValue: 'Voice calling is not configured for this workspace.' })}
+              </p>
+            ) : ccpStatus === 'unsupported' ? (
+              <p className="text-warning-emphasis small mb-0 mt-2">
+                <i className="bi bi-browser-chrome me-1" aria-hidden="true"></i>
+                {t('focus.ccpUnsupported', {
+                  defaultValue: 'Calling needs Chrome or Edge — open Numa there to make calls.',
+                })}
+              </p>
+            ) : ccpStatus === 'offline' ? (
+              <p className="text-warning-emphasis small mb-0 mt-2">
+                <i className="bi bi-wifi-off me-1" aria-hidden="true"></i>
+                {t('focus.ccpOffline', { defaultValue: "You're offline — calls resume when your connection returns." })}
+              </p>
+            ) : ccpStatus === 'inactive_tab' ? (
+              <p className="text-warning-emphasis small mb-0 mt-2">
+                <i className="bi bi-window-stack me-1" aria-hidden="true"></i>
+                {t('focus.ccpInactiveTab', {
+                  defaultValue: 'Your softphone is active in another tab — switch to it to call.',
+                })}
+              </p>
+            ) : ccpStatus === 'error' ? (
+              <p className="text-danger-emphasis small mb-0 mt-2">
+                <i className="bi bi-exclamation-octagon me-1" aria-hidden="true"></i>
+                {t('focus.ccpError', {
+                  defaultValue: 'The softphone failed to load — reload the page (softphone panel).',
+                })}
+              </p>
+            ) : ccpStatus === 'initialising' || ccpStatus === null ? (
+              <p className="text-body-secondary small mb-0 mt-2">
+                <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                {t('focus.ccpConnecting', { defaultValue: 'Connecting your phone…' })}
               </p>
             ) : (
               <p className="text-body-secondary small mb-0 mt-2">

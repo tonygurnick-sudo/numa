@@ -24,6 +24,7 @@ import { LambdaFunction } from '@cdktf/provider-aws/lib/lambda-function';
 import { LambdaInvocation } from '@cdktf/provider-aws/lib/lambda-invocation';
 import { LambdaPermission } from '@cdktf/provider-aws/lib/lambda-permission';
 import { S3Bucket } from '@cdktf/provider-aws/lib/s3-bucket';
+import { S3BucketCorsConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-cors-configuration';
 import { S3BucketLifecycleConfiguration } from '@cdktf/provider-aws/lib/s3-bucket-lifecycle-configuration';
 import { S3BucketNotification } from '@cdktf/provider-aws/lib/s3-bucket-notification';
 import { S3BucketPolicy } from '@cdktf/provider-aws/lib/s3-bucket-policy';
@@ -79,6 +80,10 @@ export interface NumaVoiceConstructProps extends ApiGatewayLambdaCollectionProps
    *  default provider). */
   voiceProvider?: AwsProvider;
   clientAccountId: string;
+  /** Resolved tenant frontend origin (https://<customDomain|{client}.{suffix}>) —
+   *  used for the Connect Approved Origin AND the intake-bucket upload CORS, so a
+   *  custom-domain tenant isn't locked out of both. */
+  frontendOrigin: string;
   /** Per-tenant Amazon Connect instance URL (Phase 1 manual, Phase 2 provisioned). */
   connectInstanceUrl?: string;
   /** ARN of the deployer-account numa-voice-config-writer Lambda (FEAT-169
@@ -116,9 +121,32 @@ export interface NumaVoiceConstructProps extends ApiGatewayLambdaCollectionProps
    *  the queue's outbound caller-id. Only takes effect when connectAutoProvision
    *  is also on. OFF by default so no client is surprise-charged. */
   connectClaimDid?: boolean;
+  /** FEAT-168: enable real-time Contact Lens analytics on outbound calls so the
+   *  SDR assist sidebar can keyword-match the live transcript (Stage 1). Adds
+   *  per-minute Contact Lens cost — OFF by default; no cost when off. */
+  liveAssist?: boolean;
+  /** FEAT-164: local time the morning Call List Preparer runs, as 'HH:MM'
+   *  24-hour. Drives BOTH the SchedulerSchedule cron and the seeded schedule
+   *  record (kept in lockstep here). @default '07:30' */
+  callPrepTime?: string;
+  /** FEAT-164: IANA timezone for callPrepTime. @default 'Pacific/Auckland' */
+  callPrepTimezone?: string;
   /** Deploy-time dependency on the system-user-creator invocation, so the seed
    *  (which resolves the system user via AdminGetUser) runs AFTER it exists. */
   systemUserDependsOn: ITerraformDependable[];
+}
+
+/**
+ * FEAT-164 pre-flight: parse a 'HH:MM' 24-hour local time into an EventBridge
+ * Scheduler cron. Throws at synth on malformed input so a config typo fails the
+ * deploy loudly instead of silently never running the morning call-prep agent.
+ */
+export function callPrepCronFromTime(raw: string): string {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(raw.trim());
+  if (!match) {
+    throw new Error(`voiceCallPrepTime "${raw}" is not a valid 'HH:MM' 24-hour time (e.g. "07:30").`);
+  }
+  return `cron(${Number(match[2])} ${Number(match[1])} * * ? *)`;
 }
 
 /**
@@ -217,6 +245,27 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
       rule: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: 'AES256' } }],
       ...pin,
     });
+    // CORS for in-browser recording playback: the Voice Analytics call drawer / call
+    // record page load the presigned .wav into an <audio> element cross-origin (the
+    // bucket lives in NUMA_VOICE_REGION, the app on the client subdomain). Without a
+    // CORS rule the media fetch + Range requests (seek/duration) are blocked → the
+    // player shows 0:00/0:00. GET+HEAD only; expose the Range headers media needs.
+    new S3BucketCorsConfiguration(this, 'recordings-cors', {
+      bucket: this.recordingsBucket.id,
+      corsRule: [
+        {
+          allowedHeaders: ['*'],
+          allowedMethods: ['GET', 'HEAD'],
+          allowedOrigins:
+            props.environmentName !== 'prod'
+              ? [props.frontendOrigin, 'http://localhost:5173', 'http://localhost']
+              : [props.frontendOrigin],
+          exposeHeaders: ['Content-Length', 'Content-Range', 'Accept-Ranges', 'ETag'],
+          maxAgeSeconds: 3000,
+        },
+      ],
+      ...pin,
+    });
     // Expire ONLY the re-derivable raw Transcribe scratch output (transcripts/).
     // Call recordings (recordings/) are intentionally NOT auto-expired here —
     // their retention is a per-customer compliance decision (set separately).
@@ -251,6 +300,15 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     // the role/policy/function directly here to keep the cross-region concern
     // isolated to this gated construct.
     const resourceName = awsNameWithHashedPrefix(clientName, '_voice-processor', 64);
+
+    // Voice credit metering: the credit-debit lambda runs in the CLIENT region
+    // alongside the credit ledger. Its name is computed (not a resource ref) so the
+    // processor can reference it in env + IAM without an ordering dependency (the
+    // function itself is declared further down).
+    const creditDebitVoiceName = awsNameWithHashedPrefix(clientName, '_voice-credit-debit', 64);
+    const creditDebitVoiceArn = `arn:aws:lambda:${props.region}:${props.clientAccountId}:function:${creditDebitVoiceName}`;
+    const creditLedgerTableName = `numa-${clientName}-credit-ledger`;
+    const creditLedgerTableArn = `arn:aws:dynamodb:${props.region}:${props.clientAccountId}:table/${creditLedgerTableName}`;
 
     const role = new IamRole(this, 'voice-processor-role', {
       name: resourceName,
@@ -291,12 +349,26 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             resources: [`arn:aws:s3:::${props.dataBucketName}/documents/company/voice/transcripts/*`],
           },
           {
+            // Read-modify-write the canonical vCon (+ the contactId→uuid index
+            // pointer) in the company KB. GetObject is required for the
+            // late-outcome re-patch (read the existing vCon, patch, re-write).
+            effect: 'Allow',
+            actions: ['s3:GetObject', 's3:PutObject'],
+            resources: [`arn:aws:s3:::${props.dataBucketName}/documents/company/voice/vcons/*`],
+          },
+          {
             // Fire the Post-Call agent via the connector-events bus (client region).
             effect: 'Allow',
             actions: ['events:PutEvents'],
             resources: [
               `arn:aws:events:${props.region}:${props.clientAccountId}:event-bus/${props.connectorEventBusName}`,
             ],
+          },
+          {
+            // Fire the voice credit-metering lambda (client region), fire-and-forget.
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [creditDebitVoiceArn],
           },
           {
             // Deliver failed async invocations to the DLQ.
@@ -367,6 +439,17 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           // lambda's matching default.
           KB_TRANSCRIPTS_S3_PREFIX: 'documents/company/voice/transcripts/',
           KB_TRANSCRIPTS_FILE_PREFIX: 'voice/transcripts/',
+          // Canonical vCon location (in lockstep with the s3 vcons/* IAM grant).
+          KB_VCONS_S3_PREFIX: 'documents/company/voice/vcons/',
+          KB_VCONS_FILE_PREFIX: 'voice/vcons/',
+          // Credit metering: after a call, meter telephony+transcribe into the credit
+          // ledger via the client-region credit-debit lambda. Metering is fleet-wide ON
+          // (visibility is gated separately by SHOW_CREDITS), matching the credit system.
+          CREDIT_DEBIT_VOICE_LAMBDA_NAME: creditDebitVoiceName,
+          CREDIT_METERING_ENABLED: 'true',
+          // FEAT-168: when Contact Lens analytics is enabled (liveAssist), count its
+          // per-minute cost in the credit meter too. Off → metering ignores it.
+          CONTACT_LENS_ENABLED: props.liveAssist ? 'true' : 'false',
           ...(props.connectInstanceUrl ? { CONNECT_INSTANCE_URL: props.connectInstanceUrl } : {}),
         },
       },
@@ -399,6 +482,79 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
       ],
       ...pin,
     });
+
+    // ── numa-voice-credit-debit Lambda (CLIENT region) ────────────────────────
+    // Meters a completed call's telephony+transcribe consumption into the Numa
+    // Credit ledger (the SAME ledger as token usage). Runs in the CLIENT region
+    // (co-located with numa-{client}-credit-ledger); invoked fire-and-forget by the
+    // processor. Client-region = default provider, so NO `...pin`. The build must
+    // package lambdas/python/numa-voice-credit-debit (package-all.sh picks it up).
+    const creditDebitRole = new IamRole(this, 'voice-credit-debit-role', {
+      name: creditDebitVoiceName,
+      assumeRolePolicy: createAssumptionPolicy({ Service: 'lambda.amazonaws.com' }),
+      lifecycle: { createBeforeDestroy: true },
+    });
+    new IamRolePolicyAttachment(this, 'voice-credit-debit-basic', {
+      role: creditDebitRole.name,
+      policyArn: 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole',
+    });
+    const creditDebitPolicy = new IamPolicy(this, 'voice-credit-debit-policy', {
+      policy: new DataAwsIamPolicyDocument(this, 'voice-credit-debit-policy-doc', {
+        statement: [
+          {
+            // Read the CONFIG row + GSI2 monthly rollup; write the META + MONTH rows.
+            effect: 'Allow',
+            actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
+            resources: [creditLedgerTableArn, `${creditLedgerTableArn}/index/*`],
+          },
+        ],
+      }).json,
+    });
+    const creditDebitAttach = new IamRolePolicyAttachment(this, 'voice-credit-debit-attach', {
+      role: creditDebitRole.name,
+      policyArn: creditDebitPolicy.arn,
+    });
+    const creditDebitZip = path.resolve(
+      import.meta.dirname,
+      '..',
+      '..',
+      'lambdas',
+      'python/numa-voice-credit-debit',
+      'lambda_function.zip'
+    );
+    new LambdaFunction(this, 'voice-credit-debit-lambda', {
+      functionName: creditDebitVoiceName,
+      role: creditDebitRole.arn,
+      runtime: 'python3.13',
+      handler: 'lambda_function.handler',
+      filename: creditDebitZip,
+      sourceCodeHash: Fn.filebase64sha256(creditDebitZip),
+      timeout: 30,
+      memorySize: 256,
+      // Default log group (/aws/lambda/<name>) in the client region; logs carry
+      // domain="credits" + _name="VOICE_CREDIT_*" for filtering alongside credit-debit.
+      environment: {
+        variables: {
+          CLIENT_NAME: clientName,
+          CREDITS_TABLE_NAME: creditLedgerTableName,
+          CREDIT_METERING_ENABLED: 'true',
+        },
+      },
+      dependsOn: [creditDebitAttach],
+    });
+
+    // ── Late SDR-outcome → vCon re-patch (DEFERRED trigger) ───────────────────
+    // The processor's `_handle_outcome` branch re-patches an already-assembled
+    // vCon when the SDR wrap-up lands AFTER the transcript completed. It is NOT
+    // wired here yet: the trigger would be an S3 ObjectCreated notification on the
+    // OUTPUTS bucket (voice/outcomes/ prefix), but that bucket is SHARED and
+    // `S3BucketNotification` REPLACES a bucket's whole notification config (the
+    // same single-resource footgun the top-level CLAUDE.md flags for the outputs
+    // bucket lifecycle). Wiring it from this feature construct needs a decision on
+    // ownership/consolidation of the outputs-bucket notification. Edge-case value:
+    // the wrap-up almost always precedes the (2-3 min) transcript, so the outcome
+    // is already folded in at assembly; a truly-late wrap-up has also already
+    // missed the post-call agent run. Code is ready (+ unit-tested) for when wired.
 
     // ── Transcribe "Job State Change" → completion handler (scale-to-zero) ─────
     // Amazon Transcribe emits this on the default bus when a job finishes. The
@@ -519,6 +675,13 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     // target can never drift to different UUIDs — a divergence would compile and
     // deploy fine but silently no-op at 7:30am (getSchedule miss).
     const callPrepScheduleId = uuidv5(`callprep-${clientName}`, VOICE_UUID_NAMESPACE);
+    // FEAT-164: per-client call-prep time. Derived ONCE here and threaded to
+    // both consumers (the SchedulerSchedule and, via env, the seeded schedule
+    // record) so the cron and the record can never drift. An invalid HH:MM
+    // throws at synth; an invalid IANA timezone fails at deploy (Scheduler
+    // validates it).
+    const callPrepCron = callPrepCronFromTime(props.callPrepTime ?? '07:30');
+    const callPrepTimezone = (props.callPrepTimezone ?? 'Pacific/Auckland').trim();
     const seedZip = path.resolve(
       import.meta.dirname,
       '..',
@@ -562,7 +725,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             effect: 'Allow',
             actions: ['dynamodb:GetItem'],
             resources: [
-              `arn:aws:dynamodb:${props.region}:${props.clientAccountId}:table/numa-${clientName}-knowledge-bases`,
+              `arn:aws:dynamodb:${props.region}:${props.clientAccountId}:table/numa-${clientName}${envSuffix}-knowledge-bases`,
             ],
           },
         ],
@@ -589,19 +752,29 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
           SYSTEM_USER_EMAIL: props.systemUserEmail,
           // Authoritative call-prep schedule id (matches the SchedulerSchedule).
           CALL_PREP_SCHEDULE_ID: callPrepScheduleId,
-          // For the deploy-time company-KB existence check.
-          KNOWLEDGE_BASES_TABLE: `numa-${clientName}-knowledge-bases`,
+          // FEAT-164: keep the seeded schedule record's cron/timezone in
+          // lockstep with the SchedulerSchedule below (display + audit only —
+          // the SchedulerSchedule is what actually fires).
+          CALL_PREP_CRON: callPrepCron,
+          CALL_PREP_TIMEZONE: callPrepTimezone,
+          // For the deploy-time company-KB existence check. MUST include the env
+          // suffix — the real table is numa-{client}{envSuffix}-knowledge-bases, so
+          // omitting it pointed dev stacks at a non-existent table (the KB guard
+          // then errored/no-op'd).
+          KNOWLEDGE_BASES_TABLE: `numa-${clientName}${envSuffix}-knowledge-bases`,
         },
       },
     });
     new LambdaInvocation(this, 'seed-voice-invocation', {
       functionName: seedLambda.functionName,
       input: JSON.stringify({ action: 'seed' }),
-      // Re-invoke when the seed code changes or the target tables change.
+      // Re-invoke when the seed code changes, the target tables change, or the
+      // call-prep time changes (the schedule record mirrors the cron).
       triggers: {
         seedSourceHash: seedLambda.sourceCodeHash,
         agentsTable: props.agentsTableName,
         schedulesTable: props.schedulesTableName,
+        callPrepCron: `${callPrepCron} ${callPrepTimezone}`,
       },
       dependsOn: [seedLambda, seedBasic, seedPolicyAttach, ...props.systemUserDependsOn],
     });
@@ -637,8 +810,8 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     new SchedulerSchedule(this, 'voice-callprep-schedule', {
       name: callPrepScheduleName,
       groupName: 'default',
-      scheduleExpression: 'cron(30 7 * * ? *)',
-      scheduleExpressionTimezone: 'Pacific/Auckland',
+      scheduleExpression: callPrepCron,
+      scheduleExpressionTimezone: callPrepTimezone,
       flexibleTimeWindow: { mode: 'OFF' },
       target: {
         arn: props.runnerArn,
@@ -674,6 +847,25 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
     new S3BucketServerSideEncryptionConfigurationA(this, 'intake-sse', {
       bucket: intakeBucket.id,
       rule: [{ applyServerSideEncryptionByDefault: { sseAlgorithm: 'AES256' } }],
+    });
+    // FEAT-167: the frontend uploads spreadsheets here via a direct browser PUT
+    // (uploadProspectSpreadsheet), so without CORS every upload is blocked by the
+    // browser preflight. Allow PUT/POST from the tenant frontend origin (+ localhost
+    // in dev), mirroring NumaCorsEnabledBucket.
+    new S3BucketCorsConfiguration(this, 'intake-cors', {
+      bucket: intakeBucket.id,
+      corsRule: [
+        {
+          allowedHeaders: ['*'],
+          allowedMethods: ['PUT', 'POST'],
+          allowedOrigins:
+            props.environmentName !== 'prod'
+              ? [props.frontendOrigin, 'http://localhost:5173', 'http://localhost']
+              : [props.frontendOrigin],
+          exposeHeaders: ['ETag'],
+          maxAgeSeconds: 3000,
+        },
+      ],
     });
     // The emitter copies each spreadsheet into the company KB, so the source copy
     // here is disposable after processing (client region — no pin).
@@ -805,17 +997,17 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         CONNECT_REGION: props.voiceRegion,
         CLIENT_NAME: clientName,
         ENV_SUFFIX: envSuffix,
-        APPROVED_ORIGIN: `https://${clientName}.numa.arcanum.ai`,
+        APPROVED_ORIGIN: props.frontendOrigin,
         // Password-free agent SSO (GetFederationToken via the assumed role).
         FEDERATION_ROLE_ARN: voiceFederationRole.arn,
         AGENT_USERNAME: 'numa-voice-agent',
+        // Resolve the caller's email/name from their sub (the FE sends the access
+        // token, which has neither) so per-user Connect agents get readable names.
+        USER_POOL_ID: props.userPoolId,
+        CLIENT_REGION: props.region,
         // FEAT-169 config write-back (STS-proof relay -> deployer numa-client-config).
         VOICE_CONFIG_WRITER_LAMBDA_ARN: props.voiceConfigWriterLambdaArn,
         RECORDINGS_BUCKET: recordingsBucketName,
-        // Cognito pool — resolve a Connect agent username (== the user's sub) back to a
-        // real email/name for the admin panel (the FE access token carries no email, so
-        // Connect usernames are bare subs and IdentityInfo is junk without this).
-        USER_POOL_ID: props.userPoolId,
         ...(props.connectInstanceUrl ? { CONNECT_INSTANCE_URL: props.connectInstanceUrl } : {}),
       },
       additionalPolicyStatements: [
@@ -833,9 +1025,6 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             'connect:ListUsers',
             // Per-user agent provisioning (each Numa user federates as their own agent).
             'connect:CreateUser',
-            // Read/repair agent IdentityInfo (sync-identities backfill from Cognito).
-            'connect:DescribeUser',
-            'connect:UpdateUserIdentityInfo',
             'connect:ListRoutingProfiles',
             'connect:ListSecurityProfiles',
             'connect:ListQueues',
@@ -849,14 +1038,21 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             'connect:ListTagsForResource',
             'connect:ListContactFlows',
             'connect:AssociatePhoneNumberContactFlow',
+            // FEAT-170 usage view: month-to-date per-agent minutes via
+            // GetMetricDataV2 (the API's required IAM action is GetMetricData).
+            'connect:GetMetricData',
+            'connect:GetMetricDataV2',
+            // FEAT-168 live assist: poll the real-time VOICE Contact Lens transcript
+            // (ListRealtimeContactAnalysisSegments) for the SDR sidebar.
+            'connect:ListRealtimeContactAnalysisSegments',
           ],
           resources: ['*'],
         },
-        // Resolve agent usernames (Cognito subs) → real email/name for the admin panel.
+        // Resolve the caller's email/name from their sub (access token lacks both).
         {
           effect: 'Allow',
-          actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminGetUser'],
-          resources: [props.userPoolArn],
+          actions: ['cognito-idp:AdminGetUser'],
+          resources: [`arn:aws:cognito-idp:${props.region}:${props.clientAccountId}:userpool/${props.userPoolId}`],
         },
         // Assume the federation role (RoleSessionName = Connect username) for SSO.
         { effect: 'Allow', actions: ['sts:AssumeRole'], resources: [voiceFederationRole.arn] },
@@ -884,8 +1080,80 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         { verb: 'POST', path: 'voice/phone-numbers/{id}/owner' },
         { verb: 'DELETE', path: 'voice/phone-numbers/{id}/owner' },
         { verb: 'POST', path: 'voice/mode' },
-        // APPEND-ONLY (routes keyed by array index): backfill agent IdentityInfo from Cognito.
-        { verb: 'POST', path: 'voice/agents/sync-identities' },
+        // FEAT-170: month-to-date per-number usage (APPEND-ONLY — see note above).
+        { verb: 'GET', path: 'voice/usage' },
+        // FEAT-168: realtime Contact Lens transcript for the live-assist sidebar.
+        { verb: 'GET', path: 'voice/contacts/{contactId}/live-transcript' },
+      ],
+    });
+
+    // ── Voice Analytics + Call Logs read API (numa-voice-analytics) ───────────
+    // SEPARATE lambda from voice-admin: read-only, higher-traffic, and its own
+    // FRESH route array (voice-admin's route indices are immutable — append-only).
+    // v1 reads the canonical vCons in the DATA bucket (same region as this lambda,
+    // so no data pipeline is required) + Amazon Connect aggregate/live metrics. The
+    // contact-events DynamoDB read-model (numa-voice-call-ingest) is the Phase-3b
+    // operational-metrics enrichment, wired once the cross-region trigger is decided.
+    this.addLambdaFunction(this, 'voice-analytics', {
+      lambdaDirectory: 'node/numa-voice-analytics',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      timeout: 29,
+      environment: {
+        CONNECT_REGION: props.voiceRegion,
+        CLIENT_NAME: clientName,
+        ENV_SUFFIX: envSuffix,
+        CLIENT_REGION: props.region,
+        DATA_BUCKET: props.dataBucketName,
+        KB_VCONS_S3_PREFIX: 'documents/company/voice/vcons/',
+        TENANT_TZ: callPrepTimezone,
+        // Per-call charged credits/cost for the call-detail drawer (credit ledger).
+        CREDITS_TABLE_NAME: creditLedgerTableName,
+      },
+      additionalPolicyStatements: [
+        {
+          // Aggregate (GetMetricDataV2) + live (GetCurrentMetricData) Connect metrics.
+          effect: 'Allow',
+          actions: [
+            'connect:ListInstances',
+            'connect:ListRoutingProfiles',
+            'connect:ListQueues',
+            'connect:GetMetricData',
+            'connect:GetMetricDataV2',
+            'connect:GetCurrentMetricData',
+          ],
+          resources: ['*'],
+        },
+        {
+          // Read the canonical vCons + transcripts (call logs + detail drawer).
+          effect: 'Allow',
+          actions: ['s3:GetObject', 's3:ListBucket'],
+          resources: [
+            `arn:aws:s3:::${props.dataBucketName}`,
+            `arn:aws:s3:::${props.dataBucketName}/documents/company/voice/*`,
+          ],
+        },
+        {
+          // Presign the call recording for playback. NOTE: SSE-S3 tenants work with
+          // this alone; an auto-provision (CMK) tenant additionally needs
+          // kms:Decrypt on the recordings key (add in the connectAutoProvision branch).
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`${this.recordingsBucket.arn}/*`],
+        },
+        {
+          // Read the per-call charged credits/cost from the credit ledger META row.
+          effect: 'Allow',
+          actions: ['dynamodb:GetItem'],
+          resources: [creditLedgerTableArn],
+        },
+      ],
+      route: [
+        { verb: 'GET', path: 'voice/analytics/summary' },
+        { verb: 'GET', path: 'voice/analytics/timeseries' },
+        { verb: 'GET', path: 'voice/analytics/live' },
+        { verb: 'GET', path: 'voice/calls' },
+        { verb: 'GET', path: 'voice/calls/{id}' },
       ],
     });
 
@@ -1033,12 +1301,56 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
             ...pin,
           })
         : undefined;
+      // The 'rec' action turns call recording ON (Agent + Customer). When liveAssist
+      // (FEAT-168) is enabled we use UpdateContactRecordingAndAnalyticsBehavior to ALSO
+      // start real-time Contact Lens analytics; otherwise the plain recording action.
+      //
+      // The analytics flow-language below was VERIFIED against the live ap-southeast-2
+      // instance via tools/voice-contactlens-preflight.sh (CreateContactFlow accepts it):
+      // recording + analytics nest under a per-channel `VoiceBehavior`; `AnalyticsModes`
+      // is a required array and ['RealTime'] is accepted (it also produces the post-call
+      // S3 analysis) while ['RealTime','PostCall'] together is REJECTED; the action
+      // REQUIRES NoMatchingError + ChannelMismatch error transitions. Do not "simplify"
+      // to a flat RecordingBehavior/AnalyticsBehavior — that is invalid and breaks deploy.
+      // Contact Lens must be enabled on the instance (it is: CONTACT_LENS attr = true).
+      // Per-minute Contact Lens cost is metered into credits via CONTACT_LENS_ENABLED.
+      const voiceRecAction = props.liveAssist
+        ? {
+            Identifier: 'rec',
+            Type: 'UpdateContactRecordingAndAnalyticsBehavior',
+            Parameters: {
+              VoiceBehavior: {
+                VoiceRecordingBehavior: { RecordedParticipants: ['Agent', 'Customer'] },
+                VoiceAnalyticsBehavior: {
+                  Enabled: 'True',
+                  // Matches NUMA_VOICE_LANGUAGE; Contact Lens supports en-AU (not en-NZ).
+                  AnalyticsLanguage: 'en-AU',
+                  AnalyticsModes: ['RealTime'],
+                  ConversationalAnalyticsRedactionConfiguration: { Enabled: 'False' },
+                },
+              },
+            },
+            Transitions: {
+              NextAction: 'end',
+              Errors: [
+                { NextAction: 'end', ErrorType: 'NoMatchingError' },
+                { NextAction: 'end', ErrorType: 'ChannelMismatch' },
+              ],
+              Conditions: [],
+            },
+          }
+        : {
+            Identifier: 'rec',
+            Type: 'UpdateContactRecordingBehavior',
+            Parameters: { RecordingBehavior: { RecordedParticipants: ['Agent', 'Customer'] } },
+            Transitions: { NextAction: 'end', Errors: [], Conditions: [] },
+          };
+
       // Outbound whisper flow that turns call recording ON (Agent + Customer) for
       // agent-initiated outbound dials. Without this the queue falls back to the
       // default outbound whisper (RecordedParticipants []), Connect announces "this
       // call is not being recorded", and no .wav is written — so the FEAT-159
-      // S3 -> Transcribe -> diarise -> post-call pipeline never triggers. The content
-      // is the minimal Connect flow: UpdateContactRecordingBehavior -> EndFlowExecution.
+      // S3 -> Transcribe -> diarise -> post-call pipeline never triggers.
       const voiceOutboundWhisper = new ConnectContactFlow(this, 'voice-outbound-whisper', {
         instanceId: connectInstance.id,
         name: 'numa-voice-outbound-whisper',
@@ -1063,15 +1375,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
               end: { position: { x: 448, y: 56 } },
             },
           },
-          Actions: [
-            {
-              Identifier: 'rec',
-              Type: 'UpdateContactRecordingBehavior',
-              Parameters: { RecordingBehavior: { RecordedParticipants: ['Agent', 'Customer'] } },
-              Transitions: { NextAction: 'end', Errors: [], Conditions: [] },
-            },
-            { Identifier: 'end', Type: 'EndFlowExecution', Parameters: {}, Transitions: {} },
-          ],
+          Actions: [voiceRecAction, { Identifier: 'end', Type: 'EndFlowExecution', Parameters: {}, Transitions: {} }],
         }),
         ...pin,
       });
@@ -1333,7 +1637,7 @@ export class NumaVoiceConstruct extends ApiGatewayLambdaCollection {
         environment: {
           variables: {
             INSTANCE_ID: connectInstance.id,
-            APPROVED_ORIGIN: `https://${clientName}.numa.arcanum.ai`,
+            APPROVED_ORIGIN: props.frontendOrigin,
           },
         },
         dependsOn: [connectSeedAttach],

@@ -11,7 +11,9 @@
       "interested": "Interested",
       "callback": "Callback",
       "qualified": "Qualified"
-    }
+    },
+    "listGenerated": "List prepared {{when}}",
+    "listStale": "List from {{when}} — today’s list has not been prepared yet"
   },
   "focus": {
     "upNext": "Up next",
@@ -24,7 +26,16 @@
     "phoneNotDiallable": "Phone number needs international format (e.g. +64…) to dial.",
     "softphoneReady": "Softphone is ready — the call opens in the floating panel.",
     "muteHint": "Use the softphone panel to mute or hang up.",
-    "allDone": "All calls done for today. Nice work."
+    "allDone": "All calls done for today. Nice work.",
+    "ccpNeedsLogin": "Connect your phone first — sign in via the softphone panel.",
+    "ccpNotConfigured": "Voice calling is not configured for this workspace.",
+    "ccpInactiveTab": "Your softphone is active in another tab — switch to it to call.",
+    "ccpError": "The softphone failed to load — reload the page (softphone panel).",
+    "ccpConnecting": "Connecting your phone…",
+    "connectingHint": "Connecting your call…",
+    "ccpUnsupported": "Calling needs Chrome or Edge — open Numa there to make calls.",
+    "ccpOffline": "You're offline — calls resume when your connection returns.",
+    "callInProgress": "Call in progress…"
   },
   "queue": {
     "next": "Next",
@@ -33,22 +44,13 @@
     "filterAll": "All",
     "filterTodo": "To call",
     "filterDone": "Done",
-    "locked": "Finish the current call first.",
-    "heading": "Queue"
+    "heading": "Queue",
+    "noneDone": "No calls logged yet today."
   },
   "prospectTable": {
     "title": "Today's calls",
     "caption": "Prospects queued for outbound calls today.",
     "refresh": "Refresh call list",
-    "columns": {
-      "company": "Company",
-      "contact": "Contact",
-      "title": "Title",
-      "industry": "Industry",
-      "pain": "Pain hypothesis",
-      "status": "Status",
-      "actions": "Actions"
-    },
     "dial": "Dial",
     "dialing": "Dialing…",
     "calling": "On call",
@@ -80,7 +82,8 @@
     "activeInOtherTab": "The softphone is active in another browser tab.",
     "unsupportedBrowser": "The softphone requires Google Chrome or Microsoft Edge. Please open Numa in Chrome or Edge to make calls.",
     "bestEffortBrowser": "For a reliable softphone, use Chrome or Edge. In Firefox you may need to allow cross-site cookies for the softphone.",
-    "offline": "You're offline — the softphone will reconnect when your connection returns."
+    "offline": "You're offline — the softphone will reconnect when your connection returns.",
+    "loginStalledHint": "Still not connected? If you're signed in to the AWS Console in this browser, the softphone sign-in can be blocked. Open Numa in a separate browser profile that isn't signed in to the AWS Console — use a normal profile, not Incognito (Incognito blocks the cookies the softphone needs)."
   },
   "wrapUp": {
     "title": "Call wrap-up",
@@ -98,7 +101,6 @@
     "qualifyPrompt": "Is this prospect qualified?",
     "qualifyYes": "Qualified",
     "qualifyNo": "Not qualified",
-    "submit": "Save outcome",
     "saveAndNext": "Save & next",
     "submitting": "Saving…",
     "saved": "Outcome saved.",
@@ -106,7 +108,10 @@
     "dismiss": "Dismiss without logging",
     "subtitleGeneric": "Log the outcome of this call.",
     "noProspectPhone": "This call has no prospect phone number, so the outcome cannot be matched to a prospect and will not be saved.",
-    "recordingDisclosed": "I told the prospect this call was being recorded"
+    "recordingDisclosed": "I told the prospect this call was being recorded",
+    "confirmDismissPrompt": "No outcome has been logged for this call. Close anyway?",
+    "confirmDismissKeep": "Keep logging",
+    "confirmDismissClose": "Close without logging"
   },
   "consent": {
     "title": "Calls are recorded.",
@@ -118,15 +123,67 @@
     "discoveryQuestions": "Discovery questions",
     "objections": "Objections",
     "hooks": "Hook lines",
+    "dealSignals": "Deal signals",
     "next": "Next",
     "prev": "Previous",
     "prepTitle": "Prep for next call",
     "noPanel": "No playbook available for this industry yet.",
     "loading": "Loading assist panel…",
-    "idle": "Assist will appear here when a call connects."
+    "idle": "Assist will appear here when a call connects.",
+    "suggested": "Suggested response",
+    "listening": "Listening for objections…",
+    "loadError": "Couldn't load the assist playbook.",
+    "retry": "Retry"
   },
   "admin": {
-    "title": "Voice Admin"
+    "title": "Voice Admin",
+    "actionError": "That action failed. Check your permissions and try again.",
+    "addNumaOrigin": "Approve Numa domain",
+    "agents": "Agents",
+    "alias": "Alias",
+    "callerIdBadge": "Caller ID",
+    "callerIdSet": "Outbound caller ID set to {{number}}.",
+    "claim": "Claim",
+    "claimForMe": "Claim for me",
+    "claimedForYou": "This line is now yours.",
+    "disabled": "Numa Voice is not enabled for this workspace.",
+    "error": "Could not load Connect status.",
+    "inboundMode": "Inbound routing",
+    "inboundNotReady": "Inbound calling isn’t set up yet — numbers can make outbound calls but won’t receive any until the next deploy.",
+    "instance": "Instance",
+    "lineReleased": "Line released to the shared pool.",
+    "modePersonal": "Personal lines",
+    "modeSetPersonal": "Owned lines now ring their owner.",
+    "modeSetShared": "Inbound now rings the whole team.",
+    "modeShared": "Shared team line",
+    "no": "No",
+    "noCallerId": "No outbound caller ID is set — outbound calls will fail until you set one below.",
+    "noCallerIdUser": "No outbound caller ID is set — outbound calls will fail. Ask your workspace admin to set one.",
+    "noNumbers": "No numbers claimed yet.",
+    "noOrigins": "No approved origins.",
+    "none": "none",
+    "notConfigured": "No phone system is set up for this workspace yet. Deploy with autoProvision enabled, then refresh.",
+    "numaOrigin": "Numa origin approved",
+    "numbers": "Phone numbers",
+    "origins": "Approved origins",
+    "readOnly": "You have read-only access — admin role required to make changes.",
+    "release": "Release",
+    "remove": "Remove",
+    "setCallerId": "Set as caller-ID",
+    "sharedLine": "Shared",
+    "unassign": "Unassign",
+    "yes": "Yes",
+    "yourLine": "Your line",
+    "usageMonth": "{{minutes}} talk minutes this month",
+    "usageUnattributed": "({{minutes}} min on shared/unassigned lines)",
+    "usageMinutes": "{{minutes}} min this month",
+    "cancel": "Cancel",
+    "releaseConfirm": "Release number",
+    "releaseWarning": "Returns this number to AWS — it may not be reclaimable.",
+    "removeOriginConfirm": "Remove origin",
+    "removeOriginWarning": "Removing this origin may break the softphone for its users.",
+    "removeOriginWarningNuma": "This breaks the softphone for EVERY user in this workspace.",
+    "numberClaimed": "New {{country}} number claimed."
   },
   "adminPhones": {
     "title": "Phone numbers",
@@ -139,5 +196,13 @@
     "release": "Release",
     "usageMinutes": "Usage (minutes)",
     "empty": "No phone numbers provisioned yet."
+  },
+  "intake": {
+    "upload": "Upload prospects",
+    "uploading": "Uploading…",
+    "done": "Uploaded — prospects will appear after ingest",
+    "error": "Upload failed — try again",
+    "wrongType": "Only {{types}} files can be ingested",
+    "retry": "Retry upload"
   }
 }

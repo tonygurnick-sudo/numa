@@ -5,6 +5,8 @@ import Collapse from 'react-bootstrap/Collapse';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { isDiallable } from '../../Services/voiceData';
+import { VOICE_DIAL_EVENT, VOICE_CALL_STATE_EVENT, subscribeCcpStatus } from '../../hooks/useConnectCcp';
+import type { VoiceDialEventDetail, VoiceCallStateEventDetail, CcpStatus } from '../../hooks/useConnectCcp';
 import type { Prospect } from '../../types/voice';
 
 /**
@@ -33,22 +35,10 @@ import type { Prospect } from '../../types/voice';
  * `phone === null` (or state 'idle') clears any active row. This is a passive
  * status mirror — if the CCP widget never emits it, the button simply stays in
  * its post-click "dialing" state until reset, which is harmless.
+ *
+ * The canonical event names + detail types live in `hooks/useConnectCcp.ts` —
+ * imported, never re-declared, so producer and consumers cannot drift.
  */
-
-/** detail shape dispatched on click-to-dial. Must match the CCP widget listener. */
-export interface NumaVoiceDialDetail {
-  phone: string;
-  prospect: Prospect;
-}
-
-/** detail shape the CCP widget emits to mirror live call state back to the table. */
-export interface NumaVoiceCallStateDetail {
-  phone: string | null;
-  state: 'dialing' | 'connected' | 'idle';
-}
-
-export const NUMA_VOICE_DIAL_EVENT = 'numa-voice-dial';
-export const NUMA_VOICE_CALL_STATE_EVENT = 'numa-voice-call-state';
 
 /** Queue filter modes (mirrors the header pills). */
 export type ProspectListFilter = 'all' | 'todo' | 'done';
@@ -102,6 +92,12 @@ interface ProspectRowProps {
   isOnCallByPhone: boolean;
   /** Another prospect's phone is active — dialing this row must be disabled. */
   otherActive: boolean;
+  /** The page is mid-call or in After-Call Work — dialing a new prospect now
+   *  would clobber the in-progress call / unsaved wrap-up, so block it. */
+  queueBusy: boolean;
+  /** The softphone is ready to place a call — a dial while it isn't ready
+   *  silently no-ops, so the button is disabled until it is. */
+  ccpReady: boolean;
   /** Stable dial handler from the parent. */
   onDial: (prospect: Prospect) => void;
 }
@@ -153,16 +149,27 @@ const ProspectRow = React.memo(function ProspectRow({
   isDialing,
   isOnCallByPhone,
   otherActive,
+  queueBusy,
+  ccpReady,
   onDial,
 }: ProspectRowProps): React.JSX.Element {
   const { t } = useTranslation('voice');
   const [detailOpen, setDetailOpen] = useState(false);
 
-  const isOnCall = isOnCallByPhone || (isActiveProspect && isPhaseConnected);
+  // A prospect with a logged outcome is Done — it can never be "on call", no matter
+  // how stale the page phase / active-phone state is (a missed CCP idle event would
+  // otherwise leave the "On call" chip + the dial-block stuck until a refresh). This
+  // data invariant is the backstop behind the activePhone/callState self-heal effects.
+  const isOnCall = !prospect.call_outcome && (isOnCallByPhone || (isActiveProspect && isPhaseConnected));
+  // A Done prospect (logged outcome) must never render as the live/active row, even if
+  // the page still has it as activeProspect (it isn't always cleared on call-end). This
+  // gates BOTH the "On call" pill and the green active-edge so a processed call shows its
+  // outcome badge instead of looking like it's still on a call. Same invariant as isOnCall.
+  const isActiveLive = isActiveProspect && !prospect.call_outcome;
 
   // Edge highlight: green when on this call, blue when up-next.
   let edgeClass = '';
-  if (isActiveProspect) {
+  if (isActiveLive) {
     edgeClass = 'border-start border-3 border-success';
   } else if (isUpNext) {
     edgeClass = 'border-start border-3 border-primary';
@@ -188,7 +195,7 @@ const ProspectRow = React.memo(function ProspectRow({
         <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <div className="d-flex align-items-center gap-2">
             <span className="fw-semibold text-truncate">{displayName}</span>
-            {isActiveProspect ? (
+            {isActiveLive ? (
               <Badge
                 bg="success-subtle"
                 text="success-emphasis"
@@ -247,7 +254,14 @@ const ProspectRow = React.memo(function ProspectRow({
           <Button
             size="sm"
             variant={isOnCall ? 'success' : 'outline-primary'}
-            disabled={!isDiallable(prospect.phone) || isDialing || isOnCall || otherActive}
+            disabled={
+              !isDiallable(prospect.phone) ||
+              isDialing ||
+              isOnCall ||
+              otherActive ||
+              (queueBusy && !isOnCall) ||
+              (!ccpReady && !isOnCall)
+            }
             onClick={() => onDial(prospect)}
             aria-label={`${t('prospectTable.dial')} ${prospect.contact_name || displayName}`}
           >
@@ -340,13 +354,19 @@ export function ProspectListTable({
   const [activePhone, setActivePhone] = useState<string | null>(null);
   const [activeState, setActiveState] = useState<'dialing' | 'connected'>('dialing');
 
+  // Softphone readiness — a Dial that fires while the CCP isn't ready silently
+  // no-ops, so the row buttons must be disabled until it is (same as FocusCallCard).
+  const [ccpStatus, setCcpStatus] = useState<CcpStatus | null>(null);
+  useEffect(() => subscribeCcpStatus(setCcpStatus), []);
+  const ccpReady = ccpStatus === 'ready';
+
   // Done group is collapsed by default to keep the queue focused.
   const [doneOpen, setDoneOpen] = useState(false);
 
   // Mirror live call state from the CCP softphone widget.
   useEffect(() => {
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<NumaVoiceCallStateDetail>).detail;
+      const detail = (event as CustomEvent<VoiceCallStateEventDetail>).detail;
       if (!detail || detail.state === 'idle' || !detail.phone) {
         setActivePhone(null);
         return;
@@ -354,9 +374,23 @@ export function ProspectListTable({
       setActivePhone(detail.phone);
       setActiveState(detail.state);
     };
-    window.addEventListener(NUMA_VOICE_CALL_STATE_EVENT, handler);
-    return () => window.removeEventListener(NUMA_VOICE_CALL_STATE_EVENT, handler);
+    window.addEventListener(VOICE_CALL_STATE_EVENT, handler);
+    return () => window.removeEventListener(VOICE_CALL_STATE_EVENT, handler);
   }, []);
+
+  // Self-heal a stale active-phone: if the prospect currently marked on-call now has
+  // a call_outcome (the call was processed), a CCP idle event was missed — clear it so
+  // the row's "On call" chip + the dial-disable on OTHER rows don't stick until refresh.
+  useEffect(() => {
+    if (activePhone && prospects.some((p) => p.phone === activePhone && p.call_outcome)) {
+      setActivePhone(null);
+    }
+  }, [prospects, activePhone]);
+
+  // A new call must not be started while one is connecting/connected or while the
+  // SDR is in After-Call Work — that would clobber the live call or silently
+  // destroy the unsaved wrap-up. Gate the dial here (the buttons are disabled too).
+  const queueBusy = phase === 'acw' || phase === 'connecting';
 
   const handleDial = useCallback(
     (prospect: Prospect) => {
@@ -367,17 +401,23 @@ export function ProspectListTable({
         console.warn('Numa Voice: invalid E.164 phone, not dialing', phone);
         return;
       }
+      // Belt-and-braces with the disabled buttons: never dial while the page is
+      // mid-call / in wrap-up, or before the softphone is ready (a dial then
+      // silently no-ops).
+      if (phase === 'acw' || phase === 'connecting' || !ccpReady) {
+        return;
+      }
       // Optimistically reflect the dialing state until the CCP widget confirms.
       setActivePhone(phone);
       setActiveState('dialing');
       onAdvance?.(prospect);
       window.dispatchEvent(
-        new CustomEvent<NumaVoiceDialDetail>(NUMA_VOICE_DIAL_EVENT, {
+        new CustomEvent<VoiceDialEventDetail>(VOICE_DIAL_EVENT, {
           detail: { phone, prospect },
         })
       );
     },
-    [onAdvance]
+    [onAdvance, phase, ccpReady]
   );
 
   if (prospects.length === 0) {
@@ -416,6 +456,8 @@ export function ProspectListTable({
         isDialing={isDialing}
         isOnCallByPhone={isOnCallByPhone}
         otherActive={otherActive}
+        queueBusy={queueBusy}
+        ccpReady={ccpReady}
         onDial={handleDial}
       />
     );
@@ -437,22 +479,37 @@ export function ProspectListTable({
         </div>
       )}
 
+      {/* Under the Done filter with nothing logged yet, neither the queue block
+          (hidden) nor the done block (empty) would render — show an explicit
+          empty state instead of a blank panel. */}
+      {filter === 'done' && done.length === 0 && (
+        <div className="text-center text-body-secondary py-4">
+          {t('queue.noneDone', { defaultValue: 'No calls logged yet today.' })}
+        </div>
+      )}
+
       {/* ── Done (collapsible) ── */}
       {showDone && done.length > 0 && (
         <div className="border-top">
-          <Button
-            variant="link"
-            className="w-100 text-start text-decoration-none text-body-secondary d-flex align-items-center justify-content-between px-3 py-2"
-            onClick={() => setDoneOpen((prev) => !prev)}
-            aria-controls="voice-done-group"
-            aria-expanded={filter === 'done' || doneOpen}
-          >
-            <span className="small fw-semibold">{t('queue.done', { count: done.length })}</span>
-            <i
-              className={`bi ${filter === 'done' || doneOpen ? 'bi-chevron-up' : 'bi-chevron-down'}`}
-              aria-hidden="true"
-            />
-          </Button>
+          {/* Under the Done filter the group is always open, so the toggle would
+              be a dead control (click does nothing visible) that silently mutated
+              the All-filter expand state — render a plain heading instead. */}
+          {filter === 'done' ? (
+            <div className="text-body-secondary px-3 py-2">
+              <span className="small fw-semibold">{t('queue.done', { count: done.length })}</span>
+            </div>
+          ) : (
+            <Button
+              variant="link"
+              className="w-100 text-start text-decoration-none text-body-secondary d-flex align-items-center justify-content-between px-3 py-2"
+              onClick={() => setDoneOpen((prev) => !prev)}
+              aria-controls="voice-done-group"
+              aria-expanded={doneOpen}
+            >
+              <span className="small fw-semibold">{t('queue.done', { count: done.length })}</span>
+              <i className={`bi ${doneOpen ? 'bi-chevron-up' : 'bi-chevron-down'}`} aria-hidden="true" />
+            </Button>
+          )}
           <Collapse in={filter === 'done' || doneOpen}>
             <div id="voice-done-group">
               <div className="list-group list-group-flush">

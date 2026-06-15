@@ -221,7 +221,10 @@ export const ScheduleRecordSchema = z
     schedule_id: z.string().uuid('Invalid schedule ID format'),
     tenant_id: z.string().min(1, 'Tenant ID is required'),
     conversation_id: z.string().min(1, 'Conversation ID is required'),
-    prompt_text: z.string().max(4000, 'Prompt text too long'),
+    // Record-level cap is higher than the 4000-char user payload cap
+    // (Create/UpdateSchedulePayloadSchema): system-seeded schedules
+    // (seed-voice-agents) carry longer prompts than users may submit.
+    prompt_text: z.string().max(10000, 'Prompt text too long'),
     trigger_type: z.enum(['cron', 'event']).optional().default('cron'),
     trigger: EventTriggerSchema.optional(),
     cron_expression: z

@@ -43,7 +43,15 @@ export type VoiceContactPhase = 'connecting' | 'connected' | 'acw' | 'ended';
 /** Status of the CCP softphone itself.
  *  'inactive_tab' = another browser tab already owns the single CCP agent session,
  *  so this tab deliberately skipped initCCP (see the cross-tab primary-tab guard). */
-export type CcpStatus = 'not_configured' | 'initialising' | 'needs_login' | 'ready' | 'error' | 'inactive_tab';
+export type CcpStatus =
+  | 'not_configured'
+  | 'initialising'
+  | 'needs_login'
+  | 'ready'
+  | 'error'
+  | 'inactive_tab'
+  | 'unsupported'
+  | 'offline';
 
 /** Detail payload carried by the `numa-voice-contact` CustomEvent. Consumed by
  *  the wrap-up (phase 'acw') and assist (phase 'connected'/'ended') panels. */
@@ -81,6 +89,15 @@ export const VOICE_CONTACT_EVENT = 'numa-voice-contact';
 export const VOICE_DIAL_EVENT = 'numa-voice-dial';
 /** Window CustomEvent name carrying call-state for the prospect table button. */
 export const VOICE_CALL_STATE_EVENT = 'numa-voice-call-state';
+/** Window CustomEvent name carrying the softphone's current CcpStatus, so the
+ *  cockpit (FocusCallCard) can tell the SDR the truth about readiness instead
+ *  of always claiming "ready". */
+export const VOICE_CCP_STATUS_EVENT = 'numa-voice-ccp-status';
+
+/** Detail carried by the `numa-voice-ccp-status` CustomEvent. */
+export interface VoiceCcpStatusEventDetail {
+  status: CcpStatus;
+}
 
 interface ConnectAgent {
   connect(endpoint: unknown, callbacks?: { success?: () => void; failure?: (err: unknown) => void }): void;
@@ -93,6 +110,9 @@ interface ConnectContact {
   onACW(handler: (contact: ConnectContact) => void): void;
   onEnded(handler: (contact: ConnectContact) => void): void;
   onDestroy?(handler: (contact: ConnectContact) => void): void;
+  /** Clears the contact out of After-Call Work (returns the agent to their prior
+   *  state). Numa owns the wrap-up flow, so Connect ACW is redundant — we clear it. */
+  clear?(callbacks?: { success?: () => void; failure?: (err: unknown) => void }): void;
 }
 
 interface ConnectEndpoint {
@@ -151,6 +171,29 @@ export function dialVoiceNumber(e164: string, prospect?: Prospect): void {
 function publishCallState(detail: VoiceCallStateEventDetail): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent<VoiceCallStateEventDetail>(VOICE_CALL_STATE_EVENT, { detail }));
+}
+
+/** Publish the softphone's current CcpStatus to the cockpit. */
+export function publishCcpStatus(status: CcpStatus): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<VoiceCcpStatusEventDetail>(VOICE_CCP_STATUS_EVENT, { detail: { status } }));
+}
+
+/**
+ * Subscribe to softphone-status changes. Returns an unsubscribe fn. The status
+ * is also re-published whenever a subscriber asks (via a one-shot request event)
+ * so a late-mounting consumer isn't stuck on a stale default until the next change.
+ */
+export function subscribeCcpStatus(handler: (status: CcpStatus) => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const listener = (event: Event) => {
+    const custom = event as CustomEvent<VoiceCcpStatusEventDetail>;
+    if (custom.detail) handler(custom.detail.status);
+  };
+  window.addEventListener(VOICE_CCP_STATUS_EVENT, listener);
+  // Ask the widget to re-announce its current status for this fresh subscriber.
+  window.dispatchEvent(new CustomEvent('numa-voice-ccp-status-request'));
+  return () => window.removeEventListener(VOICE_CCP_STATUS_EVENT, listener);
 }
 
 /* ------------------------------------------------------------------ *
@@ -277,6 +320,10 @@ interface UseConnectCcpResult {
 export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<string | null>): UseConnectCcpResult {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const initialisedRef = useRef(false);
+  // Set true when init hits a terminal failure (e.g. the streams library has no
+  // `connect.core`). Without it, the takeover poll re-triggers init every 2s
+  // forever (re-fetching the federation token + re-importing the lib each time).
+  const initFailedRef = useRef(false);
   // The just-dialled prospect, before a contactId exists; consumed when the
   // contact appears and moved into the per-contact map below.
   const pendingProspectRef = useRef<Prospect | undefined>(undefined);
@@ -332,6 +379,11 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
     // (the only other reset is contact.onEnded, which never fires for a failed dial).
     const resetDial = (): void => {
       publishCallState({ phone: null, state: 'idle' });
+      // Also clear the PAGE phase: a failed/stalled dial published 'connecting'
+      // (via connect.contact) but no onConnected/onEnded follows, so without a
+      // terminal event the FocusCallCard would spin on "Dialing…" forever. The
+      // page reducer maps 'ended' → idle (and protects an open wrap-up).
+      publishVoiceContact({ phase: 'ended' });
       pendingProspectRef.current = undefined;
       if (dialTimeoutRef.current) {
         clearTimeout(dialTimeoutRef.current);
@@ -343,6 +395,10 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
       resetDial();
       return;
     }
+    // Only NOW (CCP confirmed ready) flip the table button to 'dialing' — doing it
+    // before the readiness check briefly stranded the button on 'Dialing…' for a
+    // dial that never started.
+    publishCallState({ phone: e164, state: 'dialing' });
     // Safety net: if neither onConnected nor onEnded fires within 60s, reset the
     // stuck 'dialing' state. Cleared in onConnected / onEnded.
     if (dialTimeoutRef.current) clearTimeout(dialTimeoutRef.current);
@@ -376,7 +432,9 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
       const phone = custom.detail?.phone ?? custom.detail?.phoneNumber;
       if (!phone) return;
       pendingProspectRef.current = custom.detail?.prospect;
-      publishCallState({ phone, state: 'dialing' });
+      // dialNumber publishes the optimistic 'dialing' state itself, but only
+      // after it confirms the CCP is ready (so a not-ready dial never strands
+      // the button).
       dialNumber(phone);
     };
     window.addEventListener(VOICE_DIAL_EVENT, listener);
@@ -459,6 +517,9 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
 
         if (!connect || !connect.core) {
           setStatus('error');
+          // Terminal: the streams library is unusable. Stop the takeover poll from
+          // re-running this expensive async init every 2s.
+          initFailedRef.current = true;
           return;
         }
 
@@ -568,13 +629,24 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
             }
             const id = safeContactId(c) ?? contactId;
             const startedAt = id ? startedAtByContactRef.current.get(id) : undefined;
-            publishVoiceContact({
-              phase: 'acw',
-              contactId: id,
-              phoneNumber: getContactPhoneNumber(c),
-              prospect: prospectFor(c),
-              durationSeconds: startedAt ? Math.round((Date.now() - startedAt) / 1000) : undefined,
-            });
+            // The wrap-up panel needs a contactId to save against AND to render at
+            // all (it shows nothing without one). If getContactId threw on both the
+            // ACW contact and the outer closure, DON'T enter 'acw' — that would
+            // strand the SDR in a blank, undismissable wrap-up (the page reducer
+            // protects 'acw', so onDismissed is unreachable). Publish 'ended'
+            // instead so the page returns to idle and the next call can proceed.
+            if (id) {
+              publishVoiceContact({
+                phase: 'acw',
+                contactId: id,
+                phoneNumber: getContactPhoneNumber(c),
+                prospect: prospectFor(c),
+                durationSeconds: startedAt ? Math.round((Date.now() - startedAt) / 1000) : undefined,
+              });
+            } else {
+              console.warn('Numa Voice: ACW with no contactId — skipping wrap-up for this call');
+              publishVoiceContact({ phase: 'ended' });
+            }
             // The live call is OVER once we hit ACW (the customer hung up / the
             // call disconnected — the agent is now wrapping up). Reset the table's
             // "On call" button now: Connect's onEnded only fires when the agent
@@ -584,6 +656,18 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
             publishCallState({ phone: null, state: 'idle' });
             // No live media remains in ACW, so terminate() is once-again safe.
             callActiveRef.current = false;
+            // Numa owns the post-call wrap-up (PostCallWrapUpPanel), so Connect's own
+            // ACW is redundant — and leaving the contact in ACW keeps the agent "on
+            // call" on Connect (they'd otherwise have to click "Close contact" in the
+            // CCP, which they may never do → stuck agent + "1 agent on call" in Live).
+            // Clear it now: the agent returns to Available immediately, while the Numa
+            // wrap-up panel stays open (the page reducer protects the 'acw' phase from
+            // the 'ended' event that c.clear() triggers). Best-effort.
+            try {
+              c.clear?.({ failure: (err) => console.warn('Numa Voice: contact.clear failed', err) });
+            } catch (err) {
+              console.warn('Numa Voice: contact.clear threw', err);
+            }
           });
 
           // onEnded (contact cleared) and onDestroy are both wired so the lifecycle
@@ -703,6 +787,9 @@ export function useConnectCcp(active: boolean, getSignInUrl?: () => Promise<stri
     // which can never claim primary) doesn't churn state every interval.
     const poll = setInterval(() => {
       if (isPrimaryTabRef.current) return;
+      // A terminal init failure (no usable streams lib) won't fix itself on retry —
+      // don't churn the expensive async init every interval.
+      if (initFailedRef.current) return;
       if (!getCcpUrl()) return;
       if (!isPrimaryTakenByOther(myTabId)) {
         // Slot is free — re-attempt init. The init effect re-checks + claims.
