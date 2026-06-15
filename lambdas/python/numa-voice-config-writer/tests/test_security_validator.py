@@ -1,5 +1,6 @@
 """Tests for the Numa Voice config-writer security validator."""
 
+import hashlib
 import os
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
@@ -11,8 +12,10 @@ os.environ["CLIENT_CONFIG_TABLE_NAME"] = "test-client-config"
 
 from security_validator import (
     ALLOWED_ROLE_REGEX,
+    ROLE_NAME_MAX_LENGTH,
     SecurityValidationError,
     VoiceConfigSecurityValidator,
+    aws_name_with_hashed_prefix,
 )
 
 
@@ -100,6 +103,87 @@ class TestStsEndpointValidation:
     def test_rejects_untrusted_endpoint(self, url: str):
         with pytest.raises(SecurityValidationError, match="Untrusted STS endpoint"):
             self.validator._get_caller_identity_from_sts(url)
+
+
+class TestAwsNameWithHashedPrefix:
+    """Python port must stay byte-for-byte equivalent to aws-name-utils.ts."""
+
+    def test_short_name_passthrough(self):
+        assert (
+            aws_name_with_hashed_prefix("arcanum-demo-tony", "_voice-admin", 64)
+            == "arcanum-demo-tony_voice-admin"
+        )
+
+    def test_long_prefix_is_truncated_with_hash(self):
+        prefix = "a" * 70
+        name = aws_name_with_hashed_prefix(prefix, "_voice-admin", 64)
+        assert len(name) == 64
+        assert name.endswith("_voice-admin")
+        # Truncated prefix + '-' + 8 hex chars of sha256(full prefix).
+        expected_hash = hashlib.sha256(prefix.encode()).hexdigest()[:8]
+        assert f"-{expected_hash}_voice-admin" in name
+
+    def test_distinct_long_prefixes_stay_unique(self):
+        a = aws_name_with_hashed_prefix("x" * 70 + "a", "_voice-admin", 64)
+        b = aws_name_with_hashed_prefix("x" * 70 + "b", "_voice-admin", 64)
+        assert a != b
+
+    def test_suffix_longer_than_max_raises(self):
+        with pytest.raises(ValueError):
+            aws_name_with_hashed_prefix("c", "s" * 65, 64)
+
+
+class TestAuthorizeRoleForClient:
+    """BUG-242: client_name must be bound to the STS-proven voice-admin role —
+    a sibling client's voice-admin in the same shared dev account must not be
+    able to write this client's record."""
+
+    def setup_method(self):
+        self.validator, self.table = _make_validator()
+
+    def test_allows_matching_role(self):
+        self.validator.authorize_role_for_client(
+            "arcanum-demo-tony", "arcanum-demo-tony_voice-admin"
+        )
+
+    def test_allows_underscore_suffix_variant(self):
+        self.validator.authorize_role_for_client(
+            "arcanum-demo-tony", "arcanum-demo-tony_voice_admin"
+        )
+
+    def test_rejects_sibling_client_role_in_shared_account(self):
+        # arcanum-demo-greg's voice-admin tries to write arcanum-demo-tony's record.
+        with pytest.raises(SecurityValidationError, match="not authorized"):
+            self.validator.authorize_role_for_client(
+                "arcanum-demo-tony", "arcanum-demo-greg_voice-admin"
+            )
+
+    def test_rejects_role_with_extra_chars(self):
+        with pytest.raises(SecurityValidationError, match="not authorized"):
+            self.validator.authorize_role_for_client(
+                "arcanum-demo-tony", "arcanum-demo-tony_voice-admin-extra"
+            )
+
+    def test_rejects_blank_client_name(self):
+        with pytest.raises(SecurityValidationError, match="client_name is required"):
+            self.validator.authorize_role_for_client("  ", "x_voice-admin")
+
+    def test_long_client_name_matches_hashed_role(self):
+        # When clientName + suffix exceeds 64 chars the deployed role name uses
+        # the hashed-prefix form; the binding must recompute and accept it.
+        long_client = "very-long-client-name-" + "x" * 50
+        deployed_role = aws_name_with_hashed_prefix(
+            long_client, "_voice-admin", ROLE_NAME_MAX_LENGTH
+        )
+        self.validator.authorize_role_for_client(long_client, deployed_role)
+
+    def test_long_client_name_rejects_sibling_hashed_role(self):
+        long_client = "very-long-client-name-" + "x" * 50
+        sibling_role = aws_name_with_hashed_prefix(
+            "other-long-client-name-" + "x" * 50, "_voice-admin", ROLE_NAME_MAX_LENGTH
+        )
+        with pytest.raises(SecurityValidationError, match="not authorized"):
+            self.validator.authorize_role_for_client(long_client, sibling_role)
 
 
 class TestAuthorizeClientWrite:

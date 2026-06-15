@@ -4,7 +4,11 @@ import { Construct } from 'constructs';
 import assert from 'node:assert';
 import { before, describe, it } from 'node:test';
 import { v5 as uuidv5 } from 'uuid';
-import { NumaVoiceConstruct, isValidConnectInstanceUrl } from '../../constructs/numa-voice-construct';
+import {
+  NumaVoiceConstruct,
+  isValidConnectInstanceUrl,
+  callPrepCronFromTime,
+} from '../../constructs/numa-voice-construct';
 
 // Must match VOICE_UUID_NAMESPACE in the construct + seed-data.ts.
 const NAMESPACE = '4f3b2a1c-9d8e-5f6a-8b8c-0d1e2f3a4b5c';
@@ -22,6 +26,7 @@ class TestStack extends TerraformStack {
       voiceRegion: 'ap-southeast-2',
       voiceProvider: undefined,
       clientAccountId: '123456789012',
+      frontendOrigin: 'https://testclient.numa.arcanum.ai',
       voiceConfigWriterLambdaArn: 'arn:aws:lambda:us-east-1:207567759910:function:numa-voice-config-writer',
       outputsBucketArn: 'arn:aws:s3:::out',
       outputsBucketName: 'out',
@@ -87,6 +92,42 @@ describe('NumaVoiceConstruct (connectAutoProvision)', () => {
     // Without this the best-effort metric emits silently no-op and the
     // TranscriptionFailed/DiarisationUnexpected alarms never receive data.
     assert.match(synthesized, /cloudwatch:PutMetricData/);
+  });
+});
+
+describe('callPrepCronFromTime (FEAT-164 per-client schedule time)', () => {
+  it('parses HH:MM into an EventBridge Scheduler cron', () => {
+    assert.strictEqual(callPrepCronFromTime('07:30'), 'cron(30 7 * * ? *)');
+    assert.strictEqual(callPrepCronFromTime('6:05'), 'cron(5 6 * * ? *)');
+    assert.strictEqual(callPrepCronFromTime('23:59'), 'cron(59 23 * * ? *)');
+  });
+
+  it('throws at synth on malformed times so a config typo fails loudly', () => {
+    for (const bad of ['24:00', '7:5', 'half past', '', '07:60']) {
+      assert.throws(() => callPrepCronFromTime(bad), /HH:MM/);
+    }
+  });
+});
+
+describe('NumaVoiceConstruct FEAT-164 schedule-time plumbing', () => {
+  it('threads a custom callPrepTime/timezone into BOTH the SchedulerSchedule and the seed env', () => {
+    const app = Testing.app();
+    const synth = Testing.synth(
+      new TestStack(app, 'test-callprep', { callPrepTime: '06:15', callPrepTimezone: 'Australia/Sydney' })
+    );
+    // The cron that actually fires…
+    assert.match(synth, /cron\(15 6 \* \* \? \*\)/);
+    assert.match(synth, /Australia\/Sydney/);
+    // …and the seeded schedule record mirror (env on the seed lambda).
+    assert.match(synth, /"CALL_PREP_CRON":\s*"cron\(15 6 \* \* \? \*\)"/);
+    assert.match(synth, /"CALL_PREP_TIMEZONE":\s*"Australia\/Sydney"/);
+  });
+
+  it('defaults to 07:30 Pacific/Auckland when no time is configured', () => {
+    const app = Testing.app();
+    const synth = Testing.synth(new TestStack(app, 'test-callprep-default'));
+    assert.match(synth, /cron\(30 7 \* \* \? \*\)/);
+    assert.match(synth, /Pacific\/Auckland/);
   });
 });
 

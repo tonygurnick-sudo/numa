@@ -148,3 +148,61 @@ class TestFormatTranscript(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFetchUtterances(unittest.TestCase):
+    """Per-utterance timestamps feed the vCon transcript analysis."""
+
+    def _doc(self):
+        return {
+            "results": {
+                "speaker_labels": {
+                    "segments": [
+                        {
+                            "speaker_label": "spk_0",
+                            "items": [{"start_time": "0.0"}, {"start_time": "0.5"}],
+                        },
+                        {"speaker_label": "spk_1", "items": [{"start_time": "1.5"}]},
+                    ]
+                },
+                "items": [
+                    {
+                        "type": "pronunciation",
+                        "alternatives": [{"content": "hi"}],
+                        "start_time": "0.0",
+                        "end_time": "0.4",
+                    },
+                    {
+                        "type": "pronunciation",
+                        "alternatives": [{"content": "there"}],
+                        "start_time": "0.5",
+                        "end_time": "1.0",
+                    },
+                    {"type": "punctuation", "alternatives": [{"content": "."}]},
+                    {
+                        "type": "pronunciation",
+                        "alternatives": [{"content": "hello"}],
+                        "start_time": "1.5",
+                        "end_time": "2.0",
+                    },
+                ],
+            }
+        }
+
+    def test_utterances_have_party_text_and_times(self):
+        with patch.object(aws_transcribe, "s3_client", _mock_s3_returning(self._doc())):
+            _text, speakers, utterances = aws_transcribe.fetch_utterances_with_speakers(
+                "b", "k"
+            )
+        self.assertEqual(speakers, ["spk_0", "spk_1"])
+        self.assertEqual(len(utterances), 2)
+        u0, u1 = utterances
+        self.assertEqual(u0["party"], 0)
+        self.assertEqual(u0["speaker"], "spk_0")
+        self.assertEqual(u0["text"], "hi there.")
+        self.assertEqual(u0["start"], 0.0)
+        self.assertEqual(u0["end"], 1.0)
+        self.assertEqual(u1["party"], 1)
+        self.assertEqual(u1["text"], "hello")
+        self.assertEqual(u1["start"], 1.5)
+        self.assertEqual(u1["end"], 2.0)

@@ -1171,6 +1171,10 @@ def _resolve_lambda_and_request(
                 ("territory", "territory"),
                 ("industry", "industry"),
                 ("flags", "flags"),
+                # Phone lookup (E.164) — matches a contact's phone or the
+                # source_phone customField. Used to find-or-create the CRM
+                # customer for a Numa Voice prospect by their dialled number.
+                ("phone", "phone", "prospect_phone"),
                 ("limit", "limit"),
                 ("cursor", "cursor"),
             ],

@@ -26,12 +26,19 @@
  * domain. See useConnectCcp for the initCCP details.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Button } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { getFlag } from '../../utils/featureFlags';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { useConnectCcp, getCcpUrl, VOICE_DIAL_EVENT, VOICE_CALL_STATE_EVENT } from '../../hooks/useConnectCcp';
-import type { VoiceCallStateEventDetail } from '../../hooks/useConnectCcp';
+import {
+  useConnectCcp,
+  getCcpUrl,
+  publishCcpStatus,
+  VOICE_DIAL_EVENT,
+  VOICE_CALL_STATE_EVENT,
+} from '../../hooks/useConnectCcp';
+import type { VoiceCallStateEventDetail, CcpStatus } from '../../hooks/useConnectCcp';
 import { getVoiceBrowserSupport } from '../../utils/voiceBrowserSupport';
 
 /** Minimum CCP iframe footprint required by amazon-connect-streams ccp-v2. */
@@ -75,6 +82,27 @@ export const CcpSoftphoneWidget = () => {
   // once the agent has authenticated (status → ready).
   const loginPopupRef = useRef<Window | null>(null);
 
+  // Detects a STALLED login. The softphone signs in via Amazon Connect's
+  // console-federation flow (signin.aws.amazon.com → /connect/federate). That
+  // flow COLLIDES when the same browser already holds an AWS Console session:
+  // the federate page runs as the user's own console identity (not the voice
+  // agent) and returns "Access denied", so the agent never reaches `ready`.
+  // It works for everyone WITHOUT a console session (i.e. every real SDR). We
+  // can't read the cross-origin popup, so we infer the stall: if a sign-in was
+  // attempted and the agent hasn't reached `ready` within the window, surface
+  // guidance (use a profile not signed into the AWS Console). Bumped per attempt.
+  const [signInTick, setSignInTick] = useState(0);
+  const [loginStalled, setLoginStalled] = useState(false);
+  useEffect(() => {
+    if (signInTick === 0) return undefined; // no sign-in attempted yet
+    if (status === 'ready') {
+      setLoginStalled(false);
+      return undefined;
+    }
+    const t = setTimeout(() => setLoginStalled(true), 25_000);
+    return () => clearTimeout(t);
+  }, [signInTick, status]);
+
   // Explicit, user-gesture-driven sign-in. initCCP's own loginPopup auto-opens on
   // mount, but browsers block popups that aren't triggered by a click — so the
   // agent was stranded in needs_login with no popup and no way to start login.
@@ -89,6 +117,9 @@ export const CcpSoftphoneWidget = () => {
     // click's call stack (a window opened after an async hop gets blocked).
     const win = window.open('about:blank', 'numa-ccp-login');
     loginPopupRef.current = win;
+    // Start (or restart) the stalled-login watchdog for this attempt.
+    setLoginStalled(false);
+    setSignInTick((n) => n + 1);
     let url = await getSignInUrl();
     // Federation mint failed → fall back to the bare ccp-v2 URL so the agent can still
     // sign in manually in the tab (the SAML login page can't be framed, but loads fine
@@ -126,6 +157,12 @@ export const CcpSoftphoneWidget = () => {
   // Mirror live call state so the floating toggle turns green + pulses while a
   // call is connected. Purely cosmetic — does not touch the iframe / CCP lifecycle.
   const [onCall, setOnCall] = useState(false);
+  // The floating phone launcher only shows when the Voice page is selected (per design)
+  // — plus during a live call from anywhere, so an in-progress call is never trapped
+  // without a hangup control. The widget itself stays mounted regardless so the CCP
+  // iframe/session + inbound handling persist; we only gate the launcher + panel.
+  const location = useLocation();
+  const showLauncher = location.pathname.startsWith('/voice') || onCall;
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
     const onState = (event: Event): void => {
@@ -152,6 +189,22 @@ export const CcpSoftphoneWidget = () => {
       window.removeEventListener('offline', goOffline);
     };
   }, []);
+
+  // Publish softphone status to the cockpit (FocusCallCard) so its CTA reflects
+  // reality (e.g. "Connect your phone first" when needs_login) instead of always
+  // claiming "ready". Also re-announce on demand for late-mounting subscribers.
+  // On an unsupported browser the CCP hook never runs (so it never publishes a
+  // status) — publish 'unsupported' explicitly so the cockpit doesn't spin on
+  // "Connecting your phone…" forever. When offline, publish 'offline' so the
+  // cockpit blocks dialing + explains why (the in-panel offline banner is hidden
+  // while the panel is collapsed — its normal state).
+  const publishedStatus: CcpStatus = browserSupport === 'unsupported' ? 'unsupported' : !online ? 'offline' : status;
+  useEffect(() => {
+    publishCcpStatus(publishedStatus);
+    const onRequest = (): void => publishCcpStatus(publishedStatus);
+    window.addEventListener('numa-voice-ccp-status-request', onRequest);
+    return () => window.removeEventListener('numa-voice-ccp-status-request', onRequest);
+  }, [publishedStatus]);
 
   if (!flagEnabled) return null;
 
@@ -189,17 +242,6 @@ export const CcpSoftphoneWidget = () => {
         </div>
       );
     }
-    if (status === 'inactive_tab') {
-      // Another browser tab already owns the single CCP agent session, so this
-      // tab deliberately skipped initCCP. If that tab closes, the cross-tab guard
-      // promotes this one automatically (no reload needed).
-      return (
-        <div className="p-3 text-center text-muted small" style={{ minHeight: PANEL_BODY_HEIGHT / 2 }}>
-          <i className="bi bi-window-stack d-block fs-3 mb-2" aria-hidden="true"></i>
-          {t('ccp.activeInOtherTab', { defaultValue: 'The softphone is active in another browser tab.' })}
-        </div>
-      );
-    }
     if (status === 'initialising') {
       return (
         <div className="p-3 text-center text-muted small">
@@ -216,6 +258,15 @@ export const CcpSoftphoneWidget = () => {
             <i className="bi bi-box-arrow-in-right me-1" aria-hidden="true"></i>
             {t('ccp.signIn')}
           </Button>
+          {loginStalled && (
+            <div
+              className="mt-3 px-2 py-2 text-start text-warning-emphasis bg-warning-subtle border border-warning-subtle rounded small"
+              data-testid="voice-ccp-console-collision-hint"
+            >
+              <i className="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+              {t('ccp.loginStalledHint')}
+            </div>
+          )}
         </div>
       );
     }
@@ -233,35 +284,39 @@ export const CcpSoftphoneWidget = () => {
 
   // The iframe host stays mounted whenever Voice is enabled + configured (so the
   // CCP initialises without the SDR opening the panel); we only hide the chrome.
-  // Suppress it for 'inactive_tab' too: this tab never ran initCCP (another tab
-  // owns the session), so there's no iframe to host — show only the notice.
-  const showIframeHost = status !== 'not_configured' && status !== 'error' && status !== 'inactive_tab';
+  // It MUST also stay mounted for 'inactive_tab' (collapsed to height 0): when the
+  // primary tab closes, the takeover tick re-runs initCCP into containerRef — if
+  // the host weren't rendered, containerRef.current would be null and this tab
+  // could NEVER be promoted to primary.
+  const showIframeHost = status !== 'not_configured' && status !== 'error';
+  const iframeHostHeight = status === 'inactive_tab' ? 0 : PANEL_BODY_HEIGHT;
 
   return (
     <>
-      {/* Floating toggle button (bottom-right). Turns green + pulses on a live call. */}
-      <Button
-        variant={onCall ? 'success' : open ? 'secondary' : 'primary'}
-        onClick={() => setOpen((prev) => !prev)}
-        className={`rounded-circle d-flex align-items-center justify-content-center shadow${onCall ? ' pulse-on-call' : ''}`}
-        aria-expanded={open}
-        aria-label={open ? t('ccp.hide') : t('ccp.show')}
-        title={open ? t('ccp.hide') : t('ccp.show')}
-        style={{
-          position: 'fixed',
-          right: 20,
-          // Sit above the AskNuma FAB (bottom:24, ~56px tall) so they don't overlap.
-          bottom: 88,
-          width: 56,
-          height: 56,
-          // Above page content and chat drawers (1035), but BELOW the
-          // Ask Numa / Support popups (1049/1050) — the toggle overlaps their
-          // send-button corner and must not cover them while they're open.
-          zIndex: 1045,
-        }}
-      >
-        <i className={`bi ${open ? 'bi-chevron-down' : 'bi-telephone-fill'} fs-5`} aria-hidden="true"></i>
-      </Button>
+      {/* Floating toggle button — stacked directly ABOVE the AskNuma FAB (which is a
+          ~56px circle at bottom:24/right:24). Only shown on the Voice page (or during a
+          live call). Turns green + pulses on a live call. */}
+      {showLauncher && (
+        <Button
+          variant={onCall ? 'success' : open ? 'secondary' : 'primary'}
+          onClick={() => setOpen((prev) => !prev)}
+          className={`rounded-circle d-flex align-items-center justify-content-center shadow${onCall ? ' pulse-on-call' : ''}`}
+          aria-expanded={open}
+          aria-label={open ? t('ccp.hide') : t('ccp.show')}
+          title={open ? t('ccp.hide') : t('ccp.show')}
+          style={{
+            position: 'fixed',
+            // Right-aligned with the AskNuma FAB (right:24), one FAB-height + gap above it.
+            right: 24,
+            bottom: 96,
+            width: 56,
+            height: 56,
+            zIndex: 1060,
+          }}
+        >
+          <i className={`bi ${open ? 'bi-chevron-down' : 'bi-telephone-fill'} fs-5`} aria-hidden="true"></i>
+        </Button>
+      )}
 
       {/* Softphone panel. NOTE: no `d-flex` class — Bootstrap's `.d-flex` is
           `display:flex !important`, which would override the inline `display:none`
@@ -272,14 +327,14 @@ export const CcpSoftphoneWidget = () => {
         style={{
           position: 'fixed',
           right: 20,
-          // Above the toggle button (which is itself above the AskNuma FAB).
-          bottom: 156,
+          // Above the toggle button (which sits above the AskNuma FAB, bottom-right).
+          bottom: 164,
           width: PANEL_WIDTH,
           maxWidth: 'calc(100vw - 40px)',
-          // Same layer as the toggle button — see comment above.
-          zIndex: 1045,
-          // Keep mounted (so the iframe/session persists) but hide when collapsed.
-          display: open ? 'flex' : 'none',
+          zIndex: 1060,
+          // Keep mounted (so the iframe/session persists) but hide when collapsed OR when
+          // the launcher is hidden (off the Voice page and not on a call).
+          display: open && showLauncher ? 'flex' : 'none',
         }}
         role="region"
         aria-label={t('ccp.title')}
@@ -342,7 +397,10 @@ export const CcpSoftphoneWidget = () => {
                 ref={containerRef}
                 style={{
                   width: '100%',
-                  height: PANEL_BODY_HEIGHT,
+                  height: iframeHostHeight,
+                  // Collapse (don't unmount) while another tab owns the session so
+                  // the ref survives for a later takeover.
+                  overflow: 'hidden',
                 }}
               />
             )}

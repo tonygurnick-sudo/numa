@@ -2,8 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Card, Collapse, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../Providers/AuthProvider';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { loadPlaybook } from '../../Services/voiceData';
+import { VoiceAdminService } from '../../Services/VoiceAdminService';
 import { inferIndustry } from '../../utils/voiceIndustry';
+import { matchObjection } from '../../utils/voiceLiveMatch';
+import { VOICE_CONTACT_EVENT } from '../../hooks/useConnectCcp';
+import type { VoiceContactEventDetail } from '../../hooks/useConnectCcp';
 import type { IndustryPanel, Prospect, SdrPlaybook } from '../../types/voice';
 
 /**
@@ -20,30 +25,19 @@ import type { IndustryPanel, Prospect, SdrPlaybook } from '../../types/voice';
  *   - hook lines for quick reference.
  * No streaming, no network beyond the one-shot playbook read on mount.
  *
- * STAGE 1 (scaffold only, gated behind `enableLiveMatch`): a placeholder slot
- * for future auto-surfacing of the most-relevant objection card, driven by
- * periodic transcript analysis. The UI affordance (a highlighted "suggested"
- * slot) is wired, but the transcript source is a deliberate TODO — it depends
- * on the mid-call streaming backend that does not exist yet. We do NOT fake
- * polling here.
+ * STAGE 1 (FEAT-168, gated behind `enableLiveMatch`): during a live call the
+ * sidebar polls the realtime Contact Lens transcript (via the voice-admin
+ * live-transcript route) every 60s, keyword-matches it against the active
+ * panel's `objections[*].keywords`, and auto-surfaces the best-matching card
+ * in a highlighted "suggested" slot — no SDR action required. Degrades to
+ * Stage 0 silently when Contact Lens isn't analysing the contact.
  *
- * Event contract (dispatched by the CCP softphone widget — see integration_needs):
- *   window event name: 'numa-voice-contact'
- *   detail: { phase: 'connected' | 'acw' | 'ended' | string; prospect?: Prospect }
- *   On phase === 'connected' we (re)bind to detail.prospect and reset the stepper.
- *   On phase === 'ended' we clear the active prospect.
+ * Event contract: the canonical `numa-voice-contact` event name + detail type
+ * live in `hooks/useConnectCcp.ts` — imported, never re-declared, so producer
+ * and consumers cannot drift. On phase === 'connected' we (re)bind to
+ * detail.prospect and reset the stepper; on phase === 'ended' we clear the
+ * active prospect.
  */
-
-/** Window event the CCP softphone widget dispatches on contact lifecycle changes. */
-const VOICE_CONTACT_EVENT = 'numa-voice-contact';
-
-/** Detail payload carried by the `numa-voice-contact` window event. */
-interface VoiceContactEventDetail {
-  /** Amazon Connect contact lifecycle phase (connected → acw → ended). */
-  phase: string;
-  /** The prospect on the wire, present when phase === 'connected'. */
-  prospect?: Prospect;
-}
 
 /** Industry slug used as the fallback when a prospect's industry has no panel. */
 const FALLBACK_INDUSTRY = 'general';
@@ -102,14 +96,25 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
 }) => {
   const { t } = useTranslation('voice');
   const { getCredentials } = useAuth();
+  const { numaGet } = useNumaRequest();
 
   const [playbook, setPlaybook] = useState<SdrPlaybook | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<boolean>(false);
+  // Bumped by the Retry button to re-run the one-shot playbook load.
+  const [reloadToken, setReloadToken] = useState<number>(0);
 
   // Live prospect on the wire (set on `numa-voice-contact` connected). null until
   // a call connects; the brief/prep view falls back to `initialProspect`.
   const [liveProspect, setLiveProspect] = useState<Prospect | null>(null);
+  // FEAT-168: Amazon Connect contactId of the live call — the realtime
+  // transcript polling key. null between calls.
+  const [liveContactId, setLiveContactId] = useState<string | null>(null);
+  // Index (into the active panel's objections) of the live-matched suggestion.
+  const [suggestedIndex, setSuggestedIndex] = useState<number | null>(null);
+  // False once the backend reports Contact Lens is NOT analysing this contact —
+  // stop polling and render Stage 0 only.
+  const [liveAssistAvailable, setLiveAssistAvailable] = useState<boolean>(true);
   // The connected prospect always wins; otherwise show the seeded next prospect.
   const prospect = liveProspect ?? initialProspect ?? null;
 
@@ -117,6 +122,8 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
   const [questionIndex, setQuestionIndex] = useState<number>(0);
   // STAGE 0: which objection rows are expanded (by objection index).
   const [openObjections, setOpenObjections] = useState<Set<number>>(new Set());
+  // STAGE 0: deal-signals the SDR has ticked off during the call (by index).
+  const [checkedSignals, setCheckedSignals] = useState<Set<number>>(new Set());
 
   // ---------------------------------------------------------------------------
   // Load the playbook once on mount (one-shot direct-S3 read).
@@ -154,7 +161,7 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [getCredentials]);
+  }, [getCredentials, reloadToken]);
 
   // ---------------------------------------------------------------------------
   // Bind to the live call: the CCP softphone widget dispatches
@@ -172,11 +179,19 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
       if (!detail) return;
       if (detail.phase === 'connected' && detail.prospect) {
         resetForProspect(detail.prospect);
-      } else if (detail.phase === 'ended') {
-        resetForProspect(null);
+        setLiveContactId(detail.contactId ?? null);
+        setSuggestedIndex(null);
+        setLiveAssistAvailable(true);
+      } else if (detail.phase === 'acw' || detail.phase === 'ended') {
+        // The live transcript poll must stop the moment the call leaves the wire.
+        // 'ended' often never fires (it only fires when the agent CLOSES the
+        // contact), so clearing liveContactId only on 'ended' would keep polling
+        // the backend every 60s through the entire wrap-up. Stop on 'acw' too —
+        // the playbook content stays visible via liveProspect; only the poll ends.
+        setLiveContactId(null);
+        setSuggestedIndex(null);
+        if (detail.phase === 'ended') resetForProspect(null);
       }
-      // 'acw' (after-call work) intentionally leaves the panel in place so the
-      // SDR can keep referencing the playbook while wrapping up.
     };
 
     window.addEventListener(VOICE_CONTACT_EVENT, onContact);
@@ -201,6 +216,43 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
   const discoveryQuestions = useMemo(() => panel?.discovery_questions ?? [], [panel]);
   const objections = useMemo(() => panel?.objections ?? [], [panel]);
   const hookLines = useMemo(() => panel?.hook_lines ?? [], [panel]);
+  const dealSignals = useMemo(() => panel?.deal_signals ?? [], [panel]);
+
+  // ---------------------------------------------------------------------------
+  // FEAT-168 STAGE 1: poll the realtime Contact Lens transcript every 60s
+  // during a live call and keyword-match it against the active panel's
+  // objections. First poll after 15s (a 0s poll has nothing to read yet).
+  // Stops permanently for the call when the backend reports live assist is
+  // unavailable (Contact Lens off / older deploy) — Stage 0 is unaffected.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!enableLiveMatch || !liveContactId || !liveAssistAvailable || objections.length === 0) return undefined;
+    let cancelled = false;
+
+    const poll = async (): Promise<void> => {
+      try {
+        const res = await VoiceAdminService.getLiveTranscript(numaGet, liveContactId);
+        if (cancelled) return;
+        if (!res.enabled) {
+          setLiveAssistAvailable(false); // tears this effect down via deps
+          return;
+        }
+        setSuggestedIndex(matchObjection(res.segments ?? [], objections));
+      } catch (err) {
+        // Transient poll failure — keep the previous suggestion and try again
+        // on the next tick; never disturb the call UI over it.
+        console.warn('[SdrAssist] live transcript poll failed', err);
+      }
+    };
+
+    const firstPoll = setTimeout(() => void poll(), 15_000);
+    const interval = setInterval(() => void poll(), 60_000);
+    return () => {
+      cancelled = true;
+      clearTimeout(firstPoll);
+      clearInterval(interval);
+    };
+  }, [enableLiveMatch, liveContactId, liveAssistAvailable, objections, numaGet]);
 
   // 'brief' prep view applies only when seeded but no call is on the wire.
   const isPrep = variant === 'brief' && !liveProspect && !!prospect;
@@ -242,9 +294,15 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
 
     if (loadError) {
       return (
-        <div className="text-muted py-3">
-          <i className="bi bi-exclamation-triangle me-2" aria-hidden="true" />
-          {t('assist.noPanel')}
+        <div className="py-3">
+          <div className="text-warning-emphasis mb-2">
+            <i className="bi bi-exclamation-triangle me-2" aria-hidden="true" />
+            {t('assist.loadError', { defaultValue: "Couldn't load the assist playbook." })}
+          </div>
+          <Button variant="outline-secondary" size="sm" onClick={() => setReloadToken((n) => n + 1)}>
+            <i className="bi bi-arrow-clockwise me-1" aria-hidden="true" />
+            {t('assist.retry', { defaultValue: 'Retry' })}
+          </Button>
         </div>
       );
     }
@@ -286,6 +344,7 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
           {renderHooks()}
           {renderDiscoveryQuestions()}
           {renderObjections()}
+          {renderDealSignals()}
         </>
       );
     }
@@ -296,6 +355,7 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
         {enableLiveMatch && renderSuggestedSlot()}
         {renderDiscoveryQuestions()}
         {renderObjections()}
+        {renderDealSignals()}
         {renderHooks()}
       </>
     );
@@ -323,29 +383,47 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
   };
 
   /**
-   * STAGE 1 SCAFFOLD — "suggested" objection slot.
+   * STAGE 1 — live "suggested" objection slot (FEAT-168).
    *
-   * TODO(stage-1): wire this slot to live transcript analysis. The mid-call
-   * streaming backend will emit the prospect's spoken objections; we will match
-   * them against `panel.objections[*].keywords` and surface the best-matching
-   * card here in real time. Until that backend exists this slot renders an empty
-   * affordance only — we explicitly do NOT fake polling or simulate a match.
+   * Fed by the 60s realtime-transcript poll above. Renders the best-matching
+   * objection card (highlighted, response expanded) when a keyword from the
+   * active panel was heard; a calm "listening" state while polling with no
+   * match yet; and nothing at all when live assist is unavailable for this
+   * contact (Stage 0 behaviour is untouched).
    */
-  const renderSuggestedSlot = () => (
-    <section className="mb-3" aria-label={t('assist.objections')} data-testid="voice-assist-suggested-slot">
-      <div className="border border-2 border-primary-subtle rounded p-2 bg-primary-subtle bg-opacity-25">
-        <div className="d-flex align-items-center gap-2 text-primary">
-          <i className="bi bi-stars" aria-hidden="true" />
-          <span className="fw-semibold small text-uppercase">{t('assist.objections')}</span>
-          <Badge bg="primary-subtle" text="primary" pill className="ms-auto">
-            <Spinner animation="grow" size="sm" role="status" aria-hidden="true" />
-          </Badge>
+  const renderSuggestedSlot = () => {
+    if (!liveAssistAvailable || !liveContactId) return null;
+    const suggested = suggestedIndex !== null ? objections[suggestedIndex] : null;
+    return (
+      <section
+        className="mb-3"
+        aria-label={t('assist.suggested', { defaultValue: 'Suggested response' })}
+        data-testid="voice-assist-suggested-slot"
+      >
+        <div className="border border-2 border-primary-subtle rounded p-2 bg-primary-subtle bg-opacity-25">
+          <div className="d-flex align-items-center gap-2 text-primary">
+            <i className="bi bi-stars" aria-hidden="true" />
+            <span className="fw-semibold small text-uppercase">
+              {t('assist.suggested', { defaultValue: 'Suggested response' })}
+            </span>
+            <Badge bg="primary-subtle" text="primary" pill className="ms-auto">
+              <Spinner animation="grow" size="sm" role="status" aria-hidden="true" />
+            </Badge>
+          </div>
+          {suggested ? (
+            <div className="mt-1" data-testid="voice-assist-suggested-card">
+              <div className="fw-semibold small">{suggested.label}</div>
+              <div className="small">{suggested.response}</div>
+            </div>
+          ) : (
+            <div className="small text-muted mt-1">
+              {t('assist.listening', { defaultValue: 'Listening for objections…' })}
+            </div>
+          )}
         </div>
-        {/* TODO(stage-1): replace this placeholder with the live-matched objection card. */}
-        <div className="small text-muted mt-1">{t('assist.loading')}</div>
-      </div>
-    </section>
-  );
+      </section>
+    );
+  };
 
   const renderDiscoveryQuestions = () => {
     if (discoveryQuestions.length === 0) return null;
@@ -450,6 +528,46 @@ export const SdrAssistSidebar: React.FC<SdrAssistSidebarProps> = ({
               <span>{hook}</span>
             </li>
           ))}
+        </ul>
+      </section>
+    );
+  };
+
+  const renderDealSignals = () => {
+    if (dealSignals.length === 0) return null;
+    const toggle = (index: number) =>
+      setCheckedSignals((prev) => {
+        const next = new Set(prev);
+        if (next.has(index)) next.delete(index);
+        else next.add(index);
+        return next;
+      });
+    return (
+      <section className="mb-3" aria-label={t('assist.dealSignals')}>
+        <div className="text-uppercase small fw-semibold text-muted mb-2">
+          <i className="bi bi-flag me-1" aria-hidden="true" />
+          {t('assist.dealSignals')}
+        </div>
+        <ul className="list-unstyled mb-0 d-flex flex-column gap-1">
+          {dealSignals.map((signal, index) => {
+            const checked = checkedSignals.has(index);
+            return (
+              <li key={index}>
+                <button
+                  type="button"
+                  className="btn btn-link p-0 text-start text-decoration-none small d-flex align-items-start gap-2 w-100"
+                  aria-pressed={checked}
+                  onClick={() => toggle(index)}
+                >
+                  <i
+                    className={`bi ${checked ? 'bi-check-square text-success' : 'bi-square text-muted'} mt-1`}
+                    aria-hidden="true"
+                  />
+                  <span className={checked ? 'text-success' : ''}>{signal}</span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       </section>
     );

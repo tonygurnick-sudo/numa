@@ -162,7 +162,7 @@ function DroppableColumn({
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-const CrmMirrorView = (): React.JSX.Element => {
+const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | null } = {}): React.JSX.Element => {
   const { t } = useTranslation('ops');
   const { numaGet, numaPut } = useNumaRequest();
   const { config, crmRefreshVersion } = useOps();
@@ -782,6 +782,15 @@ const CrmMirrorView = (): React.JSX.Element => {
     setDetailCustomerId(customer.id);
     setShowDetail(true);
   }, []);
+
+  // Deep-link: open a customer's detail on mount when arriving via /ops?customer={id}
+  // (e.g. the AE clicking "View prospect" on a Numa Voice hand-off notification).
+  useEffect(() => {
+    if (initialCustomerId) {
+      setDetailCustomerId(initialCustomerId);
+      setShowDetail(true);
+    }
+  }, [initialCustomerId]);
 
   // ── Drag handlers ────────────────────────────────────────────────────────
   const handleDragStart = useCallback(

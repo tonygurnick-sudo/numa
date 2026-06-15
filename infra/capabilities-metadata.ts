@@ -118,6 +118,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: ['NUMA_OPS'],
   },
   {
+    flag: 'VOICE_ANALYTICS',
+    title: 'Voice Analytics',
+    description:
+      'Contact-center dashboard + call logs for Numa Voice — call volume, dispositions, per-agent efficiency, recording playback, transcripts, and live monitoring.',
+    icon: 'bi-graph-up',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['NUMA_VOICE'],
+  },
+  {
     flag: 'KNOWLEDGE_BASES',
     title: 'Knowledge Bases',
     description: 'Enterprise search and retrieval from uploaded documents.',

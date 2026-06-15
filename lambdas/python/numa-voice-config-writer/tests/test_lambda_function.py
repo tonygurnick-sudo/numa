@@ -1,9 +1,11 @@
 """Tests for the Numa Voice config-writer handler."""
 
 import os
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 os.environ["CLIENT_CONFIG_TABLE_NAME"] = "test-client-config"
 
@@ -11,8 +13,12 @@ import lambda_function as lf
 from security_validator import SecurityValidationError
 
 
-class _Ctx:
+class _FakeCtx:
     function_name = "numa-voice-config-writer"
+
+
+def _Ctx() -> LambdaContext:  # noqa: N802 — keep call-site spelling
+    return cast(LambdaContext, _FakeCtx())
 
 
 def _validation(client_name="arcanum-demo-tony"):
@@ -32,8 +38,13 @@ class TestDidCleaning:
             "+14155550123",
         ]
 
-    def test_drops_non_e164_and_empty(self):
-        assert lf._clean_did_numbers(["021234567", "", "notanumber", 42]) is None
+    def test_drops_non_e164_yielding_empty_list(self):
+        # A list with no valid entries cleans to [] (not None) so releasing every
+        # DID actually persists an empty list rather than leaving stale numbers.
+        assert lf._clean_did_numbers(["021234567", "", "notanumber", 42]) == []
+
+    def test_explicit_empty_list_is_empty_not_none(self):
+        assert lf._clean_did_numbers([]) == []
 
     def test_non_list_is_none(self):
         assert lf._clean_did_numbers("nope") is None
@@ -80,6 +91,29 @@ class TestHandler:
             )
         assert res["statusCode"] == 403
 
+    def test_rejects_sibling_voice_admin_role(self):
+        # BUG-242: greg's voice-admin role proven by STS, but claiming tony's
+        # client_name — the role↔client binding must deny before any write.
+        with patch.object(lf, "_get_validator") as gv:
+            gv.return_value.validate_request.return_value = _validation(
+                "arcanum-demo-greg"
+            )
+            gv.return_value.authorize_role_for_client.side_effect = (
+                SecurityValidationError("Role not authorized for this client")
+            )
+            res = lf.handler(
+                {
+                    "sts_proof_url": _PROOF,
+                    "client_name": "arcanum-demo-tony",
+                    "recordings_bucket": "b",
+                },
+                _Ctx(),
+            )
+        assert res["statusCode"] == 403
+        gv.return_value.authorize_role_for_client.assert_called_once_with(
+            "arcanum-demo-tony", "arcanum-demo-greg_voice-admin"
+        )
+
     def test_writes_scoped_nested_fields_for_authorized_client(self):
         table = MagicMock()
         with patch.object(lf, "_get_validator") as gv, patch.object(
@@ -106,6 +140,10 @@ class TestHandler:
         # The caller account was authorized against this client before any write.
         gv.return_value.authorize_client_write.assert_called_once_with(
             "arcanum-demo-tony", "905418183804"
+        )
+        # And the claimed client_name was bound to the STS-proven caller role.
+        gv.return_value.authorize_role_for_client.assert_called_once_with(
+            "arcanum-demo-tony", "arcanum-demo-tony_voice-admin"
         )
         kwargs = table.update_item.call_args.kwargs
         assert kwargs["Key"] == {"clientName": "arcanum-demo-tony"}

@@ -17,7 +17,7 @@ export class NotificationService {
   static async createNotification(
     userId: string,
     eventType: 'started' | 'completed' | 'partial' | 'failed' | 'cancelled',
-    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription',
+    scheduleType: 'agent' | 'application' | 'data_sync' | 'transcription' | 'connector' | 'voice_call',
     scheduleId: string,
     title: string,
     message: string,

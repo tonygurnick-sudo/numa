@@ -233,6 +233,11 @@ export class NumaClientStack extends TerraformStack {
       knowledgeBase: knowledgeBase,
       deployerRoleArn: deployerRole,
       emailSenderLambdaArn,
+      // FEAT-167: browser-upload grant for the voice prospect-intake bucket.
+      // Name must match NumaVoiceConstruct's intakeBucketName derivation.
+      voiceIntakeBucketArn: clientConfig.numaVoice
+        ? `arn:aws:s3:::numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}-prospect-intake`
+        : undefined,
     });
 
     // ── Disaster Recovery ────────────────────────────────────────────────────
@@ -829,6 +834,10 @@ export class NumaClientStack extends TerraformStack {
         voiceRegion: NUMA_VOICE_REGION,
         voiceProvider,
         clientAccountId: clientConfig.clientAccountId,
+        // Resolved tenant origin (custom domain or standard subdomain) — drives the
+        // Connect Approved Origin + intake-bucket upload CORS so custom-domain
+        // tenants aren't locked out.
+        frontendOrigin: `https://${domainName}`,
         connectInstanceUrl: clientConfig.connectInstanceUrl,
         // FEAT-169 config write-back relay (deployer account, fixed name).
         voiceConfigWriterLambdaArn,
@@ -850,6 +859,11 @@ export class NumaClientStack extends TerraformStack {
         runnerArn: coreApis.agentScheduleRunnerLambda.arn,
         connectAutoProvision: clientConfig.connectAutoProvision,
         connectClaimDid: clientConfig.connectClaimDid,
+        // FEAT-164: per-client morning call-prep run time (defaults inside the construct).
+        callPrepTime: clientConfig.voiceCallPrepTime,
+        callPrepTimezone: clientConfig.voiceCallPrepTimezone,
+        // FEAT-168: realtime Contact Lens for the live-assist sidebar (off by default).
+        liveAssist: clientConfig.voiceLiveAssist,
         // Seed (AdminGetUser) must run after the system user is created.
         systemUserDependsOn: core.systemUserCreator.dependsOn,
       });
@@ -1076,6 +1090,10 @@ export class NumaClientStack extends TerraformStack {
         // Numa Voice (Amazon Connect + AI call intelligence). Emitted explicitly
         // so getFlag('NUMA_VOICE') does NOT default-true on older deployments.
         NUMA_VOICE: clientConfig.numaVoice ?? false,
+        // Voice Analytics ships with Voice (admin can toggle it off via the
+        // Capabilities tab). Tied to numaVoice to avoid a new client-config key
+        // (which would need adding to both the infra + CSP config schemas).
+        VOICE_ANALYTICS: clientConfig.numaVoice ?? false,
         // When autoProvision creates the instance, derive its access URL from the
         // deterministic instance alias (numa-{client}{envSuffix}, matching the
         // construct) so the softphone is wired in ONE deploy — no manual
@@ -1088,6 +1106,20 @@ export class NumaClientStack extends TerraformStack {
               // *.awsapps.com host does NOT resolve for instances created via CreateInstance.
               `https://numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}.my.connect.aws`
             : ''),
+        // Connect/Transcribe always live in NUMA_VOICE_REGION regardless of the
+        // client's primary region — emit it so the FE CCP hook doesn't rely on
+        // its hardcoded fallback.
+        CONNECT_REGION: NUMA_VOICE_REGION,
+        // FEAT-168: live-assist (realtime transcript keyword matching). Emitted
+        // explicitly so the FE's hidden-by-default check (sessionStorage ===
+        // 'true') stays false on older deployments.
+        VOICE_LIVE_ASSIST: clientConfig.voiceLiveAssist ?? false,
+        // FEAT-167: prospect-spreadsheet intake bucket (client region) — the FE
+        // uploads .xlsx here; its S3 notification fires the ingest agent. Name
+        // must match NumaVoiceConstruct's intakeBucketName derivation.
+        VOICE_INTAKE_BUCKET: clientConfig.numaVoice
+          ? `numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}-prospect-intake`
+          : '',
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
@@ -1681,6 +1713,11 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * (details / version history / copy link) in the Files Remote UI.
          * Sub-capability of data connectors; ships dark by default.
          *
+         * Schema-only on this branch: the feature's config.json wiring and
+         * frontend gating live on the Synergy parity branch. Declared here so
+         * the strict client-config parse tolerates the flag already present on
+         * dev-stack configs (e.g. arcanum-demo-tony) without failing synth.
+         *
          * @default false
          */
         synergyFileParity: z.boolean().optional().default(false),
@@ -1751,21 +1788,32 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         connectInstanceUrl: z.string().optional(),
 
         /**
-         * Numa Voice call-recording S3 bucket name. Written back into client config
-         * by the numa-voice-config-writer Lambda (FEAT-169) so it's discoverable in
-         * the single source of truth rather than only recomputed by convention.
-         * Write-back field — not admin-authored. Declared here so the strict deploy
-         * schema accepts it (the writer pre-validates the value).
+         * FEAT-169 write-back fields. numa-voice-config-writer (deployer account)
+         * persists these from the voice-admin Lambda so the recordings bucket and
+         * claimed DID numbers are discoverable in tenant config. They are
+         * informational for the stack (the bucket name is always re-derived by
+         * convention) but MUST be in the schema — the first write-back would
+         * otherwise fail every subsequent deploy with `unrecognized_keys`.
          */
         recordingsBucket: z.string().optional(),
+        didNumbers: z.array(z.string()).optional(),
 
         /**
-         * Numa Voice claimed DID phone numbers (E.164). Written back into client
-         * config by the numa-voice-config-writer Lambda (FEAT-169) on claim/release.
-         * Write-back field — not admin-authored. Declared here so the strict deploy
-         * schema accepts it (the writer de-dupes, E.164-validates, and caps at 100).
+         * FEAT-164: local time ('HH:MM' 24-hour) + IANA timezone the morning
+         * Call List Preparer runs at. Defaults: 07:30 Pacific/Auckland.
          */
-        didNumbers: z.array(z.string()).optional(),
+        voiceCallPrepTime: z
+          .string()
+          .regex(/^([01]?\d|2[0-3]):[0-5]\d$/, "voiceCallPrepTime must be 'HH:MM' 24-hour")
+          .optional(),
+        voiceCallPrepTimezone: z.string().optional(),
+
+        /**
+         * FEAT-168: real-time Contact Lens on outbound calls feeding the SDR
+         * assist sidebar's live keyword matching. Adds per-minute Contact Lens
+         * cost — default false (zero cost when off).
+         */
+        voiceLiveAssist: z.boolean().optional().default(false),
 
         /**
          * Feature flags from other branches (not yet implemented in this branch)

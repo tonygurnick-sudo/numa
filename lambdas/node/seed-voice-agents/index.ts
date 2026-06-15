@@ -274,10 +274,12 @@ export const handler = async (): Promise<{ statusCode: number; body: string }> =
     conversation_id: `voice-callprep-${CLIENT_NAME}`,
     prompt_text: CALL_PREP_PROMPT,
     trigger_type: 'cron',
-    // AWS EventBridge 6-field wrapped form required by validateCronExpression;
-    // matches the construct's SchedulerSchedule (cron(30 7 * * ? *)).
-    cron_expression: 'cron(30 7 * * ? *)',
-    timezone: 'Pacific/Auckland',
+    // AWS EventBridge 6-field wrapped form required by validateCronExpression.
+    // FEAT-164: the construct passes its derived cron/timezone via env so this
+    // record always mirrors the SchedulerSchedule that actually fires; the
+    // fallbacks match the construct defaults (07:30 Pacific/Auckland).
+    cron_expression: process.env.CALL_PREP_CRON || 'cron(30 7 * * ? *)',
+    timezone: process.env.CALL_PREP_TIMEZONE || 'Pacific/Auckland',
     status: 'active',
     event_type: 'agent',
     agent_id: AGENT_IDS.callPrep,

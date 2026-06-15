@@ -2017,6 +2017,7 @@ export class CoreNumaInfra extends Construct {
       outputsBucket: this.outputsBucket,
       companyBucket: this.companyBucket,
       chatHistoryTable: this.chatHistoryTable,
+      voiceIntakeBucketArn: props.voiceIntakeBucketArn,
       groups: props.groups,
       pipedreamIntegrations: props.pipedreamIntegrations,
       pipedreamRelayLambdaArn: pipedreamRelayLambda?.lambda.arn,
@@ -2278,6 +2279,9 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
       groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
       brandingAssetsBucketArn: z.string().optional(),
       brandingAssetsPrefix: z.string().optional(),
+      /** FEAT-167: voice prospect-intake bucket ARN (set only when numaVoice is
+       *  on) — threaded to CognitoGroupsConstruct for the browser upload grant. */
+      voiceIntakeBucketArn: z.string().optional(),
     })
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {

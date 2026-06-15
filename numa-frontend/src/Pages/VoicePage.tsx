@@ -53,6 +53,9 @@ export const VoicePage: React.FC = () => {
   const voiceEnabled = getFlag('NUMA_VOICE');
 
   const [prospects, setProspects] = useState<Prospect[]>([]);
+  // FEAT-164: generated_at stamped by the Call List Preparer — drives the
+  // freshness chip in the header (and its "not prepared today" warning).
+  const [listGeneratedAt, setListGeneratedAt] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   // Bumped to re-trigger the load effect on Retry.
@@ -84,6 +87,15 @@ export const VoicePage: React.FC = () => {
     if (!voiceEnabled) return undefined;
     return subscribeVoiceContact((detail) => {
       setCallState((prev) => {
+        // ACW is sacred: an open wrap-up holds the SDR's unsaved disposition, so
+        // NO event may silently replace it — including a SECOND call's 'acw' event
+        // (an inbound call ending while the SDR is mid-wrap-up would otherwise
+        // re-seed the panel and wipe their entries). Keep ACW until the SDR
+        // saves/dismisses (which fires onDismissed → idle). Dialing is already
+        // blocked during ACW, so the common path can't even reach here.
+        if (prev.phase === 'acw') {
+          return prev;
+        }
         switch (detail.phase) {
           case 'connecting':
             return { phase: 'connecting', prospect: detail.prospect ?? prev.prospect };
@@ -97,8 +109,8 @@ export const VoicePage: React.FC = () => {
               durationSeconds: detail.durationSeconds,
             };
           case 'ended':
-            // Keep an open wrap-up (acw) alive until the SDR saves/dismisses.
-            if (prev.phase === 'acw') return prev;
+            // An open wrap-up (prev.phase === 'acw') is already returned by the
+            // guard above, so here we are guaranteed not in ACW → go idle.
             return { phase: 'idle' };
           default:
             return prev;
@@ -106,6 +118,21 @@ export const VoicePage: React.FC = () => {
       });
     });
   }, [voiceEnabled]);
+
+  // Self-heal a stuck call-phase. Once the prospect we're tracking has a recorded
+  // call_outcome the call is definitively over — either the SDR saved the wrap-up or
+  // the post-call agent processed it (the latter happens on no-wrap-up calls, e.g. a
+  // voicemail where the SDR never "Close contact"s in Amazon Connect ACW). Return to
+  // idle so the "On call" chip clears AND dialing unblocks (a stuck 'acw' sets
+  // queueBusy, which disables EVERY row's Dial button — the "can't redial" bug).
+  // Fires for connecting/connected/acw but NOT idle. The call_outcome guard means it
+  // never closes a wrap-up panel that's still being filled (outcome unset until saved).
+  useEffect(() => {
+    const tracked = callState.prospect;
+    if (!tracked || callState.phase === 'idle') return;
+    const updated = prospects.find((p) => p.phone && p.phone === tracked.phone);
+    if (updated?.call_outcome) setCallState({ phase: 'idle' });
+  }, [prospects, callState.phase, callState.prospect]);
 
   useEffect(() => {
     if (!voiceEnabled) {
@@ -132,6 +159,7 @@ export const VoicePage: React.FC = () => {
         const todayCalls = await loadTodayCalls(credentials);
         if (cancelled) return;
         setProspects(applyOverlay(todayCalls.calls));
+        setListGeneratedAt(todayCalls.generated_at);
         setLoading(false);
       } catch (err) {
         if (cancelled) return;
@@ -167,6 +195,7 @@ export const VoicePage: React.FC = () => {
       setRefreshing(true);
       const todayCalls = await loadTodayCalls(credentials);
       setProspects(applyOverlay(todayCalls.calls));
+      setListGeneratedAt(todayCalls.generated_at);
     } catch (err) {
       console.error('[VoicePage] refresh failed:', err);
     } finally {
@@ -219,7 +248,13 @@ export const VoicePage: React.FC = () => {
   const positionLabel = useMemo(() => {
     const focusProspect = callState.phase === 'idle' ? upNext : callState.prospect;
     if (!focusProspect) return undefined;
-    const index = prospects.indexOf(focusProspect);
+    // Match by phone, not object identity: during a call focusProspect is
+    // callState.prospect — an object captured at dial time, so after any
+    // background refresh replaces `prospects` with new object identities,
+    // indexOf would return -1 and the label would vanish mid-call.
+    const index = focusProspect.phone
+      ? prospects.findIndex((p) => p.phone && p.phone === focusProspect.phone)
+      : prospects.indexOf(focusProspect);
     if (index < 0) return undefined;
     return t('focus.position', { n: index + 1, total: prospects.length });
   }, [callState.phase, callState.prospect, upNext, prospects, t]);
@@ -272,6 +307,7 @@ export const VoicePage: React.FC = () => {
           isAdmin={isAdmin}
           filter={filter}
           onFilterChange={setFilter}
+          listGeneratedAt={listGeneratedAt}
         />
         <div className="container-fluid">
           <div className="d-flex align-items-center justify-content-center py-5 text-muted">
@@ -293,6 +329,7 @@ export const VoicePage: React.FC = () => {
           isAdmin={isAdmin}
           filter={filter}
           onFilterChange={setFilter}
+          listGeneratedAt={listGeneratedAt}
         />
         <div className="container-fluid">
           <div className="text-center py-5">
@@ -318,6 +355,7 @@ export const VoicePage: React.FC = () => {
         isAdmin={isAdmin}
         filter={filter}
         onFilterChange={setFilter}
+        listGeneratedAt={listGeneratedAt}
       />
 
       <div className="container-fluid pb-4">
@@ -328,6 +366,8 @@ export const VoicePage: React.FC = () => {
               phase={callState.phase}
               prospect={focusProspect}
               positionLabel={positionLabel}
+              contactId={callState.phase === 'acw' ? callState.contactId : undefined}
+              durationSeconds={callState.phase === 'acw' ? callState.durationSeconds : undefined}
               onSaved={handleSaved}
               onDismissed={handleDismissed}
             />
@@ -347,7 +387,14 @@ export const VoicePage: React.FC = () => {
 
           {/* SDR assist — prep view between calls, live playbook once connected. */}
           <div className="col-lg-4">
-            <SdrAssistSidebar initialProspect={upNext} variant={callState.phase === 'connected' ? 'live' : 'brief'} />
+            <SdrAssistSidebar
+              initialProspect={upNext}
+              variant={callState.phase === 'connected' ? 'live' : 'brief'}
+              // FEAT-168 Stage 1 — hidden-by-default flag check (sessionStorage,
+              // NOT getFlag: getFlag defaults missing keys to TRUE, which would
+              // light this up on every pre-FEAT-168 deployment).
+              enableLiveMatch={window.sessionStorage.getItem('VOICE_LIVE_ASSIST') === 'true'}
+            />
           </div>
         </div>
       </div>

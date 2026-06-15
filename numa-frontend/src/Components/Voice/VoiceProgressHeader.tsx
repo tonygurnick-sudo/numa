@@ -5,6 +5,8 @@ import ProgressBar from 'react-bootstrap/ProgressBar';
 import Spinner from 'react-bootstrap/Spinner';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { isListStale } from '../../utils/voiceFormat';
+import { ProspectUploadButton } from './ProspectUploadButton';
 
 /** Outcome / progress tallies derived from the prospect list (see VoicePage). */
 export interface VoiceProgressCounts {
@@ -25,6 +27,9 @@ interface VoiceProgressHeaderProps {
   isAdmin: boolean;
   filter: VoiceQueueFilter;
   onFilterChange: (filter: VoiceQueueFilter) => void;
+  /** ISO timestamp the Call List Preparer stamped on today_calls.json
+   *  (generated_at). Undefined when the file carries none. */
+  listGeneratedAt?: string;
 }
 
 /**
@@ -45,9 +50,16 @@ export const VoiceProgressHeader: React.FC<VoiceProgressHeaderProps> = ({
   isAdmin,
   filter,
   onFilterChange,
+  listGeneratedAt,
 }) => {
   const { t } = useTranslation('voice');
   const { total, done, interested, callback, qualified } = counts;
+
+  // FEAT-164: list-freshness chip. Computed at render — the page re-renders on
+  // every refresh/overlay change, so this stays current without a timer.
+  const generatedDate = listGeneratedAt ? new Date(listGeneratedAt) : null;
+  const generatedValid = generatedDate !== null && !Number.isNaN(generatedDate.getTime());
+  const stale = isListStale(listGeneratedAt, new Date());
 
   return (
     <header className="sticky-top bg-white border-bottom mb-3" style={{ zIndex: 1020 }}>
@@ -59,7 +71,32 @@ export const VoiceProgressHeader: React.FC<VoiceProgressHeaderProps> = ({
               <i className="bi bi-telephone-fill text-primary" aria-hidden="true"></i>
               {t('page.title')}
             </h1>
-            <p className="text-body-secondary small mb-0">{t('page.subtitle')}</p>
+            <p className="text-body-secondary small mb-0">
+              {t('page.subtitle')}
+              {generatedValid && (
+                <Badge
+                  bg={stale ? 'warning-subtle' : 'secondary-subtle'}
+                  text={stale ? 'warning-emphasis' : 'body-secondary'}
+                  pill
+                  className="ms-2 fw-normal"
+                  title={generatedDate.toLocaleString()}
+                >
+                  <i
+                    className={`bi ${stale ? 'bi-exclamation-triangle' : 'bi-clock-history'} me-1`}
+                    aria-hidden="true"
+                  ></i>
+                  {stale
+                    ? t('page.listStale', {
+                        defaultValue: 'List from {{when}} — today’s list has not been prepared yet',
+                        when: generatedDate.toLocaleDateString(),
+                      })
+                    : t('page.listGenerated', {
+                        defaultValue: 'List prepared {{when}}',
+                        when: generatedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      })}
+                </Badge>
+              )}
+            </p>
           </div>
           {isAdmin && (
             <Link to="/settings/admin/voice" className="btn btn-outline-secondary btn-sm text-nowrap">
@@ -92,6 +129,9 @@ export const VoiceProgressHeader: React.FC<VoiceProgressHeaderProps> = ({
               {qualified} {t('page.tally.qualified')}
             </Badge>
           </div>
+
+          {/* FEAT-167: researcher drop-off for prospect spreadsheets. */}
+          <ProspectUploadButton />
 
           <Button
             variant="link"

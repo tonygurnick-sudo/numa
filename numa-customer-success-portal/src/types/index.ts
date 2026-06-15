@@ -143,6 +143,7 @@ export const clientConfigSchema = z.object({
   workspaceChatModelSelection: z.boolean().optional(), // default: false
   numaOps: z.boolean().optional(), // default: false
   numaCliApi: z.boolean().optional(), // default: false — gates the numa-cli-api Lambda + /api/cli/* routes
+  synergyFileParity: z.boolean().optional(), // default: false (Synergy 12d file-interface parity; kept in sync with infra schema)
   numaDropZones: z.boolean().optional(), // default: false
   numaSharing: z.boolean().optional(), // default: false
   developerMode: z.boolean().optional(), // default: false
@@ -157,6 +158,23 @@ export const clientConfigSchema = z.object({
   siteWideSearch: z.boolean().optional(), // default: false
   racetechDataFeed: z.boolean().optional(), // default: false
   disasterRecovery: z.boolean().optional(), // default: false
+
+  // Numa Voice (Amazon Connect SDR telephony) — kept in sync with the infra
+  // schema in numa-client-stack.ts. recordingsBucket/didNumbers are written
+  // back at runtime by numa-voice-config-writer; without them here the portal
+  // rejects any voice-enabled client config with unrecognized_keys.
+  numaVoice: z.boolean().optional(), // default: false
+  connectAutoProvision: z.boolean().optional(), // default: false
+  connectClaimDid: z.boolean().optional(), // default: false
+  connectInstanceUrl: z.string().optional(),
+  recordingsBucket: z.string().optional(),
+  didNumbers: z.array(z.string()).optional(),
+  voiceCallPrepTime: z
+    .string()
+    .regex(/^([01]?\d|2[0-3]):[0-5]\d$/, "voiceCallPrepTime must be 'HH:MM' 24-hour")
+    .optional(), // morning call-list run (default 07:30) — same regex as the infra schema so bad input is rejected here, not at synth
+  voiceCallPrepTimezone: z.string().optional(), // IANA tz (default Pacific/Auckland)
+  voiceLiveAssist: z.boolean().optional(), // default: false — realtime Contact Lens live assist (billed/min)
   enableOpenApiDocs: z.boolean().optional(), // default: false
   v2Apps: z.boolean().optional(), // default: false
   publicDemo: z.boolean().optional(), // default: false
@@ -217,6 +235,15 @@ export const clientConfigSchema = z.object({
       valueTiers: z.record(z.string(), z.record(z.string(), z.number())).optional(),
       marginsByTier: z.record(z.string(), z.number()).optional(),
       monthlyAllocations: z.array(z.number().min(0)).optional(),
+      // Numa Voice consumption rates (USD/min): telephony + transcribe (+ contact lens).
+      // The non-LLM cost of a call; metered into the same ledger via numa-voice-credit-debit.
+      voiceRates: z
+        .object({
+          telephonyPerMin: z.number().min(0).optional(),
+          transcribePerMin: z.number().min(0).optional(),
+          contactLensPerMin: z.number().min(0).optional(),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -318,6 +345,10 @@ export const getDefaultClientConfigValues = () => ({
   publicDemo: false,
   publicDemoDailyLimitUsd: 10,
   mfa: false,
+  numaVoice: false,
+  connectAutoProvision: false,
+  connectClaimDid: false,
+  voiceLiveAssist: false,
 });
 
 // Helper to check if a config value differs from default

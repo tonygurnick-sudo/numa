@@ -53,6 +53,48 @@ describe('PostCallWrapUpPanel — prospect_phone guard', () => {
   });
 });
 
+describe('PostCallWrapUpPanel — dismiss nudge (unsaved outcome)', () => {
+  it('asks for confirmation before closing an unsaved wrap-up, and keeps the form on "Keep logging"', () => {
+    const onDismissed = vi.fn();
+    render(<PostCallWrapUpPanel onDismissed={onDismissed} />);
+    fireAcw({
+      phase: 'acw',
+      contactId: 'c4',
+      prospect: { company_name: 'Kauri', phone: '+6421677460', industry: 'Healthcare' },
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    });
+    // First click does NOT dismiss — it surfaces the inline confirm.
+    expect(onDismissed).not.toHaveBeenCalled();
+    expect(screen.getByText(/no outcome has been logged/i)).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /keep logging/i }));
+    });
+    expect(screen.queryByText(/no outcome has been logged/i)).not.toBeInTheDocument();
+    expect(onDismissed).not.toHaveBeenCalled();
+    // Form is still alive.
+    expect(screen.getByRole('button', { name: 'Interested' })).toBeInTheDocument();
+  });
+
+  it('dismisses (and informs the page) when the SDR confirms closing without logging', () => {
+    const onDismissed = vi.fn();
+    render(<PostCallWrapUpPanel onDismissed={onDismissed} />);
+    fireAcw({
+      phase: 'acw',
+      contactId: 'c5',
+      prospect: { company_name: 'Kauri', phone: '+6421677460', industry: 'Healthcare' },
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+    });
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /close without logging/i }));
+    });
+    expect(onDismissed).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('PostCallWrapUpPanel — recording-consent attestation (audit)', () => {
   it('shows a recording-disclosure attestation, checked by default, that can be toggled', () => {
     render(<PostCallWrapUpPanel />);

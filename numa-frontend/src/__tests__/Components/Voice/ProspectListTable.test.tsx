@@ -2,10 +2,11 @@
  * @vitest-environment jsdom
  */
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import '@testing-library/jest-dom';
 import { ProspectListTable } from '../../../Components/Voice/ProspectListTable';
+import { VOICE_CALL_STATE_EVENT } from '../../../hooks/useConnectCcp';
 import type { Prospect } from '../../../types/voice';
 
 const base: Prospect = {
@@ -62,5 +63,36 @@ describe('ProspectListTable — structured post-call detail (FEAT-165)', () => {
   it('does NOT show a disclosure on an un-called queue row', () => {
     const { container } = render(<ProspectListTable prospects={[base]} filter="todo" />);
     expect(container.querySelector('.bi-journal-text')).toBeNull();
+  });
+
+  // Bug A: a Done prospect must never get stuck showing "On call" / a green dial
+  // button, even if a stray 'connected' CCP event arrives for its phone (a missed
+  // idle event). The data invariant (call_outcome ⇒ not on call) is the backstop.
+  it('never enters the on-call state on a Done prospect even as the active prospect with a connected page phase', () => {
+    // Force the worst case the invariant guards: this Done prospect is BOTH the page's
+    // active prospect AND the page phase is stuck 'connected' (a missed CCP idle). The
+    // activePhone self-heal doesn't touch this clause — only the call_outcome invariant
+    // suppresses it. Also fire a stray connected event for its phone for good measure.
+    const { container } = render(
+      <ProspectListTable
+        prospects={[calledWithDetail]}
+        activeProspect={calledWithDetail}
+        phase="connected"
+        filter="done"
+      />
+    );
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(VOICE_CALL_STATE_EVENT, {
+          detail: { state: 'connected', phone: calledWithDetail.phone },
+        })
+      );
+    });
+    // A Done row must never render ANY on-call affordance: not the success-variant Dial
+    // button (keyed off isOnCall), and not the "On call" pill or green active-edge (keyed
+    // off isActiveProspect — the path that regressed once because it bypassed the invariant).
+    expect(container.querySelector('.btn-success')).toBeNull();
+    expect(container.querySelector('.bi-record-circle-fill')).toBeNull(); // "On call" pill icon
+    expect(container.querySelector('.border-success')).toBeNull(); // green active-edge
   });
 });
