@@ -48,6 +48,20 @@ MARGINS_BY_TIER: dict[str, float] = {
 # Tunable — confirm with Asa. (Does NOT touch the cost floor, which already self-limits at low cost.)
 TRIVIAL_CONSUMPTION_USD: float = 0.01
 
+# Per-model VALUE multiplier. The VALUE-tier credits are scaled by a per-model factor so the price
+# tracks how expensive the model that delivered the work is, relative to the Premium baseline
+# (Sonnet = 1.0, implicit/unlisted). The cheap Numa Standard Model bills 1/4; the premium Expert
+# model (Opus) bills 3x. Keyed on the canonical BARE model id — regional inference-profile prefixes
+# (us./global./au./…) are stripped before lookup, and the proxy stamps the opaque `numa-standard-model`
+# id on every Standard turn. It scales the *value* only; the cost-recovery floor is computed
+# separately from the model's real measured cost and is deliberately NOT scaled (the floor already
+# self-adjusts to true cost — scaling it too would double-count). Fleet-wide constants for now; could
+# become portal-tunable later. Applied per-conversation by `conversation_value_multiplier`.
+MODEL_VALUE_MULTIPLIER: dict[str, float] = {
+    "numa-standard-model": 0.25,  # Standard — cheap non-Anthropic model
+    "anthropic.claude-opus-4-6-v1": 3.0,  # Expert — Opus 4.6 (premium)
+}
+
 
 def floor_credits(
     consumption_usd: float,

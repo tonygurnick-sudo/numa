@@ -16,11 +16,12 @@ from typing import Any, Iterable, Optional
 
 from credit_pricing.credits import (
     AGENTCORE_MULT,
+    MODEL_VALUE_MULTIPLIER,
     TRIVIAL_CONSUMPTION_USD,
     floor_credits,
 )
 from credit_pricing.ledger import meta_item, msg_item
-from credit_pricing.pricing import recalculate_anthropic_cost
+from credit_pricing.pricing import _strip_prefix, recalculate_anthropic_cost
 from credit_pricing.tiers import tier_to_credits
 
 
@@ -34,6 +35,11 @@ class TurnCost:
     cache_read_tokens: int
     cache_creation_tokens: int
     recomputed_usd: Optional[float]
+    # The `result` event's `total_cost_usd` — the cost basis the runner wrote for this turn. Used
+    # ONLY as a fallback when `recomputed_usd` is None (non-Anthropic / unpriced model, e.g.
+    # `numa-standard-model`, where the relay supplies the true USD cost rather than the pricing
+    # table). Defaulted (trailing) so existing positional `TurnCost(...)` callers keep working.
+    result_cost_usd: Optional[float] = None
 
 
 def process_trace_events(
@@ -42,7 +48,10 @@ def process_trace_events(
     """Walk trace events once -> (per-result-turn costs, user texts, first_ts, last_ts).
 
     Model id is recovered from the preceding `assistant` event (it isn't on the `result` event).
-    Turns whose model isn't in the pricing table get ``recomputed_usd=None`` (cost-incomplete).
+    Turns whose model isn't in the pricing table get ``recomputed_usd=None``; the runner's
+    ``total_cost_usd`` from the same `result` event is captured as ``result_cost_usd`` so
+    ``build_conversation_rows`` can fall back to it (the true cost basis for non-Anthropic models
+    like ``numa-standard-model``) instead of treating the turn as $0.
     first_ts/last_ts are the earliest/latest event ``timestamp`` (ISO-8601, lexically comparable)
     — the conversation's real wall-clock span, including gaps where the user came back later.
     """
@@ -80,6 +89,14 @@ def process_trace_events(
                     user_texts.append(c.strip())
         elif etype == "result":
             usage = ev.get("usage") or {}
+            # The runner-written cost basis for this turn (top-level on the result event). For
+            # Anthropic models this is the recomputed figure and we don't use it (we recompute from
+            # tokens below); for unpriced models (numa-standard-model) the relay's true USD cost
+            # lands here and becomes the fallback basis in build_conversation_rows. May be None/null.
+            tcu_raw = ev.get("total_cost_usd")
+            result_cost_usd = (
+                float(tcu_raw) if isinstance(tcu_raw, (int, float)) else None
+            )
             it = int(usage.get("input_tokens") or 0)
             ot = int(usage.get("output_tokens") or 0)
             cr = int(usage.get("cache_read_input_tokens") or 0)
@@ -116,6 +133,7 @@ def process_trace_events(
                         cache_creation_5m_tokens=cw_5m,
                         cache_creation_1h_tokens=cw_1h,
                     ),
+                    result_cost_usd=result_cost_usd,
                 )
             )
             turn_idx += 1
@@ -149,6 +167,51 @@ def tools_value_signal(tools: list[str]) -> str:
     return f"tools / data-sources used ({len(tools)}): " + ", ".join(tools[:25])
 
 
+def conversation_value_multiplier(turns: list[TurnCost]) -> float:
+    """Per-model VALUE multiplier for a whole conversation (1.0 = full Premium-baseline price).
+
+    The conversation's PRIMARY model — the one that did the most work — sets the multiplier (Standard
+    0.25, Opus/Expert 3.0, everything else 1.0; see ``MODEL_VALUE_MULTIPLIER``). Work is measured by
+    cost first, tokens as a fallback. This is deliberately robust to the noise turns real traces
+    carry: a failed/blank turn (the SDK injects an assistant message with model ``<synthetic>``)
+    carries $0 cost and 0 tokens, so it can't cancel a Standard discount or fake a markup; and the
+    CLI's internal Haiku side-calls are too cheap to outweigh the model the user actually chose.
+
+    A flat max/min over the model SET is NOT robust — a single $0 ``<synthetic>`` turn (seen in real
+    nd-labs Standard traces whenever a turn errored) flips max() from 0.25 to 1.0 and silently
+    cancels the discount. Weighting by work ignores those turns. Regional inference-profile prefixes
+    (us./global./…) are stripped so the canonical bare id matches the table.
+    """
+    cost_by_model: dict[str, float] = {}
+    tok_by_model: dict[str, int] = {}
+    for t in turns:
+        if not t.model:
+            continue
+        model = _strip_prefix(t.model)
+        cost = (
+            t.recomputed_usd
+            if t.recomputed_usd is not None
+            else (t.result_cost_usd or 0.0)
+        )
+        toks = (
+            t.input_tokens
+            + t.output_tokens
+            + t.cache_read_tokens
+            + t.cache_creation_tokens
+        )
+        cost_by_model[model] = cost_by_model.get(model, 0.0) + max(cost, 0.0)
+        tok_by_model[model] = tok_by_model.get(model, 0) + toks
+    if not cost_by_model:
+        return 1.0
+    # Primary = the model that did the most work. Cost first (failed/synthetic turns are $0, so they
+    # never win); fall back to tokens when the whole conversation somehow metered $0.
+    if any(c > 0 for c in cost_by_model.values()):
+        primary = max(cost_by_model, key=lambda m: cost_by_model[m])
+    else:
+        primary = max(tok_by_model, key=lambda m: tok_by_model[m])
+    return MODEL_VALUE_MULTIPLIER.get(primary, 1.0)
+
+
 def build_conversation_rows(
     *,
     conversation_id: str,
@@ -180,9 +243,18 @@ def build_conversation_rows(
     total_consumption_usd = 0.0
     unknown = 0
     for tn in turns:
-        incomplete = tn.recomputed_usd is None
+        # Cost basis: the recomputed Anthropic figure when we have it (known model — unchanged,
+        # byte-identical path); otherwise fall back to the runner-written total_cost_usd from the
+        # result event (the relay's true USD cost for unpriced models like numa-standard-model)
+        # rather than charging $0. A turn is cost-incomplete only when NEITHER yields a real (> 0)
+        # basis — a present, positive fallback rescues the turn and clears the incomplete flag.
+        if tn.recomputed_usd is not None:
+            cons_usd = tn.recomputed_usd
+            incomplete = False
+        else:
+            cons_usd = tn.result_cost_usd or 0.0
+            incomplete = cons_usd <= 0.0
         unknown += 1 if incomplete else 0
-        cons_usd = tn.recomputed_usd or 0.0
         fl = floor_credits(
             cons_usd, margin=margin, credit_usd=credit_usd
         )  # per-message detail only
@@ -226,9 +298,11 @@ def build_conversation_rows(
         floor_basis_usd, margin=eff_margin, credit_usd=credit_usd
     )
     if value_tier:
+        # Value-tier credits, scaled down for cheap-model conversations (Standard = 1/4). The floor
+        # above is left untouched — it already reflects the model's real (low) cost.
         credits_value = tier_to_credits(
             value_tier, context, overrides=value_tier_credits
-        )
+        ) * conversation_value_multiplier(turns)
         tier_hist = {value_tier: 1}
         dominant = value_tier
     else:
