@@ -100,6 +100,19 @@ _ready = False
 _REGION: str = ""
 _RELAY_URL: str = ""
 
+# ── Local-dev direct mode (NOT production) ──────────────────────────────────
+# When NUMA_STANDARD_LOCAL_DIRECT=1 *and* a developer-provided OPEN_ROUTER_TEST_KEY are BOTH present,
+# the proxy bypasses the deployer relay and calls OpenRouter directly (replicating the relay's
+# model-map + provider pin + usage accounting). This lets the Numa Standard Model run locally —
+# benchmarking, compaction / feature tests — without the AgentCore runtime role the relay requires.
+# Triple-gated and absent in every deployed client account (no flag, no key, relay URL set instead),
+# so production is unaffected. Resolved by _resolve_local_direct() in ensure_running().
+_LOCAL_DIRECT: bool = False
+_OPENROUTER_KEY: str = ""
+_OPENROUTER_URL: str = "https://openrouter.ai/api/v1/chat/completions"
+_UPSTREAM_MODEL: str = "deepseek/deepseek-v4-flash"
+_PROVIDER_ORDER: list[str] = ["novita"]
+
 # ── Cost accumulator (Option A, contract §4) ────────────────────────────────
 # The upstream relay returns the exact charged cost per request in the terminal usage
 # event (provider price + cache discount included). The relay forwards it. We
@@ -188,6 +201,81 @@ def _relay_headers() -> dict[str, str]:
     if relay_secret:
         headers["x-numa-relay-secret"] = relay_secret
     return headers
+
+
+def _resolve_local_direct() -> None:
+    """Resolve local-dev direct mode from env (see the _LOCAL_DIRECT block above). DEV ONLY —
+    activates only with the explicit flag AND a developer-provided key, neither of which exists in a
+    deployed client account."""
+    global _LOCAL_DIRECT, _OPENROUTER_KEY, _OPENROUTER_URL, _UPSTREAM_MODEL, _PROVIDER_ORDER
+    _OPENROUTER_KEY = os.environ.get("OPEN_ROUTER_TEST_KEY", "")
+    flag = os.environ.get("NUMA_STANDARD_LOCAL_DIRECT", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    _LOCAL_DIRECT = flag and bool(_OPENROUTER_KEY)
+    if flag and not _OPENROUTER_KEY:
+        logger.error(
+            "LOCAL DIRECT requested but OPEN_ROUTER_TEST_KEY is empty — using the relay instead",
+            _name="STANDARD_PROXY_LOCAL_DIRECT",
+        )
+    if _LOCAL_DIRECT:
+        _OPENROUTER_URL = os.environ.get(
+            "NUMA_STANDARD_OPENROUTER_URL", _OPENROUTER_URL
+        )
+        _UPSTREAM_MODEL = os.environ.get(
+            "NUMA_STANDARD_MODEL_UPSTREAM", _UPSTREAM_MODEL
+        )
+        _PROVIDER_ORDER = [
+            p.strip()
+            for p in os.environ.get(
+                "NUMA_STANDARD_MODEL_PROVIDER_ORDER", "novita"
+            ).split(",")
+            if p.strip()
+        ]
+        logger.warning(
+            "Numa Standard Model proxy in LOCAL DIRECT mode — bypassing the relay and calling "
+            "OpenRouter directly with a local key. DEV ONLY; never enabled in production.",
+            _name="STANDARD_PROXY_LOCAL_DIRECT",
+            upstream_model=_UPSTREAM_MODEL,
+            provider_order=_PROVIDER_ORDER,
+        )
+
+
+def _local_direct_payload(request_body: dict) -> dict:
+    """Local-direct mode: replicate the relay's _build_upstream_payload — swap the opaque model id
+    for the real upstream id and force streaming + usage accounting + reasoning + the provider pin.
+    """
+    payload = dict(request_body)
+    payload["model"] = _UPSTREAM_MODEL
+    payload["stream"] = True
+    payload["usage"] = {"include": True}
+    reasoning = payload.get("reasoning")
+    payload["reasoning"] = (
+        {**reasoning, "enabled": True}
+        if isinstance(reasoning, dict)
+        else {"enabled": True}
+    )
+    payload["provider"] = {
+        "order": _PROVIDER_ORDER,
+        "allow_fallbacks": True,
+        "data_collection": "deny",
+    }
+    return payload
+
+
+def _local_direct_headers() -> dict[str, str]:
+    """Local-direct OpenRouter headers (mirrors the relay's _upstream_headers, with the local key).
+    ASCII X-Title only — httpx encodes header values as ASCII (see the relay's em-dash note).
+    """
+    return {
+        "Authorization": f"Bearer {_OPENROUTER_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
+        "HTTP-Referer": os.environ.get("OPENROUTER_REFERER", "https://numa.arcanum.ai"),
+        "X-Title": "Numa - local-direct",
+    }
 
 
 # --------------------------------------------------------------------------
@@ -488,13 +576,20 @@ async def _relay_stream_chunks(request_body: dict) -> AsyncIterator[dict]:
     Raises ``_RelayError`` (carrying the raw upstream status/body for the H1
     retry decision) on a non-200; the body is never surfaced to the user.
     """
-    body_bytes = json.dumps(request_body).encode("utf-8")
+    # Local-dev direct mode swaps the deployer relay for a direct OpenRouter call (DEV ONLY); the SSE
+    # parsing below is identical because OpenRouter's stream is exactly what the relay forwards.
+    if _LOCAL_DIRECT:
+        url, headers = _OPENROUTER_URL, _local_direct_headers()
+        body_bytes = json.dumps(_local_direct_payload(request_body)).encode("utf-8")
+    else:
+        url, headers = _RELAY_URL, _relay_headers()
+        body_bytes = json.dumps(request_body).encode("utf-8")
 
     async with httpx.AsyncClient(timeout=_RELAY_TIMEOUT) as client:
         async with client.stream(
             "POST",
-            _RELAY_URL,
-            headers=_relay_headers(),
+            url,
+            headers=headers,
             content=body_bytes,
         ) as response:
             if response.status_code != 200:
@@ -985,6 +1080,7 @@ async def ensure_running(region: str | None = None) -> None:
 
         _REGION = region or os.environ.get("AWS_REGION", "us-east-1")
         _RELAY_URL = os.environ.get("NUMA_STANDARD_MODEL_RELAY_URL", "")
+        _resolve_local_direct()
 
         logger.info(
             "Starting Numa Standard Model proxy",
@@ -992,6 +1088,7 @@ async def ensure_running(region: str | None = None) -> None:
             port=PROXY_PORT,
             region=_REGION,
             relay_configured=bool(_RELAY_URL),
+            local_direct=_LOCAL_DIRECT,
             forwarded_model=NUMA_STANDARD_MODEL_ID,
         )
 
