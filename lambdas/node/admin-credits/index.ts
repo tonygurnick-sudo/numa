@@ -90,7 +90,7 @@ const DEFAULT_CONFIG = {
   creditUsd: 0.3, // ~NZD $0.50/credit @ FX 1.69 — the NZD-anchored default
   margin: 2.0, // scalar fallback (unclassified); per-tier marginsByTier below are the real defence
   trivialConsumptionUsd: 0.01,
-  // Half-credit pricing steps (the floor rounds up to 0.5); agent stays cheaper than chat at every tier.
+  // Value tiers in half-credit steps; the cost-recovery floor rounds up to 0.1 credit. Agent stays cheaper than chat at every tier.
   valueTiers: {
     chat: { low: 1, medium: 2, high: 5, very_high: 8 },
     agent: { low: 0.5, medium: 1.5, high: 3, very_high: 5 },

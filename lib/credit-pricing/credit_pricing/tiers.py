@@ -45,8 +45,9 @@ VALID_CATEGORIES: tuple[str, ...] = (
     "compliance_grading",
 )
 
-# Value credits per tier (defaults @ $0.30/credit). Credits are priced in HALF-credit steps —
-# floor_credits() rounds up to the nearest 0.5, so fractional tiers genuinely bill. Agent runs stay
+# Value credits per tier (defaults @ $0.30/credit). Value tiers use half-credit steps (e.g. agent
+# low = 0.5); the cost-recovery floor (floor_credits) rounds up to the nearest 0.1 credit, so cheap
+# conversations bill in fine increments rather than snapping to a 0.5 minimum. Agent runs stay
 # cheaper than chat at every tier (0.5/1.5/3/5 vs 1/2/5/8). Tunable per client in the portal. Both
 # ad-hoc agent chats and scheduled runs price on the "agent" tier (context resolved upstream); only
 # plain chat uses "chat".

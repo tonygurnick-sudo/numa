@@ -164,21 +164,21 @@ FORBIDDEN_ADMIN = {
 # ════════════════════════════════════════════════════════════════════════════════════════════
 def test_pure_math() -> None:
     section("A. Pure pricing math (local lib)")
-    # floor: half-credit ceil of cost*margin/credit (defaults margin=2.0, credit=$0.30).
-    # cost 0.10 -> ceil2(0.10*2/0.30)=ceil2(0.667)=1.0
+    # floor: tenth-credit ceil of cost*margin/credit (defaults margin=2.0, credit=$0.30).
+    # cost 0.10 -> ceil10(0.10*2/0.30)=ceil10(0.667)=0.7
     check(floor_credits(0.0) == 0, "floor(0)==0")
-    check(floor_credits(0.10) == 1, "floor($0.10)==1", f"got {floor_credits(0.10)}")
+    check(floor_credits(0.10) == 0.7, "floor($0.10)==0.7", f"got {floor_credits(0.10)}")
     check(
         floor_credits(0.075) == 0.5,
         "floor($0.075)==0.5 (boundary: 0.075*2/0.30=0.5)",
         f"got {floor_credits(0.075)}",
     )
     check(
-        floor_credits(0.16) == 1.5,
-        "floor($0.16)==1.5 (rounds up to next half-credit)",
+        floor_credits(0.16) == 1.1,
+        "floor($0.16)==1.1 (rounds up to next tenth-credit)",
         f"got {floor_credits(0.16)}",
     )
-    check(floor_credits(5.0) == 33.5, "floor($5.00)==33.5", f"got {floor_credits(5.0)}")
+    check(floor_credits(5.0) == 33.4, "floor($5.00)==33.4", f"got {floor_credits(5.0)}")
     # monotonic
     check(
         all(floor_credits(c) <= floor_credits(c + 0.5) for c in [0.1, 1, 5, 20]),

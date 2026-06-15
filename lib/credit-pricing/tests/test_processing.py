@@ -414,8 +414,10 @@ def test_unpriced_model_no_total_cost_usd_stays_incomplete() -> None:
 def test_standard_model_value_is_quartered() -> None:
     """The Numa Standard Model bills the VALUE tier at 1/4 (MODEL_VALUE_MULTIPLIER). The
     cost-recovery floor is left untouched (it already reflects the cheap real cost), so the charge
-    is max(value/4, floor) — here value/4 (1.25) binds over the cheap-model floor (0.5).
+    is max(value/4, floor) — here value/4 (1.25) binds over the cheap-model floor.
     """
+    from credit_pricing.credits import floor_credits
+
     turns, _, _, _ = processing.process_trace_events(
         iter(_standard_model_events(0.012)), cache_ttl="1h"
     )
@@ -434,10 +436,13 @@ def test_standard_model_value_is_quartered() -> None:
         agentcore_mult=1.0,  # isolate the value math from the AgentCore uplift
     )
     assert meta["creditsValue"] == 1.25  # high chat = 5, x0.25
-    assert meta["creditsFloor"] == 0.5  # cost-recovery floor NOT discounted
+    # Floor reflects the cheap real cost (NOT discounted), at tenth-credit granularity — and sits
+    # well below the quartered value, so the value binds. Parametric so a granularity change is safe.
+    assert meta["creditsFloor"] == floor_credits(0.012, margin=2.0, credit_usd=0.5)
+    assert meta["creditsFloor"] < meta["creditsValue"]
     assert (
         meta["creditsCharged"] == 1.25
-    )  # max(1.25, 0.5) -> the discounted value binds
+    )  # max(1.25, floor) -> the discounted value binds
 
 
 def test_premium_model_value_not_discounted() -> None:

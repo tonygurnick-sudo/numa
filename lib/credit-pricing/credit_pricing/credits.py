@@ -63,21 +63,33 @@ MODEL_VALUE_MULTIPLIER: dict[str, float] = {
 }
 
 
+# Granularity of the cost-recovery floor: it rounds UP to the nearest 1/FLOOR_STEPS_PER_CREDIT credit.
+# 10 = tenth-credit (0.1) steps — was 2 (half-credit, 0.5). Finer steps let cheap-model conversations
+# (e.g. the Numa Standard Model at 1/4 value) bill in small increments instead of snapping to a 0.5
+# minimum on any non-zero cost. Purely the rounding step: the ceil still keeps charge >= cost x margin,
+# so the margin guarantee is unchanged. Tune freely (2 / 10 / 20 = 0.5 / 0.1 / 0.05 credit steps).
+FLOOR_STEPS_PER_CREDIT: int = 10
+
+
 def floor_credits(
     consumption_usd: float,
     *,
     margin: float = MARGIN_TARGET,
     credit_usd: float = CREDIT_USD,
 ) -> float:
-    """Cost-recovery floor: the fewest half-credits whose value >= consumption x margin.
+    """Cost-recovery floor: the fewest tenth-credits whose value >= consumption x margin.
 
-    Rounds UP (to the nearest 0.5 credit) so the floored charge never dips below the target
-    margin. Half-credit granularity lets sub-1-credit value tiers (e.g. agent low = 0.5)
-    genuinely bill instead of being absorbed by a whole-credit ceil.
+    Rounds UP (to the nearest 0.1 credit — see ``FLOOR_STEPS_PER_CREDIT``) so the floored charge
+    never dips below the target margin. Tenth-credit granularity lets cheap-model conversations
+    (e.g. the Numa Standard Model at 1/4 value) bill in fine steps instead of snapping to a 0.5
+    minimum on any positive cost.
     """
     if consumption_usd <= 0:
         return 0
-    return math.ceil(consumption_usd * margin / credit_usd * 2) / 2
+    return (
+        math.ceil(consumption_usd * margin / credit_usd * FLOOR_STEPS_PER_CREDIT)
+        / FLOOR_STEPS_PER_CREDIT
+    )
 
 
 def credits_to_usd(credits: float, *, credit_usd: float = CREDIT_USD) -> float:
