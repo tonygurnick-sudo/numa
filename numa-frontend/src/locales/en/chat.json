@@ -23,7 +23,22 @@
     },
     "modelSelector": {
       "title": "Select Model",
-      "mobileTitle": "Select Model"
+      "mobileTitle": "Select Model",
+      "standard": {
+        "label": "Standard",
+        "description": "Fast & efficient for everyday tasks",
+        "creditNote": "1/4 the credits of Premium"
+      },
+      "premium": {
+        "label": "Premium",
+        "description": "Best for complex work and image-based tasks",
+        "creditNote": "Baseline credit rate"
+      },
+      "expert": {
+        "label": "Expert",
+        "description": "Maximum capability for the hardest problems",
+        "creditNote": "3× the credits of Premium"
+      }
     },
     "aria": {
       "upload": "Upload Files",
