@@ -17,7 +17,14 @@ import { AgentAvatarSelector } from './AgentAvatarSelector';
 import AgentAvatar from './AgentAvatar';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from './schedulingTypes';
 import type { AgentPayload, AgentSummary, AgentUpdatePayload, AgentReferenceFile, Team } from '../../types/agents';
-import type { IntegrationListItem, IntegrationMethod } from '../../types/workspaceChatTypes';
+import {
+  type IntegrationListItem,
+  type IntegrationMethod,
+  EXPERT_WORKSPACE_MODEL,
+  PREMIUM_WORKSPACE_MODEL,
+  STANDARD_WORKSPACE_MODEL,
+  WORKSPACE_MODEL_OPTIONS_CURATED,
+} from '../../types/workspaceChatTypes';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import {
   createAgent,
@@ -26,7 +33,7 @@ import {
   shareAgent,
   revokeAgentSharing,
 } from '../../Services/AgentsService';
-import { Users } from 'lucide-react';
+import { Cpu, Users } from 'lucide-react';
 import { ScheduleService } from '../../Services/ScheduleService';
 import { AdminAgentsService, type AgentsMode } from '../../Services/AdminAgentsService';
 import { PipedreamProxyService } from '../../Services/PipedreamProxyService';
@@ -86,6 +93,9 @@ const DEFAULT_PAYLOAD: AgentPayload = {
   userWelcomeMessage: '',
   icon: 'bi bi-robot',
   iconImage: undefined,
+  // Default to Premium (Sonnet 4.6) — the current Numa default model — so a new agent behaves
+  // exactly as agents do today; the author can switch to Standard / Expert in the builder.
+  modelId: PREMIUM_WORKSPACE_MODEL,
   toolsConfig: {
     autoToolsEnabled: true,
     queryDataSources: false,
@@ -487,6 +497,8 @@ export const AgentCreateModal = ({
         estimatedTimeSavedMinutes: editingAgent.estimatedTimeSavedMinutes,
         icon: editingAgent.icon ?? DEFAULT_PAYLOAD.icon,
         iconImage: editingAgent.iconImage,
+        // Existing agents with no stored model resolve to Premium (no behaviour change).
+        modelId: editingAgent.modelId ?? PREMIUM_WORKSPACE_MODEL,
         toolsConfig: {
           autoToolsEnabled: editingAgent.toolsConfig?.autoToolsEnabled ?? true,
           queryDataSources: editingAgent.toolsConfig?.queryDataSources ?? false,
@@ -1604,6 +1616,62 @@ export const AgentCreateModal = ({
                 <Row className="g-4">
                   <Col md={12}>
                     <div className="d-flex flex-column gap-3">
+                      {getFlag('WORKSPACE_CHAT_MODEL_SELECTION') && (
+                        <div className="p-3 bg-white border rounded-2">
+                          <div className="d-flex align-items-center gap-3 mb-3">
+                            <div
+                              className="rounded-2 d-flex align-items-center justify-content-center"
+                              style={{ width: 40, height: 40, backgroundColor: '#6c757d' }}
+                            >
+                              <Cpu size={20} color="white" />
+                            </div>
+                            <div>
+                              <div className="fw-semibold">{t('createModal.model.title')}</div>
+                              <small className="text-muted">{t('createModal.model.description')}</small>
+                            </div>
+                          </div>
+                          <div className="d-flex flex-column gap-2 ms-5">
+                            {WORKSPACE_MODEL_OPTIONS_CURATED.map((opt) => {
+                              const tierKey =
+                                opt.id === STANDARD_WORKSPACE_MODEL
+                                  ? 'standard'
+                                  : opt.id === EXPERT_WORKSPACE_MODEL
+                                    ? 'expert'
+                                    : 'premium';
+                              const noteClass =
+                                opt.creditNoteVariant === 'save'
+                                  ? 'text-success'
+                                  : opt.creditNoteVariant === 'premium'
+                                    ? 'text-warning-emphasis'
+                                    : 'text-muted';
+                              return (
+                                <Form.Check
+                                  key={opt.id}
+                                  type="radio"
+                                  id={`agent-model-${tierKey}`}
+                                  name="agent-model"
+                                  checked={(formState.modelId ?? PREMIUM_WORKSPACE_MODEL) === opt.id}
+                                  disabled={saving}
+                                  onChange={() => setFormState((prev) => ({ ...prev, modelId: opt.id }))}
+                                  label={
+                                    <span className="d-inline-block">
+                                      <span className="fw-medium">{t(`createModal.model.${tierKey}.label`)}</span>
+                                      <small className="text-muted d-block">
+                                        {t(`createModal.model.${tierKey}.description`)}
+                                      </small>
+                                      {opt.creditNoteKey && getFlag('SHOW_CREDITS') && (
+                                        <small className={`${noteClass} d-block`}>
+                                          {t(`createModal.model.${tierKey}.creditNote`)}
+                                        </small>
+                                      )}
+                                    </span>
+                                  }
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                       <div className="d-flex align-items-center justify-content-between p-3 bg-white border rounded-2">
                         <div className="d-flex align-items-center gap-3">
                           <div

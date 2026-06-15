@@ -106,6 +106,7 @@ import type {
 } from '../types/workspaceChatTypes';
 import {
   STANDARD_WORKSPACE_MODEL,
+  PREMIUM_WORKSPACE_MODEL,
   DEFAULT_WORKSPACE_MODEL,
   WORKSPACE_MODEL_OPTIONS,
   WORKSPACE_MODEL_OPTIONS_CURATED,
@@ -1390,6 +1391,16 @@ const NumaWorkspaceChatAgents = () => {
     applyAgentConfiguration(agent);
     setCurrentAgent(agent);
     setPendingAgent(agent);
+    // Seed the model for this new agent conversation from the agent's configured model (Premium for
+    // legacy agents with none) and mark settings modified so it persists to the conversation's
+    // chatConfig and survives reload. Set before the welcome message locks the selector; the existing
+    // per-conversation lock then applies as usual. Gated by the same flag as the chat model picker.
+    if (getFlag('WORKSPACE_CHAT_MODEL_SELECTION')) {
+      const agentModelId =
+        agent.modelId && KNOWN_WORKSPACE_MODEL_IDS.has(agent.modelId) ? agent.modelId : PREMIUM_WORKSPACE_MODEL;
+      setSelectedModelId(agentModelId);
+      markUserSettingsModified();
+    }
     setMessages([{ role: 'assistant', content: createAgentWelcomeMessage(agent) }]);
     setUploadedFiles([]);
     setIsManuallyLoading(false);

@@ -108,6 +108,9 @@ type WorkspaceAgentItem = {
   created_at: number;
   updated_at: number;
   version: number;
+  // Per-agent workspace-chat model (Standard / Premium / Expert). Optional — omitted means the
+  // platform default (Premium / Sonnet 4.6) is resolved at runtime. Validated via normaliseModelId.
+  model_id?: string;
 };
 
 type UserAgentItem = {
@@ -136,6 +139,8 @@ type UserAgentItem = {
   version: number;
   source_agent_id?: string;
   is_favorite?: boolean;
+  // Per-agent workspace-chat model (see WorkspaceAgentItem.model_id).
+  model_id?: string;
 };
 
 // Removed unused AgentRecord type to satisfy lint
@@ -154,6 +159,8 @@ type AgentResponse = {
   iconImage?: { s3Bucket: string; s3Key: string };
   requiredIntegrations: string[];
   toolsConfig: AgentToolsConfig;
+  /** Per-agent workspace-chat model id (Standard / Premium / Expert); omitted → platform default. */
+  modelId?: string;
   referenceFiles: ReferenceFile[];
   createdBy: {
     userId: string;
@@ -189,6 +196,8 @@ type CreateAgentPayload = {
   iconImage?: { s3Bucket: string; s3Key: string } | null;
   requiredIntegrations?: string[];
   toolsConfig?: AgentToolsConfig;
+  /** Per-agent workspace-chat model id (Standard / Premium / Expert). */
+  modelId?: string;
   referenceFiles?: ReferenceFile[];
   createdByName?: string;
   sourceAgentId?: string;
@@ -288,6 +297,23 @@ const normaliseIntegrationRows = (rows: unknown): IntegrationListItem[] | undefi
   return out;
 };
 
+// Valid agent model ids — the curated workspace-chat tiers an agent author can pick (Standard /
+// Premium / Expert). Mirrors WORKSPACE_MODEL_OPTIONS_CURATED in
+// numa-frontend/src/types/workspaceChatTypes.ts (the source of truth); the workspace agent's
+// validate_model_id() is the final backstop. An unknown / retired id normalises to undefined, so the
+// agent falls back to the platform default (Premium / Sonnet 4.6) at runtime — no behaviour change.
+const VALID_AGENT_MODEL_IDS = new Set<string>([
+  'numa-standard-model', // Standard — cheap non-Anthropic model
+  'anthropic.claude-sonnet-4-6@medium-thinking', // Premium — Sonnet 4.6 (default)
+  'anthropic.claude-opus-4-6-v1@medium-thinking', // Expert — Opus 4.6
+]);
+
+const normaliseModelId = (value?: string | null): string | undefined => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return VALID_AGENT_MODEL_IDS.has(trimmed) ? trimmed : undefined;
+};
+
 const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfig => {
   if (!config) return {};
   return {
@@ -375,6 +401,7 @@ const buildPersonalDuplicatePayload = (
     iconImage: agent.icon_image,
     requiredIntegrations: agent.required_integrations ?? [],
     toolsConfig: agent.tools_config ?? {},
+    modelId: agent.model_id,
     referenceFiles: processedReferenceFiles,
     sourceAgentId: resolveSourceAgentId(agent),
     tags: agent.tags ?? [],
@@ -416,6 +443,7 @@ const mapWorkspaceAgent = (item: WorkspaceAgentItem): AgentResponse => {
     iconImage: item.icon_image,
     requiredIntegrations: item.required_integrations ?? [],
     toolsConfig: normaliseToolsConfig(item.tools_config),
+    modelId: item.model_id,
     referenceFiles: normaliseReferenceFiles(item.reference_files),
     createdBy: {
       userId: item.created_by_user_id,
@@ -446,6 +474,7 @@ const mapUserAgent = (item: UserAgentItem): AgentResponse => {
     iconImage: item.icon_image,
     requiredIntegrations: item.required_integrations ?? [],
     toolsConfig: normaliseToolsConfig(item.tools_config),
+    modelId: item.model_id,
     referenceFiles: normaliseReferenceFiles(item.reference_files),
     createdBy: {
       userId: item.created_by_user_id,
@@ -487,6 +516,7 @@ const buildWorkspaceItem = (
     icon_image: payload.iconImage?.s3Bucket && payload.iconImage?.s3Key ? payload.iconImage : undefined,
     required_integrations: Array.isArray(payload.requiredIntegrations) ? payload.requiredIntegrations : [],
     tools_config: normaliseToolsConfig(payload.toolsConfig),
+    model_id: normaliseModelId(payload.modelId),
     reference_files: normaliseReferenceFiles(payload.referenceFiles),
     tags: normaliseTags(payload.tags),
     personas: normalisePersonas(payload.personas).values,
@@ -539,6 +569,10 @@ const buildUserItem = (
       ? payload.requiredIntegrations
       : (existing?.required_integrations ?? []),
     tools_config: normaliseToolsConfig(payload.toolsConfig ?? existing?.tools_config),
+    model_id:
+      'modelId' in payload && typeof payload.modelId === 'string'
+        ? normaliseModelId(payload.modelId)
+        : existing?.model_id,
     reference_files: normaliseReferenceFiles(payload.referenceFiles ?? existing?.reference_files),
     tags: normaliseTags(payload.tags ?? existing?.tags),
     personas: normalisePersonas(payload.personas ?? existing?.personas).values,
@@ -1117,6 +1151,10 @@ const handleUpdateAgent = async (
         ? payload.requiredIntegrations
         : (workspaceAgent.required_integrations ?? []),
       tools_config: normaliseToolsConfig(payload.toolsConfig ?? workspaceAgent.tools_config),
+      model_id:
+        'modelId' in payload && typeof payload.modelId === 'string'
+          ? normaliseModelId(payload.modelId)
+          : workspaceAgent.model_id,
       reference_files: normaliseReferenceFiles(payload.referenceFiles ?? workspaceAgent.reference_files),
       tags: normaliseTags(payload.tags ?? workspaceAgent.tags),
       personas: normalisePersonas(payload.personas ?? workspaceAgent.personas).values,
@@ -1410,6 +1448,7 @@ const duplicateAsWorkspaceAgent = async (
     iconImage: agent.icon_image,
     requiredIntegrations: agent.required_integrations ?? [],
     toolsConfig: agent.tools_config ?? {},
+    modelId: agent.model_id,
     referenceFiles: processedReferenceFiles,
     sourceAgentId: resolveSourceAgentId(agent),
     tags: agent.tags ?? [],
@@ -2182,6 +2221,7 @@ const handleAdminListAgents = async (auth: AuthContext): Promise<ReturnType<type
       tags: item.tags || [],
       personas: item.personas || [],
       industries: item.industries || [],
+      modelId: item.model_id,
     });
   }
 
@@ -2196,6 +2236,7 @@ const handleAdminListAgents = async (auth: AuthContext): Promise<ReturnType<type
       tags: item.tags || [],
       personas: item.personas || [],
       industries: item.industries || [],
+      modelId: item.model_id,
     });
   }
 

@@ -2276,6 +2276,15 @@ async def _handle_chat(
         has_kb_listings=kb_listings is not None,
     )
 
+    # Model precedence: an explicit request modelId wins; otherwise fall back to the agent's
+    # configured model (Standard / Premium / Expert), parsing its @thinking suffix the same way.
+    # Scheduled runs carry no request modelId, so the agent's model is authoritative there; if
+    # neither is set, model_id stays None and resolves to DEFAULT_MODEL (Premium / Sonnet 4.6).
+    if not raw_model_id and agent_config and agent_config.model_id:
+        model_id, thinking_override = parse_model_id_with_thinking(
+            agent_config.model_id
+        )
+
     # --- Post-gather: Apply agent config ---
     agent_file_paths: list[str] = []
     if agent_config:
@@ -2702,6 +2711,13 @@ async def _handle_sync(
                 error=str(e),
             )
 
+    # Model precedence: explicit request modelId wins; else fall back to the agent's configured
+    # model (parsing its @thinking suffix). Neither set → DEFAULT_MODEL (Premium / Sonnet 4.6).
+    if not raw_model_id and agent_config and agent_config.model_id:
+        model_id, thinking_override = parse_model_id_with_thinking(
+            agent_config.model_id
+        )
+
     # Resolve all approval modes (agent overrides > user settings > defaults)
     all_approval_modes_sync = resolve_all_approval_modes(user_sub, agent_config)
     effective_approval_mode = all_approval_modes_sync.get(
@@ -3036,6 +3052,12 @@ async def _handle_fire_and_forget(
                 agent_id=agent_id,
                 error=str(e),
             )
+    # Model precedence: explicit request modelId wins; else fall back to the agent's configured
+    # model (parsing its @thinking suffix). Neither set → DEFAULT_MODEL (Premium / Sonnet 4.6).
+    if not raw_model_id and agent_config and agent_config.model_id:
+        model_id, thinking_override = parse_model_id_with_thinking(
+            agent_config.model_id
+        )
     all_approval_modes_async = resolve_all_approval_modes(user_sub, agent_config)
     effective_approval_mode = all_approval_modes_async.get(
         "integrations", "non_destructive"

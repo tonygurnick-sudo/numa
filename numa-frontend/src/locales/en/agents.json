@@ -158,6 +158,25 @@
       "minutesShort": "min",
       "help": "Shown on the agent card to indicate value."
     },
+    "model": {
+      "title": "Model",
+      "description": "Which model powers this agent when it runs (in chat and on schedules).",
+      "standard": {
+        "label": "Standard",
+        "description": "Fast and cost-efficient for everyday tasks.",
+        "creditNote": "1/4 the credits of Premium"
+      },
+      "premium": {
+        "label": "Premium",
+        "description": "Balanced quality for most work (default).",
+        "creditNote": "Baseline credit rate"
+      },
+      "expert": {
+        "label": "Expert",
+        "description": "Most capable, for hard or high-stakes problems.",
+        "creditNote": "3× the credits of Premium"
+      }
+    },
     "tools": {
       "summary": {
         "auto": "Auto",
