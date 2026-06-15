@@ -346,6 +346,7 @@ __metadata:
     "@typescript-eslint/parser": "npm:^8.13.0"
     adm-zip: "npm:^0.5.16"
     chalk: "npm:^5.3.0"
+    cognito-srp-helper: "npm:^2.3.1"
     commander: "npm:^13.0.0"
     csv: "npm:^6.3.11"
     eslint: "npm:^9.14.0"
@@ -25693,6 +25694,21 @@ __metadata:
   languageName: node
   linkType: hard
 
+"cognito-srp-helper@npm:^2.3.1":
+  version: 2.3.5
+  resolution: "cognito-srp-helper@npm:2.3.5"
+  dependencies:
+    "@aws-sdk/client-cognito-identity-provider": "npm:^3.433.0"
+    "@types/crypto-js": "npm:3.1.47"
+    "@types/jsbn": "npm:1.2.30"
+    "@types/node": "npm:^18.11.11"
+    buffer: "npm:^6.0.3"
+    crypto-js: "npm:4.2.0"
+    jsbn: "npm:1.1.0"
+  checksum: 10c0/060bcd92589f03b556d8c5ddb297cd45ab3bc0bd1ae7f63e6779cb48e67fdd1a112d3c5035df7726f5855284d53fa0909618fc17ab3473890dd15e3b851995e6
+  languageName: node
+  linkType: hard
+
 "color-convert@npm:^2.0.1":
   version: 2.0.1
   resolution: "color-convert@npm:2.0.1"
@@ -31994,6 +32010,26 @@ __metadata:
   checksum: 10c0/6f9353a95288f8455cf64cbeb707b28826a7f29690244c1e4bb61ec573256e021b6ad6651b394eb1ccfd00d6ec50147253aba2c5fe58a57ceb111fad62c519ac
   languageName: node
   linkType: hard
+
+"numa-app-inbox-api@workspace:lambdas/node/numa-app-inbox-api":
+  version: 0.0.0-use.local
+  resolution: "numa-app-inbox-api@workspace:lambdas/node/numa-app-inbox-api"
+  dependencies:
+    "@arcanumai/style": "workspace:*"
+    "@aws-sdk/client-dynamodb": "npm:^3.699.0"
+    "@aws-sdk/client-lambda": "npm:^3.699.0"
+    "@aws-sdk/lib-dynamodb": "npm:^3.699.0"
+    "@types/aws-lambda": "npm:^8.10.146"
+    "@types/node": "npm:^22.10.1"
+    "@typescript-eslint/eslint-plugin": "npm:^8.17.0"
+    "@typescript-eslint/parser": "npm:^8.17.0"
+    esbuild: "npm:^0.25.0"
+    eslint: "npm:^9.16.0"
+    rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
+    typescript: "npm:^5.7.2"
+  languageName: unknown
+  linkType: soft
 
 "numa-cli-api@workspace:lambdas/node/numa-cli-api":
   version: 0.0.0-use.local

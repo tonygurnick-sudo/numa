@@ -130,6 +130,7 @@ pre-commit:
         - lambdas/node/nolia-cognito-email-handler
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
+        - lambdas/node/numa-app-inbox-api
         - lambdas/node/numa-quota-report-daily
         - lambdas/node/oauth-auth-handler
         - lambdas/node/numa-ops-api
