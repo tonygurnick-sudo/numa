@@ -434,12 +434,10 @@ export class NumaClientStack extends TerraformStack {
         ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_ops-crm-api', 64)}`
         : undefined;
 
-      // numa-cli-api Lambda ARN — created later in AppAgnosticApiGatewayLambdaCollection
-      // when numaCliApi is enabled. Computed here so the workspace agent
-      // role can be granted invoke permission at construct time.
-      const numaCliApiLambdaArn = clientConfig.numaCliApi
-        ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_numa-cli-api', 64)}`
-        : undefined;
+      // numa-cli-api Lambda ARN — always created in AppAgnosticApiGatewayLambdaCollection
+      // (the `numa` CLI is the agent's entire tool layer). Computed here so the
+      // workspace agent role can be granted invoke permission at construct time.
+      const numaCliApiLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_numa-cli-api', 64)}`;
 
       // Shared secret for file redirect HMAC tokens (used by both tools and proxy Lambdas)
       const fileRedirectSecret = new SsmParameter(this, 'file-redirect-secret', {
@@ -569,8 +567,7 @@ export class NumaClientStack extends TerraformStack {
         creditMeteringEnabled: true,
         // numa-cli-api Lambda — workspace IAM role gets InvokeFunction so
         // the @numa/cli binary in the MicroVM can call the dispatcher.
-        // Only set when numaCliApi feature flag is on; otherwise the
-        // policy statement is skipped.
+        // Always set (numa-cli-api is always deployed).
         numaCliApiLambdaArn,
         // Centralized email sender — V2 app run-completion emails (FEAT-174)
         emailSenderLambdaArn,
@@ -792,13 +789,6 @@ export class NumaClientStack extends TerraformStack {
       recoveryBucketArn: disasterRecovery?.recoveryBucketArn,
       pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
       // Numa CLI API — backend for the `numa` CLI binary (/numa-cli/).
-      // Per-client opt-in. The bootstrap route aggregates the canonical
-      // user-context surface (agents, integrations, KBs, chat settings,
-      // company profile, client config) the workspace agent also consumes.
-      // Phase 3 will add tool-execution routes (/api/cli/tools/*) that reuse
-      // this Lambda + same gate. Customer stacks should leave this off
-      // until the CLI ships externally.
-      numaCliApiEnabled: clientConfig.numaCliApi ?? false,
       // Numa Ops entitlement — forwarded to numa-cli-api as NUMA_OPS_ENABLED so
       // it can hard-gate `ops_*` CLI tool calls server-side (the old MCP-
       // registration gate is gone now the CLI has broad `Bash(numa:*)`). Same
@@ -1738,17 +1728,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         synergyFileParity: z.boolean().optional().default(false),
-
-        /**
-         * Whether to enable the Numa CLI API Lambda (`numa-cli-api`).
-         * Backend for the `numa` CLI binary in `/numa-cli/`. Per-client
-         * opt-in — keep off on customer stacks until the CLI ships externally.
-         * Phase 1 ships only `/api/cli/bootstrap`; Phase 3 will add tool-execution
-         * routes that reuse the same Lambda + same gate.
-         *
-         * @default false
-         */
-        numaCliApi: z.boolean().optional().default(false),
 
         /**
          * Whether to enable site-wide search (DynamoDB search index + /api/search).

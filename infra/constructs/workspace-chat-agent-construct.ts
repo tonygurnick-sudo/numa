@@ -85,10 +85,10 @@ export interface WorkspaceChatAgentConstructProps {
    * numa-cli-api Lambda ARN (for `numa <cmd>` invocations from inside the
    * MicroVM). Workspace IAM role gets `lambda:InvokeFunction` on this ARN
    * so the @numa/cli binary installed in the image can talk to the
-   * dispatcher without a Cognito token. Pass only when the client has
-   * `numaCliApi: true` in its config — leave undefined otherwise.
+   * dispatcher without a Cognito token. Always set — numa-cli-api is the
+   * agent's entire tool layer and is always deployed.
    */
-  numaCliApiLambdaArn?: string;
+  numaCliApiLambdaArn: string;
   /** Whether Numa Ops feature is enabled for this client */
   numaOpsEnabled?: boolean;
   /** Frontend base URL (e.g. https://nd-labs.numa.arcanum.ai) for constructing links */
@@ -502,16 +502,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
           // CLI binary installed in the MicroVM; auth model is direct Lambda
           // InvokeCommand from inside the workspace, identity carried in
           // event.userContext, IAM signature is what the API trusts).
-          ...(props.numaCliApiLambdaArn
-            ? [
-                {
-                  sid: 'LambdaInvokeNumaCliApi',
-                  effect: 'Allow',
-                  actions: ['lambda:InvokeFunction'],
-                  resources: [props.numaCliApiLambdaArn],
-                },
-              ]
-            : []),
+          {
+            sid: 'LambdaInvokeNumaCliApi',
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [props.numaCliApiLambdaArn],
+          },
           // Data bucket read access (for downloading attached files from My Files / Company Files)
           // and write access to KB prefixes (for rules generation upload)
           ...(props.dataBucketArn
