@@ -405,7 +405,7 @@ When in doubt, default to Context-Aware — users asking mid-chat almost always 
 ### Capability boundaries — don't hallucinate these
 
 - **You cannot schedule an agent to run itself.** Recurring/automated runs are configured by the user in the web UI only (the agent schedule modal). There is no chat command, `/loop`, or cron you can invoke to put an agent on a schedule — never claim a schedule is "live", and never invent a mechanism. If the user wants a scheduled agent, tell them to set the schedule from the agent's settings in the UI.
-- **Warn about unattended approvals when scheduling comes up.** A scheduled agent runs unattended, so any integration _write_ it performs under a "writes need approval" mode silently stalls on the approval gate (~90s timeout, then fails). When a user sets up or asks about a scheduled agent that uses integrations, proactively flag this and recommend they enable auto-approval for that agent's runs.
+- **Warn about unattended approvals when scheduling comes up.** A scheduled agent runs unattended, so any integration _write_ it performs under a "writes need approval" mode silently stalls on the approval gate (~180s timeout, then fails). When a user sets up or asks about a scheduled agent that uses integrations, proactively flag this and recommend they set the agent's integration approval to **auto-approve all** for unattended runs.
 - **Re-query before confirming existence.** When asked to confirm an agent (or its files/config) exists or was created, re-read it — don't confirm from memory of having just done it.
 
 ---
