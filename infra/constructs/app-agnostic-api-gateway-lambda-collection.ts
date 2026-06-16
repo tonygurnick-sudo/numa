@@ -1726,6 +1726,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       WEBHOOK_URL: `https://${props.domainName}/api/webhooks/connector-events/${props.cloudfrontSharedSecret}`,
+      // Used by the configure-triggers route to register watches for already-connected mailboxes.
+      WATCH_MANAGER_FUNCTION_NAME: gmailWatchManagerLambda.functionName,
     } as Record<string, string>;
 
     const googleCloudSetupPolicy = [
@@ -1743,6 +1745,13 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           'secretsmanager:GetSecretValue',
         ],
         resources: ['*'],
+      },
+      {
+        // configure-triggers invokes gmail-watch-manager to register watches for
+        // already-connected mailboxes.
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [gmailWatchManagerLambda.arn],
       },
     ];
 
@@ -1814,6 +1823,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: googleCloudSetupEnv,
       additionalPolicyStatements: googleCloudSetupPolicy,
       route: { verb: 'GET', path: 'admin/google-cloud/status' },
+    });
+
+    // Token-free trigger setup: the admin provisions Pub/Sub in their own GCP
+    // project (guided by trigger-info), then we wire it up Numa-side.
+    this.addLambdaFunction(this, 'google-cloud-setup-trigger-info', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'GET', path: 'admin/google-cloud/trigger-info' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-configure-triggers', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/configure-triggers' },
     });
 
     // Agents API (list/create/update/delete/copy + prefs/teams/sharing)

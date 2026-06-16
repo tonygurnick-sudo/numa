@@ -1,16 +1,30 @@
 import { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, UpdateCommand, GetCommand } from '@aws-sdk/lib-dynamodb';
 import { SecretsManagerClient, GetSecretValueCommand, PutSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { withPRM } from '../../../lib/prm-node/prm';
 
 const CLIENT_NAME = process.env.CLIENT_NAME as string;
 const WEBHOOK_URL = process.env.WEBHOOK_URL as string;
 const DATA_CONNECTORS_SETTINGS_TABLE_NAME = process.env.DATA_CONNECTORS_SETTINGS_TABLE_NAME as string;
 const VAULT_SECRETS_PREFIX = process.env.VAULT_SECRETS_PREFIX || `${CLIENT_NAME}/vault`;
+// Optional: the gmail-watch-manager function, invoked by configure-triggers to
+// register watches for already-connected mailboxes. New connects self-register.
+const WATCH_MANAGER_FUNCTION_NAME = process.env.WATCH_MANAGER_FUNCTION_NAME as string | undefined;
 
 const ddbDoc = DynamoDBDocumentClient.from(withPRM(DynamoDBClient, {}));
 const secretsManager = withPRM(SecretsManagerClient, {});
+const lambdaClient = withPRM(LambdaClient, {});
+
+// Gmail's well-known push service account — must be granted Pub/Sub Publisher on
+// the customer's topic so users.watch() can publish. Same for every project.
+const GMAIL_PUBLISHER_SERVICE_ACCOUNT = 'gmail-api-push@system.gserviceaccount.com';
+const DEFAULT_TOPIC_NAME = 'numa-connector-events';
+const DEFAULT_SUBSCRIPTION_NAME = 'numa-connector-events-push';
+// Light validation so user input can't inject into the GCP resource path.
+const GCP_PROJECT_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+const GCP_RESOURCE_NAME_RE = /^[A-Za-z][A-Za-z0-9._~%+-]{2,254}$/;
 
 const HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -613,6 +627,128 @@ async function getClientId() {
 }
 
 // ---------------------------------------------------------------------------
+// Route: GET /api/admin/google-cloud/trigger-info
+// ---------------------------------------------------------------------------
+//
+// Token-free. Returns the environment-specific values an admin needs to wire up
+// Gmail event triggers in their OWN Google Cloud project (push endpoint, Gmail
+// publisher service account, default resource names) plus the current config
+// status read straight from the connector-settings row. The admin performs the
+// GCP steps themselves — unlike setup-pubsub, this never touches their cloud.
+
+async function getTriggerInfo() {
+  let configured = false;
+  let pubsubTopic: string | null = null;
+  let pubsubSubscription: string | null = null;
+  try {
+    const res = await ddbDoc.send(
+      new GetCommand({
+        TableName: DATA_CONNECTORS_SETTINGS_TABLE_NAME,
+        Key: { connector: 'google-cloud' },
+      })
+    );
+    pubsubTopic = (res.Item?.pubsubTopic as string | undefined) ?? null;
+    pubsubSubscription = (res.Item?.pubsubSubscription as string | undefined) ?? null;
+    configured = !!res.Item?.pubsubConfigured && !!pubsubTopic;
+  } catch (err) {
+    console.error('trigger-info settings lookup failed:', err);
+  }
+
+  return ok({
+    webhookUrl: WEBHOOK_URL,
+    publisherServiceAccount: GMAIL_PUBLISHER_SERVICE_ACCOUNT,
+    defaultTopicName: DEFAULT_TOPIC_NAME,
+    defaultSubscriptionName: DEFAULT_SUBSCRIPTION_NAME,
+    configured,
+    pubsubTopic,
+    pubsubSubscription,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Route: POST /api/admin/google-cloud/configure-triggers
+// ---------------------------------------------------------------------------
+//
+// Token-free. The admin has already created the Pub/Sub topic + push
+// subscription in their own GCP project (following the trigger-info
+// instructions). Here we only do the two Numa-side steps:
+//   1. Persist the topic/subscription on the connector-settings row so the
+//      watch lambdas know where to publish.
+//   2. Register Gmail watches for already-connected mailboxes by invoking
+//      gmail-watch-manager (new connections self-register on connect).
+
+async function configureTriggers(event: APIGatewayProxyEventV2) {
+  const body = parseBody(event);
+  const projectId = String(body.projectId || '').trim();
+  const topicName = String(body.topicName || DEFAULT_TOPIC_NAME).trim();
+  const subscriptionName = String(body.subscriptionName || DEFAULT_SUBSCRIPTION_NAME).trim();
+
+  if (!projectId) return fail(400, 'projectId is required');
+  if (!GCP_PROJECT_RE.test(projectId)) return fail(400, 'projectId is not a valid Google Cloud project ID');
+  if (!GCP_RESOURCE_NAME_RE.test(topicName)) return fail(400, 'topicName is not a valid Pub/Sub topic name');
+  if (!GCP_RESOURCE_NAME_RE.test(subscriptionName)) {
+    return fail(400, 'subscriptionName is not a valid Pub/Sub subscription name');
+  }
+
+  const pubsubTopic = `projects/${projectId}/topics/${topicName}`;
+  const pubsubSubscription = `projects/${projectId}/subscriptions/${subscriptionName}`;
+
+  // 1. Persist on the connector-settings row (watch lambdas read pubsubTopic from here).
+  try {
+    await ddbDoc.send(
+      new UpdateCommand({
+        TableName: DATA_CONNECTORS_SETTINGS_TABLE_NAME,
+        Key: { connector: 'google-cloud' },
+        UpdateExpression: 'SET pubsubConfigured = :v, pubsubTopic = :t, pubsubSubscription = :s, updatedAt = :ts',
+        ExpressionAttributeValues: {
+          ':v': true,
+          ':t': pubsubTopic,
+          ':s': pubsubSubscription,
+          ':ts': new Date().toISOString(),
+        },
+      })
+    );
+  } catch (err) {
+    console.error('configure-triggers settings write failed:', err);
+    return fail(500, 'Failed to save trigger configuration');
+  }
+
+  // 2. Register watches for already-connected mailboxes (best-effort — a failure
+  //    here doesn't undo the config; users can reconnect Gmail to self-register).
+  let watchesRegistered = 0;
+  let watchesFailed = 0;
+  let watchError: string | undefined;
+  if (WATCH_MANAGER_FUNCTION_NAME) {
+    try {
+      const invokeRes = await lambdaClient.send(
+        new InvokeCommand({
+          FunctionName: WATCH_MANAGER_FUNCTION_NAME,
+          InvocationType: 'RequestResponse',
+          Payload: Buffer.from('{}'),
+        })
+      );
+      const payloadStr = invokeRes.Payload ? Buffer.from(invokeRes.Payload).toString('utf-8') : '{}';
+      const result = JSON.parse(payloadStr) as { renewed?: number; failed?: number };
+      watchesRegistered = result.renewed ?? 0;
+      watchesFailed = result.failed ?? 0;
+    } catch (err) {
+      console.error('configure-triggers watch-manager invoke failed:', err);
+      watchError =
+        'Configuration saved, but registering existing mailbox watches failed. Users can reconnect Gmail to register.';
+    }
+  }
+
+  return ok({
+    pubsubConfigured: true,
+    pubsubTopic,
+    pubsubSubscription,
+    watchesRegistered,
+    watchesFailed,
+    ...(watchError ? { watchError } : {}),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
 
@@ -667,6 +803,16 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
     // GET /api/admin/google-cloud/status
     if (method === 'GET' && /\/google-cloud\/status\/?$/.test(path)) {
       return getStatus(event);
+    }
+
+    // GET /api/admin/google-cloud/trigger-info (token-free)
+    if (method === 'GET' && /\/google-cloud\/trigger-info\/?$/.test(path)) {
+      return getTriggerInfo();
+    }
+
+    // POST /api/admin/google-cloud/configure-triggers (token-free)
+    if (method === 'POST' && /\/google-cloud\/configure-triggers\/?$/.test(path)) {
+      return configureTriggers(event);
     }
 
     return fail(404, 'Not found');
