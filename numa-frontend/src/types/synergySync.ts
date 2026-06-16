@@ -101,3 +101,25 @@ export type SyncConfig = {
   created_at?: string;
   updated_at?: string;
 };
+
+/** Admin config for the cross-job Synergy → knowledge-base crawler. */
+export type SynergyKbSyncConfig = {
+  enabled: boolean;
+  frequency_hours: number;
+  credential_user_sub: string;
+  updated_at?: string;
+  updated_by?: string;
+};
+
+/** Latest crawl-run status (null until a run has started). */
+export type SynergyKbSyncStatus = {
+  last_run: {
+    run_id: string;
+    status: string;
+    trigger: string;
+    started_at: string;
+    job_count: number;
+    jobs_pending: number;
+    jobs_done: number;
+  } | null;
+};

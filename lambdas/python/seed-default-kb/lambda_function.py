@@ -31,6 +31,20 @@ SYSTEM_KBS = [
         "s3_prefix": "documents/numa-support/",
         "is_default": False,
     },
+    {
+        # Cross-job Synergy (12d) corpus, auto-populated by the synergy KB crawler.
+        # viewers ["*"] makes it SELECTABLE in the chat KB picker for all users, but
+        # per-document `allowed_users` metadata gates what each user can actually
+        # retrieve (fail-closed listContains filter in the query path). hidden +
+        # auto_managed keep it OUT of the Files/Folders management page while still
+        # surfacing it in the chat selector. editors [] => read-only via chat.
+        "kb_id": "synergy",
+        "kb_name": "Synergy (12d)",
+        "s3_prefix": "documents/synergy/",
+        "is_default": False,
+        "hidden": True,
+        "auto_managed": True,
+    },
 ]
 
 
@@ -100,6 +114,12 @@ def handler(event, context):
                 "status": {"S": "ACTIVE"},
                 "document_count": {"N": "0"},
             }
+            # Auto-managed KBs (e.g. the Synergy crawler corpus) are hidden from
+            # the Files/Folders management page but stay selectable in chat.
+            if kb.get("hidden"):
+                kb_item["hidden"] = {"BOOL": True}
+            if kb.get("auto_managed"):
+                kb_item["auto_managed"] = {"BOOL": True}
 
             dynamodb.put_item(TableName=table_name, Item=kb_item)
             created_kbs.append(kb_id)

@@ -1311,6 +1311,13 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME: props.dataConnectorsSyncConfigsTableName,
       CONNECTOR_EVENT_CONFIGS_TABLE_NAME: props.connectorEventConfigsTableName,
+      // Synergy KB crawl Step Function (empty when the crawler is disabled). The
+      // "Sync now" route StartExecutions it with the caller's vault secret_id.
+      SYNERGY_CRAWL_STATE_MACHINE_ARN: props.synergyKbCrawlStateMachineArn ?? '',
+      // Crawl-state table + worker for sync-config/status routes and the
+      // on-visit incremental sync (all no-ops when empty).
+      SYNERGY_CRAWL_STATE_TABLE_NAME: props.synergyCrawlStateTableName ?? '',
+      SYNERGY_TEXT_CRAWLER_FUNCTION_NAME: props.synergyTextCrawlerFunctionName ?? '',
     } as Record<string, string>;
 
     const dataConnectorsPolicy = [
@@ -1363,6 +1370,32 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.connectorEventConfigsTableName}`],
       },
+      {
+        // "Sync now" triggers the Synergy KB crawl Step Function.
+        effect: 'Allow',
+        actions: ['states:StartExecution'],
+        resources: [`arn:aws:states:*:*:stateMachine:numa-${props.clientName}*synergy-kb-crawl`],
+      },
+      // Crawl-state table (sync-config/status + on-visit grant rows) and the
+      // worker invoke — only when the Synergy KB crawler is provisioned.
+      ...(props.synergyCrawlStateTableArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+              resources: [props.synergyCrawlStateTableArn, `${props.synergyCrawlStateTableArn}/index/*`],
+            },
+          ]
+        : []),
+      ...(props.synergyTextCrawlerFunctionArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.synergyTextCrawlerFunctionArn],
+            },
+          ]
+        : []),
     ];
 
     this.addLambdaFunction(this, 'data-connectors-status', {
@@ -1403,6 +1436,44 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: dataConnectorsEnv,
       additionalPolicyStatements: dataConnectorsPolicy,
       route: { verb: 'GET', path: 'data-connectors/synergy/jobs' },
+    });
+
+    // Manual "Sync now" — kicks off the Synergy → Bedrock KB crawl Step Function.
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-now', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'POST', path: 'data-connectors/synergy/sync-now' },
+    });
+
+    // Admin crawl config + run status (admin-gated in the handler).
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/sync-config' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'PUT', path: 'data-connectors/synergy/sync-config' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-status', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/sync-status' },
     });
 
     this.addLambdaFunction(this, 'data-connectors-synergy-job-folders', {
@@ -3076,6 +3147,16 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
+  /** Synergy KB crawl Step Function ARN (empty string when the crawler is
+   *  disabled). The data-connectors "Sync now" route StartExecutions it. */
+  synergyKbCrawlStateMachineArn?: string;
+  /** Synergy crawl-state table ('' when disabled) — sync-config/status routes
+   *  + the on-visit grant/throttle rows. */
+  synergyCrawlStateTableName?: string;
+  synergyCrawlStateTableArn?: string;
+  /** Synergy crawl worker Lambda ('' when disabled) — on-visit async invoke. */
+  synergyTextCrawlerFunctionName?: string;
+  synergyTextCrawlerFunctionArn?: string;
   /** Admin-side gate. When false, the unified integrations catalog returns
    *  no native rows; admins can't add them and users don't see them. The
    *  flag is the only way to suppress natives entirely — there's no

@@ -182,6 +182,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: ['DATA_CONNECTORS_ENABLED'],
   },
   {
+    flag: 'SYNERGY_KB_SEARCH',
+    title: 'Synergy Cross-Job Search',
+    description:
+      'Index the text of all Synergy 12d documents into a knowledge base so chat can search across every job (e.g. "which jobs use material X"). 12d has no cross-project search; this crawls and indexes document contents, respecting each user\'s Synergy permissions per document. Adds a selectable "Synergy" entry in the chat knowledge-base picker.',
+    icon: 'bi-search',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['DATA_CONNECTORS_ENABLED'],
+  },
+  {
     flag: 'DEVELOPER_MODE',
     title: 'Developer Mode',
     description: 'Enables developer tools, file drill-down, metadata inspection, and debug views.',

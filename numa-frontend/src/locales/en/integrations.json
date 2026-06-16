@@ -553,6 +553,27 @@
         "rotateSuccess": "Token rotated successfully",
         "rotateFailed": "Token rotation failed",
         "rotating": "Rotating..."
+      },
+      "sync": {
+        "title": "Cross-job knowledge base sync (admin)",
+        "intro": "Indexes the text of Synergy documents into the knowledge base so chat can search across all jobs. Each user can only retrieve content from jobs they can see in Synergy.",
+        "enable": "Enable scheduled sync",
+        "frequency": "Sync frequency",
+        "everyNHours": "Every {{hours}} hours",
+        "everyNDays": "Every {{days}} days",
+        "daily": "Daily",
+        "weekly": "Weekly",
+        "useMyCredential": "Use my Synergy connection for scheduled syncs",
+        "usingYourCredential": "Scheduled syncs use your connection",
+        "syncNow": "Sync now",
+        "syncing": "Starting...",
+        "started": "Sync started — indexing runs in the background.",
+        "lastRun": "Last sync: {{when}}",
+        "progress": "{{done}} of {{total}} jobs indexed ({{pending}} pending)",
+        "neverRun": "No sync has run yet.",
+        "loadFailed": "Could not load sync settings.",
+        "saveFailed": "Could not save sync settings.",
+        "syncFailed": "Could not start the sync."
       }
     },
     "modal": {

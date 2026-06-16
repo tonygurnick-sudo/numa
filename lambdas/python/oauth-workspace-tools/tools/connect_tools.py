@@ -33,6 +33,9 @@ from .synergy_helpers import (
     get_synergy_credentials,
     is_synergy_configured,
     list_job_folders,
+)
+from .synergy_helpers import search_files as synergy_search_files
+from .synergy_helpers import (
     search_jobs,
 )
 
@@ -639,12 +642,39 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "result": None, "error": str(e)}
 
 
+def _synergy_job_scope(folder_id: str) -> Optional[str]:
+    """Extract a bare job IDString from a search scope param, else None.
+
+    File search must scope to a *job* (there is no global file search). Accepts
+    ``"job:8_1"`` and a bare ``"8_1"``; a ``"folder:..."`` value returns None
+    (folder-scoped file search isn't supported by this path — the agent should
+    pass the parent job).
+    """
+    if not folder_id:
+        return None
+    if folder_id.startswith("job:"):
+        return folder_id[4:] or None
+    if folder_id.startswith("folder:"):
+        return None
+    return folder_id  # bare IDString, e.g. "8_1"
+
+
 def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Search Synergy jobs by name."""
+    """Search Synergy.
+
+    12d file search is job-scoped (no global file search), so this op does two
+    things depending on whether a job scope is supplied:
+
+      - ``folder_id="job:{id}"`` → search FILES (name + contents, merged) within
+        that job and its sub-jobs.
+      - no scope → search JOBS by name so the agent can first locate the job,
+        then re-search files inside it.
+    """
     try:
         user_sub = params.get("user_sub", "")
         query = params.get("query", "").strip()
-        page_size = int(params.get("page_size", 20))
+        folder_id = params.get("folder_id", "") or ""
+        page_size = int(params.get("page_size", 25))
 
         if not user_sub:
             return {"status": "error", "result": None, "error": "Missing user_sub"}
@@ -657,6 +687,38 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
             return _needs_credential_response("synergy")
 
         server, token = creds
+
+        job_scope = _synergy_job_scope(folder_id)
+        if job_scope:
+            # File search within a job — matches file names AND contents.
+            data = synergy_search_files(
+                server, token, query, job_scope, page_size=page_size
+            )
+            files = [
+                {
+                    "file_id": f["file_id"],
+                    "name": f["name"],
+                    "size": f.get("size"),
+                    "content_type": f.get("content_type"),
+                    "modified_at": f.get("modified_at"),
+                    "path": f.get("path", ""),
+                }
+                for f in data.get("files", [])
+            ]
+            return {
+                "status": "success",
+                "result": {
+                    "folders": [],
+                    "files": files,
+                    "total_count": data.get("files_total") or len(files),
+                    "query": query,
+                    "scope": f"job:{job_scope}",
+                    "connector": "synergy",
+                },
+                "error": None,
+            }
+
+        # No job scope → locate matching jobs by name (file search needs a job).
         data = search_jobs(server, token, name=query, page=1, page_size=page_size)
 
         folders = [
@@ -677,6 +739,11 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
                 "files": [],
                 "total_count": data.get("total_rows") or len(folders),
                 "query": query,
+                "hint": (
+                    "These are JOBS matching the query. To search file names and "
+                    "contents inside a job, call search_files again with "
+                    "folder_id='job:<job_id>'."
+                ),
                 "connector": "synergy",
             },
             "error": None,

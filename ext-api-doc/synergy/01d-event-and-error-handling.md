@@ -18,19 +18,26 @@
 
 ### Strategy 1: Modified-Date Polling (Preferred)
 
-For entities with date fields (`LastModified`, `CreatedDate`), poll and filter client-side:
+For entities with date fields (`LastModified`, `CreatedDate`), poll and filter client-side.
+
+**File search is job-scoped — there is no "fetch all files" call.** You must poll
+**per job** (`LimitSearchTo:2` + the job's `LimitID`, which must include
+`_server_id`). To watch many projects, loop over the jobs you care about; there
+is no global file feed.
 
 ```python
 # Track last successful poll time
 last_poll = "2026-03-28T00:00:00Z"
 
-# Fetch all files via the search endpoint (body pagination)
+# Poll files for ONE job (repeat per watched project — no global file search)
+job = {"IDString": "100_1", "_id": 100, "_server_id": 1}
 page = 1
 while True:
     response = POST("/api/v1/files/search", json={
         "FileName": "", "Contents": "",
         "Page": page, "PageSize": 100,
-        "ShowDeletedFiles": False, "RetrieveAttributes": True,
+        "ShowDeletedFiles": False, "Attributes": [],
+        "LimitSearchTo": 2, "LimitID": job,   # REQUIRED — omitting LimitID returns HTTP 500
     })
     data = response.json()
 
@@ -46,9 +53,11 @@ while True:
 last_poll = now_utc()
 ```
 
-**Applicable to:** Files (LastModified), Jobs (CreatedDate), and other entities with timestamps.
+**Applicable to:** Files (LastModified, per job), Jobs (CreatedDate — `/jobs/search`
+is not job-scoped), and other entities with timestamps.
 
-**Limitation:** Must page through all results to find changes. No server-side date filtering is guaranteed (search endpoint support for date ranges should be verified).
+**Limitation:** Must page through each job's results to find changes. No server-side
+date filtering is guaranteed (search endpoint support for date ranges should be verified).
 
 ### Strategy 2: Search-Based Polling
 
@@ -64,6 +73,8 @@ Content-Type: application/json
   "FileName": "",
   "Page": 1,
   "PageSize": 100,
+  "LimitSearchTo": 2,
+  "LimitID": { "IDString": "100_1", "_id": 100, "_server_id": 1 },
   "Attributes": [
     { "Attribute": { "Name": "ModifiedDate" },
       "Value": "2026-03-28T00:00:00Z",
@@ -72,7 +83,9 @@ Content-Type: application/json
 }
 ```
 
-**Note:** Whether search supports date filtering is not confirmed for all entities. Test each search endpoint to determine available filter fields.
+**Note:** `LimitSearchTo` + `LimitID` are still required here (file search is
+always job-scoped). Whether search supports date filtering is not confirmed for
+all entities — test each search endpoint to determine available filter fields.
 
 ### Strategy 3: Snapshot Comparison
 

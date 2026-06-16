@@ -248,6 +248,9 @@ export class NumaClientStack extends TerraformStack {
       voiceIntakeBucketArn: clientConfig.numaVoice
         ? `arn:aws:s3:::numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}-prospect-intake`
         : undefined,
+      // Synergy → Bedrock KB crawler depends on the Synergy data connector + vault,
+      // so it only provisions when data connectors are also enabled.
+      synergyKbCrawlEnabled: (clientConfig.synergyKbCrawl ?? false) && (clientConfig.dataConnectorsEnabled ?? false),
     });
 
     // ── Disaster Recovery ────────────────────────────────────────────────────
@@ -737,6 +740,13 @@ export class NumaClientStack extends TerraformStack {
       capabilitiesTableName: core.capabilitiesTable.name,
       creditLedgerTableName: core.creditLedgerTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      // Synergy KB crawl Step Function — the data-connectors "Sync now" route
+      // StartExecutions it. Empty strings when the crawler is disabled.
+      synergyKbCrawlStateMachineArn: core.synergyCrawlStateMachineArn,
+      synergyCrawlStateTableName: core.synergyCrawlStateTableName,
+      synergyCrawlStateTableArn: core.synergyCrawlStateTableArn,
+      synergyTextCrawlerFunctionName: core.synergyTextCrawlerFunctionName,
+      synergyTextCrawlerFunctionArn: core.synergyTextCrawlerFunctionArn,
       // Admin-side gate. When false, the unified integrations catalog skips
       // every native row so users never see them; when true, admins can
       // manage native connectors and they surface alongside Pipedream.
@@ -1067,6 +1077,7 @@ export class NumaClientStack extends TerraformStack {
         // file search, per-file actions). Sub-capability of data connectors;
         // off by default so it ships dark until a client opts in.
         SYNERGY_FILE_PARITY: clientConfig.synergyFileParity ?? false,
+        SYNERGY_KB_SEARCH: clientConfig.synergyKbCrawl ?? false,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
@@ -1728,6 +1739,7 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         synergyFileParity: z.boolean().optional().default(false),
+        synergyKbCrawl: z.boolean().optional().default(false),
 
         /**
          * Whether to enable site-wide search (DynamoDB search index + /api/search).
