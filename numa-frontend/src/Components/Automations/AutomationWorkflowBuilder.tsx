@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Button, Alert, Card } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeft, ArrowRight, Save } from 'lucide-react';
@@ -20,6 +20,10 @@ import { parseCronExpression } from '../../utils/schedulingUtils';
 import type { AgentSchedule } from '../../types/agentSchedules';
 import type { AgentSummary } from '../../types/agents';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from '../Agents/schedulingTypes';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { ChatSettingsService, DEFAULT_CHAT_SETTINGS, type ChatSettings } from '../../Services/ChatSettingsService';
+import { atRiskIntegrationsForSchedule } from '../../utils/approvalPosture';
+import { IntegrationApprovalWarningModal } from '../Scheduling/IntegrationApprovalWarningModal';
 
 type TriggerType = 'schedule' | 'event';
 
@@ -347,6 +351,41 @@ export const AutomationWorkflowBuilder = ({
     [agents, selectedAgentId]
   );
 
+  // Integration approval-posture warning: warn before creating an automation if
+  // the selected agent uses integrations that aren't auto-approved — an
+  // unattended (scheduled/triggered) run can't approve them. Acknowledgement is
+  // a ref so the re-submit after the user clicks OK isn't blocked by the async
+  // state update.
+  const { numaGet } = useNumaRequest();
+  const [userChatSettings, setUserChatSettings] = useState<ChatSettings | null>(() => ChatSettingsService.getCached());
+  const [showApprovalWarning, setShowApprovalWarning] = useState(false);
+  const approvalAckRef = useRef(false);
+
+  useEffect(() => {
+    if (userChatSettings) return;
+    let cancelled = false;
+    ChatSettingsService.get(numaGet)
+      .then((s) => {
+        if (!cancelled) setUserChatSettings(s);
+      })
+      .catch(() => {
+        /* fail open — show no warning rather than a wrong one */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numaGet, userChatSettings]);
+
+  // Re-arm the warning whenever the chosen agent changes.
+  useEffect(() => {
+    approvalAckRef.current = false;
+  }, [selectedAgentId]);
+
+  const atRiskIntegrations = useMemo(
+    () => atRiskIntegrationsForSchedule(selectedAgent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
+    [selectedAgent, userChatSettings]
+  );
+
   const timezoneLabel = useMemo(() => {
     try {
       const now = new Date();
@@ -486,6 +525,13 @@ export const AutomationWorkflowBuilder = ({
 
   const handleSave = useCallback(async () => {
     if (!selectedAgentId || !name.trim()) return;
+    // Integration approval-posture gate: if the agent uses integrations that
+    // aren't auto-approved, warn before creating an unattended automation. The
+    // modal's OK sets approvalAckRef and re-runs handleSave.
+    if (atRiskIntegrations.length > 0 && !approvalAckRef.current) {
+      setShowApprovalWarning(true);
+      return;
+    }
     try {
       setSubmitting(true);
       setError(null);
@@ -577,6 +623,7 @@ export const AutomationWorkflowBuilder = ({
     onSave,
     isEditing,
     t,
+    atRiskIntegrations,
   ]);
 
   const renderStep = () => {
@@ -767,6 +814,16 @@ export const AutomationWorkflowBuilder = ({
           )}
         </div>
       </div>
+      <IntegrationApprovalWarningModal
+        show={showApprovalWarning}
+        integrations={atRiskIntegrations}
+        onCancel={() => setShowApprovalWarning(false)}
+        onConfirm={() => {
+          approvalAckRef.current = true;
+          setShowApprovalWarning(false);
+          void handleSave();
+        }}
+      />
     </div>
   );
 };

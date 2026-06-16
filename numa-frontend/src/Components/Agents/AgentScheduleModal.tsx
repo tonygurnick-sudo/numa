@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Form, Button, Alert, Badge } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { AgentSummary } from '../../types/agents';
@@ -12,6 +12,10 @@ import { useSchedulePreflight } from '../../hooks/useSchedulePreflight';
 import { SchedulePreflightStepper } from '../Scheduling/SchedulePreflightStepper';
 import { HighFrequencyConfirmModal } from '../Scheduling/HighFrequencyConfirmModal';
 import { estimateCronIntervalMinutes, projectMonthlyRuns, isHighFrequencyCadence } from '../../utils/cronProjection';
+import { useNumaRequest } from '../../Providers/NumaRequestContext';
+import { ChatSettingsService, DEFAULT_CHAT_SETTINGS, type ChatSettings } from '../../Services/ChatSettingsService';
+import { atRiskIntegrationsForSchedule } from '../../utils/approvalPosture';
+import { IntegrationApprovalWarningModal } from '../Scheduling/IntegrationApprovalWarningModal';
 
 type ScheduleModalProps = {
   show: boolean;
@@ -214,9 +218,39 @@ export const AgentScheduleModal = ({
   /** Set to true once the user has acknowledged a high-frequency warning so submit can proceed. */
   const [highFreqAcknowledged, setHighFreqAcknowledged] = useState(false);
 
+  // Integration approval-posture warning: warn before creating a schedule if the
+  // agent uses integrations that aren't auto-approved (an unattended run can't
+  // approve them). Acknowledgement is a ref so the re-submit triggered by the
+  // user clicking OK isn't blocked by the async state update.
+  const { numaGet } = useNumaRequest();
+  const [userChatSettings, setUserChatSettings] = useState<ChatSettings | null>(() => ChatSettingsService.getCached());
+  const [showApprovalWarning, setShowApprovalWarning] = useState(false);
+  const approvalAckRef = useRef(false);
+
+  useEffect(() => {
+    if (userChatSettings) return;
+    let cancelled = false;
+    ChatSettingsService.get(numaGet)
+      .then((s) => {
+        if (!cancelled) setUserChatSettings(s);
+      })
+      .catch(() => {
+        /* fail open — show no warning rather than a wrong one */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [numaGet, userChatSettings]);
+
+  const atRiskIntegrations = useMemo(
+    () => atRiskIntegrationsForSchedule(agent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
+    [agent, userChatSettings]
+  );
+
   // Initialize form values when modal opens or editing schedule changes
   useEffect(() => {
     if (show) {
+      approvalAckRef.current = false;
       if (editingSchedule) {
         // Populate form with existing schedule data
         setTaskName(editingSchedule.label || '');
@@ -424,8 +458,8 @@ export const AgentScheduleModal = ({
     ]
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setError(null);
 
     // Validation
@@ -465,6 +499,14 @@ export const AgentScheduleModal = ({
     const cronExpression = cronPreview.trim();
     const projected = projectMonthlyRuns(cronExpression);
     const intervalMin = estimateCronIntervalMinutes(cronExpression);
+    // Integration approval-posture gate: if the agent uses integrations that
+    // aren't auto-approved, warn before creating an unattended schedule. The
+    // modal's OK sets approvalAckRef and re-runs handleSubmit.
+    if (atRiskIntegrations.length > 0 && !approvalAckRef.current) {
+      setShowApprovalWarning(true);
+      return;
+    }
+
     if (isHighFrequencyCadence(projected, intervalMin) && !highFreqAcknowledged) {
       setShowHighFreqModal(true);
       return;
@@ -739,6 +781,16 @@ export const AgentScheduleModal = ({
           // current cron preview. The validations have already passed (we got
           // here from handleSubmit's friction gate).
           void performSubmit(cronPreview.trim());
+        }}
+      />
+      <IntegrationApprovalWarningModal
+        show={showApprovalWarning}
+        integrations={atRiskIntegrations}
+        onCancel={() => setShowApprovalWarning(false)}
+        onConfirm={() => {
+          approvalAckRef.current = true;
+          setShowApprovalWarning(false);
+          void handleSubmit();
         }}
       />
     </Modal>
