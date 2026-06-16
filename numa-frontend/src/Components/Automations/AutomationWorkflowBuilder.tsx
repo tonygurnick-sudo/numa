@@ -22,8 +22,8 @@ import type { AgentSummary } from '../../types/agents';
 import type { FrequencyType, WeekDay, WeekNumber, MonthlyMode } from '../Agents/schedulingTypes';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { ChatSettingsService, DEFAULT_CHAT_SETTINGS, type ChatSettings } from '../../Services/ChatSettingsService';
-import { atRiskIntegrationsForSchedule } from '../../utils/approvalPosture';
-import { IntegrationApprovalWarningModal } from '../Scheduling/IntegrationApprovalWarningModal';
+import { atRiskCapabilitiesForSchedule } from '../../utils/approvalPosture';
+import { ScheduleApprovalWarningModal } from '../Scheduling/ScheduleApprovalWarningModal';
 
 type TriggerType = 'schedule' | 'event';
 
@@ -381,8 +381,8 @@ export const AutomationWorkflowBuilder = ({
     approvalAckRef.current = false;
   }, [selectedAgentId]);
 
-  const atRiskIntegrations = useMemo(
-    () => atRiskIntegrationsForSchedule(selectedAgent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
+  const atRiskCapabilities = useMemo(
+    () => atRiskCapabilitiesForSchedule(selectedAgent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
     [selectedAgent, userChatSettings]
   );
 
@@ -528,7 +528,7 @@ export const AutomationWorkflowBuilder = ({
     // Integration approval-posture gate: if the agent uses integrations that
     // aren't auto-approved, warn before creating an unattended automation. The
     // modal's OK sets approvalAckRef and re-runs handleSave.
-    if (atRiskIntegrations.length > 0 && !approvalAckRef.current) {
+    if (atRiskCapabilities.length > 0 && !approvalAckRef.current) {
       setShowApprovalWarning(true);
       return;
     }
@@ -623,7 +623,7 @@ export const AutomationWorkflowBuilder = ({
     onSave,
     isEditing,
     t,
-    atRiskIntegrations,
+    atRiskCapabilities,
   ]);
 
   const renderStep = () => {
@@ -814,9 +814,9 @@ export const AutomationWorkflowBuilder = ({
           )}
         </div>
       </div>
-      <IntegrationApprovalWarningModal
+      <ScheduleApprovalWarningModal
         show={showApprovalWarning}
-        integrations={atRiskIntegrations}
+        capabilities={atRiskCapabilities}
         onCancel={() => setShowApprovalWarning(false)}
         onConfirm={() => {
           approvalAckRef.current = true;

@@ -14,8 +14,8 @@ import { HighFrequencyConfirmModal } from '../Scheduling/HighFrequencyConfirmMod
 import { estimateCronIntervalMinutes, projectMonthlyRuns, isHighFrequencyCadence } from '../../utils/cronProjection';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { ChatSettingsService, DEFAULT_CHAT_SETTINGS, type ChatSettings } from '../../Services/ChatSettingsService';
-import { atRiskIntegrationsForSchedule } from '../../utils/approvalPosture';
-import { IntegrationApprovalWarningModal } from '../Scheduling/IntegrationApprovalWarningModal';
+import { atRiskCapabilitiesForSchedule } from '../../utils/approvalPosture';
+import { ScheduleApprovalWarningModal } from '../Scheduling/ScheduleApprovalWarningModal';
 
 type ScheduleModalProps = {
   show: boolean;
@@ -242,8 +242,8 @@ export const AgentScheduleModal = ({
     };
   }, [numaGet, userChatSettings]);
 
-  const atRiskIntegrations = useMemo(
-    () => atRiskIntegrationsForSchedule(agent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
+  const atRiskCapabilities = useMemo(
+    () => atRiskCapabilitiesForSchedule(agent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
     [agent, userChatSettings]
   );
 
@@ -502,7 +502,7 @@ export const AgentScheduleModal = ({
     // Integration approval-posture gate: if the agent uses integrations that
     // aren't auto-approved, warn before creating an unattended schedule. The
     // modal's OK sets approvalAckRef and re-runs handleSubmit.
-    if (atRiskIntegrations.length > 0 && !approvalAckRef.current) {
+    if (atRiskCapabilities.length > 0 && !approvalAckRef.current) {
       setShowApprovalWarning(true);
       return;
     }
@@ -783,9 +783,9 @@ export const AgentScheduleModal = ({
           void performSubmit(cronPreview.trim());
         }}
       />
-      <IntegrationApprovalWarningModal
+      <ScheduleApprovalWarningModal
         show={showApprovalWarning}
-        integrations={atRiskIntegrations}
+        capabilities={atRiskCapabilities}
         onCancel={() => setShowApprovalWarning(false)}
         onConfirm={() => {
           approvalAckRef.current = true;
