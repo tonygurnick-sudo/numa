@@ -16,7 +16,8 @@
  */
 
 import { Command } from 'commander';
-import { srpLogin } from '../../auth/srp.js';
+import type { AuthenticationResultType } from '@aws-sdk/client-cognito-identity-provider';
+import { srpLogin, respondToMfaChallenge } from '../../auth/srp.js';
 import { decodeJwtClaims } from '../../auth/jwt.js';
 import { saveTokens, setActiveProfile, type StoredTokens } from '../../context/store.js';
 import { fail, info, success } from '../../output/pretty.js';
@@ -46,7 +47,23 @@ export function createLoginCommand(): Command {
         const password = options.password ?? process.env['NUMA_PASSWORD'] ?? (await prompt('Password: ', true));
 
         try {
-          const { authResult, username: lowercaseUsername } = await srpLogin(account, username, password);
+          const loginResult = await srpLogin(account, username, password);
+
+          // Resolve to a final AuthenticationResult, answering an MFA challenge
+          // in between if Cognito raised one.
+          let authResult: AuthenticationResultType;
+          const lowercaseUsername = loginResult.username;
+          if (loginResult.status === 'mfa_required') {
+            const label = loginResult.challengeName === 'SMS_MFA' ? 'SMS code' : 'authenticator code';
+            info(`multi-factor authentication required — enter your ${label}.`);
+            const code = (await prompt(`MFA code: `)).trim();
+            if (!code) {
+              fail('login: MFA code is required.');
+            }
+            authResult = await respondToMfaChallenge(loginResult, code);
+          } else {
+            authResult = loginResult.authResult;
+          }
 
           if (!authResult.AccessToken || !authResult.IdToken) {
             fail('login: response missing AccessToken or IdToken');
