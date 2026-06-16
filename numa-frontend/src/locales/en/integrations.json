@@ -437,6 +437,13 @@
     "multipleAccountsHelp": "When enabled, users can connect more than one Pipedream account for this integration (e.g. two Gmail inboxes) and pick which to use in chat. Doesn't affect the native connector.",
     "multipleAccountsBadge": "Multi-account",
     "multipleAccountsBadgeTooltip": "Users can connect multiple Pipedream accounts for this integration",
+    "triggersHeading": "Email triggers",
+    "triggersLabel": "Trigger automations from incoming email",
+    "triggersHelp": "Lets users build automations that fire when an email arrives. Requires a one-time Google Cloud Pub/Sub setup in your own project.",
+    "triggersConfiguredHelp": "Incoming-email triggers are active for this workspace.",
+    "triggersSetUp": "Set up",
+    "triggersReconfigure": "Reconfigure",
+    "triggersConfigured": "Configured",
     "method": {
       "pipedreamHeading": "Pipedream",
       "pipedreamBody": "Routed through Pipedream. Credentials and calls flow through a third-party service.",
@@ -456,6 +463,43 @@
       "userChoiceBadgeTooltip": "Users pick the connection method at connect time",
       "userChoiceHeading": "Let users pick",
       "userChoiceBody": "Users see both connection options at connect time and pick the one that fits them. No method is forced as the default."
+    }
+  },
+  "gmailTriggerSetup": {
+    "title": "Set up Gmail triggers",
+    "steps": {
+      "cloud": "Google Cloud",
+      "connect": "Connect",
+      "done": "Done"
+    },
+    "cloud": {
+      "intro": "Gmail event triggers need a one-time setup in your own Google Cloud project — the one your Google sign-in (OAuth) client lives in. You need Owner or Editor on that project. Numa does not make these changes for you.",
+      "projectLabel": "Google Cloud project ID",
+      "projectHelp": "The commands below fill in automatically once you enter a valid project ID.",
+      "advanced": "Advanced: topic & subscription names",
+      "topicLabel": "Topic name",
+      "subscriptionLabel": "Subscription name",
+      "advancedHelp": "Only change these if this project already has a topic by the default name (e.g. it is shared with another Numa environment). Each environment needs its own topic + subscription.",
+      "runThese": "Run these in your Google Cloud shell",
+      "copy": "Copy",
+      "copied": "Copied",
+      "domainWarning": "If the subscription command is rejected with a domain-ownership error, verify the push endpoint domain in this project (APIs & Services → Domain verification), then re-run it. No gcloud? The same four actions are available in the Pub/Sub section of the Google Cloud console.",
+      "enterProject": "Enter your Google Cloud project ID above to see the exact commands to run."
+    },
+    "connect": {
+      "intro": "Once you have run the commands and the push subscription has been created, click below. Numa will save the configuration and register Gmail watches for everyone who has already connected Gmail (new connections register automatically).",
+      "button": "Save & activate triggers",
+      "topic": "Topic",
+      "subscription": "Subscription"
+    },
+    "done": {
+      "title": "Gmail triggers are live",
+      "watches": "Registered watches for {{count}} connected mailbox(es).",
+      "testHint": "Test it by sending a connected inbox an email. The first email after a watch registers only arms it; the next one fires the automation."
+    },
+    "errors": {
+      "loadFailed": "Failed to load setup details.",
+      "configureFailed": "Failed to save trigger configuration."
     }
   },
   "patCredentials": {
