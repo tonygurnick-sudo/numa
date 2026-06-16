@@ -609,6 +609,10 @@ export class NumaClientStack extends TerraformStack {
         workspaceToolsLambdaName: workspaceChatTools.lambdaName,
         // Cross-region AgentCore support (when client region doesn't support AgentCore)
         agentCoreRegion,
+        // Active-runs mirror table (BUG-140) — the proxy serves
+        // /runs/{id}/status from this table instead of invoking AgentCore
+        activeRunsTableName: workspaceChatAgent.activeRunsTable.name,
+        activeRunsTableArn: workspaceChatAgent.activeRunsTable.arn,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {

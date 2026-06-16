@@ -4,6 +4,7 @@ import path from 'node:path';
 
 // AWS Provider imports
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { EcrRepository } from '@cdktf/provider-aws/lib/ecr-repository';
 import { IamRole } from '@cdktf/provider-aws/lib/iam-role';
 import { IamRolePolicy } from '@cdktf/provider-aws/lib/iam-role-policy';
@@ -135,6 +136,14 @@ export class WorkspaceChatAgentConstruct extends Construct {
   readonly ecrRepository: EcrRepository;
   readonly logGroup: CloudwatchLogGroup;
   readonly agentRuntime: BedrockagentcoreAgentRuntime;
+  /**
+   * Active-runs mirror table (BUG-140). The container upserts a heartbeat
+   * record per in-flight run; the proxy Lambda reads it to answer
+   * /runs/{id}/status without an AgentCore invocation (which would queue
+   * behind the running chat). Records are ephemeral — TTL is GC only,
+   * freshness is decided by the proxy from last_seen_at.
+   */
+  readonly activeRunsTable: DynamodbTable;
 
   /**
    * Get the ARN of the AgentCore runtime for use with invoke_agent_runtime SDK calls.
@@ -207,6 +216,21 @@ export class WorkspaceChatAgentConstruct extends Construct {
 
     // Get current account ID
     const callerIdentity = new DataAwsCallerIdentity(this, 'caller-identity', {});
+
+    // Active-runs mirror table (BUG-140) — ephemeral per-run heartbeat
+    // records. No PITR: contents are reconstructable (re-written within 60s
+    // by any live run) and worthless historically.
+    this.activeRunsTable = new DynamodbTable(this, 'active-runs', {
+      name: `${props.clientName}-workspace-active-runs`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'conversation_id',
+      attribute: [{ name: 'conversation_id', type: 'S' }],
+      ttl: { attributeName: 'ttl', enabled: true },
+      tags: {
+        Name: `${props.clientName}-workspace-active-runs`,
+        Purpose: 'workspace-chat-active-run-mirror',
+      },
+    });
 
     // Path to the image tar (baked into numa-deploy container)
     const imageTarPath = path.resolve(
@@ -560,6 +584,14 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
                 },
               ]
             : []),
+          // Active-runs mirror — upsert heartbeat on run start/while running,
+          // delete on run completion (BUG-140)
+          {
+            sid: 'DynamoDBActiveRunsWrite',
+            effect: 'Allow',
+            actions: ['dynamodb:UpdateItem', 'dynamodb:DeleteItem'],
+            resources: [this.activeRunsTable.arn],
+          },
           // DynamoDB Scan for the unified integrations preferences (preferred_method per service).
           // Used by the agent to honour the admin's "native vs Pipedream" choice when filtering
           // tools at runtime. Read-only; admin writes go through admin-integration-settings.
@@ -817,6 +849,8 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         ...(props.integrationsApprovalTableName && {
           INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName,
         }),
+        // Active-runs mirror table (BUG-140) — proxy reads it for /status
+        ACTIVE_RUNS_TABLE_NAME: this.activeRunsTable.name,
         // Global integration settings table — used by the agent at runtime to
         // honour the admin's preferred_method choice (native vs Pipedream) per
         // service when filtering Pipedream / connector MCP tool calls.

@@ -20,6 +20,14 @@ import {
 const TABLE = process.env['INTEGRATIONS_APPROVAL_TABLE_NAME'] ?? '';
 const POLL_INTERVAL_MS = 5_000;
 const TIMEOUT_S = 180;
+// Unattended fast-fail (BUG-140): the frontend writes `seen_at` on the
+// approval record the moment the card renders (proxy `ack` action). No ack
+// within this grace window means nobody is viewing the conversation — fail
+// fast instead of burning the full 180s per call (the approval cascade that
+// hung away-from-chat runs for 10-20 minutes). Keep in sync with
+// APPROVAL_UNATTENDED_GRACE_SECONDS in
+// `lambdas/python/workspace-chat-tools/tools/approval.py`.
+const UNATTENDED_GRACE_S = 25;
 
 let _ddb: DynamoDBClient | undefined;
 function ddb(): DynamoDBClient {
@@ -66,7 +74,7 @@ export async function createApprovalRequest(args: CreateApprovalArgs): Promise<s
   return args.approvalId;
 }
 
-export type ApprovalDecision = 'approved' | 'denied' | 'timeout';
+export type ApprovalDecision = 'approved' | 'denied' | 'unattended' | 'timeout';
 
 export interface PollResult {
   decision: ApprovalDecision;
@@ -83,11 +91,16 @@ async function getRow(approvalId: string): Promise<Record<string, { S?: string; 
  * or the 180s window elapses. Deadline is anchored to the DDB `created_at`
  * field (not the start of polling) so the budget accounts for time burned
  * between row creation and the first poll (matches Python smart-deadline).
+ *
+ * Fast-fails with `unattended` when no client has acknowledged rendering the
+ * approval card (`seen_at`) within the grace window — a decision always wins
+ * over the unattended check, even at the boundary.
  */
 export async function pollApproval(approvalId: string): Promise<PollResult> {
   const initial = await getRow(approvalId);
   const createdAt = initial?.created_at?.N ? Number(initial.created_at.N) : Math.floor(Date.now() / 1000);
   const deadlineMs = (createdAt + TIMEOUT_S) * 1000;
+  const unattendedAfterMs = (createdAt + UNATTENDED_GRACE_S) * 1000;
 
   const initialStatus = initial?.status?.S ?? 'pending';
   if (initialStatus === 'approved' || initialStatus === 'denied') {
@@ -100,6 +113,9 @@ export async function pollApproval(approvalId: string): Promise<PollResult> {
     const status = row?.status?.S ?? 'pending';
     if (status === 'approved' || status === 'denied') {
       return { decision: status, denyReason: row?.deny_reason?.S ?? '' };
+    }
+    if (!row?.seen_at?.N && Date.now() >= unattendedAfterMs) {
+      return { decision: 'unattended', denyReason: '' };
     }
   }
   return { decision: 'timeout', denyReason: '' };

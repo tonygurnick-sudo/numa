@@ -22,7 +22,7 @@ import structlog
 
 from prm import client as prm_client
 
-from .approval import create_approval_request, poll_approval
+from .approval import UNATTENDED_MESSAGE, create_approval_request, poll_approval
 
 logger = structlog.get_logger()
 
@@ -547,6 +547,13 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
                 "approval_id": approval_id,
             }
 
+        if decision == "unattended":
+            return {
+                "status": "unattended",
+                "message": UNATTENDED_MESSAGE,
+                "approval_id": approval_id,
+            }
+
         if decision == "timeout":
             return {
                 "status": "timeout",
@@ -737,6 +744,13 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 "status": "denied",
                 "message": msg,
                 "deny_reason": deny_reason,
+                "approval_id": approval_id,
+            }
+
+        if decision == "unattended":
+            return {
+                "status": "unattended",
+                "message": UNATTENDED_MESSAGE,
                 "approval_id": approval_id,
             }
 
