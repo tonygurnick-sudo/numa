@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
+import { Alert } from 'react-bootstrap';
 import '../chartSetup';
 import {
   buildByClientRowsWindowed,
@@ -18,8 +19,12 @@ import {
 } from '../shared';
 import { useCurrency } from '../currencyContext';
 import { ND_COLORS } from '../theme';
+import { RowDownloadMenu } from '../RowDownloadMenu';
+import { fetchConversationExport, type ConversationExportFormat } from '@/services/conversationExportService';
+import { FileExportService } from '@/utils/fileExport';
 import type { WindowState } from '../shared';
-import type { ClientSnapshot, DashboardView } from '@/types/fleetAnalytics';
+import type { ClientAccountRef } from '@/types/clientAccount';
+import type { ClientSnapshot, DashboardView, TopConversation } from '@/types/fleetAnalytics';
 
 interface Props {
   data: DashboardView;
@@ -38,6 +43,25 @@ export function ChatTab({ data, window, snapshots }: Props) {
   // sub_to_email is a per-client thing — aggregate view doesn't have it.
   // We still try to look up by user_id but fall back to opaque sub display.
   const subToEmail = !isAggregate(data) ? data.users?.sub_to_email : undefined;
+
+  // Per-client account ref for conversation downloads (assume-role into the
+  // client account). Aggregate views don't map to one client, so downloads are
+  // disabled there — each top-conversation row could belong to a different stack.
+  const clientRef: ClientAccountRef | null = useMemo(() => {
+    if (isAggregate(data)) return null;
+    const accountId = data.client_config?.client_account_id;
+    const region = data.client_config?.region;
+    if (!accountId || !region) return null;
+    return { clientName: data.client, accountId, region };
+  }, [data]);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const downloadConversation = async (conv: TopConversation, format: ConversationExportFormat) => {
+    if (!clientRef) return;
+    const userEmail = conv.user_id ? subToEmail?.[conv.user_id] : undefined;
+    const file = await fetchConversationExport(clientRef, conv, format, { userEmail });
+    FileExportService.downloadFile(file);
+  };
 
   const days = useMemo(() => buildDayRange(window.startDate, window.endDate), [window]);
 
@@ -215,6 +239,11 @@ export function ChatTab({ data, window, snapshots }: Props) {
             {topConvs.length} fall in selected window
           </div>
         </div>
+        {downloadError && (
+          <Alert variant="warning" dismissible onClose={() => setDownloadError(null)} className="mx-3 mt-2 mb-0 py-2">
+            {downloadError}
+          </Alert>
+        )}
         <div className="nd-scroll-tbl">
           <table className="nd-table">
             <thead>
@@ -228,12 +257,13 @@ export function ChatTab({ data, window, snapshots }: Props) {
                 <th className="nd-num">Tools</th>
                 <th className="nd-num">$/turn</th>
                 <th className="nd-num">Length</th>
+                <th className="nd-dl-col" aria-label="Download" />
               </tr>
             </thead>
             <tbody>
               {topConvs.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="nd-empty">
+                  <td colSpan={10} className="nd-empty">
                     No top conversations in window
                   </td>
                 </tr>
@@ -260,6 +290,27 @@ export function ChatTab({ data, window, snapshots }: Props) {
                       <td className="nd-num">{c.tool_call_count}</td>
                       <td className="nd-num">{fmtUSDc(cpt)}</td>
                       <td className="nd-num">{span}</td>
+                      <td className="nd-dl-col">
+                        <RowDownloadMenu
+                          title="Download conversation"
+                          disabledReason={clientRef ? undefined : 'Select a single client to download conversations'}
+                          onError={setDownloadError}
+                          options={[
+                            {
+                              key: 'txt',
+                              label: 'Clean transcript (.txt)',
+                              sublabel: 'Readable user / assistant / tool turns',
+                              run: () => downloadConversation(c, 'txt'),
+                            },
+                            {
+                              key: 'jsonl',
+                              label: 'Raw trace (.jsonl)',
+                              sublabel: 'Full lossless event log — thinking + cost included',
+                              run: () => downloadConversation(c, 'jsonl'),
+                            },
+                          ]}
+                        />
+                      </td>
                     </tr>
                   );
                 })

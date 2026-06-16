@@ -112,11 +112,15 @@ def write_snapshot(
     snapshot = _trim_oversized(snapshot)
     body = _to_decimal(snapshot)
 
-    # Latest pointer (no TTL — always current)
+    # Latest pointer (no TTL — always current). `latest_pk` is the sparse-GSI
+    # partition key: stamping it here (and NOT on the dated row below) is what
+    # puts this row — and only this row — into `latest-snapshots-index`, so the
+    # portal can Query the latest snapshots without Scanning dated history.
     table.put_item(
         Item={
             "clientName": client_name,
             "sk": "SNAPSHOT#latest",
+            "latest_pk": "LATEST",
             "generated_at": snapshot["generated_at"],
             "body": body,
         }

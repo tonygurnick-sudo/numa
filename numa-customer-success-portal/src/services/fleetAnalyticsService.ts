@@ -11,13 +11,16 @@
  * different KPI shape — see ./fleetAnalyticsTypes.
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import { awsCredentialsService } from './awsCredentialsService';
 import { getAllConfig } from './configService';
 import type { FleetAnalyticsSnapshot, RefreshScope, RollupResponse, SnapshotMetadata } from '@/types/fleetAnalytics';
 
 const SPECIAL_AGGREGATES = ['_FLEET', '_CLIENTS'] as const;
+
+/** Sparse GSI that indexes only `SNAPSHOT#latest` rows (PK `latest_pk = "LATEST"`). */
+const LATEST_SNAPSHOTS_INDEX = 'latest-snapshots-index';
 
 class FleetAnalyticsService {
   private _ddbClient: DynamoDBDocumentClient | null = null;
@@ -132,19 +135,44 @@ class FleetAnalyticsService {
   }
 
   /**
-   * Pull the full snapshot body for every client (latest only).
-   * Used by the export button to bundle into a single JSON download.
+   * Pull the full snapshot body for every client (latest only). Drives the
+   * whole dashboard (per-client views + in-browser aggregates) on mount.
+   *
+   * Fast path: Query the sparse `latest-snapshots-index` GSI, which indexes
+   * ONLY the ~150 `SNAPSHOT#latest` rows (~5MB) — not the hundreds of MB of
+   * dated `SNAPSHOT#YYYY-MM-DD` history. That's a handful of pages vs. a
+   * full-table crawl.
+   *
+   * Fallback: if the GSI isn't usable yet — still `CREATING` right after a
+   * deploy, or empty before the one-time backfill stamps `latest_pk` on
+   * existing rows — fall back to a parallel segmented Scan so the dashboard
+   * keeps working regardless of deploy/backfill ordering.
    */
   async fetchAllSnapshots(): Promise<Record<string, FleetAnalyticsSnapshot>> {
+    try {
+      const viaGsi = await this.queryLatestSnapshots();
+      if (Object.keys(viaGsi).length > 0) return viaGsi;
+      console.warn(
+        '[fleetAnalytics] latest-snapshots-index returned no rows; falling back to Scan (backfill pending?)'
+      );
+    } catch (e) {
+      console.warn('[fleetAnalytics] latest-snapshots-index query failed; falling back to Scan', e);
+    }
+    return this.scanAllSnapshots();
+  }
+
+  /** Fast path — Query the sparse GSI for the ~150 latest snapshots directly. */
+  private async queryLatestSnapshots(): Promise<Record<string, FleetAnalyticsSnapshot>> {
     const client = await this.ddb();
     const out: Record<string, FleetAnalyticsSnapshot> = {};
     let lastKey: Record<string, unknown> | undefined;
     do {
       const resp = await client.send(
-        new ScanCommand({
+        new QueryCommand({
           TableName: this.tableName(),
-          FilterExpression: 'sk = :latest',
-          ExpressionAttributeValues: { ':latest': 'SNAPSHOT#latest' },
+          IndexName: LATEST_SNAPSHOTS_INDEX,
+          KeyConditionExpression: 'latest_pk = :pk',
+          ExpressionAttributeValues: { ':pk': 'LATEST' },
           ExclusiveStartKey: lastKey,
         })
       );
@@ -155,6 +183,50 @@ class FleetAnalyticsService {
       }
       lastKey = resp.LastEvaluatedKey as Record<string, unknown> | undefined;
     } while (lastKey);
+    return out;
+  }
+
+  /**
+   * Fallback path — parallel segmented Scan of the full table filtered to
+   * `sk = :latest`. DynamoDB reads the entire table (incl. dated history)
+   * before filtering, so we split it into `TOTAL_SEGMENTS` segments scanned
+   * concurrently to cut the wall-clock ~N× vs. a sequential crawl.
+   */
+  private async scanAllSnapshots(): Promise<Record<string, FleetAnalyticsSnapshot>> {
+    const client = await this.ddb();
+    const TOTAL_SEGMENTS = 12;
+    const tableName = this.tableName();
+
+    const scanSegment = async (segment: number): Promise<Array<[string, FleetAnalyticsSnapshot]>> => {
+      const collected: Array<[string, FleetAnalyticsSnapshot]> = [];
+      let lastKey: Record<string, unknown> | undefined;
+      do {
+        const resp = await client.send(
+          new ScanCommand({
+            TableName: tableName,
+            FilterExpression: 'sk = :latest',
+            ExpressionAttributeValues: { ':latest': 'SNAPSHOT#latest' },
+            Segment: segment,
+            TotalSegments: TOTAL_SEGMENTS,
+            ExclusiveStartKey: lastKey,
+          })
+        );
+        for (const row of resp.Items ?? []) {
+          const name = (row as { clientName?: string }).clientName;
+          const body = (row as { body?: FleetAnalyticsSnapshot }).body;
+          if (name && body) collected.push([name, body]);
+        }
+        lastKey = resp.LastEvaluatedKey as Record<string, unknown> | undefined;
+      } while (lastKey);
+      return collected;
+    };
+
+    const segments = await Promise.all(Array.from({ length: TOTAL_SEGMENTS }, (_, i) => scanSegment(i)));
+
+    const out: Record<string, FleetAnalyticsSnapshot> = {};
+    for (const segment of segments) {
+      for (const [name, body] of segment) out[name] = body;
+    }
     return out;
   }
 

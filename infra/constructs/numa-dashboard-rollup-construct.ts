@@ -40,6 +40,9 @@ export interface NumaDashboardRollupConstructProps {
  *
  * Provisions:
  *   • DynamoDB `numa-portal-fleet-analytics` table (PK clientName, SK sk; TTL).
+ *     Sparse GSI `latest-snapshots-index` (PK latest_pk) indexes only the
+ *     `SNAPSHOT#latest` rows so the portal Queries ~150 rows instead of
+ *     Scanning the full table (dated history is hundreds of MB).
  *   • Lambda `numa-fleet-analytics-rollup` (Python 3.13, 3008MB, 15min, 4GB ephemeral).
  *   • IAM execution role: read client config, write rollups, sts:AssumeRole into client accts.
  *   • Step Functions state machine `numa-fleet-analytics-rollup-orchestrator`:
@@ -89,6 +92,20 @@ export class NumaDashboardRollupConstruct extends Construct {
       attribute: [
         { name: 'clientName', type: 'S' },
         { name: 'sk', type: 'S' },
+        // Sparse-GSI partition key — stamped ONLY on `SNAPSHOT#latest` rows
+        // (value "LATEST"). Dated history rows omit it, so they never enter the
+        // index. Lets the portal Query the ~150 latest snapshots directly
+        // instead of Scanning the whole table (which carries hundreds of MB of
+        // dated history). See `latest-snapshots-index` below.
+        { name: 'latest_pk', type: 'S' },
+      ],
+      globalSecondaryIndex: [
+        {
+          name: 'latest-snapshots-index',
+          hashKey: 'latest_pk',
+          rangeKey: 'clientName',
+          projectionType: 'ALL',
+        },
       ],
       ttl: {
         attributeName: 'ttl',
