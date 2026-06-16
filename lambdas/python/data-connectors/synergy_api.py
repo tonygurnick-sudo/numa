@@ -251,12 +251,16 @@ def _attr_value(attributes: Any, *names: str) -> Any:
     """
     if not isinstance(attributes, list):
         return None
-    wanted = {n.strip().lower() for n in names}
+    # Attributes carry BOTH snake_case `name` ("document_status") and human
+    # `display_name` ("Document Status"); instances vary in which is populated.
+    # Check both, normalizing underscores, so either shape matches.
+    wanted = {n.strip().lower().replace("_", " ") for n in names}
     for attr in attributes:
         if not isinstance(attr, dict):
             continue
-        name = (attr.get("name") or attr.get("display_name") or "").strip().lower()
-        if name in wanted:
+        candidates = (attr.get("name"), attr.get("display_name"))
+        normalized = {str(c).strip().lower().replace("_", " ") for c in candidates if c}
+        if normalized & wanted:
             value = attr.get("value")
             if isinstance(value, dict):
                 return value.get("_value")

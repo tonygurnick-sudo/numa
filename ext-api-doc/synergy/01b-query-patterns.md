@@ -192,22 +192,52 @@ other, not both with different values (they get AND-ed).
 
 ### File search (includes content search)
 
+**File search is ALWAYS job-scoped — there is no global / all-jobs search.**
+`LimitSearchTo` + `LimitID` are **required**. Omitting `LimitID` (or using
+`LimitSearchTo: 0`) returns **HTTP 500** ("Object reference not set..."). The
+12d web client behaves the same way: you pick a project, then search inside it.
+(Verified live: an instance can have >13,000 projects and none of the
+no-scope/`LimitSearchTo:0` variants return results.)
+
 ```
 POST /api/v1/files/search
 {
-  "FileName": "drainage",
-  "Contents": "",                     // full-text content search — supported
+  "FileName": "drainage",            // matches file names
+  "Contents": "",                    // full-text content search — supported, runs separately
   "Page": 1,
   "PageSize": 50,
   "ShowDeletedFiles": false,
-  "RetrieveAttributes": true,
-  "LimitSearchTo": 0,                 // 0=all, 1=job, 2=folder (verify per API)
-  "LimitID": { "IDString": "100_1" }  // only required if LimitSearchTo > 0
+  "Attributes": [],
+  "LimitSearchTo": 2,                // REQUIRED. 2 = the job AND its sub-jobs (verified
+                                     //   against the web client; this is the value to use)
+  "LimitID": {                       // REQUIRED. The JOB's full ID object.
+    "IDString": "100_1",
+    "_id": 100,                      // the part before "_" in the IDString
+    "_server_id": 1                  // the part after "_" — MANDATORY; {IDString} alone 500s
+  }
 }
 ```
 
-**File content search IS supported** via `Contents`. Earlier doc said
-otherwise — it was wrong.
+Rules that matter:
+
+- **`LimitID` must include `_server_id`.** Parse the `N_N` IDString: `"8_1"` →
+  `{ "IDString": "8_1", "_id": 8, "_server_id": 1 }`. Sending just
+  `{ "IDString": "8_1" }` returns HTTP 500. (`_server_guid` is optional.)
+- **`LimitSearchTo: 2`** = the job and its sub-jobs. Scope to the **job**
+  (not a folder) using the job's ID. Folder-level file search is not reliable
+  via this endpoint — scope to the parent job and filter results yourself.
+- **`FileName` and `Contents` are separate searches.** To match a term in
+  either a filename or document body, run both (one with `FileName`, one with
+  `Contents`) and merge the results — `FileName` + `Contents` in one body ANDs
+  them.
+- **No global search.** To "find files about X" you must first resolve a job:
+  `POST /api/v1/jobs/search` with `{Name:"..."}` → `Result[i].ID.IDString`,
+  then file-search inside it. If you can't determine the job, ask the user
+  which project — do not loop job-name searches or claim no files exist.
+
+**File content search IS supported** via `Contents` (verified live — a content
+query returns documents by their body text). It is NOT limited by indexing or
+file type; never tell the user otherwise.
 
 ### Contact search
 
@@ -328,7 +358,9 @@ POST /api/v1/files/2000_1/download/3/false     # version 3, with_references=fals
 # Body empty. Response is raw bytes.
 ```
 
-### Example 5: Full-text search inside files
+### Example 5: Full-text search inside files (job-scoped)
+
+File search is always job-scoped — resolve the job first (`/jobs/search`), then:
 
 ```
 POST /api/v1/files/search
@@ -337,9 +369,14 @@ POST /api/v1/files/search
   "Contents": "drainage",
   "Page": 1, "PageSize": 20,
   "ShowDeletedFiles": false,
-  "RetrieveAttributes": true
+  "Attributes": [],
+  "LimitSearchTo": 2,
+  "LimitID": { "IDString": "100_1", "_id": 100, "_server_id": 1 }
 }
 ```
+
+`LimitSearchTo` + `LimitID` (with `_server_id`) are **required** — omitting them
+returns HTTP 500. There is no global content search across all jobs.
 
 ### Example 6: Fetch required attributes before creating a job
 

@@ -1,7 +1,11 @@
 export const COMPANY_KB_ID = 'company';
 export const NUMA_SUPPORT_KB_ID = 'numa-support';
 export const SHAREPOINT_KB_ID = 'sharepoint';
-export const SYSTEM_KB_IDS = new Set<string>([COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SHAREPOINT_KB_ID]);
+// Cross-job Synergy (12d) corpus — system-managed, auto-populated by the Synergy
+// KB crawler. Selectable in the chat KB picker but hidden from the Files/Folders
+// management page (it has no per-file management surface).
+export const SYNERGY_KB_ID = 'synergy';
+export const SYSTEM_KB_IDS = new Set<string>([COMPANY_KB_ID, NUMA_SUPPORT_KB_ID, SHAREPOINT_KB_ID, SYNERGY_KB_ID]);
 
 /**
  * Sentinel value used in persisted chat-settings `defaultKBIds` to mean
@@ -16,11 +20,12 @@ export function sortKnowledgeBases<T extends { kb_id: string; is_root?: boolean 
   const order: Record<string, number> = {
     [COMPANY_KB_ID]: 1,
     [SHAREPOINT_KB_ID]: 2,
-    [NUMA_SUPPORT_KB_ID]: 3,
+    [SYNERGY_KB_ID]: 3,
+    [NUMA_SUPPORT_KB_ID]: 4,
   };
   return [...kbs].sort((a, b) => {
-    const aRank = a.is_root ? 0 : (order[a.kb_id] ?? 4);
-    const bRank = b.is_root ? 0 : (order[b.kb_id] ?? 4);
+    const aRank = a.is_root ? 0 : (order[a.kb_id] ?? 5);
+    const bRank = b.is_root ? 0 : (order[b.kb_id] ?? 5);
     return aRank - bRank;
   });
 }

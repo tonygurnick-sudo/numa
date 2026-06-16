@@ -6,6 +6,8 @@ import type {
   SynergyFileHistoryResponse,
   SynergyFile,
   SyncConfig,
+  SynergyKbSyncConfig,
+  SynergyKbSyncStatus,
 } from '../types/synergySync';
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -111,5 +113,35 @@ export const SynergyDataConnectorService = {
 
   async deleteSyncConfig(numaDelete: NumaDelete, syncConfigId: string): Promise<void> {
     await numaDelete(`/api/data-connectors/sync-configs/${syncConfigId}`);
+  },
+
+  // ---------------------------------------------------------------------------
+  // Cross-job KB crawler admin (sync-config / sync-status / sync-now). All
+  // admin-gated server-side; the panel additionally gates on the admin group +
+  // DEPLOY_SYNERGY_KB_SEARCH flag.
+  // ---------------------------------------------------------------------------
+  async getKbSyncConfig(numaGet: NumaGet): Promise<SynergyKbSyncConfig> {
+    return (await numaGet('/api/data-connectors/synergy/sync-config')) as SynergyKbSyncConfig;
+  },
+
+  async updateKbSyncConfig(
+    numaPut: NumaPut,
+    payload: { enabled: boolean; frequency_hours: number; use_my_credential?: boolean }
+  ): Promise<SynergyKbSyncConfig> {
+    return (await numaPut('/api/data-connectors/synergy/sync-config', payload)) as SynergyKbSyncConfig;
+  },
+
+  async getKbSyncStatus(numaGet: NumaGet): Promise<SynergyKbSyncStatus> {
+    return (await numaGet('/api/data-connectors/synergy/sync-status')) as SynergyKbSyncStatus;
+  },
+
+  async kbSyncNow(
+    numaPost: NumaPost,
+    scope?: { max_jobs?: number; job_ids?: string[] }
+  ): Promise<{ status?: string; run_id?: string }> {
+    return (await numaPost('/api/data-connectors/synergy/sync-now', scope ? { scope } : {})) as {
+      status?: string;
+      run_id?: string;
+    };
   },
 };

@@ -6,6 +6,7 @@ import base64
 import binascii
 import json
 import os
+import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, Optional
@@ -62,6 +63,16 @@ SECRETS_PREFIX = os.environ.get("DATA_CONNECTORS_SECRETS_PREFIX")
 SETTINGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SETTINGS_TABLE_NAME")
 SYNC_CONFIGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME")
 EVENT_CONFIGS_TABLE_NAME = os.environ.get("CONNECTOR_EVENT_CONFIGS_TABLE_NAME")
+# Synergy → Bedrock KB crawl Step Function (empty when the crawler is disabled).
+SYNERGY_CRAWL_STATE_MACHINE_ARN = os.environ.get("SYNERGY_CRAWL_STATE_MACHINE_ARN", "")
+# Crawl-state table + worker function for the on-visit incremental sync.
+SYNERGY_CRAWL_STATE_TABLE_NAME = os.environ.get("SYNERGY_CRAWL_STATE_TABLE_NAME", "")
+SYNERGY_TEXT_CRAWLER_FUNCTION_NAME = os.environ.get(
+    "SYNERGY_TEXT_CRAWLER_FUNCTION_NAME", ""
+)
+SYNERGY_ONVISIT_COOLDOWN_HOURS = float(
+    os.environ.get("SYNERGY_ONVISIT_COOLDOWN_HOURS", "6")
+)
 SYSTEM_KB_IDS = {"company", "numa-support"}
 
 # Synergy PAT rotation config
@@ -730,6 +741,9 @@ def _handle_synergy_job_folders(
         logger.warning("Synergy job folders failed", error=str(exc))
         return _response(400, {"error": str(exc)})
     update_connector_health(table_name, user_id, "synergy", "connected")
+    # On-visit incremental KB sync: the user just proved (with their own PAT)
+    # they can see this job — grant + opportunistically refresh its index.
+    _sneaky_synergy_sync(user_id, job_id, server)
     return _response(200, payload, cache_control="private, max-age=300")
 
 
@@ -764,6 +778,333 @@ def _handle_synergy_folder_items(
         return _response(400, {"error": str(exc)})
     update_connector_health(table_name, user_id, "synergy", "connected")
     return _response(200, payload, cache_control="private, max-age=300")
+
+
+def _is_admin(event: Dict[str, Any]) -> bool:
+    """Check if the caller belongs to the admin Cognito group.
+
+    Handles both the JWT-authorizer claim shape and the Lambda-authorizer
+    serialized-JWT shape (same pattern as vault-secrets).
+    """
+    auth = event.get("requestContext", {}).get("authorizer", {})
+
+    claims = auth.get("jwt", {}).get("claims", {}) or {}
+    groups = claims.get("cognito:groups", "")
+
+    if not groups:
+        lambda_ctx = auth.get("lambda", {})
+        jwt_str = lambda_ctx.get("jwt", "")
+        if jwt_str and isinstance(jwt_str, str):
+            try:
+                jwt_obj = json.loads(jwt_str)
+                groups = jwt_obj.get("claims", {}).get("cognito:groups", "")
+            except (json.JSONDecodeError, AttributeError):
+                pass
+
+    if isinstance(groups, str):
+        groups = [g.strip() for g in groups.split(",") if g.strip()]
+    if isinstance(groups, list):
+        return "admin" in groups
+    return False
+
+
+def _synergy_crawl_state_table():
+    return prm_resource("dynamodb").Table(SYNERGY_CRAWL_STATE_TABLE_NAME)
+
+
+def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
+    """Opportunistic on-visit sync of the Synergy job a user is browsing.
+
+    Best-effort and additive: (a) grant the visiting user on the job's
+    ``allowed_users`` (their own PAT just proved they can see it); (b) async-
+    invoke the crawl worker for the job — always when the grant is NEW (so the
+    sidecar restamp makes content retrievable immediately), otherwise throttled
+    by ``last_enumerated_at`` cooldown. Never raises into the browse path.
+    """
+    if not (SYNERGY_CRAWL_STATE_TABLE_NAME and SYNERGY_TEXT_CRAWLER_FUNCTION_NAME):
+        return
+    try:
+        table = _synergy_crawl_state_table()
+        key = {"pk": f"JOB#{job_id}", "sk": "META"}
+
+        granted = False
+        try:
+            table.update_item(
+                Key=key,
+                UpdateExpression=(
+                    "ADD allowed_users :u "
+                    "SET acl_rev = if_not_exists(acl_rev, :z) + :one, job_id = :jid"
+                ),
+                ConditionExpression=(
+                    "attribute_not_exists(allowed_users) OR NOT contains(allowed_users, :uid)"
+                ),
+                ExpressionAttributeValues={
+                    ":u": {user_id},
+                    ":uid": user_id,
+                    ":z": 0,
+                    ":one": 1,
+                    ":jid": job_id,
+                },
+            )
+            granted = True
+        except table.meta.client.exceptions.ConditionalCheckFailedException:
+            pass  # already granted
+
+        if not granted:
+            # No ACL change — honour the cooldown before re-crawling.
+            row = (table.get_item(Key=key)).get("Item") or {}
+            last = str(row.get("last_enumerated_at") or "")
+            if last:
+                try:
+                    elapsed_h = (
+                        datetime.now(timezone.utc) - datetime.fromisoformat(last)
+                    ).total_seconds() / 3600
+                    if elapsed_h < SYNERGY_ONVISIT_COOLDOWN_HOURS:
+                        return
+                except ValueError:
+                    pass
+
+        table.update_item(
+            Key=key,
+            UpdateExpression="SET last_enumerated_at = :t",
+            ExpressionAttributeValues={":t": datetime.now(timezone.utc).isoformat()},
+        )
+        prm_client("lambda").invoke(
+            FunctionName=SYNERGY_TEXT_CRAWLER_FUNCTION_NAME,
+            InvocationType="Event",
+            Payload=json.dumps(
+                {
+                    "job_id": job_id,
+                    "run_id": f"onvisit-{user_id[:8]}-{int(datetime.now(timezone.utc).timestamp())}",
+                    "user_sub": user_id,
+                    "secret_id": f"{CLIENT_NAME}/vault/users/{user_id}",
+                    "instance_url": server,
+                }
+            ).encode("utf-8"),
+        )
+        logger.info(
+            "synergy_onvisit_sync",
+            _name="SYNERGY_ONVISIT",
+            job_id=job_id,
+            new_grant=granted,
+        )
+    except Exception as exc:  # noqa: BLE001 — never break the browse path
+        logger.warning("synergy_onvisit_sync_failed", job_id=job_id, error=str(exc))
+
+
+def _handle_synergy_sync_config_get(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the admin crawl config (admin-only)."""
+    if not SYNERGY_CRAWL_STATE_TABLE_NAME:
+        return _response(400, {"error": "Synergy cross-job search is not enabled."})
+    if not _is_admin(event):
+        return _response(403, {"error": "Admin access required"})
+    row = (
+        _synergy_crawl_state_table().get_item(Key={"pk": "CONFIG#crawl", "sk": "META"})
+    ).get("Item") or {}
+    return _response(
+        200,
+        {
+            "enabled": bool(row.get("enabled")),
+            "frequency_hours": int(row.get("frequency_hours") or 24),
+            "credential_user_sub": str(row.get("credential_user_sub") or ""),
+            "updated_at": str(row.get("updated_at") or ""),
+            "updated_by": str(row.get("updated_by") or ""),
+        },
+    )
+
+
+def _handle_synergy_sync_config_put(
+    event: Dict[str, Any], user_id: str
+) -> Dict[str, Any]:
+    """Update the admin crawl config (admin-only)."""
+    if not SYNERGY_CRAWL_STATE_TABLE_NAME:
+        return _response(400, {"error": "Synergy cross-job search is not enabled."})
+    if not _is_admin(event):
+        return _response(403, {"error": "Admin access required"})
+
+    raw = event.get("body") or "{}"
+    try:
+        if event.get("isBase64Encoded"):
+            raw = base64.b64decode(raw).decode("utf-8")
+        body = json.loads(raw) or {}
+    except (ValueError, binascii.Error):
+        return _response(400, {"error": "Invalid JSON body"})
+
+    enabled = bool(body.get("enabled"))
+    try:
+        frequency_hours = int(body.get("frequency_hours") or 24)
+    except (TypeError, ValueError):
+        return _response(400, {"error": "frequency_hours must be a number"})
+    if not 1 <= frequency_hours <= 168:
+        return _response(400, {"error": "frequency_hours must be between 1 and 168"})
+
+    # The scheduled pass runs under this credential where possible (per-job
+    # fallbacks cover the rest). "use_my_credential" pins it to the caller.
+    item_updates: Dict[str, Any] = {
+        ":e": enabled,
+        ":f": frequency_hours,
+        ":by": user_id,
+        ":t": datetime.now(timezone.utc).isoformat(),
+    }
+    update_expr = (
+        "SET enabled = :e, frequency_hours = :f, updated_by = :by, updated_at = :t"
+    )
+    if body.get("use_my_credential"):
+        update_expr += ", credential_user_sub = :cred"
+        item_updates[":cred"] = user_id
+
+    _synergy_crawl_state_table().update_item(
+        Key={"pk": "CONFIG#crawl", "sk": "META"},
+        UpdateExpression=update_expr,
+        ExpressionAttributeValues=item_updates,
+    )
+    logger.info(
+        "synergy_sync_config_updated",
+        _name="SYNERGY_SYNC_CONFIG",
+        enabled=enabled,
+        frequency_hours=frequency_hours,
+        updated_by=user_id[:8] + "...",
+    )
+    return _handle_synergy_sync_config_get(event)
+
+
+def _handle_synergy_sync_status(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Return the latest crawl run's status + progress (admin-only)."""
+    if not SYNERGY_CRAWL_STATE_TABLE_NAME:
+        return _response(400, {"error": "Synergy cross-job search is not enabled."})
+    if not _is_admin(event):
+        return _response(403, {"error": "Admin access required"})
+
+    table = _synergy_crawl_state_table()
+    config = (table.get_item(Key={"pk": "CONFIG#crawl", "sk": "META"})).get(
+        "Item"
+    ) or {}
+    last_run_id = str(config.get("last_run_id") or "")
+    if not last_run_id:
+        return _response(200, {"last_run": None})
+
+    run = (table.get_item(Key={"pk": f"RUN#{last_run_id}", "sk": "META"})).get(
+        "Item"
+    ) or {}
+
+    def _count(status: str) -> int:
+        total = 0
+        kwargs: Dict[str, Any] = {
+            "IndexName": "run-status-index",
+            "KeyConditionExpression": "run_id = :r AND #s = :st",
+            # The RUN# row itself carries run_id + status and lands in this
+            # index — exclude it or jobs_done reads "13 of 12" after completion.
+            "FilterExpression": "begins_with(pk, :job)",
+            "ExpressionAttributeNames": {"#s": "status"},
+            "ExpressionAttributeValues": {
+                ":r": last_run_id,
+                ":st": status,
+                ":job": "JOB#",
+            },
+            "Select": "COUNT",
+        }
+        while True:
+            resp = table.query(**kwargs)
+            total += int(resp.get("Count") or 0)
+            last_key = resp.get("LastEvaluatedKey")
+            if not last_key:
+                return total
+            kwargs["ExclusiveStartKey"] = last_key
+
+    pending = _count("pending")
+    done = _count("done")
+    return _response(
+        200,
+        {
+            "last_run": {
+                "run_id": last_run_id,
+                "status": str(run.get("status") or "unknown"),
+                "trigger": str(run.get("trigger") or ""),
+                "started_at": str(run.get("started_at") or ""),
+                "job_count": int(run.get("job_count") or 0),
+                "jobs_pending": pending,
+                "jobs_done": done,
+            }
+        },
+    )
+
+
+def _handle_synergy_sync_now(
+    event: Dict[str, Any], user_id: str, table_name: str
+) -> Dict[str, Any]:
+    """Kick off a Synergy → Bedrock KB crawl for the calling user (manual sync).
+
+    Runs as the caller's OWN PAT: only the vault ``secret_id`` (never the token)
+    is put into the Step Function input, so the coordinator/worker read the PAT
+    from Secrets Manager under their own role and it never lands in execution
+    history. Every job this crawl indexes is granted to the user's
+    ``allowed_users`` precisely because it was enumerated with the user's
+    credential — access mirrors the user's Synergy permissions by construction.
+    """
+    del table_name  # crawl reads creds from the vault, not the connector table
+    if not SYNERGY_CRAWL_STATE_MACHINE_ARN:
+        return _response(
+            400,
+            {"error": "Synergy cross-job search is not enabled for this workspace."},
+        )
+
+    # Require a vault-sourced PAT (the worker reads the same vault path) — this
+    # also confirms the user has actually connected Synergy.
+    creds = _get_synergy_credentials_from_vault(user_id)
+    if not creds:
+        return _response(
+            400,
+            {
+                "error": "Connect Synergy (add your personal access token) before syncing."
+            },
+        )
+    instance_url, _token = creds
+
+    body: Dict[str, Any] = {}
+    raw = event.get("body")
+    if raw:
+        try:
+            if event.get("isBase64Encoded"):
+                raw = base64.b64decode(raw).decode("utf-8")
+            body = json.loads(raw) or {}
+        except (ValueError, binascii.Error):
+            body = {}
+    scope = body.get("scope") if isinstance(body.get("scope"), dict) else {}
+
+    run_id = f"sync-{uuid.uuid4().hex[:16]}"
+    sfn_input = {
+        "run_id": run_id,
+        "user_sub": user_id,
+        "secret_id": f"{CLIENT_NAME}/vault/users/{user_id}",
+        "instance_url": instance_url,
+        "scope": scope,
+        "trigger": "manual",
+    }
+    try:
+        sfn = prm_client("stepfunctions")
+        execution = sfn.start_execution(
+            stateMachineArn=SYNERGY_CRAWL_STATE_MACHINE_ARN,
+            name=run_id,
+            input=json.dumps(sfn_input),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("synergy_sync_now_failed", user_id=user_id, error=str(exc))
+        return _response(500, {"error": "Failed to start Synergy sync."})
+
+    logger.info(
+        "synergy_sync_now_started",
+        _name="SYNERGY_SYNC_NOW",
+        run_id=run_id,
+        user_id=user_id,
+    )
+    return _response(
+        202,
+        {
+            "status": "started",
+            "run_id": run_id,
+            "execution_arn": execution.get("executionArn"),
+        },
+    )
 
 
 def _handle_sync_configs_list(user_id: str, table_name: str) -> Dict[str, Any]:
@@ -1172,6 +1513,18 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
 
     if method == "POST" and path.endswith("/data-connectors/synergy/rotate-pat"):
         return _handle_pat_rotate(user_id, table_name)
+
+    if method == "POST" and path.endswith("/data-connectors/synergy/sync-now"):
+        return _handle_synergy_sync_now(event, user_id, table_name)
+
+    if method == "GET" and path.endswith("/data-connectors/synergy/sync-config"):
+        return _handle_synergy_sync_config_get(event)
+
+    if method == "PUT" and path.endswith("/data-connectors/synergy/sync-config"):
+        return _handle_synergy_sync_config_put(event, user_id)
+
+    if method == "GET" and path.endswith("/data-connectors/synergy/sync-status"):
+        return _handle_synergy_sync_status(event)
 
     if method == "GET" and path.endswith("/data-connectors/synergy/jobs"):
         return _handle_synergy_jobs(event, user_id, table_name)

@@ -263,7 +263,7 @@ item_owner (EntityID), job_id (EntityID), children: []
 | Permission        | GET    | `/api/v1/files/{id}/permission`                                           |                                                                                     |
 | Weblink           | GET    | `/api/v1/files/{id}/weblink/{include_web_root_path}`                      |                                                                                     |
 
-`POST /api/v1/files/search` supports **file content search** via the `Contents` field in the body — don't just search by filename.
+`POST /api/v1/files/search` supports **file content search** via the `Contents` field in the body — don't just search by filename. It is **always job-scoped**: `LimitSearchTo:2` + the job's `LimitID` (with `_server_id`) are required, and there is no global/all-jobs search.
 
 ### Tasks
 
@@ -492,6 +492,10 @@ file bytes.
 
 ### Search files (including content search)
 
+**File search is ALWAYS job-scoped — `LimitSearchTo` + `LimitID` are REQUIRED.**
+There is no global/all-jobs file search; omitting `LimitID` (or `LimitSearchTo:0`)
+returns HTTP 500. Resolve the job first (`POST /api/v1/jobs/search`), then:
+
 ```http
 POST /api/v1/files/search
 {
@@ -500,12 +504,18 @@ POST /api/v1/files/search
   "Page": 1,
   "PageSize": 20,
   "ShowDeletedFiles": false,
-  "RetrieveAttributes": true
+  "Attributes": [],
+  "LimitSearchTo": 2,
+  "LimitID": { "IDString": "100_1", "_id": 100, "_server_id": 1 }
 }
 ```
 
-Scope to a job/folder with `LimitSearchTo` + `LimitID`. To search by
-content, set `Contents` instead of (or in addition to) `FileName`.
+- `LimitSearchTo: 2` = the job and its sub-jobs (the value to use). `LimitID` is
+  the job's full ID and **must include `_server_id`** (the `_N` half of the
+  `N_N` IDString) — `{IDString}` alone returns HTTP 500.
+- To search by content, set `Contents`. `FileName` and `Contents` AND together
+  in one body, so run them as separate calls and merge for an OR match.
+- See `01b-query-patterns.md` → "File search" for the full rules.
 
 ### Create a task
 
@@ -609,9 +619,10 @@ Pick best match by exact name; show list if ambiguous.
 
 ### "Download the file X"
 
-1. Find file id: `POST /api/v1/files/search` with `{FileName:"X", Page:1, PageSize:5}`. Capture `Result[0].ID.IDString` and `LatestVersion`.
-2. Metadata (confirm + get version): `GET /api/v1/files/{id}/true`.
-3. Download: `POST /api/v1/files/{id}/download/{version}/false` with empty body.
+1. Resolve the job: `POST /api/v1/jobs/search` with `{Name:"<project>"}` → `Result[0].ID.IDString`. (File search needs a job scope — ask the user which project if it isn't clear.)
+2. Find file id (job-scoped): `POST /api/v1/files/search` with `{FileName:"X", Page:1, PageSize:5, LimitSearchTo:2, LimitID:{IDString:"<job>", _id:<n>, _server_id:<m>}}`. Capture `Result[0].ID.IDString` and `LatestVersion`.
+3. Metadata (confirm + get version): `GET /api/v1/files/{id}/true`.
+4. Download: `POST /api/v1/files/{id}/download/{version}/false` with empty body.
 
 ### "What tasks are on project Y?"
 
@@ -620,8 +631,9 @@ Pick best match by exact name; show list if ambiguous.
 
 ### "Search inside file contents for 'drainage'"
 
-`POST /api/v1/files/search` with `{Contents:"drainage", Page:1, PageSize:20}`.
-Use `LimitSearchTo` + `LimitID` to narrow to a job/folder.
+Resolve a job first, then `POST /api/v1/files/search` with
+`{Contents:"drainage", Page:1, PageSize:20, LimitSearchTo:2, LimitID:{IDString:"<job>", _id:<n>, _server_id:<m>}}`.
+`LimitSearchTo` + `LimitID` are **required** — there is no global content search.
 
 ---
 

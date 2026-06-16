@@ -770,6 +770,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     params["__allowed_kbs_with_names"] = allowed_kbs_with_names
     # Pass raw JWT for tools that need identity-aware AWS access (Q Business).
     params["__id_token"] = id_token
+    # Pass caller identity for tools that apply per-document ACLs (e.g. the
+    # Synergy cross-job KB filters retrieval by allowed_users == this sub).
+    params["__user_sub"] = user_sub
     # Inject auth context for ops handlers (user_sub/email/name/groups from top-level event)
     if tool_name and tool_name.startswith("ops_"):
         params["user_sub"] = user_sub
