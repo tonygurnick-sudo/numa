@@ -63,6 +63,59 @@ export interface ToolInvokeRequest {
   request_id?: string;
 }
 
+/**
+ * T-09: check a Pipedream action key exists BEFORE the ~180s approval poll.
+ *
+ * A hallucinated key (valid format, wrong name — e.g. `gmail-list-messages`
+ * when the real action is `gmail-find-email`) otherwise sits through the entire
+ * approval timeout and only fails afterwards. Fetch the app's action catalogue
+ * (dispatched to workspace-chat-tools, which carries the cached schemas) and
+ * check membership. Fails OPEN — any lookup error returns null (treated as
+ * valid) so a transient hiccup never blocks a legitimate action. This is the
+ * PRIMARY check because the approval poll lives here, not in the Python handler
+ * (which keeps a fail-open fallback for its vestigial gate path).
+ */
+async function invalidPipedreamActionKey(
+  auth: AuthContext,
+  body: ToolInvokeRequest
+): Promise<{ actionKey: string; message: string } | null> {
+  try {
+    if (body.tool !== 'pipedream_run_action') return null;
+    const actionKey = (body.params?.action_key as string | undefined) ?? '';
+    if (!actionKey) return null;
+    const dash = actionKey.indexOf('-');
+    const appSlug = dash > 0 ? actionKey.slice(0, dash) : actionKey;
+    const res = await invokeChatTools({
+      clientName: CLIENT_NAME,
+      tool: 'pipedream_list_actions',
+      params: { app_slug: appSlug },
+      userSub: auth.sub,
+      userEmail: auth.email ?? '',
+      userGroups: auth.groups,
+      allowedKbs: [],
+      enabledTools: [],
+      conversationId: body.context?.conversation_id ?? '',
+      idToken: body.id_token ?? '',
+    });
+    // list_actions result may sit under `.result.actions` or top-level `.actions`.
+    const r = res as { result?: { actions?: unknown }; actions?: unknown };
+    const actions = (r.result?.actions ?? r.actions) as Array<{ key?: string }> | undefined;
+    if (!Array.isArray(actions) || actions.length === 0) return null; // fail open
+    const keys = actions.map((a) => a?.key).filter((k): k is string => typeof k === 'string');
+    if (keys.includes(actionKey)) return null;
+    const suggestions = keys.slice(0, 20).join(', ');
+    return {
+      actionKey,
+      message:
+        `'${actionKey}' is not a valid action for this integration. ` +
+        'Read the action index (_index.json) and use an exact key' +
+        (suggestions ? `. Available actions include: ${suggestions}` : '.'),
+    };
+  } catch {
+    return null; // fail open — never block a real action on a lookup failure
+  }
+}
+
 export const handleToolInvoke = async (auth: AuthContext, body: ToolInvokeRequest): Promise<HttpResponse> => {
   if (!body.tool || typeof body.tool !== 'string') {
     return errorResponse(400, "Missing or invalid 'tool' field");
@@ -109,6 +162,16 @@ export const handleToolInvoke = async (auth: AuthContext, body: ToolInvokeReques
   // record here and poll until the user clicks Approve/Deny (or timeout).
   // Only dispatch downstream on approval — denied/timeout short-circuit.
   if (!autoApproved && requestId) {
+    // T-09: validate a Pipedream action key before paying the ~180s approval
+    // poll, so a hallucinated key fails fast with the real options.
+    const badKey = await invalidPipedreamActionKey(auth, body);
+    if (badKey) {
+      return jsonResponse(200, {
+        status: 'invalid_action_key',
+        message: badKey.message,
+        action_key: badKey.actionKey,
+      });
+    }
     try {
       await createApprovalRequest({
         userSub: auth.sub,
