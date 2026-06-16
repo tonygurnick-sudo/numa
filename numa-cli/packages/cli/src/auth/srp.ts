@@ -10,9 +10,11 @@
  * `generateSecret: true` (the secret stays Lambda-side; clients only ever
  * see the hash).
  *
- * MFA challenges (SOFTWARE_TOKEN_MFA, NEW_PASSWORD_REQUIRED, DEVICE_SRP_AUTH)
- * are not handled in v1 — they throw with a clear message. nd-labs has MFA
- * off, prod tenants will need the additional flows wired in later.
+ * TOTP MFA (SOFTWARE_TOKEN_MFA / SMS_MFA) is supported: srpLogin returns an
+ * `mfa_required` result carrying the Cognito Session, and the caller answers it
+ * with `respondToMfaChallenge` after prompting for the code. The flows that can
+ * only be completed in the browser (NEW_PASSWORD_REQUIRED, MFA_SETUP) throw with
+ * an actionable message pointing the user at the web interface.
  */
 
 import {
@@ -25,12 +27,26 @@ import { createSrpSession, signSrpSession } from 'cognito-srp-helper';
 import { fetchClientConfig, type ClientConfig } from '../api/client.js';
 import { fetchSecretHash } from '../api/srp-hasher.js';
 
-export interface SrpLoginResult {
+/** SRP succeeded outright — no further challenge. */
+export interface SrpAuthSuccess {
+  status: 'authenticated';
   authResult: AuthenticationResultType;
   config: ClientConfig;
   username: string;
   secretHash: string;
 }
+
+/** Password verified, but Cognito wants a one-time MFA code next. */
+export interface SrpMfaRequired {
+  status: 'mfa_required';
+  challengeName: 'SOFTWARE_TOKEN_MFA' | 'SMS_MFA';
+  session: string;
+  config: ClientConfig;
+  username: string;
+  secretHash: string;
+}
+
+export type SrpLoginResult = SrpAuthSuccess | SrpMfaRequired;
 
 export async function srpLogin(account: string, username: string, password: string): Promise<SrpLoginResult> {
   const lowercaseUsername = username.toLowerCase();
@@ -79,21 +95,85 @@ export async function srpLogin(account: string, username: string, password: stri
     })
   );
 
-  if (challengeResponse.ChallengeName) {
+  // Password verified but Cognito wants a second factor. Hand the session back
+  // to the caller (the command layer prompts for the code, then calls
+  // respondToMfaChallenge) so this module stays free of terminal I/O.
+  if (challengeResponse.ChallengeName === 'SOFTWARE_TOKEN_MFA' || challengeResponse.ChallengeName === 'SMS_MFA') {
+    if (!challengeResponse.Session) {
+      throw new Error(`srpLogin: ${challengeResponse.ChallengeName} challenge returned without a Session`);
+    }
+    return {
+      status: 'mfa_required',
+      challengeName: challengeResponse.ChallengeName,
+      session: challengeResponse.Session,
+      config,
+      username: lowercaseUsername,
+      secretHash,
+    };
+  }
+
+  // Browser-only flows — can't be completed from the CLI.
+  if (challengeResponse.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
     throw new Error(
-      `srpLogin: post-password challenge '${challengeResponse.ChallengeName}' is not supported in v1 (MFA / device trust / new password required not yet wired in)`
+      'srpLogin: a password change is required — please log in via the web interface first, then retry `numa login`'
     );
+  }
+  if (challengeResponse.ChallengeName === 'MFA_SETUP') {
+    throw new Error(
+      'srpLogin: MFA setup is required — please complete MFA setup via the web interface first, then retry `numa login`'
+    );
+  }
+  if (challengeResponse.ChallengeName) {
+    throw new Error(`srpLogin: post-password challenge '${challengeResponse.ChallengeName}' is not supported`);
   }
   if (!challengeResponse.AuthenticationResult) {
     throw new Error('srpLogin: no AuthenticationResult in PASSWORD_VERIFIER response');
   }
 
   return {
+    status: 'authenticated',
     authResult: challengeResponse.AuthenticationResult,
     config,
     username: lowercaseUsername,
     secretHash,
   };
+}
+
+/**
+ * Answer a SOFTWARE_TOKEN_MFA / SMS_MFA challenge raised by srpLogin with the
+ * one-time code the user just entered. A wrong code surfaces as Cognito's
+ * CodeMismatchException; the session is single-use, so re-run `numa login` to
+ * get a fresh challenge.
+ */
+export async function respondToMfaChallenge(
+  challenge: SrpMfaRequired,
+  code: string
+): Promise<AuthenticationResultType> {
+  const cognitoClient = new CognitoIdentityProviderClient({ region: challenge.config.REGION });
+
+  const codeKey = challenge.challengeName === 'SMS_MFA' ? 'SMS_MFA_CODE' : 'SOFTWARE_TOKEN_MFA_CODE';
+
+  const response = await cognitoClient.send(
+    new RespondToAuthChallengeCommand({
+      ChallengeName: challenge.challengeName,
+      ClientId: challenge.config.CLIENT_ID,
+      Session: challenge.session,
+      ChallengeResponses: {
+        USERNAME: challenge.username,
+        [codeKey]: code,
+        SECRET_HASH: challenge.secretHash,
+      },
+    })
+  );
+
+  if (response.ChallengeName) {
+    throw new Error(`respondToMfaChallenge: unexpected follow-up challenge '${response.ChallengeName}'`);
+  }
+  if (!response.AuthenticationResult) {
+    throw new Error('respondToMfaChallenge: no AuthenticationResult after MFA code');
+  }
+
+  return response.AuthenticationResult;
 }
 
 /**
