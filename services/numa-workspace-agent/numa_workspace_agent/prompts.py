@@ -1253,7 +1253,7 @@ def _build_integrations_context(
 
 The user's integrations are listed below. Each row is tagged with its method:
 - **Pipedream** rows are accessed via `numa integrations pipedream-call` / `numa integrations pipedream-props-options` / `numa integrations request`.
-- **Native** rows are accessed via `numa integrations request`.
+- **Native** rows are accessed via `numa integrations request` (authenticated HTTP API calls). To browse/search/download a connector's **files**, use `numa integrations list-files` / `search-files` / `download-file` / `file-info` (works for Synergy 12d, Google Drive, Gmail, OneDrive, Dropbox). **Synergy is a file-store connector — use the file commands, not `request`** (its `request` path is intentionally disabled).
 
 All integrations are invoked via `Bash("numa integrations ...")` commands. Only rows marked **Enabled for this conversation** can be called right now. Rows marked Available are connected but toggled off for this session — when relevant, suggest the user enable them from the chat sidebar's Integrations panel.
 
@@ -1262,7 +1262,7 @@ All integrations are invoked via `Bash("numa integrations ...")` commands. Only 
 
 **Method routing:** Follow the per-row method tag and any "admin set this service to ..." hint. When a service appears on both a Pipedream and a Native row, the admin hint is the source of truth — there is no global "prefer one or the other" rule. If you call the wrong method, the runtime rejects the call and tells you which to switch to. If a command reports a slug is ambiguous ("multiple connection methods"), re-run it with `--via pipedream` or `--via native`.
 
-**File-store integrations:** Rows tagged **file-store** expose a browsable file tree (Google Drive, Dropbox, Synergy, …) and surface as folders in the user's Files page. When the user references a file without naming a specific folder or location, prefer browsing their enabled file-store integrations over guessing or fabricating paths. Don't silently write into a file-store integration — ask before creating or modifying anything there. Non-file-store rows (Slack, simPRO, …) are tool-only and have no folder semantics."""
+**File-store integrations:** Rows tagged **file-store** expose a browsable file tree (Google Drive, Dropbox, Synergy, …) and surface as folders in the user's Files page. Browse/search/download them with `numa integrations list-files <slug>` / `search-files <slug> <query>` / `download-file <slug> <file-id>`. When the user references a file without naming a specific folder or location, prefer browsing their enabled file-store integrations over guessing or fabricating paths. Don't silently write into a file-store integration — ask before creating or modifying anything there. Non-file-store rows (Slack, simPRO, …) are tool-only and have no folder semantics."""
 
     # ── Pipedream subsection (only when any pipedream is enabled) ────────
     if has_pipedream_enabled:
@@ -1359,10 +1359,19 @@ The following tools have been restricted by administrator or user policy. They h
 
 ### Native connector tool usage
 
-Access native rows via `numa integrations request <slug> ...`. Operations:
-- `numa integrations request <slug> GET <url> -m "..."` — authenticated HTTP request (requires approval)
+Two surfaces, pick by what you need:
 
-The `request` command makes authenticated HTTP calls to ANY API the connector's OAuth token covers. For example, a Google Drive connector token also works with Google Docs API, Sheets API, etc.
+**Browse / download files** (Synergy 12d, Google Drive, Gmail, OneDrive, Dropbox):
+- `numa integrations list-files <slug> [--folder-id <id>] [--query <text>] -m "..."` — browse folders/files (omit `--folder-id` for the root)
+- `numa integrations search-files <slug> <query> -m "..."` — search files/jobs by name
+- `numa integrations download-file <slug> <file-id> -m "..."` — download into `/workdir/uploads/connect-<slug>/`
+- `numa integrations file-info <slug> <file-id> -m "..."` — file metadata (OAuth providers only)
+- Synergy navigation: list jobs at the root, then `--folder-id job:<id>` for a job's folders, `--folder-id folder:<id>` for a folder's contents.
+
+**Authenticated HTTP API calls** (`request`):
+- `numa integrations request <slug> <METHOD> <url> -m "..."` — authenticated HTTP request (requires approval)
+- Makes authenticated HTTP calls to ANY API the connector's OAuth token covers (e.g. a Google Drive token also works with Google Docs/Sheets APIs). Relative paths (a leading `/`) are allowed and expanded against the connector's instance URL.
+- **Not for Synergy** — Synergy is a file-store connector; use the file commands above.
 
 **Handling disconnected connectors — READ CAREFULLY:**
 
@@ -1389,19 +1398,23 @@ Never: paste-the-token-in-chat. Never: go-to-settings for a chat-only connector 
             docs_list = ", ".join(connectors_with_docs)
             context += f"""
 
-**API Reference Documentation:**
-API reference documentation is available at `/workdir/api-docs/{{name}}/` for the following connectors: {docs_list}.
+**API Reference Documentation — the SOURCE OF TRUTH for calling these connectors:**
+For these connectors, `/workdir/api-docs/{{name}}/` is the **authoritative, canonical reference** for every authenticated HTTP call you make via `numa integrations request` (and `mcp_call`): {docs_list}.
 
-You **MUST** read `01-llm-api-rules.md` before making any authenticated API request via the `request` operation for these connectors. It contains auth requirements, rate limits, required headers, and common pitfalls that will cause failures if ignored.
+These docs were captured from live testing of THIS specific connector — treat them as complete and current. **Derive every endpoint, base path, version segment, header, auth scheme, query/pagination shape, and mutation body from the docs.** Do **NOT** rely on your own training knowledge of the API, and do **NOT** invent or guess URLs, path prefixes (e.g. prepending a `/v1/` that isn't in the docs), field names, or parameters. If the docs and your assumptions disagree, **the docs win**. If the docs don't cover what you need, say so and ask — never fabricate a call.
 
-Companion files provide detailed reference — read the one matching your task:
-- `01a-domain-model-reference.md` — Entity definitions, field types, relationships.
-- `01b-query-patterns.md` — Read operations: list, search, filter, pagination.
-- `01c-mutation-patterns.md` — Write operations: create, update, delete, batch.
-- `01d-event-and-error-handling.md` — Error codes, retry logic, webhooks.
-- `02-api-spec-investigation.md` — Full API spec details, edge cases, field-level behaviour observed from live testing.
-- `03-connector-setup.md` — How the connector is configured (admin side) and what the vault holds.
-- `04-connection-and-reauth.md` — Connect / reconnect / revoke flow, token lifetime, reauth triggers."""
+Workflow before any `request` to one of these connectors:
+1. **Read `01-llm-api-rules.md` first** — auth, required headers, rate limits, base URL / instance-URL handling, and the pitfalls that cause failures. This is mandatory; skipping it causes the exact errors these docs exist to prevent.
+2. Then read the companion file matching your task (when present):
+   - `01a-domain-model-reference.md` — Entity definitions, field types, relationships.
+   - `01b-query-patterns.md` — Read operations: list, search, filter, pagination.
+   - `01c-mutation-patterns.md` — Write operations: create, update, delete, batch.
+   - `01d-event-and-error-handling.md` — Error codes, retry logic, webhooks.
+   - `02-api-spec-investigation.md` — Full API spec details, edge cases, field-level behaviour observed from live testing.
+   - `03-connector-setup.md` — How the connector is configured (admin side) and what the vault holds.
+   - `04-connection-and-reauth.md` — Connect / reconnect / revoke flow, token lifetime, reauth triggers.
+
+If a connector you're calling via `request` is **not** in the list above, its reference docs haven't synced — fetch them with `numa integrations docs <slug>` and read the paths it returns before constructing any call."""
 
     return context
 

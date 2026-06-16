@@ -83,6 +83,14 @@ export interface ToolInvokeResponse<T extends ToolName = ToolName> {
   result?: ToolResult<T>;
   error?: string;
   /**
+   * Machine-readable error tag from the native-connector backend
+   * (`oauth_workspace_tools`) — e.g. `needs_credential` (connector not
+   * connected) or `auth_error` (token expired). Lets commands give the model
+   * a connect/reconnect hint instead of a bare error string. Absent for tools
+   * routed through workspace-chat-tools / kb_manager.
+   */
+  error_code?: string;
+  /**
    * Server-side gate denials (the Ops entitlement gate and the Phase-5
    * per-agent CLI allow-list) return `{status:'error', message}` rather than
    * `error`. `invokeTool` normalises `message` → `error` so every command's

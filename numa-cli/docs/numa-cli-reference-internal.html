@@ -1213,6 +1213,30 @@ Saved to: ./tmp/numa-cli/numa-web_search-2026-05-26T....json</span></pre>
           <div class="cmd-flags"><span class="flag">--&lt;field&gt; &lt;value&gt; (ad-hoc body)</span><span class="flag">--body &lt;json&gt;</span><span class="flag">--headers &lt;json&gt;</span><span class="flag">--via pipedream|native</span><span class="flag">-m, --user-message &lt;text&gt;</span><span class="flag">-y, --yes</span></div>
         </div>
 
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations list-files <span class="arg">&lt;slug&gt;</span> <span class="opt">[--folder-id &lt;id&gt;] [--query &lt;text&gt;]</span></div>
+          <div class="cmd-desc">Browse folders/files from a native file-store connector (Synergy 12d, Google Drive, Gmail, OneDrive, Dropbox). Omit <code>--folder-id</code> for the connector root; Synergy uses <code>job:&lt;id&gt;</code> / <code>folder:&lt;id&gt;</code> ids from a prior listing. Read-only.</div>
+          <div class="cmd-flags"><span class="flag">--folder-id &lt;id&gt;</span><span class="flag">--query &lt;text&gt;</span><span class="flag">--page-size &lt;n&gt;</span><span class="flag">--page-token &lt;token&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations search-files <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;query&gt;</span></div>
+          <div class="cmd-desc">Search files/jobs by name in a native file-store connector. Read-only.</div>
+          <div class="cmd-flags"><span class="flag">--folder-id &lt;id&gt;</span><span class="flag">--page-size &lt;n&gt;</span><span class="flag">--page-token &lt;token&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations download-file <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;file-id&gt;</span> <span class="opt">[-o &lt;path&gt;]</span></div>
+          <div class="cmd-desc">Download a connector file by id. In-workspace it lands under <code>/workdir/uploads/connect-&lt;slug&gt;/</code>; sha256-verified end-to-end. Read-only.</div>
+          <div class="cmd-flags"><span class="flag">-o, --output &lt;path&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations file-info <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;file-id&gt;</span></div>
+          <div class="cmd-desc">Detailed metadata for a single file (OAuth providers only — Synergy has no metadata endpoint). Read-only.</div>
+          <div class="cmd-flags"><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
         <div class="callout callout-tip">
           <strong>Three input forms (all four wildcard-shape commands):</strong>
           <ul style="margin-top: 8px">
@@ -1324,7 +1348,7 @@ numa: 1 option(s)</span></pre>
         </div>
 
         <div class="callout callout-warn">
-          <strong>Native vs Pipedream:</strong> Native integrations don't expose pre-built actions. For native slugs, use <code>numa integrations request</code> directly. The <code>pipedream-*</code> commands error helpfully if you target a native slug. A slug should only ever be enabled via one method at a time (the workspace agent dedupes); if a stale context presents both, <code>docs</code>/<code>request</code> refuse to pick silently — re-run with <code>--via pipedream|native</code>.
+          <strong>Native vs Pipedream:</strong> Native integrations don't expose pre-built actions. For native slugs, use <code>numa integrations request</code> for authenticated HTTP API calls, or the file commands (<code>list-files</code> / <code>search-files</code> / <code>download-file</code> / <code>file-info</code>) to browse a connector's files. <strong>Synergy 12d is a file-store connector — use the file commands, not <code>request</code></strong> (its <code>request</code> path is intentionally disabled). The <code>pipedream-*</code> commands error helpfully if you target a native slug. A slug should only ever be enabled via one method at a time (the workspace agent dedupes); if a stale context presents both, <code>docs</code>/<code>request</code> refuse to pick silently — re-run with <code>--via pipedream|native</code>.
         </div>
       </section>
 

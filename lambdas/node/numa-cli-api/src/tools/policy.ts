@@ -72,6 +72,14 @@ const TOOL_CATEGORY: Record<string, CliCategory> = {
   pipedream_proxy_request: 'integrations',
   connect_status: 'integrations',
   connect_request: 'integrations',
+  // native-connector file browsing (Synergy + OAuth cloud storage)
+  connect_synergy_list: 'integrations',
+  connect_synergy_search: 'integrations',
+  connect_synergy_download: 'integrations',
+  oauth_list_files: 'integrations',
+  oauth_search_files: 'integrations',
+  oauth_download_file: 'integrations',
+  oauth_get_file_metadata: 'integrations',
 };
 
 /**

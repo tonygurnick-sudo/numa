@@ -497,6 +497,53 @@ def search_jobs(
     }
 
 
+def search_all_jobs(
+    server: str,
+    token: str,
+    name: str = "",
+    page_size: int = 100,
+    max_pages: int = 50,
+) -> Dict[str, Any]:
+    """Fetch ALL matching jobs across pages.
+
+    ``search_jobs`` returns a single page; the chat agent has no "load more"
+    affordance, so an account with more jobs than one page was silently
+    truncated (``handle_connect_synergy_list`` requested page 1 only). We walk
+    every page up to a safety cap and return the complete set — mirroring
+    ``get_folder_items``. Stops on a short/empty page (the universal last-page
+    signal) so it works even when the API omits ``TotalPages``.
+    """
+    page_size = max(int(page_size or 100), 1)
+    jobs: List[Dict[str, Any]] = []
+    total_rows = 0
+    truncated = False
+    page = 1
+    while True:
+        data = search_jobs(server, token, name=name, page=page, page_size=page_size)
+        page_items = data.get("items") or []
+        jobs.extend(page_items)
+        total_rows = data.get("total_rows") or total_rows
+        total_pages = data.get("total_pages")
+        # Stop on a short/empty page, an explicit last page, or once we've
+        # gathered the reported total.
+        if not page_items or len(page_items) < page_size:
+            break
+        if total_pages and page >= total_pages:
+            break
+        if total_rows and len(jobs) >= total_rows:
+            break
+        if page >= max_pages:
+            truncated = bool(total_rows) and len(jobs) < total_rows
+            break
+        page += 1
+    return {
+        "items": jobs,
+        "total_rows": total_rows or len(jobs),
+        "pages_fetched": page,
+        "truncated": truncated,
+    }
+
+
 def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any]]:
     """Return top-level folders for a job."""
     base_url = _build_base_url(server)
