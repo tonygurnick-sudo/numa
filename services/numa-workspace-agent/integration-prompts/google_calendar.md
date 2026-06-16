@@ -30,6 +30,8 @@ Auth key is `googleCalendar` (camelCase):
   ```
 - **`orderBy="startTime"`:** Requires `singleEvents: true` or it will fail.
 - **`maxResults` default:** 250 events. Max 2500. For larger pulls, use `proxy_request` against `https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent. Built-in `list-events` strips `nextPageToken`, so it can't be paginated past one page. Never re-walk a date range from the start with different params — decide your full field set up front.
+- **Always set BOTH `timeMin` AND `timeMax`.** Omitting `timeMax` with `singleEvents: true` expands recurring events into the far future — one bench pulled **14,481 events out to the year 2056** in a single call (28 wasted turns). Bound every events query on both ends.
+- **All-day / working-location events have ~0 duration.** When summing time ("how many meeting-hours this week?"), treat all-day events, out-of-office, and "working location" entries as ≈0h, not 24h — otherwise one all-day event swamps the total (models have reported 1,560h vs 4.5h for the same week). State the convention you used for borderline entries; sub-15-minute slots are usually buffers, not meetings.
 
 ## Resolving Attendee Emails
 

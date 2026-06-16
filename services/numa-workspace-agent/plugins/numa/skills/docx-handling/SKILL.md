@@ -26,6 +26,14 @@ doc.save('/workdir/outputs/result.docx')
 
 ---
 
+## Editing strategy & text fidelity
+
+**Iterate in place — don't regenerate.** When revising a document across turns, load it and edit the specific paragraphs/cells with python-docx (or `Edit` the generator script's _data_, not re-emit the whole script). Do NOT re-run a giant build-from-scratch script every turn — one bench re-ran a ~700-line generator on every edit, which dominated its cost and steadily lost fidelity. Build once; after that, open the real `.docx` and change only what needs changing.
+
+**Preserve diacritics and Unicode exactly.** Names and te reo Māori / accented text must survive verbatim — "Te Whetū" stays "Te Whetū", never "Te Whetu" or a `□` box glyph. python-docx writes Unicode correctly; the failure shows up at render time when the chosen font lacks the glyph. Use a font with full Latin Extended-A coverage (Calibri, Arial, or DejaVu Sans — all installed) and never strip or ASCII-fold accents to "simplify". If you convert the DOCX to PDF, confirm the macrons survived in the output (see pdf-handling for UTF-8 font setup).
+
+---
+
 ## Understanding Word Document Structure
 
 Before working with DOCX files, understand their architecture:
@@ -672,3 +680,14 @@ pandoc /workdir/tmp/extracted_scanned_document.txt -o /workdir/outputs/document.
 - **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.
+
+---
+
+## Helper Scripts
+
+- **`build_styled_doc.py`** — branded DOCX from a JSON spec with a diacritic-safe font (macrons survive), purple headings, and image/table helpers. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+  ```bash
+  python3 /app/plugins/numa/skills/docx-handling/helpers/build_styled_doc.py --spec @/workdir/tmp/doc.json
+  ```
+
+Generic starting point — copy into `/workdir/chat-workflows/` and adapt for a user's recurring document job.

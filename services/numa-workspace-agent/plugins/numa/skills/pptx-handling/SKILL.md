@@ -207,6 +207,14 @@ After converting to images, read each slide image and check for:
 4. Re-verify the affected slides ONE time to confirm the fix worked
 5. **Stop here.** Do NOT loop more than once. Present the result to the user and say something like "Here's your presentation — let me know if you'd like me to adjust anything." Minor cosmetic issues (spacing tweaks, colour preferences, font size adjustments) should be mentioned to the user rather than auto-fixed in another loop.
 
+### Don't chase render artifacts — verify against source first
+
+The PPTX→PDF step can introduce artifacts that aren't in your deck — LibreOffice has been seen to turn `<` into `·`, garble a glyph, or nudge a box. Before you "fix" an apparent visual issue, confirm it exists in the **source**: check the markitdown text or the python-pptx run/shape. If the text is correct in the `.pptx` and only wrong in the rendered image, it's a preview artifact — leave the deck alone. (One bench burned a third of a turn chasing a `<`→`·` non-bug.)
+
+### Verify brand/spec colours actually landed
+
+When the user specified brand or spec colours, don't claim you applied them on faith — confirm. Inspect the shape fills with python-pptx, or `numa vision view` the rendered slide and check navy actually appears where navy was specified. A "brand colours applied" claim over a deck that has none is a silent, embarrassing failure. (The `helpers/verify_artifact.py` script checks fills/colours for you — see Helper Scripts.)
+
 ---
 
 ## Icons (SVG + sharp)
@@ -262,3 +270,17 @@ All pre-installed in the workspace:
 - **Input presentations**: `/workdir/uploads/`
 - **Output presentations**: `/workdir/outputs/`
 - **Working files**: `/workdir/outputs/`
+
+---
+
+## Helper Scripts
+
+Read-only at `/app/plugins/numa/skills/pptx-handling/helpers/`. Generic — adapt via `/workdir/chat-workflows/` for a bespoke look.
+
+- **`constants.js`** — the valid PptxGenJS shape names (stop guessing `ROUNDED_RECT` — it's `roundRect`), the Numa palette, and a `shape()` normaliser. `require()` it from your generator script.
+- **`starter_deck.js`** — build a branded deck from a JSON spec: title / section / content / chart / table / stat masters in the Numa palette. The fast path for a standard deck — skips the shape-constant and layout churn.
+  ```bash
+  NODE_PATH=/app/node_packages/node_modules node \
+    /app/plugins/numa/skills/pptx-handling/helpers/starter_deck.js --spec @/workdir/tmp/deck.json
+  ```
+- Charts go in as pre-rendered PNGs: **`make_chart.py`** (`/app/plugins/numa/skills/data-analysis/helpers/make_chart.py`) → reference the PNG in a `"chart"` slide. Verify the deck embedded them with **`verify_artifact.py`** (`/app/plugins/numa/skills/pdf-handling/helpers/verify_artifact.py --expect-images N`).

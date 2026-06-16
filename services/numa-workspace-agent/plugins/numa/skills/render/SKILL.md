@@ -64,6 +64,12 @@ Proactively use render when the conversation naturally calls for a visual:
 
 **Multi-render responses**: Call render multiple times in a single response, interleaved with prose. Write a paragraph of explanation, then render a diagram, then more text, then a chart. Each visual should feel like it belongs exactly where it appears.
 
+**Defaults to get right:**
+
+- **"Show me" / "preview" / "let me see" means render — not a markdown table.** When the user asks to _see_ data or a comparison, produce an actual rendered visual (chart, comparison cards, a table component). A markdown table in your text is the fallback for when a visual genuinely doesn't fit, not the default.
+- **Re-render after you edit the visual.** If you change an HTML/SVG file the user has already seen, call render again on the updated file in the same turn. Editing the file does NOT refresh what's on screen — without a re-render the user is still looking at the old visual and thinks nothing happened.
+- **Charts include every requested category — even empty ones.** If the user asks for a breakdown across six buckets and four are zero, render all six; the zeros are information. Never silently drop categories. For series spanning very different magnitudes (counts vs revenue), use a secondary axis or normalise — otherwise the small series renders as invisible flat bars.
+
 ## When NOT to Use
 
 - Simple text output (just write it as a message)
@@ -77,6 +83,8 @@ Proactively use render when the conversation naturally calls for a visual:
 - **Create file** (Write to `/workdir/outputs/` or run a generator script in `/workdir/tmp/`): A standalone HTML document the user can download. Full dashboards, multi-page layouts, complex apps.
 
 If you want to both create AND preview, create the file first, then render it with `--file-path`.
+
+**Don't build a standalone HTML document unless the user asked for one.** For an inline preview, render is enough — reaching for a full self-contained `.html` file (page chrome, multiple sections, interactive handlers) when the user only wanted to "see" something is wasted effort and usually ships dead, unwired controls. Match the artifact to the request.
 
 ---
 
@@ -360,3 +368,11 @@ White background, 0.5px border, 12px radius, 16px padding.
 - Use colour to convey meaning -- status indicators, priority levels, category groupings
 - Rounded corners and subtle borders make rendered content feel native to the chat
 - Multiple renders per response is encouraged -- interleave visuals with explanation text
+- **Design once for open-ended work.** For a free-form dashboard, a classifier, or a rule-set, plan the full spec and edge cases up front, then build in one pass. Iterating shape-by-shape on an underspecified target churns turns (one bench took 40) — settle the structure first, then execute.
+
+## Helper Scripts
+
+- **`numa-palette.css`** — the Numa brand palette as drop-in CSS (`:root` variables + `.numa-card` / `.numa-btn` / `.numa-stat` / `.numa-table` recipes). Read it and inline the parts you need into your render HTML for an on-brand look without reinventing colours and type. Read-only at `/app/plugins/numa/skills/render/helpers/`.
+  ```bash
+  cat /app/plugins/numa/skills/render/helpers/numa-palette.css
+  ```

@@ -232,4 +232,14 @@ Read /workdir/tmp/integrations-results/result-{timestamp}.json
 4. **Verify files exist** before upload operations
 5. **Use descriptive approvals** — full content for writes, brief for reads
 6. **Summarize large results** — don't dump raw JSON to the user
-7. **Prefer built-in actions** over `request`
+7. **Prefer built-in actions over `request`** — for a simple single call the curated action is cheaper and less error-prone than a hand-built raw REST request (raw REST cost +82% for identical output in one bench). Reserve `request` for bulk/paginated pulls and capabilities no action covers.
+8. **"Update X" means update — never duplicate.** When revising an existing record (a draft, a calendar event, a CRM note), modify or replace the original; don't create a second copy. If there's no in-place update action, delete-and-recreate.
+9. **No unresolved placeholders in external write-backs.** A bracketed placeholder (`[Company]`, `[NAME]`) is fine in a _draft document the user will review_, but must NEVER be written to an external system as live data — a Gmail draft subject-lined `[Company]`, a CRM field set to `[TBD]`. Before any external write, confirm every field holds a real value; if one is missing, ask or hold the write — don't ship the placeholder.
+
+## Helper Scripts
+
+- **`decode_attachment.py`** — decode a Gmail/Graph base64 attachment to a file in one step (handles URL-safe and standard base64; can auto-find the field in a saved action result). Read-only at `/app/plugins/numa/skills/integrations/helpers/`.
+  ```bash
+  python3 /app/plugins/numa/skills/integrations/helpers/decode_attachment.py \
+    --json /workdir/tmp/integrations-results/<id>.json --out /workdir/tmp/file.pdf
+  ```

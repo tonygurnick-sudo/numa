@@ -90,6 +90,10 @@ For bulk calendar fetches (e.g. a full year of `calendarView`), use `proxy_reque
 - **Built-in actions (`list-events`, etc.) strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. Use `proxy_request` for multi-page fetches.
 - For `calendarView` specifically: query `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=...&endDateTime=...&$select=...&$top=200` and then follow the `@odata.nextLink` from each response.
 
+## Summing Meeting Time — All-Day Events ≈ 0h
+
+When totalling time ("how many meeting-hours this week?"), treat all-day events, out-of-office, and "working location" entries as ≈0h, not 24h — one all-day event otherwise swamps the total. State the convention you used; sub-15-minute slots are usually buffers, not meetings. Always bound a time query on BOTH ends (`startDateTime` AND `endDateTime` for `calendarView`) — never leave the end open, or recurring events expand far into the future.
+
 ## Event IDs Are Required for Updates/Deletes
 
 Get the event `id` (long base64 string) from `list-events` or `create-calendar-event` response, then pass it to `update-calendar-event` or `delete-calendar-event`.

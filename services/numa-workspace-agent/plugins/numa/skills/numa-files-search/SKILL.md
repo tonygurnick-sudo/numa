@@ -372,3 +372,4 @@ Based on the company policy, employees are entitled to 25 days annual leave.
 - Use the S3 URIs from the `references` array in the query results
 - List the most relevant sources (typically 1-3) rather than every result
 - If multiple documents contributed to your answer, cite all relevant ones
+- **Cite on EVERY turn that uses KB content — not just summary turns.** The most-skipped case is the headline explanation on the first turn: if your answer draws on a Numa Files document, it gets a `<kb-source:…>` tag, even when you'll summarise again later. No KB-derived claim ships without its source.

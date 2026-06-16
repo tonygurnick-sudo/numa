@@ -54,6 +54,14 @@ Different actions expect different formats for the `lineItems` prop:
 }
 ```
 
+### lineAmountType Casing: "Exclusive", Not "EXCLUSIVE"
+
+`lineAmountTypes` / `lineAmountType` is case-sensitive title case: `"Exclusive"`, `"Inclusive"`, `"NoTax"`. All-caps (`"EXCLUSIVE"`) is rejected with a validation error. Default is `Exclusive` when omitted.
+
+### List Account Codes Before Creating Bills/Invoices
+
+A line item's `AccountCode` must be a real code from the org's chart of accounts (e.g. `200`, `400`) — a guessed code fails validation or, worse, silently posts to the wrong account. Before creating a bill/invoice, list the accounts (`get-accounts`, or `make-an-api-call` on `/Accounts`) and use a real code. If you can't determine the right account, ask rather than guess.
+
 ### make-an-api-call Requires Leading Slash
 
 The `relativeUrl` must start with `/` (e.g., `/Invoices`, `/Contacts`, `/Items`). Without it, the URL is malformed:

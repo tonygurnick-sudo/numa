@@ -290,6 +290,8 @@ Bash("numa agents patch-prompt agt_abc123 --old-text 'AcmeCorp' --new-text 'Arca
 Bash("numa agents patch-prompt agt_abc123 --old-text '\n\nAlways CC legal@example.com on outbound emails.' --new-text '' -m 'Remove outdated instruction'")
 ```
 
+> **Renumber when you edit a numbered list.** If you insert or delete a step in a numbered sequence in the prompt (`1.`, `2.`, `3.` …), patch the surrounding numbers too so the list stays consecutive — don't leave a duplicate "step 3" or a gap. A second patch covering the affected numbers is fine.
+
 ### Permissions
 
 - Same as `update`: personal agents you own, public agents you created, or any public agent if you are an admin.
@@ -398,6 +400,13 @@ When in doubt, default to Context-Aware — users asking mid-chat almost always 
 - User is chatting WITH an agent (the agent is already loaded)
 - User is asking ABOUT agents conceptually (general questions)
 - User wants to DELETE an agent (deletion must be done via the web UI)
+- User wants to SCHEDULE an agent to run automatically (see capability boundaries below)
+
+### Capability boundaries — don't hallucinate these
+
+- **You cannot schedule an agent to run itself.** Recurring/automated runs are configured by the user in the web UI only (the agent schedule modal). There is no chat command, `/loop`, or cron you can invoke to put an agent on a schedule — never claim a schedule is "live", and never invent a mechanism. If the user wants a scheduled agent, tell them to set the schedule from the agent's settings in the UI.
+- **Warn about unattended approvals when scheduling comes up.** A scheduled agent runs unattended, so any integration _write_ it performs under a "writes need approval" mode silently stalls on the approval gate (~90s timeout, then fails). When a user sets up or asks about a scheduled agent that uses integrations, proactively flag this and recommend they enable auto-approval for that agent's runs.
+- **Re-query before confirming existence.** When asked to confirm an agent (or its files/config) exists or was created, re-read it — don't confirm from memory of having just done it.
 
 ---
 

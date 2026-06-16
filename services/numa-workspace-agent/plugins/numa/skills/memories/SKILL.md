@@ -150,6 +150,10 @@ Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `s
 
 ## Behavioral Rules
 
+### Retrieve before you produce
+
+Before generating a user-facing deliverable (email, doc, message, summary), list the relevant memories first — preferences, sign-off, tone, names, operational details — and apply them. This matters most when the **output format changes mid-conversation**: if you saved that the user signs off as "Priya — PMM", carry that into the Slack message too, not just the email you first saved it from. A saved preference you don't retrieve is a preference you've effectively forgotten.
+
 ### Always Confirm First
 
 **ALWAYS ask the user before adding or updating a memory.** Never silently save memories.
@@ -181,6 +185,7 @@ Only run the add/update command **after the user confirms**.
 
 - If a memory on the same topic already exists, **update** it rather than adding a duplicate
 - List memories first to check for existing ones on the same topic
+- **Merged vs separate is a judgment call.** Closely-related facts can live in one memory (retrieved together) or as separate memories (finer update granularity) — both pass hygiene. Prefer separate when the facts will change independently, merged when they're always used together.
 
 ### Deleting Memories
 
