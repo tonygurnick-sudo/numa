@@ -362,7 +362,9 @@ export const AutomationWorkflowBuilder = ({
   const approvalAckRef = useRef(false);
 
   useEffect(() => {
-    if (userChatSettings) return;
+    // Always refetch on mount — the cached settings can be stale (e.g. the user
+    // just changed their approval defaults), and a stale cache yields a wrong /
+    // missing warning. getCached() above only seeds the instant first render.
     let cancelled = false;
     ChatSettingsService.get(numaGet)
       .then((s) => {
@@ -374,7 +376,7 @@ export const AutomationWorkflowBuilder = ({
     return () => {
       cancelled = true;
     };
-  }, [numaGet, userChatSettings]);
+  }, [numaGet]);
 
   // Re-arm the warning whenever the chosen agent changes.
   useEffect(() => {

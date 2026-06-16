@@ -228,7 +228,11 @@ export const AgentScheduleModal = ({
   const approvalAckRef = useRef(false);
 
   useEffect(() => {
-    if (userChatSettings) return;
+    if (!show) return;
+    // Always refetch on open — the cached settings can be stale (e.g. the user
+    // just changed their approval defaults on the Settings page), and a stale
+    // cache yields a wrong / missing warning. getCached() above only seeds the
+    // instant first render.
     let cancelled = false;
     ChatSettingsService.get(numaGet)
       .then((s) => {
@@ -240,7 +244,7 @@ export const AgentScheduleModal = ({
     return () => {
       cancelled = true;
     };
-  }, [numaGet, userChatSettings]);
+  }, [show, numaGet]);
 
   const atRiskCapabilities = useMemo(
     () => atRiskCapabilitiesForSchedule(agent?.toolsConfig, userChatSettings ?? DEFAULT_CHAT_SETTINGS),
