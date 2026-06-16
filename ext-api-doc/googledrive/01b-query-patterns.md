@@ -1,209 +1,88 @@
 ---
-api_name: 'Google Drive'
-api_slug: 'googledrive'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-source_phases: ['Phase 5: Query & Filter Capabilities', 'Phase 6: Pagination & Bulk Operations']
+api_name: Google Drive
+api_slug: googledrive
+companion_of: 01-llm-api-rules.md
+base_url: https://www.googleapis.com/drive/v3
+call_surface: file-store connector (list-files/search-files/download-file); NOT `numa integrations request`. Provider drives `files.list` for both browse and search.
+confidence: doc-based [DOCUMENTED] unless tagged [INFERRED]
+source_phases: Phase 5 (Query/Filter), Phase 6 (Pagination/Bulk)
 ---
 
 # Google Drive — Query Patterns Reference
 
-> Companion to `01-llm-api-rules.md`. Read operations: browsing the folder graph, the `q` filter
-> DSL, search, field selection, and pagination.
->
-> **Connector reality:** the platform provider drives `files.list` for both browsing and search. Its
-> **search tool matches `name contains '<query>'` only** — it does **not** use Drive's `fullText`
-> content search. The raw API _can_ do full-text; the connector currently does not. Examples below
-> show both the connector behaviour and the raw API capability, labelled accordingly.
+Read operations: browsing the folder graph, the `q` filter DSL, search, field selection, pagination. The connector's **search tool matches `name contains '<query>'` only** — it does NOT use Drive's `fullText` content search (raw API can; connector does not). Examples below label connector behaviour vs raw-API capability.
 
----
+## Query Capabilities
 
-## Query Capabilities Summary
+Supported: filter by field value, date range, MIME/type, folder scoping, owner/sharing, trashed/starred; sort; field selection; logical operators (`and`/`or`/`not` + parens); comparison `=`,`!=`,`<`,`<=`,`>`,`>=`; membership/`contains`. **Full-text (content) is supported by the API (`fullText contains`) but NOT used by the connector** — name match only.
+NOT supported: aggregation/count (no count endpoint — page to count); regex/pattern (`contains` only).
 
-| Capability                      | Supported | Syntax                                 | Notes                                           |
-| ------------------------------- | --------- | -------------------------------------- | ----------------------------------------------- |
-| Filter by field value           | Yes       | `name = 'report.pdf'`                  | Single-quoted values                            |
-| Filter by date range            | Yes       | `modifiedTime > '2026-01-01T00:00:00'` | Quoted RFC-3339, UTC                            |
-| Full-text search (content+meta) | Yes (API) | `fullText contains 'merger agreement'` | **Not used by the connector** — name match only |
-| Filter by MIME / type           | Yes       | `mimeType = 'application/pdf'`         | Folder detection too                            |
-| Folder scoping                  | Yes       | `'<folderId>' in parents`              | The browse primitive                            |
-| Owner / sharing                 | Yes       | `'me' in owners`, `sharedWithMe`       | "Shared with me" virtual folder                 |
-| Trashed / starred               | Yes       | `trashed = false`, `starred = true`    | Connector always appends `trashed=false`        |
-| Sort by field                   | Yes       | `orderBy=modifiedTime desc`            | Provider uses `folder,modifiedTime desc`        |
-| Field selection (partial resp.) | Yes       | `fields=files(id,name,...)`            | Always set one — huge payload savings           |
-| Logical operators (and/or/not)  | Yes       | `... and (... or ...)`                 |                                                 |
-| Comparison operators            | Yes       | `=`, `!=`, `<`, `<=`, `>`, `>=`        |                                                 |
-| Membership / contains           | Yes       | `in`, `contains`                       | `contains` is **prefix/token**, not substring   |
-| Aggregation / count             | No        | —                                      | No count endpoint; page to count                |
-| Regex / pattern matching        | No        | —                                      | `contains` only                                 |
+## The `q` Filter DSL (term operator value tables below give all syntax + examples)
 
----
+`q` = `<term> <operator> <value>`, combinable with `and`/`or`/`not` + parentheses. Values **single-quoted**; escape `\` and `'` inside (`\\`, `\'`). Whole `q` string must be URL-encoded. `GET /drive/v3/files?q=<expression>`.
 
-## The `q` Filter DSL
+| Term           | Operators                       | Example                                                      |
+| -------------- | ------------------------------- | ------------------------------------------------------------ |
+| `name`         | `=`, `!=`, `contains`           | `name contains 'Q2'`                                         |
+| `fullText`     | `contains`                      | `fullText contains 'revenue'` (API only, not connector)      |
+| `mimeType`     | `=`, `!=`, `contains`           | `mimeType = 'application/pdf'`                               |
+| `modifiedTime` | `<=`, `<`, `=`, `!=`, `>`, `>=` | `modifiedTime > '2026-01-01T00:00:00'` (quoted RFC-3339 UTC) |
+| `createdTime`  | `<=`, `<`, `=`, `!=`, `>`, `>=` | `createdTime >= '2026-01-01T00:00:00'`                       |
+| `parents`      | `in`                            | `'1aBcFolderId' in parents` (the browse primitive)           |
+| `owners`       | `in`                            | `'me' in owners`                                             |
+| `trashed`      | `=`, `!=`                       | `trashed = false` (connector always appends this)            |
+| `starred`      | `=`, `!=`                       | `starred = true`                                             |
+| `sharedWithMe` | (bare boolean)                  | `sharedWithMe = true` ("Shared with me" virtual folder)      |
 
-`q` is a small expression language: `<term> <operator> <value>`, combinable with `and` / `or` /
-`not` and parentheses. Values are **single-quoted**; escape `\` and `'` inside a value
-(`\\`, `\'`). The whole `q` string must be URL-encoded.
-
-```
-GET /drive/v3/files?q=<url-encoded expression>
-```
-
-**Operators by term:**
-
-| Term           | Operators                       | Example                                  |
-| -------------- | ------------------------------- | ---------------------------------------- |
-| `name`         | `=`, `!=`, `contains`           | `name contains 'Q2'`                     |
-| `fullText`     | `contains`                      | `fullText contains 'revenue'` (API only) |
-| `mimeType`     | `=`, `!=`, `contains`           | `mimeType = 'application/pdf'`           |
-| `modifiedTime` | `<=`, `<`, `=`, `!=`, `>`, `>=` | `modifiedTime > '2026-01-01T00:00:00'`   |
-| `createdTime`  | `<=`, `<`, `=`, `!=`, `>`, `>=` | `createdTime >= '2026-01-01T00:00:00'`   |
-| `parents`      | `in`                            | `'1aBcFolderId' in parents`              |
-| `owners`       | `in`                            | `'me' in owners`                         |
-| `trashed`      | `=`, `!=`                       | `trashed = false`                        |
-| `starred`      | `=`, `!=`                       | `starred = true`                         |
-| `sharedWithMe` | (bare boolean term)             | `sharedWithMe = true`                    |
-
-> **`contains` footgun:** on `name` and `fullText` it matches **whole tokens / prefixes**, not
-> arbitrary substrings. `name contains 'port'` will **not** match "Report". Set user expectations
-> accordingly. [DOCUMENTED]
-
----
+**`contains` footgun:** on `name`/`fullText` it matches **whole tokens/prefixes**, not arbitrary substrings. `name contains 'port'` will NOT match "Report".
 
 ## Common Patterns
 
-### Pattern 1: Browse a folder (children of a folder)
+**1. Browse a folder (children):** browse primitive is `'<folderId>' in parents`; `orderBy=folder,...` puts folders first.
+`GET /drive/v3/files?q='1aBcFolderId' in parents and trashed=false&orderBy=folder,modifiedTime desc&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,webViewLink)`
 
-```http
-GET /drive/v3/files?q='1aBcFolderId'%20in%20parents%20and%20trashed%3Dfalse&orderBy=folder,modifiedTime%20desc&supportsAllDrives=true&includeItemsFromAllDrives=true&fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,webViewLink)
-```
+**2. My Drive root vs "Shared with me":** literal `'root'` aliases the user's My-Drive root; connector exposes these as `virtual:my-drive` / `virtual:shared-with-me` (see 01a).
+`GET /drive/v3/files?q='root' in parents and trashed=false&corpora=user`
+`GET /drive/v3/files?q=sharedWithMe=true and trashed=false&corpora=user`
 
-- The browse primitive is `'<folderId>' in parents`. `orderBy=folder,...` puts folders first.
+**3. Search by filename (connector's `search_files`):** scope to a folder by appending `and '<folderId>' in parents`.
+`GET /drive/v3/files?q=name contains 'quarterly' and trashed=false&orderBy=folder,modifiedTime desc&fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)`
+→ `{"files":[{"id":"9kLmN","name":"Quarterly Revenue.pdf","mimeType":"application/pdf","modifiedTime":"2026-04-01T08:00:00.000Z"}]}`
 
-### Pattern 2: Browse My Drive root vs "Shared with me"
+**4. Full-text content search (raw API — NOT via connector):** searches content + metadata; connector does not issue this. Note as a capability if content search requested.
+`GET /drive/v3/files?q=fullText contains 'merger agreement' and trashed=false`
 
-```http
-# My Drive root
-GET /drive/v3/files?q='root'%20in%20parents%20and%20trashed%3Dfalse&corpora=user
-# Shared with me
-GET /drive/v3/files?q=sharedWithMe%3Dtrue%20and%20trashed%3Dfalse&corpora=user
-```
+**5. Type/date filters:**
+`GET /drive/v3/files?q=mimeType='application/pdf' and modifiedTime > '2026-01-01T00:00:00'` (PDFs modified this year)
+`GET /drive/v3/files?q=mimeType='application/vnd.google-apps.folder' and trashed=false` (folders only, to map the tree)
 
-- The literal `'root'` aliases the user's My-Drive root folder. The connector exposes these as the
-  `virtual:my-drive` / `virtual:shared-with-me` root folders (see 01a).
-
-### Pattern 3: Search by filename (the connector's `search_files`)
-
-```http
-GET /drive/v3/files?q=name%20contains%20'quarterly'%20and%20trashed%3Dfalse&orderBy=folder,modifiedTime%20desc&fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)
-```
-
-```json
-{
-  "files": [
-    {
-      "id": "9kLmN",
-      "name": "Quarterly Revenue.pdf",
-      "mimeType": "application/pdf",
-      "modifiedTime": "2026-04-01T08:00:00.000Z"
-    }
-  ]
-}
-```
-
-- This is exactly what the connector does. Scope to a folder by appending
-  `and '<folderId>' in parents`.
-
-### Pattern 4: Full-text content search (raw API — not via connector)
-
-```http
-GET /drive/v3/files?q=fullText%20contains%20'merger%20agreement'%20and%20trashed%3Dfalse
-```
-
-- Searches file **content** + metadata. The connector does not currently issue this; note it as a
-  capability if a content search is requested.
-
-### Pattern 5: Type / date filters
-
-```http
-# Only PDFs modified this year
-GET /drive/v3/files?q=mimeType%3D'application%2Fpdf'%20and%20modifiedTime%20%3E%20'2026-01-01T00%3A00%3A00'
-# Folders only (to map the tree)
-GET /drive/v3/files?q=mimeType%3D'application%2Fvnd.google-apps.folder'%20and%20trashed%3Dfalse
-```
-
-### Pattern 6: Get one file's metadata (with permissions)
-
-```http
-GET /drive/v3/files/1aBcD3eFgH?fields=id,name,mimeType,size,modifiedTime,createdTime,parents,md5Checksum,version,permissions&supportsAllDrives=true
-```
-
-- `fields=*` returns the full resource; prefer a narrow selector. The connector's metadata tool
-  requests the field set above (including `permissions`).
-
----
+**6. Get one file's metadata (with permissions):** `fields=*` returns full resource — prefer a narrow selector. Connector's metadata tool requests the set below (incl. `permissions`).
+`GET /drive/v3/files/1aBcD3eFgH?fields=id,name,mimeType,size,modifiedTime,createdTime,parents,md5Checksum,version,permissions&supportsAllDrives=true`
 
 ## Field Selection (`fields`) — always set it
 
-Drive returns a _huge_ File resource by default. The `fields` parameter is a partial-response
-selector and is mandatory for sane payloads:
+Drive returns a huge File resource by default. `fields` is a partial-response selector, mandatory for sane payloads:
 
-```
-fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,webViewLink)   # list
-fields=id,name,mimeType,size,modifiedTime,parents,exportLinks,capabilities            # single file
-```
+- list: `fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,webViewLink)`
+- single file: `fields=id,name,mimeType,size,modifiedTime,parents,exportLinks,capabilities`
 
-- Wrap list fields in `files(...)`; include `nextPageToken` or you lose pagination.
-- Omitting `fields` on `files.list` defaults to a minimal set (`kind,id,name,mimeType`) — but for
-  any real use, request exactly what you need.
-
----
+Wrap list fields in `files(...)`; include `nextPageToken` or you lose pagination. Omitting `fields` on `files.list` defaults to a minimal set (`kind,id,name,mimeType`) — request exactly what you need.
 
 ## Sort
 
-```
-orderBy=folder,modifiedTime desc,name
-```
+`orderBy=folder,modifiedTime desc,name`. Sort keys: `createdTime`, `folder`, `modifiedByMeTime`, `modifiedTime`, `name`, `name_natural`, `quotaBytesUsed`, `recency`, `sharedWithMeTime`, `starred`, `viewedByMeTime`. Append ` desc` to reverse. Provider default: `folder,modifiedTime desc`.
 
-Sort keys: `createdTime`, `folder`, `modifiedByMeTime`, `modifiedTime`, `name`, `name_natural`,
-`quotaBytesUsed`, `recency`, `sharedWithMeTime`, `starred`, `viewedByMeTime`. Append ` desc` to
-reverse. The provider defaults to `folder,modifiedTime desc` (folders first, newest first).
+## Pagination
 
----
+Opaque **page token**. Default size 100, max 1000 (provider clamps `min(page_size,1000)`). **No total count** — enumerate until token absent.
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pageSize` | int | 100 | Files per page; max 1000 |
+| `pageToken` | string | — | Continuation token from previous `nextPageToken` |
 
-## Pagination Handling
+Response: `{"kind":"drive#fileList","incompleteSearch":false,"nextPageToken":"~!!~AI9F...","files":[/* up to pageSize File objects */]}`. Last page = `nextPageToken` **absent**.
 
-### Model
-
-- **Type:** opaque **page token**.
-- **Default page size:** 100. **Max page size:** 1000 (provider clamps with `min(page_size, 1000)`).
-- **Total count available:** **No** — there is no total; enumerate until the token is absent.
-
-### Request Parameters
-
-| Parameter   | Type   | Default | Description                                          |
-| ----------- | ------ | ------- | ---------------------------------------------------- |
-| `pageSize`  | int    | 100     | Files per page; max 1000                             |
-| `pageToken` | string | —       | Continuation token from the previous `nextPageToken` |
-
-### Response Structure
-
-```json
-{
-  "kind": "drive#fileList",
-  "incompleteSearch": false,
-  "nextPageToken": "~!!~AI9F...",
-  "files": [
-    /* up to pageSize File objects */
-  ]
-}
-```
-
-### Last Page Detection
-
-`nextPageToken` is **absent** on the final page.
-
-### Full Pagination Loop
+Loop:
 
 ```
 token = null
@@ -211,87 +90,23 @@ loop:
   GET /files?q=<same q>&orderBy=<same orderBy>&pageSize=1000[&pageToken=token]
   process response.files
   token = response.nextPageToken
-  if token is absent: stop          ← done
+  if token absent: stop
 ```
 
-> **Send identical `q` and `orderBy` on every page** — the token encodes the query context. Changing
-> them mid-iteration corrupts paging. [DOCUMENTED]
-
----
+**Send identical `q` and `orderBy` on every page** — the token encodes the query context; changing them mid-iteration corrupts paging.
 
 ## Bulk Reads
 
-Drive supports **HTTP batch** (`POST https://www.googleapis.com/batch/drive/v3`, `multipart/mixed`,
-up to 100 sub-requests) to fetch metadata for many ids in one round-trip. Each sub-request returns
-its own status, so failures are isolated. **Not required** for the Files surface and not used by the
-connector. [DOCUMENTED]
-
-For Google-native files **> 10 MB**, the inline `files.export` cap is exceeded — use the per-format
-URLs in the file's `exportLinks` map (authenticated GET) instead. [DOCUMENTED]
-
----
+Drive supports **HTTP batch** (`POST https://www.googleapis.com/batch/drive/v3`, `multipart/mixed`, ≤100 sub-requests) to fetch metadata for many ids in one round-trip; each sub-request returns its own status (failures isolated). **Not required** for the Files surface and not used by the connector. For Google-native files **> 10 MB**, the inline `files.export` cap is exceeded — use the per-format URLs in `exportLinks` (authenticated GET).
 
 ## Worked Examples
 
-### Example 1: List everything modified since a date
+**1. List everything modified since a date** (incremental "what changed" without the changes feed): quote the timestamp inside `q` (UTC), loop on `nextPageToken`. For true sync prefer the `changes` feed (01d) — this misses deletions.
+`GET /drive/v3/files?q=modifiedTime > '2026-05-01T00:00:00' and trashed=false&orderBy=modifiedTime desc&pageSize=1000&fields=nextPageToken,files(id,name,mimeType,modifiedTime)`
 
-> Incremental "what changed" without the changes feed.
+**2. All spreadsheets in a folder** — match BOTH native Sheets and uploaded XLSX with `or` (native Sheets have no `size`; XLSX do):
+`GET /drive/v3/files?q='1aBcFolderId' in parents and (mimeType='application/vnd.google-apps.spreadsheet' or mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') and trashed=false&fields=files(id,name,mimeType,size)`
 
-```http
-GET /drive/v3/files?q=modifiedTime%20%3E%20'2026-05-01T00:00:00'%20and%20trashed%3Dfalse&orderBy=modifiedTime%20desc&pageSize=1000&fields=nextPageToken,files(id,name,mimeType,modifiedTime)
-```
-
-**Key points:**
-
-- Quote the timestamp inside `q`; it is UTC. Loop on `nextPageToken`.
-- For true sync prefer the `changes` feed (01d) — this misses deletions.
-
-### Example 2: Find all spreadsheets in a specific folder
-
-```http
-GET /drive/v3/files?q='1aBcFolderId'%20in%20parents%20and%20(mimeType%3D'application%2Fvnd.google-apps.spreadsheet'%20or%20mimeType%3D'application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet')%20and%20trashed%3Dfalse&fields=files(id,name,mimeType,size)
-```
-
-**Key points:**
-
-- Match **both** Google-native Sheets and uploaded XLSX with an `or`.
-- Native Sheets have no `size`; uploaded XLSX do.
-
-### Example 3: List shared drives (top-level navigation)
-
-```http
-GET /drive/v3/drives?pageSize=100&fields=drives(id,name)
-```
-
-```json
-{
-  "drives": [
-    { "id": "0AHkAbc", "name": "Finance Team" },
-    { "id": "0AHkDef", "name": "Legal" }
-  ]
-}
-```
-
-**Key points:**
-
-- The provider shows each shared drive as a root-level folder (`shared-drive:<id>`). Browsing into
-  one sets `corpora=drive` + `driveId=<id>` on the `files.list` call.
-
----
-
-## Gotchas & Counter-Exceptions
-
-1. **Connector search = filename only.** It issues `name contains '<q>'`, not `fullText contains`.
-   If the user wants content search, that's a raw-API capability the connector doesn't expose today.
-2. **`contains` is token/prefix, not substring** — `name contains 'port'` won't match "Report".
-3. **No total count.** Don't promise "N results found" until you've paged to the end; report
-   "at least N" while a `nextPageToken` remains.
-4. **Shared-drive items disappear** without `supportsAllDrives=true` + `includeItemsFromAllDrives=true`
-   (and the right `corpora`/`driveId`). The provider always sets these.
-5. **`incompleteSearch: true`** means cross-drive results are partial — narrow the corpus and retry.
-6. **Virtual folder ids are not file ids.** `virtual:my-drive` / `virtual:shared-with-me` /
-   `shared-drive:<id>` are connector synthetics; never pass them to `/files/{id}`.
-
----
-
-_Generated from the investigation questionnaire, Phases 5–6._
+**3. List shared drives (top-level navigation)** — provider shows each shared drive as a root-level folder (`shared-drive:<id>`); browsing into one sets `corpora=drive` + `driveId=<id>` on the `files.list` call:
+`GET /drive/v3/drives?pageSize=100&fields=drives(id,name)`
+→ `{"drives":[{"id":"0AHkAbc","name":"Finance Team"},{"id":"0AHkDef","name":"Legal"}]}`

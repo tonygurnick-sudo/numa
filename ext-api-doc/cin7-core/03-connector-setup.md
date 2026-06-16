@@ -1,54 +1,39 @@
 ---
-api_name: 'Cin7 Core'
-api_slug: 'cin7-core'
-auth_type: 'api-key (per-user Account ID + Application Key, sent as two custom headers via credentialHeaderMap)'
-generated_date: '2026-06-10'
+api_name: Cin7 Core
+api_slug: cin7-core
+auth_type: api-key (per-user Account ID + Application Key, sent as two custom headers via credentialHeaderMap)
+base_url: https://inventory.dearsystems.com/externalapi/v2
+call_surface: HTTP via `numa integrations request cin7-core <METHOD> <relative-url>` (native connector)
+role: connector wiring — registry entry, admin wizard flow, stored secrets, backend auth injection
+confidence: wiring below is the real implementation; the Cin7 side has NOT been live-validated (no credentials yet)
 ---
 
 # Cin7 Core — Connector & Integration Setup
 
-> How the Cin7 Core connector is wired into Numa: registry entry, admin wizard flow, what gets
-> stored where, and how the backend injects auth on every request. The wiring below is the real
-> implementation; the Cin7 side has NOT been live-validated (no credentials yet).
-
----
-
 ## 1. Product context
 
-|              |                                                                          |
-| ------------ | ------------------------------------------------------------------------- |
-| Vendor       | Cin7                                                                      |
-| Product      | Cin7 Core — inventory/ERP (formerly DEAR Inventory)                       |
-| App URL      | `inventory.dearsystems.com`                                               |
-| API base URL | `https://inventory.dearsystems.com/externalapi/v2` (fixed SaaS host)      |
-| Rate limit   | 60/min per Application Key                                                |
+|              |                                                                      |
+| ------------ | -------------------------------------------------------------------- |
+| Vendor       | Cin7                                                                 |
+| Product      | Cin7 Core — inventory/ERP (formerly DEAR Inventory)                  |
+| App URL      | `inventory.dearsystems.com`                                          |
+| API base URL | `https://inventory.dearsystems.com/externalapi/v2` (fixed SaaS host) |
+| Rate limit   | 60/min per Application Key                                           |
 
-⚠️ **Cin7 sells two products with separate APIs.** This connector is for **Core** only. Cin7
-**Omni** (`api.cin7.com`, HTTP Basic auth, integer IDs) has its own connector, `cin7-omni` —
-if the customer logs in at `go.cin7.com`/`app.cin7.com`, set up that one instead.
-
----
+⚠️ **Cin7 sells two products with separate APIs.** This connector is for **Core** only. Cin7 **Omni** (`api.cin7.com`, HTTP Basic auth, integer IDs) has its own connector, `cin7-omni` — if the customer logs in at `go.cin7.com`/`app.cin7.com`, set up that one instead.
 
 ## 2. Auth model — two custom headers, per-user credentials
 
-Every API call carries **two custom headers** (there is no Authorization header at all):
+Every call carries **two custom headers** (no Authorization header at all):
 
 ```
 api-auth-accountid:      <account-id>
 api-auth-applicationkey: <application-key>
 ```
 
-Both values come from Cin7 Core → **Integrations → API → New Application**, and both are
-**per-user secrets in Numa**: the user pastes them into the inline chat credential card on
-first use (stored as `account_id` + `application_key` in their personal vault). The admin
-wizard collects **no credential at all**. This is the first connector using the registry's
-**`credentialHeaderMap`** mechanism — a header-name → credential-field map that tells the
-backend which vault field rides in which custom header.
+Both come from Cin7 Core → **Integrations → API → New Application**, and both are **per-user secrets in Numa**: the user pastes them into the inline chat credential card on first use (stored as `account_id` + `application_key` in their personal vault). The admin wizard collects **no credential at all**. First connector using the registry's **`credentialHeaderMap`** mechanism — a header-name → credential-field map telling the backend which vault field rides in which custom header.
 
-**Auth semantics to remember:** Cin7 Core returns **403 for bad credentials** (not a permission
-issue — Core has no per-endpoint permission model). See `04-connection-and-reauth.md` §4.
-
----
+**Auth semantics:** Cin7 Core returns **403 for bad credentials** (not a permission issue — Core has no per-endpoint permission model). See `04-connection-and-reauth.md` §4.
 
 ## 3. Connector Registry entry
 
@@ -81,100 +66,60 @@ issue — Core has no per-endpoint permission model). See `04-connection-and-rea
 
 Notes:
 
-- `authType: 'api-key'` + `credentialHeaderMap` routes the backend to the **custom-header**
-  credential path (`_user_connector_header_creds`) — not Bearer, not Basic.
-- There are **no `adminFields`** (admin flow is register + metadata only) and no
-  `rateLimitDaily` — Core has no documented daily cap (unlike Omni's 5,000/day).
+- `authType: 'api-key'` + `credentialHeaderMap` routes the backend to the **custom-header** credential path (`_user_connector_header_creds`) — not Bearer, not Basic.
+- **No `adminFields`** (admin flow is register + metadata only) and no `rateLimitDaily` — Core has no documented daily cap (unlike Omni's 5,000/day).
 
-The slug is also listed in `infra/config/connectors.ts` → `NATIVE_CONNECTORS` (under the
-"Inventory (Cin7 is two separate products with separate APIs)" group), which feeds the unified
-Integrations catalog endpoint. That slug list is mirrored in
-`lambdas/python/workspace-chat-tools/tools/user_profile.py` (`_NATIVE_CONNECTOR_SLUGS`) — keep
-them in sync if the slug ever changes.
-
----
+The slug is also listed in `infra/config/connectors.ts` → `NATIVE_CONNECTORS` (under "Inventory (Cin7 is two separate products with separate APIs)"), feeding the unified Integrations catalog endpoint. That slug list is mirrored in `lambdas/python/workspace-chat-tools/tools/user_profile.py` (`_NATIVE_CONNECTOR_SLUGS`) — keep in sync if the slug ever changes.
 
 ## 4. Admin setup (Integrations → Cin7 Core)
 
-The admin flow uses the generic `ApiKeyWizard` (`wizards/ApiKeyWizard.tsx`):
+Uses the generic `ApiKeyWizard` (`wizards/ApiKeyWizard.tsx`):
 
 1. Open **Integrations**, pick **Cin7 Core**, start the wizard.
-2. Step 1 (overview) shows the per-user notice: *no credential is needed here* — each user is
-   asked for their own credentials the first time they use the connector from chat.
-3. Step 2 (review & save) — metadata only. **Leave Instance URL empty** (fixed-host SaaS; the
-   registry `baseUrl` is used). Optional: override display name/icon/description/rate limit.
-4. Save → step 3 confirms. No credentials are collected anywhere in this flow.
+2. Step 1 (overview): per-user notice — _no credential needed here_; each user is asked for their own credentials the first time they use the connector from chat.
+3. Step 2 (review & save): metadata only. **Leave Instance URL empty** (fixed-host SaaS; the registry `baseUrl` is used). Optional: override display name/icon/description/rate limit.
+4. Save → step 3 confirms. No credentials collected anywhere in this flow.
 
 ### 4.1 What gets stored — company secret `connector-config-cin7-core`
 
 The wizard persists a single company vault secret (category "Connector Config"):
-
-| Field                   | Value                                                                     |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `display_name`          | `Cin7 Core` (or admin override)                                             |
-| `icon`, `description`   | Registry defaults / admin overrides                                         |
-| `connector_type`        | `api-key`                                                                   |
-| `base_url`              | `https://inventory.dearsystems.com/externalapi/v2` — written from the registry when no instance URL is entered |
-| `rate_limit_rpm`        | `60` (admin-overridable)                                                    |
+| Field | Value |
+| --- | --- |
+| `display_name` | `Cin7 Core` (or admin override) |
+| `icon`, `description` | Registry defaults / admin overrides |
+| `connector_type` | `api-key` |
+| `base_url` | `https://inventory.dearsystems.com/externalapi/v2` — written from the registry when no instance URL is entered |
+| `rate_limit_rpm` | `60` (admin-overridable) |
 | `credential_header_map` | `{"api-auth-accountid":"account_id","api-auth-applicationkey":"application_key"}` (JSON) — drives the backend's custom-header auth |
-| `credential_fields`     | JSON snapshot of the per-user fields (account_id + application_key) — drives the inline chat credential card |
+| `credential_fields` | JSON snapshot of the per-user fields (account_id + application_key) — drives the inline chat credential card |
 
-No `api_key`/`api_key_header` (no admin credential — that mechanism is for connectors like
-ProWorkflow with an account-level key). Re-running the wizard updates this same secret; a
-legacy `connector-cin7-core` company secret, if present, is migrated and deleted on save.
+No `api_key`/`api_key_header` (no admin credential — that mechanism is for connectors like ProWorkflow with an account-level key). Re-running the wizard updates this same secret; a legacy `connector-cin7-core` company secret, if present, is migrated and deleted on save.
 
 ### 4.2 Prerequisite on the Cin7 side
 
-Before users connect, someone with Cin7 Core access must create an API Application
-(**Integrations → API → New Application**) and note the **Account ID** + **Application Key**.
-Recommended: a **dedicated Application for Numa** — its 60/min budget is then isolated. In
-multi-company setups, the Account ID is per company — use the right company's ID. Webhooks
-(customer's own endpoints) additionally require the **Automation module add-on**.
-
----
+Before users connect, someone with Cin7 Core access must create an API Application (**Integrations → API → New Application**) and note the **Account ID** + **Application Key**. Recommended: a **dedicated Application for Numa** (isolated 60/min budget). In multi-company setups the Account ID is per company — use the right company's ID. Webhooks (customer's own endpoints) additionally require the **Automation module add-on**.
 
 ## 5. Backend request flow (oauth-workspace-tools)
 
 > File: `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`
 
-The agent calls
-`connectors(name="request", params={connector: "cin7-core", url: "/Product?page=1&limit=100", method: "GET"})`.
-`handle_connect_request` then:
+The agent calls `numa integrations request cin7-core GET "/Product?page=1&limit=100"`, routed to `handle_connect_request`, which:
 
-1. Expands the relative URL against the stored `base_url` (`_resolve_connector_base_url` →
-   `https://inventory.dearsystems.com/externalapi/v2` + `/Product...`).
-2. Looks for an OAuth token (none), then a single per-user token via `_user_connector_token`
-   (none — the vault fields are `account_id`/`application_key`, not `api_key`-style), then a
-   Basic-auth pair via `_user_connector_basic_creds` (none — no `username`/`password`), then
-   **`_user_connector_header_creds`** → reads `credential_header_map` from
-   `connector-config-cin7-core`, resolves each mapped field from the user's
-   `connector-cin7-core` personal-vault secret, and builds **both** custom headers.
-   **All-or-nothing:** if either mapped field is missing, no headers are returned and the user
-   counts as not connected.
+1. Expands the relative URL against the stored `base_url` (`_resolve_connector_base_url` → `https://inventory.dearsystems.com/externalapi/v2` + `/Product...`).
+2. Looks for: an OAuth token (none) → a single per-user token via `_user_connector_token` (none — vault fields are `account_id`/`application_key`, not `api_key`-style) → a Basic-auth pair via `_user_connector_basic_creds` (none — no `username`/`password`) → **`_user_connector_header_creds`** → reads `credential_header_map` from `connector-config-cin7-core`, resolves each mapped field from the user's `connector-cin7-core` personal-vault secret, builds **both** custom headers. **All-or-nothing:** if either mapped field is missing, no headers returned and the user counts as not connected.
 3. `_connector_static_headers` contributes nothing (no `api_key`/`api_key_header` on the config).
-4. No stored user credential → returns the structured `needs_credential` error
-   (`_needs_credential_response`), which the agent surfaces as the **inline chat credential
-   card** built from the `credential_fields` snapshot. On submit, the values are written to the
-   user's personal vault (`connector-cin7-core`, fields `account_id` + `application_key`) via
-   the PAT credentials endpoint, and the request retries.
+4. No stored user credential → returns the structured `needs_credential` error (`_needs_credential_response`), surfaced as the **inline chat credential card** built from the `credential_fields` snapshot. On submit, values written to the user's personal vault (`connector-cin7-core`, fields `account_id` + `application_key`) via the PAT credentials endpoint, and the request retries.
 
-The agent must **never** set `api-auth-accountid` or `api-auth-applicationkey` itself — both
-are injected by the backend and the agent never sees the credentials.
-
----
+The agent must **never** set `api-auth-accountid` or `api-auth-applicationkey` itself — both injected by the backend; the agent never sees the credentials.
 
 ## 6. Smoke test after setup
 
-```http
+```
 # Cheapest authenticated probe — account details, no business data
-GET https://inventory.dearsystems.com/externalapi/v2/me
+GET /me
 → 200 with a JSON object   — credential pair valid
 → 403                       — wrong/revoked Account ID or Application Key (re-enter via card)
-→ 404                       — wrong path (check /externalapi/v2 prefix), NOT an auth failure
+→ 404                       — wrong path (check the /externalapi/v2 prefix in base_url), NOT an auth failure
 ```
 
-From chat: ask the agent to "list Cin7 Core products" — first use triggers the credential card;
-after the user enters the Account ID + Application Key, the request retries and returns
-`{ "Products": [...], "Total": n }`. Then spot-check `/SaleList` and `/ProductAvailability`,
-and `/webhooks` if event-driven flows are planned (an error there may instead mean the
-Automation module add-on is missing).
+From chat: ask the agent to "list Cin7 Core products" — first use triggers the credential card; after the user enters the Account ID + Application Key, the request retries and returns `{"Products":[...],"Total":n}`. Then spot-check `/SaleList` and `/ProductAvailability`, and `/webhooks` if event-driven flows are planned (an error there may instead mean the Automation module add-on is missing).

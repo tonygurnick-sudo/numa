@@ -1,31 +1,20 @@
-# Mutation Patterns — MYOB AccountRight (MYOB Business API v2)
-
-> Natural language → API write operation mappings.
-> All endpoint paths confirmed from official docs or SDK source.
-> Request body field names marked [INFERRED] where not confirmed from live calls.
-> DO NOT use these as drop-in payloads without testing against sandbox first.
-
+---
+doc: mutation-patterns (NL → write operation) — MYOB AccountRight (MYOB Business API v2)
+confidence: paths [DOCUMENTED] from official docs/SDK; request field names [INFERRED] where not live-confirmed — do NOT use as drop-in payloads without sandbox testing
+ref: errors=https://developer.myob.com/api/myob-business-api/api-overview/error-messages/ · rules-section=https://apisupport.myob.com/hc/en-us/sections/360000104856 · apideck=https://www.apideck.com/blog/how-to-integrate-with-the-myob-api
 ---
 
-## General Mutation Rules
+# Mutation Patterns — MYOB AccountRight
 
-1. **POST** — Create a new entity. Returns 201 Created + created entity (or URI).
-2. **PUT** — Update an existing entity. **Always include the current `RowVersion`**. Returns 200 OK.
-3. **DELETE** — Delete an entity. Some entities cannot be deleted (see Dangerous Operations).
-4. **Content-Type** must be `application/json` for all POST/PUT requests.
-5. All object references use `{ "UID": "{guid}" }` format.
-6. All dates use ISO format: `"2024-06-15T00:00:00"`.
+## General Rules
 
----
+- **POST** = create → 201 + created entity (or URI). **PUT** = update → 200; **always include current `RowVersion`**. **DELETE** = delete (some entities cannot — see Dangerous Operations).
+- `Content-Type: application/json` on all POST/PUT.
+- All object references use `{ "UID": "{guid}" }`. All dates ISO: `"2024-06-15T00:00:00"`.
 
-## Create Patterns
+## Create Customer — `POST /Contact/Customer`
 
-### Create a Customer
-
-```
-POST /Contact/Customer
-Content-Type: application/json
-
+```json
 {
   "CompanyName": "Acme Corp Ltd",
   "FirstName": "Tony",
@@ -46,16 +35,9 @@ Content-Type: application/json
 }
 ```
 
-[INFERRED from pymyob SDK + apideck guide]
+## Create Supplier — `POST /Contact/Supplier`
 
----
-
-### Create a Supplier
-
-```
-POST /Contact/Supplier
-Content-Type: application/json
-
+```json
 {
   "CompanyName": "Parts & Co",
   "IsActive": true,
@@ -75,48 +57,27 @@ Content-Type: application/json
 }
 ```
 
-[INFERRED]
+## Update Customer — `PUT /Contact/Customer/{uid}` (requires RowVersion)
 
----
+Step 1: `GET /Contact/Customer/{uid}` to get current `RowVersion`. Step 2:
 
-### Update a Customer (PUT — requires RowVersion)
-
-```
-# Step 1: Fetch the customer to get current RowVersion
-GET /Contact/Customer/{uid}
-
-# Step 2: PUT with updated fields + RowVersion from Step 1
-PUT /Contact/Customer/{uid}
-Content-Type: application/json
-
+```json
 {
   "UID": "{uid}",
   "CompanyName": "Acme Corp Ltd (Updated)",
   "IsActive": true,
   "RowVersion": "{rowversion_from_step1}",
-  "Addresses": [ ... ]
+  "Addresses": []
 }
 ```
 
-> ⚠️ If `RowVersion` is stale, you get a `409 IncorrectRowVersionSupplied` error.
+Stale `RowVersion` → `409 IncorrectRowVersionSupplied` [DOCUMENTED errors].
 
-[DOCUMENTED] https://developer.myob.com/api/myob-business-api/api-overview/error-messages/
+## Create Item Invoice — `POST /Sale/Invoice/Item`
 
----
+Prereq UIDs (fetch first): Customer `GET /Contact/Customer?$filter=substringof('Acme', CompanyName)`; Item `GET /Inventory/Item`; TaxCode `GET /GeneralLedger/TaxCode`; Income Account `GET /GeneralLedger/Account?$filter=Type eq 'Income'`.
 
-### Create an Item Invoice
-
-**Prerequisites — fetch these UIDs first:**
-
-- Customer UID: `GET /Contact/Customer?$filter=substringof('Acme', CompanyName)`
-- Item UID: `GET /Inventory/Item`
-- TaxCode UID: `GET /GeneralLedger/TaxCode`
-- Income Account UID: `GET /GeneralLedger/Account?$filter=Type eq 'Income'`
-
-```
-POST /Sale/Invoice/Item
-Content-Type: application/json
-
+```json
 {
   "Date": "2024-06-15T00:00:00",
   "Customer": { "UID": "{customer_uid}" },
@@ -137,16 +98,9 @@ Content-Type: application/json
 }
 ```
 
-[INFERRED from apideck guide + pymyob SDK]
+## Create Service Invoice — `POST /Sale/Invoice/Service`
 
----
-
-### Create a Service Invoice
-
-```
-POST /Sale/Invoice/Service
-Content-Type: application/json
-
+```json
 {
   "Date": "2024-06-15T00:00:00",
   "Customer": { "UID": "{customer_uid}" },
@@ -156,71 +110,43 @@ Content-Type: application/json
       "LineType": "Transaction",
       "Account": { "UID": "{income_account_uid}" },
       "Description": "Consulting services - June 2024",
-      "Amount": 500.00,
+      "Amount": 500.0,
       "TaxCode": { "UID": "{gst_taxcode_uid}" }
     }
   ]
 }
 ```
 
-[INFERRED]
+## Update Invoice — `PUT /Sale/Invoice/Item/{uid}`
 
----
+Step 1: `GET /Sale/Invoice/Item/{uid}` for `RowVersion`. Step 2 (full payload + current RowVersion):
 
-### Update an Invoice (PUT)
-
-```
-# Step 1: GET the invoice to retrieve RowVersion
-GET /Sale/Invoice/Item/{uid}
-
-# Step 2: PUT with full payload + current RowVersion
-PUT /Sale/Invoice/Item/{uid}
-Content-Type: application/json
-
+```json
 {
   "UID": "{uid}",
   "Date": "2024-06-15T00:00:00",
   "Customer": { "UID": "{customer_uid}" },
-  "Lines": [ ... ],
+  "Lines": [],
   "RowVersion": "{rowversion}"
 }
 ```
 
-[DOCUMENTED from RowVersion rules]
+## Record Customer Payment — `POST /Sale/CustomerPayment`
 
----
-
-### Record a Customer Payment
-
-```
-POST /Sale/CustomerPayment
-Content-Type: application/json
-
+```json
 {
   "Customer": { "UID": "{customer_uid}" },
   "ReceiveFrom": { "UID": "{bank_account_uid}" },
   "Date": "2024-06-20T00:00:00",
   "Amount": 1099.89,
-  "Invoices": [
-    {
-      "UID": "{invoice_uid}",
-      "AmountApplied": 1099.89
-    }
-  ],
+  "Invoices": [{ "UID": "{invoice_uid}", "AmountApplied": 1099.89 }],
   "Memo": "Payment received - INV-0001"
 }
 ```
 
-[INFERRED from pymyob SDK]
+## Create Item Bill — `POST /Purchase/Bill/Item`
 
----
-
-### Create an Item Bill (Purchase)
-
-```
-POST /Purchase/Bill/Item
-Content-Type: application/json
-
+```json
 {
   "Supplier": { "UID": "{supplier_uid}" },
   "Date": "2024-06-10T00:00:00",
@@ -230,7 +156,7 @@ Content-Type: application/json
       "LineType": "Transaction",
       "Item": { "UID": "{item_uid}" },
       "BillQuantity": 5,
-      "UnitCost": 45.00,
+      "UnitCost": 45.0,
       "TaxCode": { "UID": "{gst_taxcode_uid}" },
       "Account": { "UID": "{expense_account_uid}" }
     }
@@ -238,48 +164,29 @@ Content-Type: application/json
 }
 ```
 
-[INFERRED]
+## Record Supplier Payment — `POST /Purchase/SupplierPayment`
 
----
-
-### Record a Supplier Payment
-
-```
-POST /Purchase/SupplierPayment
-Content-Type: application/json
-
+```json
 {
   "Supplier": { "UID": "{supplier_uid}" },
   "PayFrom": { "UID": "{bank_account_uid}" },
   "Date": "2024-06-25T00:00:00",
-  "Amount": 225.00,
-  "Bills": [
-    {
-      "UID": "{bill_uid}",
-      "AmountApplied": 225.00
-    }
-  ]
+  "Amount": 225.0,
+  "Bills": [{ "UID": "{bill_uid}", "AmountApplied": 225.0 }]
 }
 ```
 
-[INFERRED]
+## Create Spend Money — `POST /Banking/SpendMoneyTxn`
 
----
-
-### Create a Spend Money Transaction
-
-```
-POST /Banking/SpendMoneyTxn
-Content-Type: application/json
-
+```json
 {
   "Account": { "UID": "{bank_account_uid}" },
   "Date": "2024-06-15T00:00:00",
-  "Amount": 150.00,
+  "Amount": 150.0,
   "Lines": [
     {
       "Account": { "UID": "{expense_account_uid}" },
-      "Amount": 150.00,
+      "Amount": 150.0,
       "TaxCode": { "UID": "{gst_taxcode_uid}" },
       "Memo": "Office supplies"
     }
@@ -288,16 +195,9 @@ Content-Type: application/json
 }
 ```
 
-[INFERRED]
+## Create General Journal — `POST /GeneralLedger/GeneralJournal`
 
----
-
-### Create a General Journal Entry
-
-```
-POST /GeneralLedger/GeneralJournal
-Content-Type: application/json
-
+```json
 {
   "DateOccurred": "2024-06-30T00:00:00",
   "Memo": "Month-end accrual",
@@ -305,96 +205,61 @@ Content-Type: application/json
     {
       "Account": { "UID": "{debit_account_uid}" },
       "IsCredit": false,
-      "Amount": 1000.00,
+      "Amount": 1000.0,
       "TaxCode": { "UID": "{nt_taxcode_uid}" }
     },
     {
       "Account": { "UID": "{credit_account_uid}" },
       "IsCredit": true,
-      "Amount": 1000.00,
+      "Amount": 1000.0,
       "TaxCode": { "UID": "{nt_taxcode_uid}" }
     }
   ]
 }
 ```
 
-[INFERRED]
+## Email an Invoice — `POST /Sale/Invoice/Item/{uid}/email`
 
----
-
-### Email an Invoice
-
-```
-POST /Sale/Invoice/Item/{uid}/email
-Content-Type: application/json
-
-{
-  "To": "customer@example.com",
-  "Subject": "Invoice INV-0001",
-  "Message": "Please find attached your invoice."
-}
+```json
+{ "To": "customer@example.com", "Subject": "Invoice INV-0001", "Message": "Please find attached your invoice." }
 ```
 
-> ⚠️ Only works for **online (cloud-hosted)** company files. Local desktop files will return an error.
+Only works for **online (cloud-hosted)** company files; local desktop files error. [DOCUMENTED apideck] Body field names [INFERRED — confirm against sandbox].
 
-[DOCUMENTED] https://www.apideck.com/blog/how-to-integrate-with-the-myob-api
-Body field names: [INFERRED — confirm against sandbox before use]
-
----
-
-### Delete an Entity
+## Delete an Entity
 
 ```
-DELETE /Contact/Customer/{uid}
-DELETE /Sale/Invoice/Item/{uid}
-DELETE /Purchase/Bill/Item/{uid}
+DELETE /Contact/Customer/{uid}    DELETE /Sale/Invoice/Item/{uid}    DELETE /Purchase/Bill/Item/{uid}
 ```
 
-Returns 200 OK on success. Returns 400 with `TransactionsCannotBeDeleted` error if the company file setting prohibits deletion.
-
----
+200 OK on success. 400 `TransactionsCannotBeDeleted` if company file setting prohibits deletion.
 
 ## State Transitions
 
-### Mark invoice as paid (Close it)
-
-Invoices are closed **automatically** when a `CustomerPayment` is posted that fully covers the invoice amount. You do not PUT a status field directly.
-
-### Reverse a transaction (when deletion is not permitted)
-
-When `TransactionsCannotBeChangedMustBeReversed = true` on the company file:
-
-1. Do NOT attempt DELETE — returns error 25003
-2. Create a new reversing transaction with negative amounts and the same date (or current date)
-
-[DOCUMENTED] https://developer.myob.com/api/myob-business-api/api-overview/error-messages/
-
----
+- **Mark invoice paid (Close):** automatic when a `CustomerPayment` fully covering the amount is posted. Do NOT PUT a status field.
+- **Reverse a transaction** (when `TransactionsCannotBeChangedMustBeReversed=true`): do NOT DELETE (error 25003) — POST a new reversing transaction with negative amounts, same date (or current date). [DOCUMENTED errors]
 
 ## Dangerous Operations
 
-| Operation                         | Risk                                                         | Mitigation                                                  |
-| --------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------- |
-| `DELETE /Sale/Invoice/Item/{uid}` | Permanent deletion if company permits it. Irreversible.      | Check company file setting first. Prefer reversals.         |
-| `PUT` with wrong RowVersion       | Returns 409 — no data loss, but you must re-fetch RowVersion | Always GET before PUT                                       |
-| POST with duplicate `Number`      | May create duplicate entities or return validation error     | Check if entity already exists with GET before POST         |
-| `DELETE /Contact/Customer/{uid}`  | Removes contact. May fail if contact has open transactions.  | Set `IsActive = false` (soft-delete) instead of hard DELETE |
+| Operation                         | Risk                                           | Mitigation                                    |
+| --------------------------------- | ---------------------------------------------- | --------------------------------------------- |
+| `DELETE /Sale/Invoice/Item/{uid}` | permanent, irreversible if company permits     | check company setting first; prefer reversals |
+| `PUT` with wrong RowVersion       | 409 (no data loss) but must re-fetch           | always GET before PUT                         |
+| POST with duplicate `Number`      | duplicate entity or validation error           | GET to check existence before POST            |
+| `DELETE /Contact/Customer/{uid}`  | removes contact; may fail if open transactions | set `IsActive=false` (soft-delete) instead    |
 
----
+## Common POST/PUT Errors
 
-## Common POST/PUT Error Scenarios
+| Error (code)                                  | Cause                                | Fix                                |
+| --------------------------------------------- | ------------------------------------ | ---------------------------------- |
+| `Required` (100)                              | missing required field               | add field                          |
+| `NotFound` (150)                              | referenced UID doesn't exist         | verify UID via GET                 |
+| `SerializationError` (50)                     | wrong type (string for boolean etc.) | check field types                  |
+| `IncorrectRowVersionSupplied` (111, HTTP 409) | stale RowVersion on PUT              | re-fetch + retry                   |
+| `TransactionsCannotBeDeleted` (25003)         | company "must reverse" setting       | create reversal                    |
+| `DatePriorToBeginningOfFinancialYear` (25008) | date before FY start                 | use date in current FY             |
+| `FreightHasNotBeenSet`                        | freight amount without TaxCode       | add `FreightTaxCode:{"UID":"..."}` |
+| `AccountHeaderNotAllowed`                     | header-type account in a transaction | use a detail-type account          |
+| `ConsolidatedTaxCodesNotAllowed`              | consolidated tax code on a line      | use a non-consolidated tax code    |
 
-| Error                                              | Cause                                        | Fix                                               |
-| -------------------------------------------------- | -------------------------------------------- | ------------------------------------------------- |
-| `Required` (code 100)                              | Missing required field                       | Add missing field to payload                      |
-| `NotFound` (code 150)                              | Referenced UID doesn't exist                 | Verify UID via GET before submitting              |
-| `SerializationError` (code 50)                     | Wrong type (e.g. string instead of boolean)  | Check field types                                 |
-| `IncorrectRowVersionSupplied` (code 111, HTTP 409) | Stale RowVersion on PUT                      | Re-fetch entity and retry                         |
-| `TransactionsCannotBeDeleted` (code 25003)         | Company file setting prevents deletion       | Create reversal instead                           |
-| `DatePriorToBeginningOfFinancialYear` (code 25008) | Date before financial year start             | Use a date within the current financial year      |
-| `FreightHasNotBeenSet`                             | Freight amount set without TaxCode           | Add `FreightTaxCode: { "UID": "..." }` to invoice |
-| `AccountHeaderNotAllowed`                          | Using a header-type account in a transaction | Use a detail-type account                         |
-| `ConsolidatedTaxCodesNotAllowed`                   | Consolidated tax code used on line           | Use a non-consolidated tax code                   |
-
-[DOCUMENTED] https://developer.myob.com/api/myob-business-api/api-overview/error-messages/
-https://apisupport.myob.com/hc/en-us/sections/360000104856
+[DOCUMENTED errors + rules-section]

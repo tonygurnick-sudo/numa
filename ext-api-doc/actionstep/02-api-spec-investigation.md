@@ -1,48 +1,36 @@
 ---
-api_name: 'Actionstep'
-api_slug: 'actionstep'
-base_url: '{api_endpoint}/api/rest (region-specific; from token response)'
-version: 'v1 (vnd.api+json), v2 partial'
-spec_format: 'OpenAPI (per-endpoint YAMLs); no single aggregate spec'
-spec_url: 'https://docs.actionstepdev.com/ (v2 reference)'
-docs_url: 'https://docs.actionstep.com/'
-date_researched: '2026-05-27'
+api_name: Actionstep
+api_slug: actionstep
+base_url: dynamic — api_endpoint from the OAuth token response (region-specific), then /api/rest/{resource}
+path_version_segment: none — "v1"/"v2" are API variants (content-type/label), NEVER a path segment
+api_variant: v1 (application/vnd.api+json, full surface) + v2 (plain JSON, partial — Matters/FileNotes/Tags)
+spec_format: OpenAPI (per-endpoint YAMLs); no single aggregate spec
+spec_url: https://docs.actionstepdev.com/ (v2 reference)
+docs_url: https://docs.actionstep.com/
+auth: OAuth2 authorization-code only (user-context); no machine-to-machine
+field_casing: camelCase
+id_format: integer
+date_researched: 2026-05-27 (doc-based — no live call; confirm 🔬 on a sandbox)
 ---
 
 # Actionstep — API Specification & Investigation
 
-> Clean developer reference. **Doc-based** — no live call made; confirm 🔬 items on a sandbox.
-
----
-
 ## Overview
 
 - **Vendor:** Actionstep (legal practice management SaaS; NZ-founded, US-HQ, PE-owned).
-- **API version:** v1 (`application/vnd.api+json`, full surface) + v2 (cleaner JSON; partial).
-- **Base URL:** the `api_endpoint` from the OAuth token response, then `/api/rest/{resource}`.
-- **Sandbox/staging:** `go.actionstepstaging.com` (authorize) / `api.actionstepstaging.com` (token).
-- **API type:** REST. **Data format:** JSON (`vnd.api+json` envelope on v1).
-- **Documentation:** https://docs.actionstep.com/ · legacy: https://actionstep.atlassian.net/wiki/spaces/API
-- **OpenAPI:** per-endpoint YAML specs published; no single aggregate file.
+- **API variants:** v1 (`application/vnd.api+json`, full surface) + v2 (cleaner plain JSON; partial — Matters/FileNotes/Tags only). Use v1 unless told.
+- **Base URL:** `api_endpoint` from the OAuth token response, then `/api/rest/{resource}`. No version segment in the path.
+- **API type / format:** REST; JSON (`vnd.api+json` envelope on v1).
+- **Sandbox/staging hosts:** `go.actionstepstaging.com` (authorize) / `api.actionstepstaging.com` (token). Production: `go.actionstep.com` / `api.actionstep.com`.
+- **Docs:** https://docs.actionstep.com/ · legacy: https://actionstep.atlassian.net/wiki/spaces/API
+- **OpenAPI:** per-endpoint YAML specs; no single aggregate file.
 - **Summary:** REST API over a law firm's matters, contacts, time, billing, tasks, documents.
 
----
+## Authentication — OAuth 2.0 (Authorization Code only)
 
-## Authentication
+User-context only — no machine-to-machine. The token response carries the **region base URL** (`api_endpoint`) and org id (`orgkey`).
 
-### Method: OAuth 2.0 (Authorization Code only)
-
-User-context only — no machine-to-machine. The token response carries the **region base URL**
-(`api_endpoint`) and the org id (`orgkey`).
-
-**Header format:**
-
-```
-Authorization: Bearer <access_token>
-Content-Type: application/vnd.api+json
-```
-
-**OAuth 2.0:**
+Headers: `Authorization: Bearer <access_token>` · `Content-Type: application/vnd.api+json`.
 
 | Parameter         | Value                                                       |
 | ----------------- | ----------------------------------------------------------- |
@@ -52,10 +40,7 @@ Content-Type: application/vnd.api+json
 | Token lifetime    | access 28800s (8h); refresh 21 days, **rotates** on refresh |
 | PKCE required     | Not documented 🔬                                           |
 
-**Scopes:** space-separated resource names; `all` is a wildcard. Common: `actions`,
-`participants`, `timerecords`, `filenotes`, `tasks`, `bills`, `actiondocuments`, `resthooks`.
-
----
+**Scopes:** space-separated resource names; `all` = wildcard. Common: `actions`, `participants`, `timerecords`, `filenotes`, `tasks`, `bills`, `actiondocuments`, `resthooks`.
 
 ## Endpoint Catalog
 
@@ -69,74 +54,32 @@ Standard verbs per resource (`{api_endpoint}/api/rest/...`):
 | PUT    | `/actions/{id}` | Update matter | No        |
 | DELETE | `/actions/{id}` | Delete matter | No        |
 
-Same shape repeats for: `participants`, `timeentries`, `filenotes`, `tasks`, `bills`,
-`actiondocuments`, `actiontypes`, `datacollections`, `datacollectionrecords`, `resthooks`,
-`disbursements`, and the other resources listed at `/endpoint-resources/`.
+Same shape repeats for: `participants`, `timeentries`, `filenotes`, `tasks`, `bills`, `actiondocuments`, `actiontypes`, `datacollections`, `datacollectionrecords`, `resthooks`, `disbursements`, and the other resources at `/endpoint-resources/`.
 
-### RestHooks
-
-| Method | Path              | Purpose               |
-| ------ | ----------------- | --------------------- |
-| GET    | `/resthooks`      | List subscriptions    |
-| POST   | `/resthooks`      | Subscribe to an event |
-| PUT    | `/resthooks/{id}` | Update subscription   |
-| DELETE | `/resthooks/{id}` | Unsubscribe           |
-
----
+RestHooks: `GET /resthooks` (list) · `POST /resthooks` (subscribe) · `PUT /resthooks/{id}` (update) · `DELETE /resthooks/{id}` (unsubscribe).
 
 ## Data Models
 
-See `01a-domain-model-reference.md`. Core: **Action** (matter), **Participant** (contact),
-**TimeEntry**, **FileNote**, **Task**, **Bill**, **ActionDocument**. Records use integer ids;
-related records are sideloaded under `linked` with URI templates under `links`.
-
----
+See `01a-domain-model-reference.md`. Core: **Action** (matter), **Participant** (contact), **TimeEntry**, **FileNote**, **Task**, **Bill**, **ActionDocument**. Integer ids; related records sideloaded under `linked` with URI templates under `links`.
 
 ## Pagination
 
-- **Type:** page-number. **Default:** 50. **Max:** 200 (`pageSize` cap). **Total count:** yes.
+Page-number. Default 50, max 200 (`pageSize` cap). Total count: yes.
 
-| Parameter  | Type | Default | Description         |
+| Param      | Type | Default | Description         |
 | ---------- | ---- | ------- | ------------------- |
 | `page`     | int  | 1       | 1-based page no.    |
 | `pageSize` | int  | 50      | Records/page (≤200) |
 
-**Response structure:**
-
-```json
-{ "actions": [ ... ], "links": { ... }, "linked": { ... },
-  "meta": { "paging": { "actions": { "recordCount": 240, "pageCount": 5, "page": 1, "pageSize": 50, "prevPage": null, "nextPage": 2 } } } }
-```
-
-**Last page detection:** `meta.paging.{resource}.nextPage === null`.
-
----
+Response: `{"actions":[...],"links":{...},"linked":{...},"meta":{"paging":{"actions":{"recordCount":240,"pageCount":5,"page":1,"pageSize":50,"prevPage":null,"nextPage":2}}}}`. Last page when `meta.paging.{resource}.nextPage === null`.
 
 ## Rate Limits
 
-| Scope                      | Limit          | Window |
-| -------------------------- | -------------- | ------ |
-| user/session + orgkey + IP | unpublished 🔬 | —      |
-
-**When exceeded:** `429`. **Headers:** none documented 🔬. **Strategy:** exponential backoff +
-jitter; serialise bursty work (limits are session/org-based). Live since April 2024.
-
----
+Scope: user/session + orgkey + IP. Limit: unpublished 🔬. **When exceeded:** `429`. **Headers:** none documented 🔬. **Strategy:** exponential backoff + jitter; serialise bursty work (limits are session/org-based). Live since April 2024.
 
 ## Error Handling
 
-```json
-{
-  "errors": {
-    "id": "...",
-    "status": 422,
-    "code": "AS-…",
-    "title": "...",
-    "detail": "...",
-    "source": { "pointer": null, "parameter": null }
-  }
-}
-```
+Format: `{"errors":{"id":"...","status":422,"code":"AS-…","title":"...","detail":"...","source":{"pointer":null,"parameter":null}}}`
 
 | Status | Meaning          | Retryable | Recovery             |
 | ------ | ---------------- | --------- | -------------------- |
@@ -150,24 +93,15 @@ jitter; serialise bursty work (limits are session/org-based). Live since April 2
 
 Per-resource validation codes: `A01–A02`, `P01–P03`, `T01–T11`, `TR01–TR05`.
 
----
-
 ## Webhooks / Events
 
-**Registration:** `POST /api/rest/resthooks` (`{"resthooks": {"eventName","targetUrl"}}`).
-**Events:** 24 (ActionCreated, ActionUpdated, TaskCreated, TimeEntryCreated, FileNoteCreated,
-ParticipantCreated, StepChanged, …). **Verification:** none documented 🔬. **Reliability:**
-target must return 200 or the hook is disabled; payload body shape undocumented 🔬 (re-fetch).
-
----
+Registration: `POST /api/rest/resthooks` (`{"resthooks":{"eventName","targetUrl"}}`). Events: 24 (ActionCreated, ActionUpdated, TaskCreated, TimeEntryCreated, FileNoteCreated, ParticipantCreated, StepChanged, …). Verification: none documented 🔬. Reliability: target must return 200 or the hook is disabled; payload body shape undocumented 🔬 (re-fetch). Full event list in `01d`.
 
 ## Known Limitations
 
 1. OAuth user-context only — no service accounts.
-2. Region base URL is dynamic (`api_endpoint`) — must be stored/used per connection.
+2. Region base URL is dynamic (`api_endpoint`) — store/use per connection.
 3. Filter/sort syntax, webhook payloads, and exact rate limits are under-documented.
-
----
 
 ## SDKs & Tooling
 
@@ -177,16 +111,9 @@ target must return 200 or the hook is disabled; payload body shape undocumented 
 | OpenAPI (per-endpoint) | YAML per resource; no aggregate spec                |
 | Official SDK           | None first-party of note 🔬                         |
 
----
-
 ## Integration Path Assessment
 
-**Recommended path:** **Direct API (spec-driven, chat-only).**
-
-**Justification:** Structured legal-practice data, not browsable files — so not a Files-Remote
-connector. Mirrors NetSuite/simPRO/Zoho: an OAuth2 connector whose specs live in `ext-api-doc/`
-and are read by the workspace agent; **no `lib/oauth-providers/` provider class**;
-`surfaces: ['chat']`.
+**Recommended: Direct API (spec-driven, chat-only).** Justification: structured legal-practice data, not browsable files — so not a Files-Remote connector. Mirrors NetSuite/simPRO/Zoho: an OAuth2 connector whose specs live in `ext-api-doc/` and are read by the workspace agent; **no `lib/oauth-providers/` provider class**; `surfaces: ['chat']`.
 
 | Connector Method | Feasibility | Note                                    |
 | ---------------- | ----------- | --------------------------------------- |
@@ -195,6 +122,6 @@ and are read by the workspace agent; **no `lib/oauth-providers/` provider class*
 | create/update    | good        | `POST`/`PUT` (confirm field schemas 🔬) |
 | file browsing    | n/a         | not a file connector                    |
 
----
+## Sources
 
-_Researched 2026-05-27 (documentation-based; live smoke test pending). Source: investigation questionnaire._
+Researched 2026-05-27 (doc-based; live smoke test pending). Investigation questionnaire + docs.actionstep.com.

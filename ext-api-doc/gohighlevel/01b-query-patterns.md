@@ -1,251 +1,187 @@
 ---
-api_name: 'GoHighLevel'
-api_slug: 'gohighlevel'
-generated_from: '00-api-investigation (GoHighLevel, 2026-05-04) + official marketplace docs'
-generated_date: '2026-06-10'
-source_phases: ['Phase 4: Query Patterns']
+api_name: GoHighLevel
+api_slug: gohighlevel
+base_url: https://services.leadconnectorhq.com
+path_version_segment: none (version is the Version header, never a path)
+auth: Bearer PIT (backend-injected); NEVER set Authorization
+required_on_every_read: Version header (default 2021-07-28; 2023-02-21 for contacts) + locationId query param on most lists
+field_casing: camelCase
+call_surface: HTTP via `numa integrations request gohighlevel GET <URL> --headers '{"Version":"..."}'`. NOT a file-store connector.
+confidence: docs-derived [DOCS], NOT live-validated. First successful response of each shape in a session is ground truth — prefer it over this file. Non-default markers [UNVERIFIED] inline.
+companions: 01=api-rules, 01a=domain-model, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# GoHighLevel -- Query Patterns Reference
+# GoHighLevel — Query Patterns
 
-> ⚠️ Docs-derived — NOT yet live-validated through the Numa connector path.
-> All examples use the Numa `connectors` tool form — relative URLs, **no Authorization header**
-> (Numa injects the Bearer PIT automatically), and an explicit `Version` header on EVERY call
-> (Numa does NOT add it). Facts tagged [DOCS] / [UNVERIFIED].
+URLs are relative paths; backend prepends base_url and injects the Bearer PIT. Pass the Version header on EVERY call (`--headers '{"Version":"2021-07-28"}'`); contacts docs target `2023-02-21` — switch only if a contacts response looks wrong. `locationId` is a required query param on most list/search endpoints.
 
-## The Two Non-Negotiables on Every Read
-
-1. **`headers: {"Version": "2021-07-28"}`** — required by the API on every request [DOCS]. Contacts
-   docs are written against `2023-02-21`; switch only if a contacts response looks wrong.
-2. **`locationId`** — required as a query param on most list/search endpoints [DOCS].
-
-## Step 0: Resolve the locationId (always do this first)
+## Step 0: resolve locationId (always first)
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/locations/search", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET /locations/search --headers '{"Version":"2021-07-28"}' -m "find location"
 ```
 
-- Returns the location(s) visible to the PIT [DOCS]. A PIT is created inside one location, so expect
-  one result in the normal case [DOCS]; if several come back, ask the user which to use.
-- Cache `locationId` for the whole session — never re-derive it per call, never guess it.
-- This is also the cheapest **connection health probe**: a 200 here proves the PIT works at all
-  (it needs the "View Locations" scope [DOCS]).
+- Returns the location(s) the PIT sees. A PIT lives in one location → expect one result; if several, ask the user which.
+- Cache `locationId` for the session — never re-derive per call, never guess.
+- Also the cheapest **connection health probe**: 200 proves the PIT works (needs "View Locations" scope).
 
 ## Pagination (cursor / keyset)
 
-Mechanics [DOCS — official pagination behaviour, confirmed by the community walkthrough]:
+| Param          | Type            | Notes                                           |
+| -------------- | --------------- | ----------------------------------------------- |
+| `limit`        | integer         | default 20, max 100                             |
+| `startAfter`   | epoch ms number | cursor from previous page's `meta.startAfter`   |
+| `startAfterId` | string          | cursor from previous page's `meta.startAfterId` |
+| `locationId`   | string          | required for most lists                         |
 
-| Param          | Type            | Notes                                            |
-| -------------- | --------------- | ------------------------------------------------ |
-| `limit`        | integer         | Default **20**, max **100**                      |
-| `startAfter`   | epoch ms number | Cursor from `meta.startAfter` of the previous page |
-| `startAfterId` | string          | Cursor from `meta.startAfterId` of the previous page |
-| `locationId`   | string          | Required for most lists                          |
-
-Response envelope: `{ "<collection>": [...], "meta": {...} }` — e.g. `contacts` [DOCS].
-
-The loop:
+Envelope: `{"<collection>":[...],"meta":{...}}` (e.g. `contacts`).
+Loop:
 
 ```
-page 1:  /contacts/?locationId={loc}&limit=100
-         → read meta.startAfter + meta.startAfterId
+page 1:  /contacts/?locationId={loc}&limit=100              → read meta.startAfter + meta.startAfterId
 page 2:  /contacts/?locationId={loc}&limit=100&startAfter={meta.startAfter}&startAfterId={meta.startAfterId}
-page N:  …until meta cursors are absent/null or the collection array is empty
+page N:  …until meta cursors absent/null OR the collection array is empty
 ```
 
-- **Pass BOTH cursors** — they work as a pair (timestamp + id tiebreak) [DOCS].
-- Stop condition: meta cursors absent/null [UNVERIFIED — inferred]; an empty collection array is the
-  unambiguous stop [DOCS — "response is empty" is the community stop condition].
-- No reliable total count is documented [UNVERIFIED whether `meta` carries one] — phrase totals as
-  "at least N" unless you drained all pages.
-- **Pace pages ~1/sec** — rate limits are numerically unknown; the community guidance inserts 1000ms
-  between page calls [DOCS — community practice; thresholds [UNVERIFIED]].
+- **Pass BOTH cursors** — they work as a pair (timestamp + id tiebreak).
+- Stop: meta cursors absent/null [UNVERIFIED — inferred]; an empty collection array is the unambiguous stop (community-confirmed).
+- No reliable total count [UNVERIFIED whether `meta` carries one] — phrase as "at least N" unless you drained all pages.
+- Pace pages ~1/sec — limits unknown (community guidance: 1000ms between page calls).
 
-## Common Patterns
+## Patterns
 
-### Pattern 1: List contacts (paged)
+### 1: List contacts (paged)
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100",
-  "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
 ```
 
-`GET /contacts/` is **deprecated in favour of `/contacts/search`** [DOCS] but is the path with
-fully-documented cursor pagination — use it for "list/dump all contacts" work until search is
-validated through Numa.
+`GET /contacts/` is deprecated in favour of `/contacts/search`, but is the path with fully-documented cursor pagination — use it for "list/dump all contacts" until search is validated.
 
-### Pattern 2: Get one record by id
+### 2: Get one record by id
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/{contactId}", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET /contacts/{contactId} --headers '{"Version":"2021-07-28"}' -m "get contact"
 ```
 
-Single-record responses appear wrapped (`{ "contact": {...} }` per SDK examples) [UNVERIFIED for all
-entities] — unwrap defensively (use the entity key if present, else the body itself).
+Single-record responses appear wrapped (`{"contact":{...}}` per SDK) [UNVERIFIED for all entities] — unwrap defensively (use the entity key if present, else the body).
 
-### Pattern 3: Search contacts (preferred per docs — shape UNVERIFIED)
+### 3: Search contacts (preferred per docs — shape UNVERIFIED)
 
-`/contacts/search` is the documented replacement for the deprecated list [DOCS], but the exact
-request shape (GET with params vs POST with a filter body) was **not pinned down** in the
-investigation [UNVERIFIED]. Approach:
+`/contacts/search` is the documented replacement, but the exact request shape (GET-with-params vs POST-with-filter-body) was not pinned [UNVERIFIED]. Approach:
 
-1. Try `GET /contacts/search?locationId={loc}&query={text}&limit=20` (query-param style) [UNVERIFIED].
-2. If that 4xxs, try `POST /contacts/search` with `{"locationId": "...", "query": "...", "pageLimit": 20}` [UNVERIFIED].
-3. Whichever works, note it for the rest of the session — and fall back to Pattern 1 + client-side
-   filtering if neither cooperates.
+1. Try `GET /contacts/search?locationId={loc}&query={text}&limit=20` [UNVERIFIED].
+2. If 4xx, try `POST /contacts/search` body `{"locationId":"...","query":"...","pageLimit":20}` [UNVERIFIED].
+3. Whichever works, note it for the session — and fall back to Pattern 1 + client-side filtering if neither cooperates.
+   Never present search-shape guesses as fact; say you're locating the working form.
 
-Never present search-shape guesses as fact to the user; say you're locating the working form.
-
-### Pattern 4: Opportunities — pipelines first, then search
+### 4: Opportunities — pipelines first, then search
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT",
-  "headers": {"Version": "2021-07-28"}})
-
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/opportunities/search?location_id=ve9EPM428h8vShlRW1KT&limit=20",
-  "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT" --headers '{"Version":"2021-07-28"}' -m "list pipelines"
+numa integrations request gohighlevel GET "/opportunities/search?location_id=ve9EPM428h8vShlRW1KT&limit=20" --headers '{"Version":"2021-07-28"}' -m "search deals"
 ```
 
-- Pipelines give you stage ids/names — you need them to interpret (and later move) deals [DOCS].
-- The search param casing (`location_id` vs `locationId`) is [UNVERIFIED] — try `location_id` first
-  (snake_case appears in community examples for this endpoint), fall back to `locationId`.
-- Useful filters (status, pipeline, assignedTo) are [UNVERIFIED] — discover from a working response.
+- Pipelines give stage ids/names — needed to interpret and later move deals.
+- Search param casing (`location_id` vs `locationId`) [UNVERIFIED] — try `location_id` first (snake_case in community examples for this endpoint), fall back to `locationId`.
+- Filters (status, pipeline, assignedTo) [UNVERIFIED] — discover from a working response.
 
-### Pattern 5: Conversations and messages
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/conversations/search?locationId=ve9EPM428h8vShlRW1KT&limit=20",
-  "headers": {"Version": "2021-07-28"}})
-
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/conversations/{conversationId}/messages",
-  "headers": {"Version": "2021-07-28"}})
-```
-
-Search supports filter/sort per the MCP tool description ("Search/filter/sort conversations") [DOCS];
-the specific filter params are [UNVERIFIED].
-
-### Pattern 6: Calendar events (needs an anchor id)
-
-`GET /calendars/events` **requires `userId`, `groupId`, or `calendarId`** [DOCS — MCP tool doc].
+### 5: Conversations and messages
 
 ```
-# 1. find calendars (or users) first  — path for calendar listing [UNVERIFIED]; users family exists [DOCS]
+numa integrations request gohighlevel GET "/conversations/search?locationId=ve9EPM428h8vShlRW1KT&limit=20" --headers '{"Version":"2021-07-28"}' -m "search conversations"
+numa integrations request gohighlevel GET /conversations/{conversationId}/messages --headers '{"Version":"2021-07-28"}' -m "get messages"
+```
+
+Search supports filter/sort per the MCP tool ("Search/filter/sort conversations"); specific filter params [UNVERIFIED].
+
+### 6: Calendar events (needs an anchor id)
+
+`GET /calendars/events` requires `userId`, `groupId`, or `calendarId`.
+
+```
+# 1. find calendars (or users) first — calendar listing path [UNVERIFIED]; users family exists
 # 2. then:
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/calendars/events?locationId=ve9EPM428h8vShlRW1KT&calendarId={calId}&startTime=...&endTime=...",
-  "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/calendars/events?locationId=ve9EPM428h8vShlRW1KT&calendarId={calId}&startTime=...&endTime=..." --headers '{"Version":"2021-07-28"}' -m "list events"
 ```
 
-Time-window params (`startTime`/`endTime`) are the natural shape but [UNVERIFIED] — expect the 400
-message to name the required params, and use them.
+`startTime`/`endTime` are the natural window params but [UNVERIFIED] — expect the 400 message to name the required params.
 
-### Pattern 7: Payments
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/payments/transactions?locationId=ve9EPM428h8vShlRW1KT&limit=20",
-  "headers": {"Version": "2021-07-28"}})
-
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/payments/orders/{orderId}", "headers": {"Version": "2021-07-28"}})
-```
-
-Transactions are "paginated list, supports filtering" [DOCS — MCP tool]; filter params [UNVERIFIED].
-
-### Pattern 8: Contact sub-resources
+### 7: Payments
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/{contactId}/tasks", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/payments/transactions?locationId=ve9EPM428h8vShlRW1KT&limit=20" --headers '{"Version":"2021-07-28"}' -m "list transactions"
+numa integrations request gohighlevel GET /payments/orders/{orderId} --headers '{"Version":"2021-07-28"}' -m "get order"
 ```
 
-Tasks documented [DOCS]; notes/followers follow the same nesting pattern [UNVERIFIED paths].
+Transactions are "paginated list, supports filtering"; filter params [UNVERIFIED].
 
-### Pattern 9: Custom field definitions (decode contact custom values)
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/locations/{locationId}/customFields", "headers": {"Version": "2021-07-28"}})
-```
-
-Path inferred from the MCP tool `locations_get-custom-fields` [UNVERIFIED — locations-scoped route].
-Fetch once per session; use `fieldKey`/`name` to translate the opaque custom-field entries on
-contact records into human-readable answers.
-
-### Pattern 10: Users (for calendar anchors and "assigned to" names)
-
-The users family is documented ([DOCS] — SDK service + docs nav); the list path is [UNVERIFIED]:
+### 8: Contact sub-resources
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/users/?locationId=ve9EPM428h8vShlRW1KT", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET /contacts/{contactId}/tasks --headers '{"Version":"2021-07-28"}' -m "list tasks"
 ```
 
-Needed to resolve `userId` for `/calendars/events` queries and to display owner names on
-opportunities. If the path 404s, note it and ask the user for the relevant person's id from the
-HighLevel UI instead.
+Tasks documented; notes/followers follow the same nesting [UNVERIFIED paths].
 
-## Choosing `limit`
-
-| Situation                     | `limit` | Why                                                |
-| ----------------------------- | ------- | --------------------------------------------------- |
-| Interactive lookups           | 20 (default) | Fast, small payloads                            |
-| "Find X" scans                | 100     | Fewer pages = fewer requests against unknown limits |
-| Full exports / sync walks     | 100     | Mandatory — a 10k-contact book is 100 pages at 100, 500 at 20 |
-| Probes / health checks        | 1       | Cheapest possible signal                            |
-
-## Worked Examples
-
-### Example 1: "Find Jane Smith and show her details"
+### 9: Custom field definitions (decode contact custom values)
 
 ```
-# Resolve location (once per session)
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/locations/search", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET /locations/{locationId}/customFields --headers '{"Version":"2021-07-28"}' -m "custom fields"
+```
 
-# Search (Pattern 3 probing), or list + filter client-side:
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/?locationId={loc}&limit=100", "headers": {"Version": "2021-07-28"}})
+Path inferred from the MCP tool `locations_get-custom-fields` [UNVERIFIED]. Fetch once per session; use `fieldKey`/`name` to translate opaque custom-field entries on contacts.
+
+### 10: Users (for calendar anchors and "assigned to" names)
+
+Users family documented; list path [UNVERIFIED]:
+
+```
+numa integrations request gohighlevel GET "/users/?locationId=ve9EPM428h8vShlRW1KT" --headers '{"Version":"2021-07-28"}' -m "list users"
+```
+
+Resolves `userId` for `/calendars/events` and displays owner names on opportunities. If it 404s, note it and ask the user for the person's id from the HighLevel UI.
+
+## Choosing limit
+
+| Situation                 | limit        | Why                                                    |
+| ------------------------- | ------------ | ------------------------------------------------------ |
+| Interactive lookups       | 20 (default) | fast, small payloads                                   |
+| "Find X" scans            | 100          | fewer pages = fewer requests vs unknown limits         |
+| Full exports / sync walks | 100          | mandatory — 10k contacts = 100 pages at 100, 500 at 20 |
+| Probes / health checks    | 1            | cheapest signal                                        |
+
+## Worked examples
+
+### "Find Jane Smith and show her details"
+
+```
+numa integrations request gohighlevel GET /locations/search --headers '{"Version":"2021-07-28"}' -m "find location"
+numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
 # …page until found; match on name/email client-side
 ```
 
-For small-to-medium books (≤ a few thousand contacts) the paged list + client-side match is reliable
-and avoids the unverified search shape. 3,000 contacts ≈ 30 pages at limit=100 [DOCS — community
-account had 3,016 across 151 dashboard pages].
+For ≤ a few thousand contacts, paged list + client-side match is reliable and avoids the unverified search shape. 3,000 contacts ≈ 30 pages at limit=100.
 
-### Example 2: "How many deals are in the Sales pipeline, by stage?"
+### "How many deals in the Sales pipeline, by stage?"
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/opportunities/pipelines?locationId={loc}", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/opportunities/pipelines?locationId={loc}" --headers '{"Version":"2021-07-28"}' -m "list pipelines"
 # pick the pipeline id by name; then
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/opportunities/search?location_id={loc}&pipeline_id={pid}&limit=100",
-  "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/opportunities/search?location_id={loc}&pipeline_id={pid}&limit=100" --headers '{"Version":"2021-07-28"}' -m "search deals"
 ```
 
-`pipeline_id` filter param [UNVERIFIED] — if rejected, search without it and group client-side by
-`pipelineId`/`stageId`. Map stage ids to names using the pipelines response.
+`pipeline_id` filter [UNVERIFIED] — if rejected, search without it and group client-side by `pipelineId`/`stageId`. Map stage ids to names via the pipelines response.
 
-### Example 3: "Show the last messages with contact X"
+### "Show the last messages with contact X"
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/conversations/search?locationId={loc}&contactId={contactId}",
-  "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET "/conversations/search?locationId={loc}&contactId={contactId}" --headers '{"Version":"2021-07-28"}' -m "find conversation"
 # contactId filter [UNVERIFIED] — fall back to search + client-side match on contactId
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/conversations/{convId}/messages", "headers": {"Version": "2021-07-28"}})
+numa integrations request gohighlevel GET /conversations/{convId}/messages --headers '{"Version":"2021-07-28"}' -m "get messages"
 ```
 
-### Example 4: Full contact export (cursor drain)
+### Full contact export (cursor drain)
 
 ```
 loop:
@@ -258,43 +194,26 @@ loop:
 
 Write batches to a `/workdir` file as you go — don't hold tens of thousands of records in context.
 
-### Example 5: "Which contacts were added this week?"
+### "Which contacts were added this week?"
 
-No documented server-side date filter [UNVERIFIED — search may support one]; the robust path is a
-cursor walk with client-side filtering:
+No documented server-side date filter [UNVERIFIED — search may support one]; robust path is a cursor walk with client-side filtering:
 
 ```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/?locationId={loc}&limit=100", "headers": {"Version": "2021-07-28"}})
-# inspect the first page: identify the created-date field (likely dateAdded [UNVERIFIED])
-# and whether results are ordered newest-first; if so, stop paging once records pre-date the window
+numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+# inspect page 1: identify the created-date field (likely dateAdded [UNVERIFIED]) and whether
+# results are ordered newest-first; if so, stop paging once records pre-date the window
 ```
 
-If page 1 shows oldest-first ordering (or no clear order), you must drain pages and filter — warn
-the user it may take a moment on large books, and consider proposing a scheduled agent for
-recurring versions of this question (see 01d).
+If page 1 shows oldest-first (or no clear order), drain pages and filter — warn the user it may take a moment on large books; consider proposing a scheduled agent for recurring versions (see 01d).
 
-## Query Gotchas & Counter-Exceptions
+## Query gotchas
 
-1. **Version header omitted → request fails.** It's the first thing to check on any 4xx. [DOCS]
-2. **Missing `locationId` on a list → 4xx.** Second thing to check. [DOCS]
-3. **`startAfter` is epoch milliseconds, not seconds and not ISO.** Pass `meta` values through
-   verbatim — never compute your own cursor. [DOCS]
-4. **Both cursors or neither.** Sending only `startAfter` without `startAfterId` may mis-page
-   [UNVERIFIED] — always send the pair.
-5. **403 on one family, 200 on another = scope gap**, not a broken connection. Tell the user which
-   scope to add to their Private Integration. [DOCS]
-6. **Empty page ≠ error.** `[]` with 200 means no matches / end of data. Stop paging; don't retry.
-7. **Deprecated ≠ broken**: `GET /contacts/` works today [DOCS]; just don't be surprised by an
-   eventual sunset — prefer `/contacts/search` once its shape is validated through Numa.
-8. **Server-side date filtering is unproven.** No documented `dateUpdated>=` filter was found —
-   change detection is cursor walks + client-side date comparison until search filters are validated
-   [UNVERIFIED]. See 01d for the polling recipe.
-9. **Responses may differ per `Version` value** — pin one value per session; don't mix. [DOCS]
-10. **Nothing here is live-validated.** First successful response of each shape in a session is your
-    ground truth — prefer it over this file and note discrepancies.
-
----
-
-_Generated 2026-06-10 from the 2026-05-04 docs investigation. Companion to `01-llm-api-rules.md`.
-See `01c-mutation-patterns.md` for writes and `01d-event-and-error-handling.md` for polling and errors._
+1. **Version header omitted → request fails.** First thing to check on any 4xx.
+2. **Missing `locationId` on a list → 4xx.** Second thing to check.
+3. **`startAfter` is epoch milliseconds**, not seconds and not ISO. Pass `meta` values through verbatim — never compute your own cursor.
+4. **Both cursors or neither.** Sending only `startAfter` without `startAfterId` may mis-page [UNVERIFIED] — always send the pair.
+5. **403 on one family, 200 on another = scope gap**, not a broken connection. Tell the user which scope to add.
+6. **Empty page ≠ error.** `[]` with 200 = no matches / end of data. Stop paging; don't retry.
+7. **Deprecated ≠ broken:** `GET /contacts/` works today; prefer `/contacts/search` once its shape is validated.
+8. **Server-side date filtering is unproven.** No documented `dateUpdated>=` filter found — change detection is cursor walks + client-side date comparison until search filters are validated [UNVERIFIED]. See 01d.
+9. **Responses may differ per `Version` value** — pin one value per session; don't mix.

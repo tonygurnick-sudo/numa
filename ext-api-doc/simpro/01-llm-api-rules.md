@@ -1,235 +1,120 @@
 ---
-api_name: 'simPRO'
-api_slug: 'simpro'
-version: 'v1.0'
-generated_from: '00-api-investigation'
-generated_date: '2026-03-30'
-line_count_target: '< 300 lines'
+api_name: simPRO
+api_slug: simpro
+base_url: https://{build}.simprosuite.com/api/v1.0/
+path_version_segment: /api/v1.0 — REAL path segment, already in base_url; do NOT add or strip it
+route_prefix_injected_by_connector: scheme + {build}.simprosuite.com + /api/v1.0 (you pass the resource path only)
+company_scope: /companies/{companyID}/ — REAL path segment, mandatory on every resource path
+auth: Bearer {access_token} (OAuth2) OR Bearer {api_key} (Direct Access); + Content-Type: application/json on POST/PATCH/PUT
+field_casing: PascalCase (Type, CompanyName, SiteID, DateIssued)
+id_format: integer (file-attachment IDs are strings; recurring-job/folder IDs are long)
+rate_limit: 10 req/sec per build, shared across ALL consumers/tokens; no rate-limit headers; HTTP 429 when exceeded
+call_surface: HTTP via `numa integrations request` (NOT file-browse, NOT MCP)
+integration_path: hybrid (Data Connector + Direct API)
+confidence: facts confirmed (forum / official PHP SDK / SyncHub data model) unless tagged [INFERRED]/[UNKNOWN]/[VERIFIED <date>]
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# simPRO -- Workspace Agent API Rules
+# simPRO — API Rules
 
-> **This file is loaded into the workspace agent's context when the simPRO integration is active.**
-> It must stay under 300 lines. Be precise, not verbose.
-> Companion files (01a-01d) contain the detailed reference material.
+## Call surface
 
-## Context
+HTTP only — invoke via `numa integrations request`. simPRO is NOT a file-store connector and NOT MCP.
 
-- **API:** simPRO REST API v1.0
-- **Base URL:** `https://{build}.simprosuite.com/api/v1.0/` (per-tenant subdomain)
-- **Auth:** OAuth 2.0 Bearer token (access token: 1hr lifetime; refresh token: 14-day, single-use) [CONFIRMED]
-- **Integration path:** Hybrid (Data Connector + Direct API)
-- **Rate limits:** 10 requests/second per build, shared across all API consumers [DOCUMENTED]
+## Paths (read first)
 
-## Auth Structure
+- Base URL already ends in `/api/v1.0/`. `/api/v1.0` is a REAL path segment — it stays. There is no `/v1/`.
+- Pass the resource path scoped under a company: `/companies/{companyID}/jobs/`, `/companies/{companyID}/jobs/{id}`.
+- Top-level (no company): `/companies/`, `/webhooks/`.
+- Trailing slash on collection endpoints (`/jobs/`); no trailing slash on item endpoints (`/jobs/{id}`).
+- `companyID` is mandatory in every resource path. Do NOT hardcode `0` — it is a legacy single-build folklore shortcut that only works on some builds. Canonical: `GET /companies/` → use a real `ID`. (`0` may appear in defaults/examples but discover the real id when unsure.)
 
-```
-Authorization: Bearer {access_token}
-Content-Type: application/json
-```
+## Auth
 
-**Token lifecycle:** [CONFIRMED -- forum]
+`Authorization: Bearer {token}` + `Content-Type: application/json` (POST/PATCH/PUT). Token = OAuth2 access token (1hr) or Direct Access api_key (long-lived). Refresh: `POST https://{build}.simprosuite.com/oauth2/token`, `grant_type=refresh_token` (per-build; `auth.simpro.co` is NXDOMAIN). Refresh tokens are single-use — persist the new one every refresh.
 
-- Access tokens expire in 3600 seconds (1 hour)
-- Refresh tokens expire in 14 days; single-use (becomes invalid once used)
-- Token URL: `https://{build}.simprosuite.com/oauth2/token` (per-build; `auth.simpro.co` does NOT exist — corrected 2026-05-19 against official PHP SDK)
-- Refresh: POST with `grant_type=refresh_token`, `client_id`, `client_secret`, `refresh_token`
+## CAN
 
-## URL Structure
+List/get/create/update: jobs, quotes, leads, customers (company+individual), contacts, sites, contractors, catalogs, vendors, purchaseOrders, assets, schedules. Read+update: employees, customerInvoices. Delete: jobs (DELETE; prefer Archive). Filter by field-value with operators `gt() lt() ge() le() ne() between()` + `%` wildcard. Nested-field filter via dot notation (`?CustomFields.CustomField.ID=35`). `?columns=` field selection; `?orderby=` sort (`-` prefix = desc, comma = multi). `If-Modified-Since` header for change detection. Job cost-center breakdowns via sub-resources. Manage webhooks (22 event types).
 
-All resource endpoints are scoped under a company:
+## CANNOT
 
-```
-/api/v1.0/companies/{companyID}/{resource}/
-/api/v1.0/companies/{companyID}/{resource}/{id}
-```
+Bulk/batch create/update/delete (single-record only — 100 jobs = 100 PATCHes). Full-text search (no search endpoint; use field filters + wildcards). OR logical operator (multiple params are AND-only). Modify system config (status codes, custom fields, security groups). Upload/download file attachments (entities exist, upload API undocumented). Cross-company access without an explicit companyID.
 
-- **companyID = 0** for single-company builds (most common) [DOCUMENTED]
-- Multi-company builds require the actual company ID from `GET /api/v1.0/companies/`
+## Gotchas
 
-## Capabilities
+1. **PATCH returns 204 even on silent rejection.** Status changes violating priority return 204 but do nothing. ALWAYS verify with a GET after PATCH. Quote-status PATCH that is silently rejected even fires a webhook despite no change. [known bug — forum]
+2. Status codes are hierarchical: cannot set a lower-priority status unless "Ignore status priority" is enabled.
+3. Default `pageSize=30`; max `250`. Always set `pageSize=250` for large pulls.
+4. `orderby` + `If-Modified-Since` + certain columns (e.g. `AssignedTo`) → HTTP 500. Avoid combining all three.
+5. Filter field names matter: use `CompanyName` (not `Name`) for company customers. The `ID` column is not searchable on some endpoints.
+6. `Type` enum: `Service`, `Project`, `Prepaid` ONLY.
+7. Custom fields may be ignored on job-create POST — apply them in a separate PATCH after create.
+8. Build the job hierarchy top-down: Job → Section → CostCenter → (Labor|Materials|Schedule). Each parent must exist before its child.
+9. FK fields are plain integer IDs (`CompanyCustomerID:45`, `SiteID:1`), not nested objects.
+10. Pagination metadata is in response HEADERS, not body. Body is a bare JSON array.
 
-### CAN
+## Defaults (override only if the user specifies)
 
-1. List, get, create, and update jobs, quotes, leads, customers, contacts, sites
-2. Filter records using field-value params with comparison operators: `gt()`, `lt()`, `ge()`, `le()`, `ne()`, `between()`, and `%` wildcards [CONFIRMED]
-3. Filter by nested fields using dot notation: `?CustomFields.CustomField.ID=35` [CONFIRMED]
-4. Select specific fields with `?columns=` parameter to reduce payload size [DOCUMENTED]
-5. Sort results with `?orderby=` (prefix `-` for descending, comma for multi-sort) [DOCUMENTED]
-6. Monitor changes via `If-Modified-Since` header on list endpoints [DOCUMENTED]
-7. Manage webhook subscriptions for real-time event notifications (22 event types) [DOCUMENTED]
-8. Get job cost center breakdowns (labor, materials, service fees) via sub-resources [CONFIRMED]
+`companyID=0` (single-company fallback — discover real id when unsure), `pageSize=250`, `columns`=omit (API returns default fields).
 
-### CANNOT
+## Operations
 
-1. Perform bulk create/update/delete operations (no batch endpoints exist) [CONFIRMED]
-2. Execute full-text search (no search endpoint; use field filters + wildcards) [CONFIRMED]
-3. Access data across company boundaries without explicit company ID
-4. Modify system configuration (status codes, custom fields, security groups)
-5. Upload or download file attachments (attachment entities exist but upload API undocumented)
-
-## Critical Gotchas
-
-1. **Company ID is mandatory in every resource path.** Use `0` for single-company builds. [DOCUMENTED]
-2. **Rate limit is per-build, not per-key.** All consumers share 10 req/sec. [DOCUMENTED]
-3. **PATCH returns 204 even on silent rejection.** Status updates that violate priority hierarchy return 204 but do nothing. Always verify with a GET after PATCH. [CONFIRMED -- forum: known bug]
-4. **Status codes are hierarchical.** Cannot set lower-priority status unless "Ignore status priority" is enabled. [DOCUMENTED]
-5. **Pagination defaults to 30 results.** Always set `pageSize=250` (max) for large datasets. [DOCUMENTED]
-6. **orderby + If-Modified-Since + certain columns = 500.** Avoid combining these three. [DOCUMENTED]
-7. **Filter field names matter.** Use `CompanyName` for company customers, not `Name`. ID column is not searchable on some endpoints. [CONFIRMED -- forum]
-8. **Job Type has three values:** `Service`, `Project`, or `Prepaid`. [CONFIRMED -- forum]
-
-## Default Parameters
-
-| Parameter | Default | Reason                                                        |
-| --------- | ------- | ------------------------------------------------------------- |
-| companyID | 0       | Works for single-company builds                               |
-| pageSize  | 100     | Balance of performance and data volume                        |
-| columns   | (omit)  | Let API return default fields unless user needs specific ones |
-
-## Working Examples
-
-### Example 1: List Jobs with Pagination
-
-```http
-GET /api/v1.0/companies/0/jobs/?pageSize=100&page=1&columns=ID,Type,Status,DateIssued,Customer
-Host: {build}.simprosuite.com
-Authorization: Bearer {access_token}
-```
-
-Response: JSON array. Pagination metadata in headers:
-
-- `Result-Total: 816` / `Result-Pages: 9` / `Result-Count: 100`
-- `Link: <...?page=2>; rel="next", <...?page=9>; rel="last"`
-  [DOCUMENTED]
-
-### Example 2: Filter with Comparison Operators
-
-```http
-GET /api/v1.0/companies/0/customerInvoices/?DateIssued=gt(2026-01-01)&pageSize=250
-Host: {build}.simprosuite.com
-Authorization: Bearer {access_token}
-```
-
-Operators: `gt()`, `lt()`, `ge()`, `le()`, `ne()`, `between(start,end)`, `%` wildcard
-[CONFIRMED -- forum]
-
-### Example 3: Filter with Wildcards and Nested Fields
-
-```http
-GET /api/v1.0/companies/0/customers/individuals/?GivenName=Rose%&FamilyName=A%
-Host: {build}.simprosuite.com
-Authorization: Bearer {access_token}
-```
-
-[CONFIRMED -- forum]
-
-### Example 4: Create a Webhook Subscription
-
-```http
-POST /api/v1.0/webhooks/
-Host: {build}.simprosuite.com
-Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "url": "https://your-endpoint.com/webhook",
-  "events": ["job.created", "job.updated", "job.stage.complete"]
-}
-```
-
-[DOCUMENTED]
-
-## Proxy API Operations
-
-| Operation              | Method | Path                                                      | Key Parameters                   |
-| ---------------------- | ------ | --------------------------------------------------------- | -------------------------------- |
-| List companies         | GET    | `/companies/`                                             | (none)                           |
-| List jobs              | GET    | `/companies/{cid}/jobs/`                                  | page, pageSize, columns, orderby |
-| Get job                | GET    | `/companies/{cid}/jobs/{id}`                              | columns                          |
-| Create job             | POST   | `/companies/{cid}/jobs/`                                  | Body: Type, Customer/Site IDs    |
-| Update job             | PATCH  | `/companies/{cid}/jobs/{id}`                              | Body: fields to update           |
-| Delete job             | DELETE | `/companies/{cid}/jobs/{id}`                              |                                  |
-| List quotes            | GET    | `/companies/{cid}/quotes/`                                | page, pageSize, columns          |
-| List leads             | GET    | `/companies/{cid}/leads/`                                 | page, pageSize                   |
-| List company customers | GET    | `/companies/{cid}/customers/companies/`                   | page, pageSize                   |
-| List individuals       | GET    | `/companies/{cid}/customers/individuals/`                 | page, pageSize                   |
-| List contacts          | GET    | `/companies/{cid}/contacts/`                              | page, pageSize                   |
-| List sites             | GET    | `/companies/{cid}/sites/`                                 | page, pageSize                   |
-| List schedules         | GET    | `/companies/{cid}/schedules/`                             | page, pageSize                   |
-| List invoices          | GET    | `/companies/{cid}/customerInvoices/`                      | page, pageSize                   |
-| List employees         | GET    | `/companies/{cid}/employees/`                             | page, pageSize                   |
-| List catalog           | GET    | `/companies/{cid}/catalogs/`                              | page, pageSize                   |
-| List vendors           | GET    | `/companies/{cid}/vendors/`                               | page, pageSize                   |
-| List POs               | GET    | `/companies/{cid}/purchaseOrders/`                        | page, pageSize                   |
-| Job sections           | GET    | `/companies/{cid}/jobs/{jid}/sections/`                   |                                  |
-| Cost centers           | GET    | `/companies/{cid}/jobs/{jid}/sections/{sid}/costCenters/` |                                  |
-| Create webhook         | POST   | `/webhooks/`                                              | Body: url, events                |
-| List webhooks          | GET    | `/webhooks/`                                              |                                  |
+| Operation                     | Method         | Path                                                                     | Key params / notes                              |
+| ----------------------------- | -------------- | ------------------------------------------------------------------------ | ----------------------------------------------- |
+| List companies                | GET            | /companies/                                                              | discover companyID; returns `{ID,Name}[]`       |
+| List jobs                     | GET            | /companies/{cid}/jobs/                                                   | page, pageSize, columns, orderby, field filters |
+| Get job                       | GET            | /companies/{cid}/jobs/{id}                                               | columns                                         |
+| Create job                    | POST           | /companies/{cid}/jobs/                                                   | Type + (Company/IndividualCustomerID) + SiteID  |
+| Update job                    | PATCH          | /companies/{cid}/jobs/{id}                                               | returns 204 — verify with GET                   |
+| Replace job                   | PUT            | /companies/{cid}/jobs/{id}                                               | full update                                     |
+| Delete job                    | DELETE         | /companies/{cid}/jobs/{id}                                               | prefer Archive                                  |
+| List/get/create/update quotes | GET/POST/PATCH | /companies/{cid}/quotes/[{id}]                                           | —                                               |
+| List/create/update leads      | GET/POST/PATCH | /companies/{cid}/leads/[{id}]                                            | —                                               |
+| Company customers             | GET/POST/PATCH | /companies/{cid}/customers/companies/[{id}]                              | filter `CompanyName` not `Name`                 |
+| Individual customers          | GET/POST/PATCH | /companies/{cid}/customers/individuals/[{id}]                            | GivenName/FamilyName req on create              |
+| List contacts                 | GET            | /companies/{cid}/contacts/                                               | —                                               |
+| List sites                    | GET            | /companies/{cid}/sites/                                                  | —                                               |
+| List employees                | GET            | /companies/{cid}/employees/                                              | read+update only                                |
+| List contractors              | GET            | /companies/{cid}/contractors/                                            | —                                               |
+| List catalog                  | GET            | /companies/{cid}/catalogs/                                               | —                                               |
+| List vendors                  | GET            | /companies/{cid}/vendors/                                                | —                                               |
+| List invoices                 | GET            | /companies/{cid}/customerInvoices/                                       | read+update only                                |
+| List POs                      | GET            | /companies/{cid}/purchaseOrders/                                         | —                                               |
+| List assets                   | GET            | /companies/{cid}/assets/                                                 | —                                               |
+| List schedules                | GET            | /companies/{cid}/schedules/                                              | —                                               |
+| Job sections                  | GET/POST       | /companies/{cid}/jobs/{jid}/sections/                                    | —                                               |
+| Cost centers                  | GET/POST       | /companies/{cid}/jobs/{jid}/sections/{sid}/costCenters/                  | —                                               |
+| Schedules (nested)            | GET/POST       | /companies/{cid}/jobs/{jid}/sections/{sid}/costCenters/{ccid}/schedules/ | —                                               |
+| List/create webhooks          | GET/POST       | /webhooks/                                                               | Body: url, events                               |
+| Delete webhook                | DELETE         | /webhooks/{id}                                                           | —                                               |
 
 ## Pagination
 
-- **Type:** Page-number based [DOCUMENTED]
-- **Default page size:** 30; **Max page size:** 250 [DOCUMENTED]
-- **Last page detection:** No `rel="next"` in Link header, or `page >= Result-Pages` header value
-- **Always read:** `Result-Total`, `Result-Pages`, `Result-Count` response headers
+Page-number based. Body = bare JSON array. Metadata in HEADERS: `Result-Total`, `Result-Pages`, `Result-Count`, `Link` (`rel="next"/"last"/"first"/"prev"`). Params: `?page=1&pageSize=250` (1-indexed; pageSize 1–250). Last page = no `rel="next"` in `Link`, OR `page >= Result-Pages`, OR array length < pageSize.
 
-## Error Handling
+## Errors
 
-**Error response format:** [CONFIRMED -- forum]
+Format: `{"status":"error","url":"...","header":{},"data":{"errors":[{"path":<field|null>,"message":"...","value":<val|null>}]}}`. Multiple validation errors can return in one `data.errors` array. `header` echoes your request headers.
+Recovery: 400/422 fix params per `data.errors[].message` · 401 refresh token then retry once · 403 access-type/permission or wrong companyID — do NOT loop refresh · 404 verify id + companyID · 405 wrong method · 409 re-fetch then retry · 429 wait ≥1s, exponential backoff (cap 8 req/sec) · 5xx backoff (≤3); 503 check status.simprogroup.com.
 
-```json
-{
-  "status": "error",
-  "data": {
-    "errors": [{ "path": null, "message": "Error description", "value": null }]
-  }
-}
-```
+## Examples
 
-**Recovery by status:**
+1. List newest jobs (key fields):
+   `GET /companies/0/jobs/?columns=ID,Type,Status,DateIssued,Customer,Site&orderby=-DateIssued&pageSize=250&page=1`
+   → headers `Result-Total:816 Result-Pages:4 Result-Count:250`, `Link:<...?page=2>; rel="next", <...?page=4>; rel="last"`; body `[{"ID":1,"Type":"Service",...},{"ID":2,"Type":"Project",...}]`
 
-| Status | Meaning         | Action                                                   |
-| ------ | --------------- | -------------------------------------------------------- |
-| 204    | Success (PATCH) | Verify change with GET -- 204 may hide silent rejections |
-| 400    | Bad request     | Fix request per `data.errors[].message`                  |
-| 401    | Unauthorized    | Refresh token and retry                                  |
-| 403    | Forbidden       | Check access type (Direct vs User Token)                 |
-| 404    | Not found       | Verify resource ID and company ID                        |
-| 429    | Rate limited    | Wait 1+ seconds then retry; respect 10 req/sec limit     |
-| 500    | Server error    | Retry with backoff; check for column/filter conflicts    |
+2. Filter invoices by date range:
+   `GET /companies/0/customerInvoices/?DateIssued=between(2026-01-01,2026-03-31)&pageSize=250`
 
-## Webhooks
+3. Wildcard name search:
+   `GET /companies/0/customers/individuals/?GivenName=Rose%&FamilyName=A%&pageSize=100` (AND-combined; `%`=any chars)
 
-**Payload format:** [CONFIRMED -- forum posts with actual payloads]
+4. Create a job (`POST /companies/0/jobs/`):
+   `{"Type":"Service","CompanyCustomerID":45,"SiteID":1}` → returns created job with auto `ID`. Customer + Site must exist first. Custom fields need a separate PATCH after create.
 
-```json
-{
-  "ID": "job.status",
-  "build": "{build_name}",
-  "name": "Job",
-  "action": "status",
-  "reference": { "companyID": 0, "jobID": 300555, "statusID": 10 },
-  "date_triggered": "2023-01-31T09:05:27+00:00",
-  "description": "Status of Job #300555 set to \"Job : In Progress\""
-}
-```
+5. Update job status + verify:
+   `PATCH /companies/0/jobs/123` `{"StatusID":10}` → 204. Then `GET /companies/0/jobs/123?columns=ID,StatusID,Stage` to confirm (204 may be a silent rejection).
 
-**22 event types:** job.created/updated/status, job.stage.{pending/progress/complete/invoiced/archived}, quote.created/updated/status, lead.created/updated/status, contact.created/updated, company.customer.created/updated, individual.customer.updated, job.schedule.created/updated, quote.schedule.created/updated
-
-## Known Limitations
-
-1. **PATCH response (204) does not confirm success** -- verify with a subsequent GET [CONFIRMED]
-2. **No rate limit response headers** -- cannot detect approaching limit; use 80% threshold [CONFIRMED]
-3. **OAuth scopes not enumerated** -- specific scope values are not publicly documented [CONFIRMED]
-4. **Daily rate limit may exist but is unverified** -- a forum post mentions daily caps but no public source confirms a number. Do not budget against a specific figure. [INFERRED]
-5. **No bulk operations** -- must iterate one-by-one for mass creates/updates [CONFIRMED]
-
----
-
-_Generated from investigation questionnaire. See companion files for detailed reference:_
-
-- _01a-domain-model-reference.md -- Entity catalog, relationships, state machines_
-- _01b-query-patterns.md -- Filtering, search, pagination examples_
-- _01c-mutation-patterns.md -- Create, update, delete patterns_
-- _01d-event-and-error-handling.md -- Events, webhooks, error recovery_
+6. Create webhook (`POST /webhooks/`):
+   `{"url":"https://your-endpoint.com/webhook","events":["job.created","job.updated","job.stage.complete"]}`

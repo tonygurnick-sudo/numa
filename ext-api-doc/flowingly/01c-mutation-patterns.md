@@ -1,326 +1,140 @@
 ---
-api_name: 'Flowingly'
-api_slug: 'flowingly'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-source_phases: ['Phase 3: Domain Model & Behavior', 'Phase 4: Endpoint Catalog']
-confidence: 'LOW — write request shapes are DOCUMENTED; write RESPONSE shapes and validation behaviour are INFERRED/UNKNOWN and not live-tested.'
+api_name: Flowingly
+api_slug: flowingly
+companion_to: 01-llm-api-rules.md
+source_phases: Phase 3 (domain model), Phase 4 (endpoint catalog)
+confidence: write REQUEST shapes are [DOCUMENTED]; write RESPONSE shapes + validation behaviour are [INFERRED]/[UNKNOWN], NOT live-tested, NO [CONFIRMED] facts. Run a GET→POST→GET round-trip to confirm responses. Tags inline where not [DOCUMENTED].
 ---
 
-# Flowingly -- Mutation Patterns Reference
+# Flowingly — Mutation Patterns Reference
 
-> Companion to `01-llm-api-rules.md`. Covers write operations: starting flows, updating step fields,
-> the auth token exchange, business rules, and dangerous operations.
->
-> ⚠️ **DISCOVERY-REQUIRED.** Request bodies below are [DOCUMENTED]. The **responses** to writes (and
-> the exact validation-error shapes) are [INFERRED] from the Start Flow envelope and are NOT
-> live-verified. Run a GET→POST→GET round-trip on a real step to confirm. There are NO [CONFIRMED]
-> facts in this file.
+Covers writes: starting flows, updating step fields, the auth token exchange, business rules, dangerous operations.
 
----
+## Write capabilities
 
-## Write Capabilities Summary
-
-| Operation              | Supported  | Method | Path                                | Notes                                                   |
-| ---------------------- | ---------- | ------ | ----------------------------------- | ------------------------------------------------------- |
-| Authenticate           | Yes        | POST   | /public/authorise                   | Credentials in query string [DOCUMENTED]                |
-| Start flow instance    | Yes        | POST   | /public/startflow                   | **PascalCase** body; NOT idempotent [DOCUMENTED]        |
-| Update step fields     | Yes        | POST   | /public/flow/{flowId}/step/{stepId} | Bulk array; camelCase body [DOCUMENTED]                 |
-| Update single field    | (via bulk) | POST   | /public/flow/{flowId}/step/{stepId} | Send a one-element array (or the full array) [INFERRED] |
-| Advance / approve step | **No**     | —      | —                                   | Not in documented surface [UNKNOWN/None]                |
-| Complete / cancel flow | **No**     | —      | —                                   | Not in documented surface [UNKNOWN/None]                |
-| Delete flow / step     | **No**     | —      | —                                   | Not in documented surface [UNKNOWN/None]                |
-| File upload            | **No**     | —      | —                                   | No file endpoints [UNKNOWN/None]                        |
-| Bulk start flows       | **No**     | —      | —                                   | One instance per call [UNKNOWN]                         |
+| Operation              | Supported | Method | Path                                | Notes                                                   |
+| ---------------------- | --------- | ------ | ----------------------------------- | ------------------------------------------------------- |
+| Authenticate           | Yes       | POST   | /public/authorise                   | credentials in query string [DOCUMENTED]                |
+| Start flow instance    | Yes       | POST   | /public/startflow                   | **PascalCase** body; NOT idempotent [DOCUMENTED]        |
+| Update step fields     | Yes       | POST   | /public/flow/{flowId}/step/{stepId} | bulk array; camelCase body [DOCUMENTED]                 |
+| Update single field    | via bulk  | POST   | /public/flow/{flowId}/step/{stepId} | send a one-element array (or the full array) [INFERRED] |
+| Advance / approve step | No        | —      | —                                   | not in documented surface [UNKNOWN/None]                |
+| Complete / cancel flow | No        | —      | —                                   | not in documented surface [UNKNOWN/None]                |
+| Delete flow / step     | No        | —      | —                                   | not in documented surface [UNKNOWN/None]                |
+| File upload            | No        | —      | —                                   | no file endpoints [UNKNOWN/None]                        |
+| Bulk start flows       | No        | —      | —                                   | one instance per call [UNKNOWN]                         |
 
 ---
 
-## Pattern 0: Token Exchange (precondition for every write)
+## Pattern 0: Token exchange (precondition for every write)
 
-Every write requires a bearer token from `/public/authorise`. The backend handles this; the agent
-just calls operations. Documented placement: **credentials in the query string**, Content-Type
-`application/x-www-form-urlencoded`.
-
-```http
-POST /public/authorise?username=admin@acme.com&password=******** HTTP/1.1
-Host: publicapi.flowingly.net
-Content-Type: application/x-www-form-urlencoded
-```
-
-```json
-{ "accessToken": "eyJhbGci...", "refreshToken": null, "idToken": "", "tokenType": "Bearer", "expiresIn": 0 }
-```
-
-**On 401 later:** `refreshToken` is `null`, so refresh is likely unsupported — **re-run `/authorise`
-with the stored username/password and retry the original write once.** [INFERRED]
+Every write needs a bearer token from `/public/authorise`. The backend handles this; the agent just calls operations. Credentials in the QUERY STRING, `Content-Type: application/x-www-form-urlencoded`.
+`POST /public/authorise?username=admin@acme.com&password=********` → `{"accessToken":"eyJhbGci...","refreshToken":null,"idToken":"","tokenType":"Bearer","expiresIn":0}`
+On 401 later: `refreshToken` is null → refresh likely unsupported → re-run `/authorise` with stored credentials, retry the original write once [INFERRED] (safe for GET/update, NOT for startflow).
 
 ---
 
-## Pattern 1: Start a Flow Instance
+## Pattern 1: Start a flow instance
 
-> Instantiate a published flow MODEL (by `Name`) into a new running flow instance.
+Instantiate a published flow MODEL (by `Name`) into a new running instance. **Request body is PascalCase:**
+`POST /public/startflow`, `Authorization: Bearer {accessToken}`, `Content-Type: application/json`
+`{"Name":"New Customer Onboarding","Subject":"Acme Ltd onboarding","ActorsToStartFlowFor":[{"UserEmail":"jo@acme.com"}],"CCActors":[{"Team":"Finance"}],"AssignedActor":"manager@acme.com","FlowInitiator":"system@acme.com"}`
+Success (camelCase envelope): `{"success":true,"errorCode":null,"errorMessage":null,"dataModel":[{"flowIdentifier":"FLOW-9042","stepIdentifier":"Step 1"}]}`
 
-**IMPORTANT — request body is PascalCase:**
+Field semantics [DOCUMENTED]:
+| Field | Required | Meaning |
+| --- | --- | --- |
+| Name | yes | **Flow MODEL name** — uniquely identifies the published template. NOT the instance subject. |
+| Subject | yes | Subject/title of the new instance. |
+| ActorsToStartFlowFor | yes | Array of `{UserEmail}` and/or `{Team}` — who the flow is started for. |
+| CCActors | no | Array of CC actors. |
+| AssignedActor | conditional | Assignee email for the first step — **required only when the first step needs an approver**. |
+| FlowInitiator | yes | Email of the initiating user. |
 
-```http
-POST /public/startflow HTTP/1.1
-Host: publicapi.flowingly.net
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "Name": "New Customer Onboarding",
-  "Subject": "Acme Ltd onboarding",
-  "ActorsToStartFlowFor": [{ "UserEmail": "jo@acme.com" }],
-  "CCActors": [{ "Team": "Finance" }],
-  "AssignedActor": "manager@acme.com",
-  "FlowInitiator": "system@acme.com"
-}
-```
-
-**Success response (camelCase envelope):**
-
-```json
-{
-  "success": true,
-  "errorCode": null,
-  "errorMessage": null,
-  "dataModel": [{ "flowIdentifier": "FLOW-9042", "stepIdentifier": "Step 1" }]
-}
-```
-
-**Field semantics:** [DOCUMENTED]
-
-| Field                | Required    | Meaning                                                                                      |
-| -------------------- | ----------- | -------------------------------------------------------------------------------------------- |
-| Name                 | yes         | **Flow MODEL name** — uniquely identifies the published template. NOT the instance subject.  |
-| Subject              | yes         | Subject/title of the new instance.                                                           |
-| ActorsToStartFlowFor | yes         | Array of `{UserEmail}` and/or `{Team}` — who the flow is started for.                        |
-| CCActors             | no          | Array of CC actors.                                                                          |
-| AssignedActor        | conditional | Assignee email for the first step — **required only when the first step needs an approver**. |
-| FlowInitiator        | yes         | Email of the initiating user.                                                                |
-
-**Behaviour:**
-
-- **NOT idempotent** — each POST starts a new instance. No idempotency-key support. [INFERRED]
-- The model must already exist and be published; there is no API to discover model names. [INFERRED]
-- Capture `dataModel[0].flowIdentifier` and `stepIdentifier` to address the instance afterward. [DOCUMENTED]
-- Required/optional flags are [INFERRED] from docs prose — confirm via validation-error mining. [INFERRED]
+Behaviour: NOT idempotent — each POST starts a new instance, no idempotency-key support [INFERRED]. Model must exist + be published; no API to discover model names [INFERRED]. Capture `dataModel[0].flowIdentifier` + `stepIdentifier` to address the instance after. Required/optional flags are [INFERRED] from prose — confirm via validation-error mining.
 
 ---
 
-## Pattern 2: Update Step Fields (bulk)
+## Pattern 2: Update step fields (bulk)
 
-> Save/populate the values of a step's form fields. **GET the step first** to obtain field
-> `identifier`s, set `value`s, POST the array back.
+Save/populate a step's form field values. **GET the step first** to obtain field `identifier`s, set `value`s, POST the array back.
+Step A — read (see 01b): `GET /public/flow/FLOW-9042/step/Step%201` → `[{"name":"Customer Name","type":"Text","order":1,"identifier":"field4938201746","value":"","options":null},{"name":"Email","type":"Email","order":2,"identifier":"field4938201747","value":"","options":null}]`
+Step B — write back (camelCase array body): `POST /public/flow/FLOW-9042/step/Step%201`, `Content-Type: application/json`
+`[{"name":"Customer Name","type":"Text","order":1,"identifier":"field4938201746","value":"Acme Ltd","options":null},{"name":"Email","type":"Email","order":2,"identifier":"field4938201747","value":"jo@acme.com","options":null}]`
+Response (INFERRED — mirrors startflow envelope): `{"success":true,"errorCode":null,"errorMessage":null}`. May instead echo the updated field array or return a bare 200 — verify with a follow-up GET [INFERRED/UNKNOWN].
 
-**Step A — read the field array (see 01b):**
-
-```http
-GET /public/flow/FLOW-9042/step/Step%201 HTTP/1.1
-Authorization: Bearer {accessToken}
-```
-
-```json
-[
-  {
-    "name": "Customer Name",
-    "type": "Text",
-    "order": 1,
-    "identifier": "field4938201746",
-    "value": "",
-    "options": null
-  },
-  { "name": "Email", "type": "Email", "order": 2, "identifier": "field4938201747", "value": "", "options": null }
-]
-```
-
-**Step B — write values back (camelCase array body):**
-
-```http
-POST /public/flow/FLOW-9042/step/Step%201 HTTP/1.1
-Host: publicapi.flowingly.net
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-[
-  { "name": "Customer Name", "type": "Text",  "order": 1, "identifier": "field4938201746", "value": "Acme Ltd",   "options": null },
-  { "name": "Email",         "type": "Email", "order": 2, "identifier": "field4938201747", "value": "jo@acme.com", "options": null }
-]
-```
-
-**Response (INFERRED — mirrors the Start Flow envelope):**
-
-```json
-{ "success": true, "errorCode": null, "errorMessage": null }
-```
-
-> The write response is **not explicitly documented** — it may instead echo the updated field array
-> or return a bare 200. Verify with a follow-up GET. [INFERRED / UNKNOWN]
-
-**Rules:**
-
-- Preserve `name`, `type`, `order`, `identifier` exactly as returned by GET — only mutate `value`. [DOCUMENTED]
-- This is the **only bulk-like operation**: multiple field values update in one request (per step). [DOCUMENTED]
-- **Partial-failure behaviour is unknown** — if one field fails validation, whether the whole array is rejected or partially applied is undocumented. Treat the call as all-or-nothing and re-GET to confirm. [UNKNOWN]
-- Field values are validated against modeller-configured rules; custom messages (from the modeller) are returned, else default validation errors. [DOCUMENTED]
-- Per-type `value` encoding (Date, Currency, MultiSelectList, CheckBox) is undocumented — discover via round-trip. [UNKNOWN]
+Rules: preserve `name`/`type`/`order`/`identifier` exactly as returned by GET — only mutate `value` [DOCUMENTED]. This is the **only bulk-like operation** (multiple field values per step in one request) [DOCUMENTED]. **Partial-failure behaviour unknown** — treat as all-or-nothing, re-GET to confirm [UNKNOWN]. Values validated against modeller-configured rules; custom (modeller) messages returned, else default validation errors [DOCUMENTED]. Per-type `value` encoding (Date `dd/MM/yyyy`, CheckBox string `"true"`/`"false"`, SelectList option object, etc.) — see Field-types table in 01/02.
 
 ---
 
-## Pattern 3: Update a Single Field
+## Pattern 3: Update a single field
 
-There is no documented single-field endpoint. To change one field, either:
-
-1. POST a one-element array containing just that field object (with its `identifier`), or
-2. GET the full array, mutate the one field, POST the whole array back (safest — avoids surprises if a full-array overwrite is required).
-
-Which form is accepted is **unverified** — prefer option 2 until confirmed. [INFERRED]
+No documented single-field endpoint. Either (1) POST a one-element array with just that field object (incl. its `identifier`), or (2) GET the full array, mutate the one field, POST the whole array back. Which form is accepted is unverified — **prefer option 2** (safest, avoids surprises if full-array overwrite is required) until confirmed [INFERRED].
 
 ---
 
-## Field Validation Rules
+## Field Validation Rules [DOCUMENTED]
 
-| Entity | Field                | Rule                                                                       | Source       |
-| ------ | -------------------- | -------------------------------------------------------------------------- | ------------ |
-| Flow   | Name                 | Must match an existing, published flow MODEL name                          | [DOCUMENTED] |
-| Flow   | Subject              | Required                                                                   | [DOCUMENTED] |
-| Flow   | ActorsToStartFlowFor | Required; each actor is `{UserEmail}` and/or `{Team}`                      | [DOCUMENTED] |
-| Flow   | FlowInitiator        | Required; valid user email                                                 | [DOCUMENTED] |
-| Flow   | AssignedActor        | Required only if the first step requires approver selection                | [DOCUMENTED] |
-| Field  | value                | Validated against modeller-configured rules; custom/default error returned | [DOCUMENTED] |
-| Auth   | username/password    | Account must be a **Business Administrator**                               | [DOCUMENTED] |
+| Entity | Field                | Rule                                                                       |
+| ------ | -------------------- | -------------------------------------------------------------------------- |
+| Flow   | Name                 | Must match an existing, published flow MODEL name                          |
+| Flow   | Subject              | Required                                                                   |
+| Flow   | ActorsToStartFlowFor | Required; each actor is `{UserEmail}` and/or `{Team}`                      |
+| Flow   | FlowInitiator        | Required; valid user email                                                 |
+| Flow   | AssignedActor        | Required only if the first step requires approver selection                |
+| Field  | value                | Validated against modeller-configured rules; custom/default error returned |
+| Auth   | username/password    | Account must be a **Business Administrator**                               |
 
-> The structure of validation errors (per-field array vs single message) is **undocumented**.
-> Expect the `success:false` + `errorCode`/`errorMessage` envelope, possibly with field detail in
-> `errorMessage`. [UNKNOWN]
-
----
+Validation-error structure (per-field array vs single message) is undocumented. Expect the `success:false` + `errorCode`/`errorMessage` envelope, possibly with field detail in `errorMessage` [UNKNOWN].
 
 ## Server-Side / Computed Fields
 
-| Entity | Field           | Behaviour                                              |
-| ------ | --------------- | ------------------------------------------------------ |
-| Flow   | flowIdentifier  | System-assigned on start (`FLOW-####`) [DOCUMENTED]    |
-| Flow   | stepIdentifier  | System-assigned; name of the current step [DOCUMENTED] |
-| Field  | identifier      | Model-assigned `field<digits>`; read-only [DOCUMENTED] |
-| Field  | name/type/order | Model-defined; read-only via API [DOCUMENTED]          |
+`flowIdentifier` system-assigned on start (`FLOW-####`) · `stepIdentifier` system-assigned, name of current step · field `identifier` model-assigned `field<digits>`, read-only · field `name`/`type`/`order` model-defined, read-only [all DOCUMENTED].
 
 ---
 
 ## Worked Examples
 
-### Example 1: Start a flow and immediately populate its first step
+### Example 1: start a flow and immediately populate its first step
 
-> End-to-end: authenticate → start → read field ids → write values.
+End-to-end: authenticate → start → read field ids → write values.
 
-**1. Authorise** → store `accessToken` (handled by backend).
+1. Authorise → store `accessToken` (backend).
+2. `POST /public/startflow`: `{"Name":"Purchase Request","Subject":"Laptops for Eng team","ActorsToStartFlowFor":[{"UserEmail":"buyer@acme.com"}],"FlowInitiator":"system@acme.com"}` → `{"success":true,"dataModel":[{"flowIdentifier":"FLOW-9101","stepIdentifier":"Request Details"}]}`
+3. `GET /public/flow/FLOW-9101/step/Request%20Details` → `[{"name":"Item","type":"Text","order":1,"identifier":"field880011","value":"","options":null},{"name":"Quantity","type":"Number","order":2,"identifier":"field880012","value":"","options":null}]`
+4. `POST /public/flow/FLOW-9101/step/Request%20Details`: `[{"name":"Item","type":"Text","order":1,"identifier":"field880011","value":"MacBook Pro 14","options":null},{"name":"Quantity","type":"Number","order":2,"identifier":"field880012","value":"5","options":null}]` → `{"success":true,"errorCode":null,"errorMessage":null}` (response shape INFERRED — re-GET to confirm)
 
-**2. Start flow:**
+### Example 2: start a flow whose first step needs an approver
 
-```http
-POST /public/startflow
-Authorization: Bearer {accessToken}
-Content-Type: application/json
+When the first step requires an approver, `AssignedActor` is required.
+`POST /public/startflow`: `{"Name":"Leave Request","Subject":"Annual leave - July","ActorsToStartFlowFor":[{"UserEmail":"staff@acme.com"}],"AssignedActor":"lead@acme.com","FlowInitiator":"staff@acme.com"}` → `{"success":true,"dataModel":[{"flowIdentifier":"FLOW-9120","stepIdentifier":"Manager Approval"}]}`
+Omitting `AssignedActor` here would likely return `success:false` with a required-approver validation error [DOCUMENTED conditionally required; exact error UNKNOWN].
 
-{ "Name": "Purchase Request", "Subject": "Laptops for Eng team",
-  "ActorsToStartFlowFor": [{ "UserEmail": "buyer@acme.com" }],
-  "FlowInitiator": "system@acme.com" }
-```
+### Example 3: team actor instead of individual
 
-→ `{ "success": true, "dataModel": [{ "flowIdentifier": "FLOW-9101", "stepIdentifier": "Request Details" }] }`
-
-**3. Read the step's fields:**
-
-```http
-GET /public/flow/FLOW-9101/step/Request%20Details
-Authorization: Bearer {accessToken}
-```
-
-→ `[{ "name": "Item", "type": "Text", "order": 1, "identifier": "field880011", "value": "", "options": null },
-     { "name": "Quantity", "type": "Number", "order": 2, "identifier": "field880012", "value": "", "options": null }]`
-
-**4. Write values back:**
-
-```http
-POST /public/flow/FLOW-9101/step/Request%20Details
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-[{ "name": "Item", "type": "Text", "order": 1, "identifier": "field880011", "value": "MacBook Pro 14", "options": null },
- { "name": "Quantity", "type": "Number", "order": 2, "identifier": "field880012", "value": "5", "options": null }]
-```
-
-→ `{ "success": true, "errorCode": null, "errorMessage": null }` (response shape INFERRED — re-GET to confirm)
+`POST /public/startflow`: `{"Name":"Incident Report","Subject":"Outage 2026-05-29","ActorsToStartFlowFor":[{"Team":"Operations"}],"CCActors":[{"UserEmail":"cto@acme.com"}],"FlowInitiator":"system@acme.com"}`
+Actors can be a `Team` name or a `UserEmail`. Whether both can appear in one actor object is unverified — supply one per actor [INFERRED].
 
 ---
 
-### Example 2: Start a flow whose first step needs an approver
+## Gotchas
 
-> When the first step requires an approver to be selected, `AssignedActor` becomes required.
-
-```http
-POST /public/startflow
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{ "Name": "Leave Request", "Subject": "Annual leave - July",
-  "ActorsToStartFlowFor": [{ "UserEmail": "staff@acme.com" }],
-  "AssignedActor": "lead@acme.com",
-  "FlowInitiator": "staff@acme.com" }
-```
-
-→ `{ "success": true, "dataModel": [{ "flowIdentifier": "FLOW-9120", "stepIdentifier": "Manager Approval" }] }`
-
-**Key point:** omitting `AssignedActor` here would likely return `success:false` with a validation
-error about a required approver. [DOCUMENTED that it is conditionally required; exact error UNKNOWN]
+1. **Request casing flips per endpoint.** startflow body = PascalCase; step-field body = camelCase; auth + startflow responses = camelCase [DOCUMENTED].
+2. **`Name` = model, `Subject` = instance.** Common mistake: putting the instance title in `Name`. `Name` must exactly match a published model name [DOCUMENTED].
+3. **Cannot discover model names via the API** — get the exact `Name` from the user or the Flowingly UI [INFERRED].
+4. **GET before POST on step fields** — `identifier`s are required in the write body and not guessable [DOCUMENTED].
+5. **`startflow` is not idempotent** — never blind-retry on ambiguous failure (may create duplicate flows); confirm with the user first [INFERRED].
+6. **Errors may be HTTP 200 with `success:false`** — always read the envelope [DOCUMENTED envelope / UNKNOWN codes].
+7. **Step name URL-encoded in the path** (spaces→`%20`, parens→`%28`/`%29`) [DOCUMENTED].
+8. **No step-progression API** — can populate a step's fields but cannot submit/approve/advance it via API (happens in Flowingly); set expectations with the user [INFERRED].
 
 ---
 
-### Example 3: Team actor instead of individual
+## Dangerous Operations (confirm with the user before executing)
 
-```http
-POST /public/startflow
-Authorization: Bearer {accessToken}
-Content-Type: application/json
+| Operation                        | Why Dangerous                                                                                                     | Safeguard                                                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `POST /public/startflow`         | Starts a **real workflow** — notifies/assigns people, kicks off approvals. NOT idempotent (retries duplicate it). | Confirm model `Name`, `Subject`, actors with the user before sending. Never auto-retry on ambiguous failure. |
+| `POST /public/flow/.../step/...` | Overwrites live form values real users may act on; partial-failure behaviour unknown.                             | Re-GET after writing to verify; confirm before overwriting non-empty values.                                 |
 
-{ "Name": "Incident Report", "Subject": "Outage 2026-05-29",
-  "ActorsToStartFlowFor": [{ "Team": "Operations" }],
-  "CCActors": [{ "UserEmail": "cto@acme.com" }],
-  "FlowInitiator": "system@acme.com" }
-```
-
-**Key point:** actors can be a `Team` name or a `UserEmail`. Whether both can appear in one actor
-object is unverified — supply one per actor. [INFERRED]
-
----
-
-## Gotchas & Counter-Exceptions
-
-1. **Request casing flips per endpoint.** Start Flow body = **PascalCase**; step-field body = **camelCase**. The auth + Start-Flow response are camelCase. [DOCUMENTED]
-2. **`Name` = model, `Subject` = instance.** A common mistake is putting the instance title in `Name`. `Name` must exactly match a published model name. [DOCUMENTED]
-3. **You cannot discover model names via the API.** Get the exact `Name` from the user or the Flowingly UI. [INFERRED]
-4. **GET before POST on step fields** — the `identifier`s are required in the write body and are not guessable. [DOCUMENTED]
-5. **`startflow` is not idempotent.** Never blind-retry on an ambiguous failure; you may create duplicate flows. Confirm with the user first. [INFERRED]
-6. **Errors may be HTTP 200 with `success:false`.** Always read the envelope. [DOCUMENTED envelope / UNKNOWN codes]
-7. **Step name must be URL-encoded in the path** (spaces → `%20`, parens → `%28`/`%29`). [DOCUMENTED]
-8. **No step-progression API.** You can populate a step's fields but cannot submit/approve/advance it via the API — that happens in Flowingly. Set expectations with the user. [INFERRED]
-
----
-
-## Dangerous Operations
-
-> The workspace agent should confirm with the user before executing these.
-
-| Operation                        | Why Dangerous                                                                                                     | Safeguard                                                                                                        |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `POST /public/startflow`         | Starts a **real workflow** — notifies/assigns people, kicks off approvals. NOT idempotent (retries duplicate it). | Confirm model `Name`, `Subject`, and actors with the user before sending. Never auto-retry on ambiguous failure. |
-| `POST /public/flow/.../step/...` | Overwrites live form values that real users may act on; partial-failure behaviour unknown.                        | Re-GET after writing to verify; confirm before overwriting non-empty values.                                     |
-
-> Flowingly drives real business processes (onboarding, approvals, leave, purchasing). Starting a
-> flow or writing step values has **real-world side effects** (emails, task assignments). Default to
-> confirming intent before any write.
-
----
-
-_Generated from the investigation questionnaire, Phases 3-4 (2026-05-29). LOW confidence — request shapes documented, responses inferred, not live-tested._
+Flowingly drives real business processes (onboarding, approvals, leave, purchasing) — writes have real-world side effects (emails, task assignments). Default to confirming intent before any write.

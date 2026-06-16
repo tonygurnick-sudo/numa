@@ -1,42 +1,34 @@
 ---
-api_name: 'QuickBooks Online Accounting API'
-connector_id: 'quickbooks'
-auth_type: 'oauth2'
-tier: 'standard'
-category: 'accounting'
-integration_path: 'direct-api' # Direct API via connect_request — NOT a Files connector
+api_name: QuickBooks Online Accounting API
+connector_id: quickbooks
+auth_type: oauth2
+tier: standard
+category: accounting
+integration_path: direct-api (HTTP via connect_request / relay — NOT a Files connector, NOT MCP)
+call_surface: agent calls `connectors(name="request", …)` → relay injects Authorization: Bearer → forwards to https://quickbooks.api.intuit.com/v3/company/{realmId}/…
+status: connector ALREADY EXISTS in the registry — this documents the actual entry + deploy/load mechanism
 ---
 
 # QuickBooks Online — Connector & Integration Setup
 
-> How the `quickbooks` connector is wired into Numa. The connector **already exists** in the registry — this document describes the **actual** entry and the deploy/load mechanism, so an engineer can find, verify, and reason about it.
->
-> **Integration type: Direct API via `connect_request`.** QuickBooks Online is an accounting data API, not a file system, so it does **not** use the Data Connector (Files) interface (`list_files`/`download_file`/`search_files`). There is **no Python provider class** in `lib/oauth-providers/`. The workspace agent calls QBO through the relay using the `connectors(name="request", ...)` operation (the `connect_request` path), which injects the stored OAuth bearer token and forwards to `https://quickbooks.api.intuit.com/v3/company/{realmId}/...`.
+QBO is an accounting data API, not a file system → it does NOT use the Data Connector (Files) interface (`list_files`/`download_file`/`search_files`/`get_file_metadata`). There is NO Python provider class in `lib/oauth-providers/`. The agent reaches QBO through the relay's `connectors(name="request", …)` (`connect_request`) operation; the relay injects the stored OAuth bearer token and forwards to the base URL.
 
----
+## Integration components
 
-## Integration Type
-
-**Selected path:** Direct API via `connect_request` (Direct API Only).
-
-| Component                        | Required? | Notes                                                                                |
-| -------------------------------- | --------- | ------------------------------------------------------------------------------------ |
-| Connector Registry entry         | Yes ✅    | Already present — see §1                                                             |
-| OAuth setup steps                | Yes ✅    | `oauthSetupSteps[]` in the registry entry — admin guidance for the Intuit app        |
-| Backend provider class           | **No**    | Not a Files connector — no `lib/oauth-providers/quickbooks_provider.py`              |
-| Files Remote surface             | **No**    | No browsable file tree; the connector is chat-only via the `request` operation       |
-| API reference docs (this folder) | Yes ✅    | `ext-api-doc/quickbooks/*.md` — synced to S3 at deploy, loaded by the agent (see §3) |
-| Workspace agent prompt           | Yes ✅    | The agent is told to read `01-llm-api-rules.md` before any `request` call (see §3)   |
-| Feature flag                     | Inherited | Gated by the connectors/integrations surface (`DATA_CONNECTORS_ENABLED`)             |
-| i18n keys                        | As needed | `displayName`/`description` live on the registry entry, not i18n                     |
-
----
+| Component                        | Required? | Notes                                                                            |
+| -------------------------------- | --------- | -------------------------------------------------------------------------------- |
+| Connector Registry entry         | Yes ✅    | already present — §1                                                             |
+| OAuth setup steps                | Yes ✅    | `oauthSetupSteps[]` in the entry — admin guidance for the Intuit app             |
+| Backend provider class           | **No**    | not a Files connector — no `lib/oauth-providers/quickbooks_provider.py`          |
+| Files Remote surface             | **No**    | no file tree; chat-only via the `request` operation                              |
+| API reference docs (this folder) | Yes ✅    | `ext-api-doc/quickbooks/*.md` — synced to S3 at deploy, loaded by the agent (§3) |
+| Workspace agent prompt           | Yes ✅    | agent told to read `01-llm-api-rules.md` before any `request` call (§3)          |
+| Feature flag                     | Inherited | gated by the connectors/integrations surface (`DATA_CONNECTORS_ENABLED`)         |
+| i18n keys                        | As needed | `displayName`/`description` live on the entry, not i18n                          |
 
 ## 1. Connector Registry Entry (actual)
 
-> **File:** `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` (search for `id: 'quickbooks'`).
-
-This is the **verbatim** entry as it exists in the codebase today:
+File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` (`id: 'quickbooks'`). Verbatim:
 
 ```typescript
 {
@@ -60,152 +52,88 @@ This is the **verbatim** entry as it exists in the codebase today:
 }
 ```
 
-**Field-by-field:**
+| Field             | Value                                                       | Notes                                                                                                           |
+| ----------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `id`              | `quickbooks`                                                | slug; also the `ext-api-doc/quickbooks/` folder name + the `/workdir/api-docs/quickbooks/` path the agent reads |
+| `displayName`     | `QuickBooks Online`                                         | integration card title                                                                                          |
+| `icon`            | `bi-receipt`                                                | Bootstrap icon class                                                                                            |
+| `description`     | `Cloud accounting and bookkeeping`                          | card subtitle                                                                                                   |
+| `category`        | `Accounting`                                                | groups with MYOB / Xero                                                                                         |
+| `authType`        | `oauth2`                                                    | OAuth 2.0 Authorization Code — the only QBO auth method                                                         |
+| `oauth.authUrl`   | `https://appcenter.intuit.com/connect/oauth2`               | Intuit's documented authorize endpoint                                                                          |
+| `oauth.tokenUrl`  | `https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer` | Intuit's documented token endpoint (code exchange + refresh)                                                    |
+| `oauth.scopes`    | `com.intuit.quickbooks.accounting`                          | single scope — full Accounting read/write. NOT the Payments scope                                               |
+| `oauthSetupSteps` | 4-step admin guide (above)                                  | rendered in the connect wizard so the admin creates the Intuit app + copies Client ID/Secret                    |
 
-| Field             | Value                                                       | Notes                                                                                                                       |
-| ----------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `id`              | `quickbooks`                                                | Connector slug; also the `ext-api-doc/quickbooks/` folder name and the `/workdir/api-docs/quickbooks/` path the agent reads |
-| `displayName`     | `QuickBooks Online`                                         | Shown on the integration card                                                                                               |
-| `icon`            | `bi-receipt`                                                | Bootstrap icon class                                                                                                        |
-| `description`     | `Cloud accounting and bookkeeping`                          | Card subtitle                                                                                                               |
-| `category`        | `Accounting`                                                | Groups with MYOB / Xero                                                                                                     |
-| `authType`        | `oauth2`                                                    | OAuth 2.0 Authorization Code — the only QBO auth method                                                                     |
-| `oauth.authUrl`   | `https://appcenter.intuit.com/connect/oauth2`               | Matches Intuit's documented authorize endpoint                                                                              |
-| `oauth.tokenUrl`  | `https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer` | Matches Intuit's documented token endpoint (used for both code exchange and refresh)                                        |
-| `oauth.scopes`    | `com.intuit.quickbooks.accounting`                          | Single scope — full Accounting API read/write. **Not** the Payments scope                                                   |
-| `oauthSetupSteps` | 4-step admin guide (above)                                  | Rendered in the connect wizard so the admin can create the Intuit app and copy Client ID/Secret                             |
+**Deliberately absent (and why):**
 
-**What the entry deliberately does NOT have (and why):**
+- No `credentialFields` — no extra admin-entered field needed; host is fixed; the only per-company value (`realmId`) is captured automatically from the OAuth callback, not typed.
+- No `extraAuthParams` — QBO's authorize flow needs no extra params (cf. Zoho's `access_type=offline&prompt=consent`); QBO already returns a rotating refresh token without an `access_type` hint.
+- No `surfaces`/`cachingPolicy` — defaults apply. Financial reads shouldn't be aggressively cached; a short-TTL cache for static name-lists (Item, Account) could be added later but isn't configured today.
+- No `authHeaderScheme` — QBO uses standard `Authorization: Bearer {token}` (cf. Zoho's `Zoho-oauthtoken`), so the default Bearer scheme is correct.
 
-- **No `credentialFields`** — unlike token/api-key connectors (or OAuth connectors with a per-instance host like Actionstep's `api_endpoint`), QBO needs no extra admin-entered field. The host is fixed; the only per-company value (`realmId`) is captured automatically from the OAuth callback, not typed by an admin.
-- **No `extraAuthParams`** — QBO's authorize flow needs no extra query params beyond the standard set (compare Zoho, which sends `access_type=offline&prompt=consent`). QBO already returns a rotating refresh token without an `access_type` hint.
-- **No `surfaces` / `cachingPolicy`** — defaults apply. Financial reads should not be aggressively cached (data must be fresh); a short-TTL cache for static name-lists (Item, Account) could be added later but is not configured today.
-- **No `authHeaderScheme`** — QBO uses the standard `Authorization: Bearer {token}` scheme (unlike Zoho's `Zoho-oauthtoken`), so the default Bearer scheme is correct.
-
-> **`realmId` is the one connector-specific subtlety.** QBO has no static instance/base URL field in the registry because the base host is fixed; the per-company `{realmId}` path segment is returned in the OAuth callback (`?...&realmId=...`), persisted alongside the tokens, and templated into every request path. One authorisation = one company; multiple companies = multiple connections. The relay must capture and store it. See `04-connection-and-reauth.md`.
-
----
+**`realmId` is the one connector-specific subtlety.** No static instance/base-URL field exists because the base host is fixed; the per-company `{realmId}` path segment is returned in the OAuth callback (`?...&realmId=…`), persisted alongside the tokens, and templated into every request path. One authorisation = one company; multiple companies = multiple connections. The relay must capture and store it. See 04.
 
 ## 2. Backend Provider — Not Applicable
 
-This connector has **no** `lib/oauth-providers/quickbooks_provider.py` and is **not** registered in `lib/oauth-providers/__init__.py`'s `PROVIDER_REGISTRY`. Those are only for **Data Connector (Files)** providers that implement `list_files` / `download_file` / `search_files` / `get_file_metadata`.
-
-QuickBooks is a Direct API connector. The agent reaches it through the relay's authenticated `request` operation:
+NO `lib/oauth-providers/quickbooks_provider.py`; NOT in `PROVIDER_REGISTRY` (`lib/oauth-providers/__init__.py`). Those are only for Data Connector (Files) providers implementing `list_files`/`download_file`/`search_files`/`get_file_metadata`. QBO is Direct API — reached via the relay's authenticated `request` operation:
 
 ```
-connectors(
-  name="request",
-  params={
-    "connector": "quickbooks",
-    "method": "GET",
-    "url": "/v3/company/{realmId}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 100&minorversion=75",
-  },
-  description="List unpaid QuickBooks invoices"
-)
+connectors(name="request", params={"connector":"quickbooks","method":"GET","url":"/v3/company/{realmId}/query?query=SELECT * FROM Invoice WHERE Balance > '0' MAXRESULTS 100&minorversion=75"}, description="List unpaid QuickBooks invoices")
 ```
 
-The relay attaches `Authorization: Bearer {access_token}` (from the stored OAuth credential), forwards to the QBO host, refreshes the token on 401, and returns the response. The agent is responsible for the path, body, `Accept: application/json`, and `minorversion`. Write operations through `request` require human approval (HITL) in chat.
+The relay attaches `Authorization: Bearer {access_token}` (from the stored credential), forwards to the QBO host, refreshes on 401, returns the response. The agent owns path, body, `Accept: application/json`, `minorversion`. Write operations through `request` require human approval (HITL).
 
----
-
-## 3. API Reference Docs — Deploy & Load Mechanism
-
-The files in this folder (`ext-api-doc/quickbooks/`) are how the workspace agent learns the QBO rules. This is the part engineers most often need to understand.
+## 3. API Reference Docs — Deploy & Load
 
 ### 3a. Deploy: synced to S3 by `numa-client-stack`
 
-> **File:** `infra/stacks/numa-client-stack.ts` (the `Sync ext-api-doc files to S3` block, ~line 1135).
+File: `infra/stacks/numa-client-stack.ts` (`Sync ext-api-doc files to S3` block, ~line 1135). At deploy the client stack walks the whole `ext-api-doc/` tree, skips `_templates/`, and uploads EVERY `.md` as an `S3Object` into the per-client ext-api-doc bucket (`{clientName}-ext-api-doc`, from `core-numa-infra-construct.ts`). Each object keeps its relative path as the S3 key (`quickbooks/01-llm-api-rules.md`, …), content-typed `text/markdown`. Bucket name exposed to the agent via `EXT_API_DOC_BUCKET_NAME`. Add/edit a file here, redeploy, content lands in S3 — no code change (filesystem-driven sync).
 
-At deploy time the client stack walks the entire `ext-api-doc/` tree, skips the `_templates/` folder, and uploads **every** `.md` file as an `S3Object` into the per-client **ext-api-doc bucket** (`{clientName}-ext-api-doc`, created in `core-numa-infra-construct.ts`). Each object keeps its relative path as the S3 key (`quickbooks/01-llm-api-rules.md`, `quickbooks/02-api-spec-investigation.md`, etc.) and is content-typed `text/markdown`. The bucket name is exposed to the workspace agent as the `EXT_API_DOC_BUCKET_NAME` env var.
+### 3b. Load: agent stages docs into `/workdir/api-docs/{slug}/`
 
-Practically: **add or edit a file here, redeploy the client stack, and the new content lands in S3.** No code change is needed — the sync is filesystem-driven.
+Reference: `services/numa-workspace-agent/numa_workspace_agent/prompts.py` (`_build_connectors_context`, ~line 1220). For every enabled native connector the agent stages its docs from the bucket into the conversation MicroVM at `/workdir/api-docs/{slug}/` (QBO → `/workdir/api-docs/quickbooks/`). When ≥1 such folder exists, the system prompt instructs: "You MUST read `01-llm-api-rules.md` before making any authenticated API request via the `request` operation for these connectors." Companions pulled on demand: `01a` (domain model), `01b` (query patterns), `01c` (mutation patterns), `01d` (errors/retry/webhooks), `02` (full spec/edge cases), `03` (this file), `04` (reauth). So `01-llm-api-rules.md` is the always-read entry point; keep it under ~300 lines, push detail into companions.
 
-### 3b. Load: the agent stages docs into `/workdir/api-docs/{slug}/`
+### 3c. Files to ship (all in `ext-api-doc/quickbooks/`, auto-shipped)
 
-> **Reference:** `services/numa-workspace-agent/numa_workspace_agent/prompts.py` (`_build_connectors_context`, ~line 1220).
-
-For every **enabled native connector**, the agent stages its docs from the ext-api-doc bucket into the conversation's MicroVM at `/workdir/api-docs/{slug}/` (so QBO docs appear at `/workdir/api-docs/quickbooks/`). When at least one such folder exists, the system prompt instructs the agent:
-
-> "You **MUST** read `01-llm-api-rules.md` before making any authenticated API request via the `request` operation for these connectors."
-
-and lists the companion files it can read on demand:
-
-- `01a-domain-model-reference.md` — entity definitions, field types, relationships
-- `01b-query-patterns.md` — read operations: list, search, filter, pagination
-- `01c-mutation-patterns.md` — write operations: create, update, delete, batch
-- `01d-event-and-error-handling.md` — error codes, retry logic, webhooks
-- `02-api-spec-investigation.md` — full API spec, edge cases, field-level behaviour
-- `03-connector-setup.md` — this file (admin-side config + what the vault holds)
-- `04-connection-and-reauth.md` — connect / reconnect / revoke flow, token lifetime, reauth triggers
-
-So `01-llm-api-rules.md` is the **always-read** entry point; the rest are pulled in as the task demands. Keep `01-llm-api-rules.md` under ~300 lines and push detail into the companions.
-
-### 3c. Files to ship
-
-All of these live in `ext-api-doc/quickbooks/` and ship automatically:
-
-- `01-llm-api-rules.md` (main rules — always read first)
-- `01a-domain-model-reference.md`, `01b-query-patterns.md`, `01c-mutation-patterns.md`, `01d-event-and-error-handling.md` (companions)
-- `02-api-spec-investigation.md` (this folder's clean dev reference)
-- `03-connector-setup.md` (this file)
-- `04-connection-and-reauth.md` (auth setup)
-- `00-api-investigation-questionnaire.md` (research trail — shipped too, but not part of the agent's read list)
-
----
+`01-llm-api-rules.md` (always read first); `01a`/`01b`/`01c`/`01d` (companions); `02-api-spec-investigation.md` (dev reference); `03-connector-setup.md` (this); `04-connection-and-reauth.md` (auth); `00-api-investigation-questionnaire.md` (research trail — shipped but not in the agent's read list).
 
 ## 4. Vault — What Gets Stored
 
-OAuth 2.0 connectors use the standard two-secret model. For QuickBooks:
+OAuth 2.0 two-secret model:
+| Key | Scope | Holds |
+| --- | --- | --- |
+| Company/OAuth-client secret | Company-wide | Intuit Client ID + Client Secret (admin enters via the connect wizard, guided by `oauthSetupSteps`) |
+| User connection secret | Per user | the user's `access_token`, **rotating** `refresh_token`, captured **`realmId`** (company id) |
 
-| Key                         | Scope        | Holds                                                                                                             |
-| --------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------- |
-| Company/OAuth-client secret | Company-wide | Intuit **Client ID** + **Client Secret** (admin enters these via the connect wizard, guided by `oauthSetupSteps`) |
-| User connection secret      | Per user     | The user's `access_token`, **rotating** `refresh_token`, and the captured **`realmId`** (company id)              |
+Admin supplies OAuth client credentials once; each user runs the OAuth redirect to mint their own per-user tokens + realmId. On refresh the relay must PERSIST the new `refresh_token` (QBO rotates it) and keep the same `realmId`. See 04.
 
-- The admin supplies the OAuth client credentials **once**; each user then runs the OAuth redirect to mint their own per-user tokens + realmId.
-- On refresh, the relay must **persist the new `refresh_token`** (QBO rotates it) and keep the same `realmId`. See `04-connection-and-reauth.md`.
+## 5. Verification Checklist (verify, not build — connector already exists)
 
----
-
-## 5. Verification Checklist
-
-> The connector already exists — this is what to verify, not build.
-
-- [x] Registry entry present in `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` (`id: 'quickbooks'`)
-- [x] `authType: 'oauth2'` with `oauth.authUrl` / `oauth.tokenUrl` / `oauth.scopes` matching Intuit's documented endpoints
-- [x] `oauthSetupSteps[]` guide the admin to create the Intuit app and copy Client ID/Secret
-- [ ] Redirect URI from the connect wizard added to the Intuit app's **Keys & credentials → Redirect URIs** (per environment)
-- [ ] `ext-api-doc/quickbooks/*.md` synced to the `{clientName}-ext-api-doc` bucket after a client-stack deploy
-- [ ] Agent stages docs to `/workdir/api-docs/quickbooks/` and reads `01-llm-api-rules.md` before a `request` call (check container logs)
-- [ ] User connect flow completes and persists `access_token` + rotating `refresh_token` + `realmId`
-- [ ] A smoke-test `request` returns 200 (e.g. `GET /v3/company/{realmId}/companyinfo/{realmId}?minorversion=75`)
-- [ ] Token refresh works (401 → relay refreshes and stores the rotated `refresh_token`)
-- [ ] Destructive operations (delete/void) are gated behind HITL approval
-
----
+- [x] Registry entry present (`id: 'quickbooks'`)
+- [x] `authType: 'oauth2'` with `oauth.authUrl`/`tokenUrl`/`scopes` matching Intuit's endpoints
+- [x] `oauthSetupSteps[]` guide admin to create the Intuit app + copy Client ID/Secret
+- [ ] Redirect URI from the wizard added to Intuit app's Keys & credentials → Redirect URIs (per environment)
+- [ ] `ext-api-doc/quickbooks/*.md` synced to `{clientName}-ext-api-doc` after a client-stack deploy
+- [ ] Agent stages docs to `/workdir/api-docs/quickbooks/` and reads `01-llm-api-rules.md` before a `request` call (container logs)
+- [ ] User connect flow completes + persists `access_token` + rotating `refresh_token` + `realmId`
+- [ ] Smoke-test `request` returns 200 (`GET /v3/company/{realmId}/companyinfo/{realmId}?minorversion=75`)
+- [ ] Token refresh works (401 → relay refreshes + stores the rotated `refresh_token`)
+- [ ] Destructive ops (delete/void) gated behind HITL approval
 
 ## 6. Testing Plan
 
-### Manual sequence
+**Manual sequence:**
 
-1. **Admin setup:** open the connect wizard for QuickBooks Online, follow `oauthSetupSteps`, paste Client ID + Secret, copy the shown redirect URI into the Intuit app.
-2. **User connect:** click Connect, complete the Intuit consent screen, confirm the callback captured `realmId`.
-3. **Smoke test (chat):** ask the agent "what's my QuickBooks company name?" → it should `request` `GET /companyinfo/{realmId}` and return the name.
-4. **Read:** "list my unpaid invoices" → `query SELECT * FROM Invoice WHERE Balance > '0'`.
-5. **Write (HITL):** "create an invoice for customer X for $150" → approval prompt → `POST /invoice`.
-6. **Sparse update (HITL):** "change customer X's email" → `POST /customer` with `"sparse": true` + current `SyncToken`.
-7. **Refresh:** wait past 1h access-token expiry, repeat a read → relay refreshes silently.
-8. **Disconnect:** user disconnect removes the per-user secret only; admin disconnect removes the company OAuth-client secret.
+1. Admin setup: open the QBO connect wizard, follow `oauthSetupSteps`, paste Client ID + Secret, copy the shown redirect URI into the Intuit app.
+2. User connect: click Connect, complete Intuit consent, confirm the callback captured `realmId`.
+3. Smoke (chat): "what's my QuickBooks company name?" → `request GET /companyinfo/{realmId}` → returns the name.
+4. Read: "list my unpaid invoices" → `query SELECT * FROM Invoice WHERE Balance > '0'`.
+5. Write (HITL): "create an invoice for customer X for $150" → approval → `POST /invoice`.
+6. Sparse update (HITL): "change customer X's email" → `POST /customer` with `"sparse":true` + current `SyncToken`.
+7. Refresh: wait past 1h access-token expiry, repeat a read → relay refreshes silently.
+8. Disconnect: user disconnect removes the per-user secret only; admin disconnect removes the company OAuth-client secret.
 
-### Edge cases
+**Edge cases:** empty query result (`QueryResponse:{}`, entity key absent); stale `SyncToken` on update (error 5010 → GET-then-retry); duplicate name on create (error 6240); 429 throttle → backoff w/ jitter; refresh-token rotation persisted (no `invalid_grant` on next refresh); multiple QuickBooks companies (one connection per realm).
 
-- [ ] Empty query result (`QueryResponse: {}` — entity key absent)
-- [ ] Stale `SyncToken` on update (error 5010) → GET-then-retry
-- [ ] Duplicate name on create (error 6240)
-- [ ] 429 throttle → backoff with jitter
-- [ ] Refresh-token rotation persisted correctly (no `invalid_grant` on next refresh)
-- [ ] Multiple QuickBooks companies (one connection per realm)
-
----
-
-_Generated from `00-api-investigation-questionnaire.md`. See also `04-connection-and-reauth.md` (auth flow detail) and the [Numa Connectors documentation](../../documentation/connectors/README.md)._
+See 04 (auth flow detail) and `documentation/connectors/README.md`.
