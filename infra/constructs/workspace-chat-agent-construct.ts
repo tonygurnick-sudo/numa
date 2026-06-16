@@ -85,10 +85,10 @@ export interface WorkspaceChatAgentConstructProps {
    * numa-cli-api Lambda ARN (for `numa <cmd>` invocations from inside the
    * MicroVM). Workspace IAM role gets `lambda:InvokeFunction` on this ARN
    * so the @numa/cli binary installed in the image can talk to the
-   * dispatcher without a Cognito token. Pass only when the client has
-   * `numaCliApi: true` in its config — leave undefined otherwise.
+   * dispatcher without a Cognito token. Always set — numa-cli-api is the
+   * agent's entire tool layer and is always deployed.
    */
-  numaCliApiLambdaArn?: string;
+  numaCliApiLambdaArn: string;
   /** Whether Numa Ops feature is enabled for this client */
   numaOpsEnabled?: boolean;
   /** Frontend base URL (e.g. https://nd-labs.numa.arcanum.ai) for constructing links */
@@ -113,6 +113,21 @@ export interface WorkspaceChatAgentConstructProps {
    * invoke permission and the env var.
    */
   emailSenderLambdaArn?: string;
+  /**
+   * Function URL of the deployer-account Numa Standard Model relay. The
+   * in-container proxy POSTs to it (cross-account, STS-proof header) when the
+   * conversation is on the opaque `numa-standard-model`. The relay holds the
+   * real upstream + OpenRouter key — the container only knows this URL. The
+   * AgentCore role needs nothing new (it already signs STS proof + the relay
+   * Function URL is authorizationType: NONE).
+   */
+  numaStandardModelRelayUrl?: string;
+  /**
+   * Bedrock model id used by the `numa vision view` tool to read images the
+   * primary model can't see natively. Defaults to Haiku 4.5 (the bench A/B
+   * showed Nova reads layouts backwards — see contracts.md §6).
+   */
+  visionModelId?: string;
 }
 
 export class WorkspaceChatAgentConstruct extends Construct {
@@ -487,16 +502,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
           // CLI binary installed in the MicroVM; auth model is direct Lambda
           // InvokeCommand from inside the workspace, identity carried in
           // event.userContext, IAM signature is what the API trusts).
-          ...(props.numaCliApiLambdaArn
-            ? [
-                {
-                  sid: 'LambdaInvokeNumaCliApi',
-                  effect: 'Allow',
-                  actions: ['lambda:InvokeFunction'],
-                  resources: [props.numaCliApiLambdaArn],
-                },
-              ]
-            : []),
+          {
+            sid: 'LambdaInvokeNumaCliApi',
+            effect: 'Allow',
+            actions: ['lambda:InvokeFunction'],
+            resources: [props.numaCliApiLambdaArn],
+          },
           // Data bucket read access (for downloading attached files from My Files / Company Files)
           // and write access to KB prefixes (for rules generation upload)
           ...(props.dataBucketArn
@@ -846,6 +857,16 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         ...(props.emailSenderLambdaArn && {
           EMAIL_SENDER_LAMBDA_ARN: props.emailSenderLambdaArn,
         }),
+        // Numa Standard Model — opaque id known to the container; the real
+        // upstream + OpenRouter key live ONLY in the deployer-account relay.
+        NUMA_STANDARD_MODEL_ID: 'numa-standard-model',
+        // Function URL of the deployer-account relay the in-container proxy
+        // forwards to (cross-account, STS-proof header) when on the standard model.
+        ...(props.numaStandardModelRelayUrl && {
+          NUMA_STANDARD_MODEL_RELAY_URL: props.numaStandardModelRelayUrl,
+        }),
+        // Vision model for the `numa vision view` tool (Haiku 4.5, not Nova).
+        VISION_MODEL_ID: props.visionModelId ?? 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
       },
     });
 

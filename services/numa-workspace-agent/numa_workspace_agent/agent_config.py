@@ -76,6 +76,9 @@ class AgentConfig:
     agent_type: str = "task"
     description: Optional[str] = None
     scope: str = "user"  # 'user' or 'workspace'
+    # Per-agent workspace-chat model id (Standard / Premium / Expert). None → the request's modelId
+    # or, failing that, the platform default (Premium / Sonnet 4.6) is used at runtime.
+    model_id: Optional[str] = None
 
 
 def _get_dynamodb_client():
@@ -161,6 +164,7 @@ def _parse_workspace_agent(item: dict) -> AgentConfig:
         agent_type=item.get("agent_type", "task"),
         description=item.get("description"),
         scope="workspace",
+        model_id=item.get("model_id"),
     )
 
 
@@ -179,6 +183,7 @@ def _parse_user_agent(item: dict) -> AgentConfig:
         agent_type=item.get("agent_type", "task"),
         description=item.get("description"),
         scope="user",
+        model_id=item.get("model_id"),
     )
 
 

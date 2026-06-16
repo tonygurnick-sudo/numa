@@ -65,6 +65,7 @@ from tools import (
     handle_transcribe,
     handle_update_agent,
     handle_update_memory,
+    handle_view_image,
     handle_web_search,
 )
 from tools.enhanced_vault_connectors import (
@@ -137,6 +138,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "retrieve_kb_file": handle_retrieve_kb_file,
     "update_agent": handle_update_agent,
     "transcribe": handle_transcribe,
+    "view_image": handle_view_image,
     "web_search": handle_web_search,
     "pipedream_list_actions": handle_list_actions,
     "pipedream_batch_get_schemas": handle_batch_get_schemas,
@@ -519,6 +521,19 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
 
         logger.info(
             "Transcribe tool invoked",
+            file_path=params.get("file_path"),
+            user_sub=user_sub[:8] + "..." if user_sub else "",
+            conversation_id=conversation_id[:8] + "..." if conversation_id else "",
+        )
+
+    # Handle view_image tool - pass user context for S3 path construction
+    # (reads a workspace image, not a KB file, so no KB validation needed)
+    if tool_name == "view_image":
+        params["__user_sub"] = user_sub
+        params["__conversation_id"] = conversation_id
+
+        logger.info(
+            "View image tool invoked",
             file_path=params.get("file_path"),
             user_sub=user_sub[:8] + "..." if user_sub else "",
             conversation_id=conversation_id[:8] + "..." if conversation_id else "",

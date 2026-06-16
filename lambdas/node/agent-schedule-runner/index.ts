@@ -379,6 +379,9 @@ type AgentSnapshot = {
   userWelcomeMessage?: string;
   requiredIntegrations?: string[];
   toolsConfig?: AgentToolsConfig;
+  // Per-agent workspace-chat model (Standard / Premium / Expert), refreshed live each run so an
+  // existing schedule inherits the agent's current model. Omitted → platform default (Premium).
+  modelId?: string;
 };
 
 type ScheduleRecord = {
@@ -2709,6 +2712,7 @@ const mapDynamoItemToSnapshot = (item: Record<string, unknown>): AgentSnapshot =
   userWelcomeMessage: item.user_instructions as string | undefined,
   requiredIntegrations: (item.required_integrations as string[] | undefined) ?? [],
   toolsConfig: item.tools_config as AgentToolsConfig | undefined,
+  modelId: item.model_id as string | undefined,
 });
 
 /** System KBs that are accessible to all authenticated users (mirrors kb_permissions.py). */
@@ -2852,6 +2856,10 @@ const mergeRunConfig = (
   const autoToolsEnabled = base.autoToolsEnabled ?? toolsConfig.autoToolsEnabled;
   const webSearchEnabled = base.webSearchEnabled ?? toolsConfig.webSearchEnabled;
   const createAgentEnabled = base.createAgentEnabled ?? toolsConfig.createAgentEnabled;
+  // Model: an explicit per-schedule run_config.modelId wins (none is set today — there's no
+  // scheduler model picker), else inherit the agent's live model from the refreshed snapshot so an
+  // existing schedule follows the agent's current model. Undefined on both → backend default (Premium).
+  const modelId = base.modelId ?? agentSnapshot?.modelId;
 
   console.info('[SCHEDULE_RUNNER] mergeRunConfig KB resolution', {
     'base.enabledKBIds': base.enabledKBIds,
@@ -2913,6 +2921,7 @@ const mergeRunConfig = (
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
+    modelId,
   };
 };
 

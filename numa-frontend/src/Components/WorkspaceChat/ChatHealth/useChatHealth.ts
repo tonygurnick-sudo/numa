@@ -86,7 +86,15 @@ export function useChatHealth(
       // The SDK's ResultMessage usage is cumulative across sub-turns and can
       // exceed the model's hard window; donut needs the per-call snapshot.
       if (msg.role === 'assistant') {
-        const hasSnapshot = typeof msg.snapshotInputTokens === 'number';
+        // A real per-call snapshot exists if the (uncached) input OR the cache-read is
+        // non-zero. Both paths populate these now: Anthropic from message_start, the Numa
+        // Standard Model from message_delta (its message_start usage is 0 — OpenAI-style
+        // upstreams only report usage at stream end). Checking input alone would miss a
+        // fully-cached turn (input 0, large cache_read) and wrongly fall back to the SDK's
+        // cumulative usage — summed across every agentic sub-turn — which overcounts context.
+        const hasSnapshot =
+          (typeof msg.snapshotInputTokens === 'number' && msg.snapshotInputTokens > 0) ||
+          (typeof msg.snapshotCacheReadTokens === 'number' && msg.snapshotCacheReadTokens > 0);
         const hasCumulative = typeof msg.inputTokens === 'number';
         if (hasSnapshot) {
           lastTurnInput = msg.snapshotInputTokens ?? 0;

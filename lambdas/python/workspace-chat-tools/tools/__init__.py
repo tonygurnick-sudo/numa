@@ -40,6 +40,7 @@ from .user_profile import (
     handle_list_memories,
     handle_update_memory,
 )
+from .view_image import handle_view_image
 from .web_search import handle_web_search
 
 __all__ = [
@@ -72,4 +73,5 @@ __all__ = [
     "handle_update_memory",
     "handle_ops_operation",
     "handle_transcribe",
+    "handle_view_image",
 ]

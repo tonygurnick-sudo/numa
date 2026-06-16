@@ -110,6 +110,20 @@ def _price_event(usage: dict, model: Optional[str], ts: Optional[str] = None) ->
     return base * _cross_region_multiplier(ts)
 
 
+# Models billed by the relay/provider, NOT by the Bedrock MODEL_PRICING table above. Their reported
+# usage.cost (the trace's `result.total_cost_usd`) IS the real charge — and captures what a token
+# recompute would miss (e.g. DeepSeek's reasoning tokens, which aren't fully in output_tokens). We
+# trust total_cost_usd for these: a token recompute would price DeepSeek's shape at the Sonnet
+# fallback rate (~19x the real cost). The opaque `numa-standard-model` id is stamped on every
+# Standard turn (system-init + assistant events), so current_model carries it here.
+RELAY_PRICED_MODELS = ("numa-standard-model",)
+
+
+def _is_relay_priced(model: Optional[str]) -> bool:
+    """True if the model is billed by the relay (use trace total_cost_usd), not the Bedrock table."""
+    return bool(model) and any(m in model.lower() for m in RELAY_PRICED_MODELS)
+
+
 # ─── trace -> analytics (pure compute, no side effects) ──────────────────────
 
 
@@ -180,11 +194,17 @@ def compute_trace_analytics(text: str) -> dict[str, Any]:
         elif etype == "result":
             usage = ev.get("usage") or {}
             sdk_cost = float(ev.get("total_cost_usd") or 0)
-            recomputed_cost = _price_event(usage, current_model, ts)
+            # Relay-priced models (Numa Standard Model / DeepSeek): the relay's reported cost is the
+            # real charge, so trust total_cost_usd. Anthropic models keep the token recompute (the
+            # SDK's own cost number had bugs the Bedrock table corrects). See _is_relay_priced.
+            if _is_relay_priced(current_model):
+                event_cost = sdk_cost
+            else:
+                event_cost = _price_event(usage, current_model, ts)
             turns = int(ev.get("num_turns") or 0)
 
             totals["request_count"] += 1
-            totals["total_cost_usd"] += recomputed_cost
+            totals["total_cost_usd"] += event_cost
             totals["sdk_cost_usd"] += sdk_cost
             totals["total_turns"] += turns
             totals["duration_ms_total"] += int(ev.get("duration_ms") or 0)
@@ -215,7 +235,7 @@ def compute_trace_analytics(text: str) -> dict[str, Any]:
                 if last_request_at is None or ts > last_request_at:
                     last_request_at = ts
             if day:
-                daily_cost[day] += recomputed_cost
+                daily_cost[day] += event_cost
                 daily_turns[day] += turns
                 daily_request_count[day] += 1
                 active_days.add(day)

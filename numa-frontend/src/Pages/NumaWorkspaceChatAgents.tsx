@@ -104,9 +104,22 @@ import type {
   WorkspaceChatModelId,
   WorkspaceChatMessage,
 } from '../types/workspaceChatTypes';
-import { DEFAULT_WORKSPACE_MODEL } from '../types/workspaceChatTypes';
+import {
+  STANDARD_WORKSPACE_MODEL,
+  PREMIUM_WORKSPACE_MODEL,
+  DEFAULT_WORKSPACE_MODEL,
+  WORKSPACE_MODEL_OPTIONS,
+  WORKSPACE_MODEL_OPTIONS_CURATED,
+} from '../types/workspaceChatTypes';
 import { expandMyFilesSentinel } from '../constants/knowledgeBase';
 import { downloadFileFromS3 } from '../utils/s3Utils';
+
+/** Every model id the selector can legitimately persist — used to reject a
+ *  stale/garbage `chatConfig.modelId` when restoring a conversation. */
+const KNOWN_WORKSPACE_MODEL_IDS = new Set<WorkspaceChatModelId>([
+  ...WORKSPACE_MODEL_OPTIONS.map((m) => m.id),
+  ...WORKSPACE_MODEL_OPTIONS_CURATED.map((m) => m.id),
+]);
 
 type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
@@ -123,6 +136,9 @@ type ConversationChatConfig = {
   /** Per-chat enable list for native connectors (mirror of
    *  enabledConnectionIds for Pipedream). */
   enabledNativeConnectorIds?: string[];
+  /** The model the conversation started with. Persisted so a reloaded
+   *  conversation shows (and stays locked to) its original model. */
+  modelId?: WorkspaceChatModelId;
 };
 
 // Hoisted so the prop is referentially stable (BUG-194: an inline `{{}}` defeated
@@ -284,10 +300,20 @@ const NumaWorkspaceChatAgents = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   /** True from when user sends first message in new conversation until first assistant content arrives */
   const [isFirstMessagePending, setIsFirstMessagePending] = useState(false);
-  /** Selected model for workspace chat (global cross-region inference profile) */
-  const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(DEFAULT_WORKSPACE_MODEL);
+  /** Selected model for workspace chat. When the curated selector is on
+   *  (WORKSPACE_CHAT_MODEL_SELECTION), Standard (Numa Standard Model) is the
+   *  default tier — the cheap everyday choice. When the selector is off, we
+   *  fall back to Sonnet (DEFAULT_WORKSPACE_MODEL) so flag-off clients are
+   *  unchanged and never send the standard id. A persisted per-conversation
+   *  chatConfig.modelId overrides this on load (see applyConversationChatConfig). */
+  const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(() =>
+    getFlag('WORKSPACE_CHAT_MODEL_SELECTION') ? STANDARD_WORKSPACE_MODEL : DEFAULT_WORKSPACE_MODEL
+  );
   /** Whether model selection is enabled for workspace chat (from runtime config) */
   const [workspaceModelSelectionEnabled] = useState(() => getFlag('WORKSPACE_CHAT_MODEL_SELECTION'));
+  /** Lock the model once the conversation has started — no mid-conversation
+   *  switching. The conversation runs end-to-end on the model it began with. */
+  const modelLocked = messages.length > 0;
   /** In-session dismissal of the red chat-health banner. Resets on conversation
    *  change so users see the warning again when they re-open the conversation. */
   const [chatHealthBannerDismissed, setChatHealthBannerDismissed] = useState(false);
@@ -645,6 +671,11 @@ const NumaWorkspaceChatAgents = () => {
     selectedAccountsByApp,
   ]);
 
+  // Tracks the conversation config whose model we've already applied, so a re-run of
+  // applyConversationChatConfig (which re-fires to re-filter KBs/connections once they load) doesn't
+  // re-apply the model and clobber a model the user picked after the conversation loaded.
+  const appliedModelForConfigRef = useRef<unknown>(null);
+
   const applyConversationChatConfig = useCallback(
     (config: unknown) => {
       if (!config || typeof config !== 'object') return;
@@ -692,6 +723,23 @@ const NumaWorkspaceChatAgents = () => {
         setEnabledNativeConnectorIds(parsed.enabledNativeConnectorIds.filter((id) => connectedNativeSet.has(id)));
       }
 
+      // Set the model for this conversation — ONCE per conversation config (reference-compared). The
+      // callback re-runs whenever its deps (availableKBs/connections, loaded async) change to
+      // re-filter the enable-lists above; that re-run must NOT re-set the model or it clobbers a
+      // model the user picked after load. On a genuinely NEW conversation (switch OR reload) we
+      // ALWAYS set the model: the conversation's saved one, or — for a legacy/unconfigured chat with
+      // no saved modelId — the DEFAULT, exactly as a fresh page load would. Never inherit the
+      // previously-viewed conversation's model (the bug: switching to a no-modelId conversation kept
+      // the prior chat's model, e.g. stuck on Premium, while a refresh correctly showed the default).
+      if (appliedModelForConfigRef.current !== config) {
+        const defaultModel = getFlag('WORKSPACE_CHAT_MODEL_SELECTION')
+          ? STANDARD_WORKSPACE_MODEL
+          : DEFAULT_WORKSPACE_MODEL;
+        const hasSavedModel = typeof parsed.modelId === 'string' && KNOWN_WORKSPACE_MODEL_IDS.has(parsed.modelId);
+        setSelectedModelId(hasSavedModel ? parsed.modelId : defaultModel);
+      }
+      appliedModelForConfigRef.current = config;
+
       window.setTimeout(() => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
@@ -700,14 +748,50 @@ const NumaWorkspaceChatAgents = () => {
   );
 
   useEffect(() => {
-    if (!pendingConversationChatConfig) return;
-    applyConversationChatConfig(pendingConversationChatConfig);
+    if (pendingConversationChatConfig) {
+      applyConversationChatConfig(pendingConversationChatConfig);
+      return;
+    }
+    // No saved chatConfig for this conversation (legacy / never-configured) — reset the model to the
+    // default instead of inheriting the previously-viewed conversation's. (applyConversationChatConfig
+    // handles the with-config case and its own saved-or-default fallback.) Guarded by the ref so this
+    // runs once per transition, not on every re-render.
+    if (appliedModelForConfigRef.current !== null) {
+      appliedModelForConfigRef.current = null;
+      setSelectedModelId(
+        getFlag('WORKSPACE_CHAT_MODEL_SELECTION') ? STANDARD_WORKSPACE_MODEL : DEFAULT_WORKSPACE_MODEL
+      );
+    }
   }, [applyConversationChatConfig, pendingConversationChatConfig]);
+
+  // New chat (conversationId cleared) — reset the model to the default rather than keeping the
+  // previous conversation's. handleNewChat() only clears conversationId; it doesn't touch the model
+  // or the chatConfig, so without this a new chat stays on whatever the last conversation used.
+  useEffect(() => {
+    if (conversationId === null) {
+      setSelectedModelId(
+        getFlag('WORKSPACE_CHAT_MODEL_SELECTION') ? STANDARD_WORKSPACE_MODEL : DEFAULT_WORKSPACE_MODEL
+      );
+    }
+  }, [conversationId]);
 
   const handleUserSetWebSearchEnabled = useCallback(
     (value: SetStateAction<boolean>) => {
       markUserSettingsModified();
       setWebSearchEnabled(value);
+    },
+    [markUserSettingsModified]
+  );
+
+  // The model chip changes ONLY the model — without marking settings modified,
+  // the per-conversation chatConfig save effect (gated on `userSettingsModified`)
+  // never fires, so `modelId` is never persisted and a reload snaps the chat back
+  // to the default model (e.g. a Standard/DeepSeek chat reopens as Premium/Sonnet).
+  // Mirror the other user-side setters so a model change is saved and restored.
+  const handleUserSetSelectedModelId = useCallback(
+    (value: SetStateAction<WorkspaceChatModelId>) => {
+      markUserSettingsModified();
+      setSelectedModelId(value);
     },
     [markUserSettingsModified]
   );
@@ -797,6 +881,7 @@ const NumaWorkspaceChatAgents = () => {
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
         enabledNativeConnectorIds,
+        modelId: selectedModelId,
       };
 
       numaChatDynamoUtils
@@ -826,6 +911,7 @@ const NumaWorkspaceChatAgents = () => {
     sub,
     userSettingsModified,
     webSearchEnabled,
+    selectedModelId,
   ]);
 
   const defaultKBIdsFromSettings = useMemo(() => {
@@ -1305,6 +1391,16 @@ const NumaWorkspaceChatAgents = () => {
     applyAgentConfiguration(agent);
     setCurrentAgent(agent);
     setPendingAgent(agent);
+    // Seed the model for this new agent conversation from the agent's configured model (Premium for
+    // legacy agents with none) and mark settings modified so it persists to the conversation's
+    // chatConfig and survives reload. Set before the welcome message locks the selector; the existing
+    // per-conversation lock then applies as usual. Gated by the same flag as the chat model picker.
+    if (getFlag('WORKSPACE_CHAT_MODEL_SELECTION')) {
+      const agentModelId =
+        agent.modelId && KNOWN_WORKSPACE_MODEL_IDS.has(agent.modelId) ? agent.modelId : PREMIUM_WORKSPACE_MODEL;
+      setSelectedModelId(agentModelId);
+      markUserSettingsModified();
+    }
     setMessages([{ role: 'assistant', content: createAgentWelcomeMessage(agent) }]);
     setUploadedFiles([]);
     setIsManuallyLoading(false);
@@ -3557,8 +3653,9 @@ const NumaWorkspaceChatAgents = () => {
                           isStopping={isStopping}
                           variant="v2"
                           selectedModelId={selectedModelId}
-                          setSelectedModelId={setSelectedModelId}
-                          showModelSelector={false}
+                          setSelectedModelId={handleUserSetSelectedModelId}
+                          showModelSelector={workspaceModelSelectionEnabled}
+                          modelLocked={modelLocked}
                           onQuickAction={handleQuickAction}
                           connectedIntegrations={connectedSet}
                           onOpenHistory={() => {
@@ -3725,8 +3822,9 @@ const NumaWorkspaceChatAgents = () => {
                           enabledKBIds={enabledKBIds}
                           setEnabledKBIds={handleUserSetEnabledKBIds}
                           selectedModelId={selectedModelId}
-                          setSelectedModelId={setSelectedModelId}
-                          showModelSelector={false}
+                          setSelectedModelId={handleUserSetSelectedModelId}
+                          showModelSelector={workspaceModelSelectionEnabled}
+                          modelLocked={modelLocked}
                           onStop={stopStream}
                           isStopping={isStopping}
                           variant="v2"
@@ -3866,9 +3964,6 @@ const NumaWorkspaceChatAgents = () => {
             selectedAccountsByApp={selectedAccountsByApp}
             setSelectedAccountsByApp={setSelectedAccountsByApp}
             isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
-            showModelSelector={workspaceModelSelectionEnabled}
-            selectedModelId={selectedModelId}
-            setSelectedModelId={setSelectedModelId}
           />
         </aside>
       )}

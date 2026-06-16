@@ -20,6 +20,7 @@ import subprocess
 import time
 import unicodedata
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -95,10 +96,43 @@ logger = structlog.get_logger()
 
 logger.info("numa-workspace-agent module loading", version="0.5.0")
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    """App lifecycle hook.
+
+    Starts the in-container Numa Standard Model proxy (localhost:4100) as a
+    daemon thread at startup, so the Claude SDK can reach the opaque
+    non-Anthropic model via ANTHROPIC_BASE_URL the moment a request selects it.
+    The proxy binds loopback only and forwards (translated to OpenAI Chat
+    Completions, STS-proof authed) to the deployer-account relay. Mirrors the
+    existing localhost-only /internal/* endpoints' in-container HTTP model.
+
+    Starting it here (rather than lazily per request) means the first
+    standard-model turn doesn't pay the ~uvicorn-startup latency, and a startup
+    failure is visible immediately in the container logs. `ensure_running` is
+    idempotent and failure-tolerant (it still binds even if the relay URL is
+    unset), so it never blocks the agent from serving Anthropic traffic.
+    """
+    try:
+        from .bedrock_mantle_proxy import ensure_running
+
+        await ensure_running(region=os.environ.get("AWS_REGION", "us-east-1"))
+    except Exception as e:  # never let proxy startup take down the whole app
+        logger.error(
+            "Standard-model proxy failed to start at app startup",
+            _name="STANDARD_PROXY_BOOT_ERROR",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+    yield
+
+
 app = FastAPI(
     title="Numa Workspace Agent",
     description="AgentCore-based workspace agent with Claude Agent SDK",
     version="0.5.0",
+    lifespan=_lifespan,
 )
 
 # Local development CORS — only active when LOCAL_DEV=1
@@ -2242,6 +2276,15 @@ async def _handle_chat(
         has_kb_listings=kb_listings is not None,
     )
 
+    # Model precedence: an explicit request modelId wins; otherwise fall back to the agent's
+    # configured model (Standard / Premium / Expert), parsing its @thinking suffix the same way.
+    # Scheduled runs carry no request modelId, so the agent's model is authoritative there; if
+    # neither is set, model_id stays None and resolves to DEFAULT_MODEL (Premium / Sonnet 4.6).
+    if not raw_model_id and agent_config and agent_config.model_id:
+        model_id, thinking_override = parse_model_id_with_thinking(
+            agent_config.model_id
+        )
+
     # --- Post-gather: Apply agent config ---
     agent_file_paths: list[str] = []
     if agent_config:
@@ -2668,6 +2711,13 @@ async def _handle_sync(
                 error=str(e),
             )
 
+    # Model precedence: explicit request modelId wins; else fall back to the agent's configured
+    # model (parsing its @thinking suffix). Neither set → DEFAULT_MODEL (Premium / Sonnet 4.6).
+    if not raw_model_id and agent_config and agent_config.model_id:
+        model_id, thinking_override = parse_model_id_with_thinking(
+            agent_config.model_id
+        )
+
     # Resolve all approval modes (agent overrides > user settings > defaults)
     all_approval_modes_sync = resolve_all_approval_modes(user_sub, agent_config)
     effective_approval_mode = all_approval_modes_sync.get(
@@ -3002,6 +3052,12 @@ async def _handle_fire_and_forget(
                 agent_id=agent_id,
                 error=str(e),
             )
+    # Model precedence: explicit request modelId wins; else fall back to the agent's configured
+    # model (parsing its @thinking suffix). Neither set → DEFAULT_MODEL (Premium / Sonnet 4.6).
+    if not raw_model_id and agent_config and agent_config.model_id:
+        model_id, thinking_override = parse_model_id_with_thinking(
+            agent_config.model_id
+        )
     all_approval_modes_async = resolve_all_approval_modes(user_sub, agent_config)
     effective_approval_mode = all_approval_modes_async.get(
         "integrations", "non_destructive"

@@ -234,10 +234,33 @@ def override_result_cost(serialized: dict[str, Any], stream_log: Any) -> dict[st
 
     Must be called AFTER `stream_log.finalize(message)` so the recomputed
     values are available.
+
+    Numa Standard Model (Option A, contract §4): the per-token pricing tables
+    don't know the opaque model, so the Anthropic recompute returns the SDK's
+    own (wrong) value. Instead, the in-container proxy captured the relay's TRUE
+    per-request `usage.cost` and summed it for the conversation. When that
+    accumulator is populated (i.e. the standard-model relay path ran in this
+    MicroVM), it is the authoritative cost basis — we override `total_cost_usd`
+    with it so the trace carries the real USD figure for credit metering. The
+    accumulator stays None on Anthropic turns, so their behaviour is unchanged.
     """
     if serialized.get("type") != "result":
         return serialized
     sdk_value = serialized.get("total_cost_usd")
+
+    # Standard-model true cost from the relay (via the in-container proxy).
+    try:
+        from numa_workspace_agent.bedrock_mantle_proxy import get_accumulated_cost
+
+        standard_cost = get_accumulated_cost()
+    except Exception:
+        standard_cost = None
+    if standard_cost is not None:
+        if "sdk_reported_cost_usd" not in serialized:
+            serialized["sdk_reported_cost_usd"] = sdk_value
+        serialized["total_cost_usd"] = standard_cost
+        return serialized
+
     recomputed = getattr(stream_log, "total_cost_usd", None)
     if recomputed is None:
         return serialized
@@ -541,6 +564,18 @@ async def stream_claude_sdk(
     Yields:
         SSE formatted events as bytes (SDK message types serialized)
     """
+    # Per-request reset of the Standard Model cost accumulator so this message's
+    # result.total_cost_usd is its OWN upstream cost (the per-message badge), not
+    # the conversation running total — which the frontend sums separately for the
+    # header total. No-op on Anthropic turns. (Without this, every badge showed
+    # the cumulative sum, and the header double-counted it.)
+    try:
+        from numa_workspace_agent.bedrock_mantle_proxy import reset_accumulated_cost
+
+        reset_accumulated_cost()
+    except Exception:
+        pass
+
     paths = get_workspace_paths()
     trace_path = paths["trace_file"]
     session_id: Optional[str] = None
@@ -1379,6 +1414,15 @@ async def run_claude_sdk(
             "error": "..."  # only present when status == "error"
         }
     """
+    # Per-request reset of the Standard Model cost accumulator (see
+    # stream_claude_sdk) so this run's result.total_cost_usd is its own cost.
+    try:
+        from numa_workspace_agent.bedrock_mantle_proxy import reset_accumulated_cost
+
+        reset_accumulated_cost()
+    except Exception:
+        pass
+
     paths = get_workspace_paths()
     # Allow pipeline orchestrators to isolate SDK session state per step
     effective_system_dir = system_dir or paths["system_dir"]

@@ -18,22 +18,29 @@ const MODEL_TYPES = {
   DEFAULT: 'default',
   CLAUDE_HAIKU: 'claude_haiku',
   FALLBACK: 'fallback',
+  // Numa Standard Model — an opaque, region-agnostic id. The backend does NOT
+  // regionalize it (it's routed to an in-container proxy, not a Bedrock
+  // inference profile), so it resolves to the same string in every region.
+  NUMA_STANDARD: 'numa_standard',
 };
 const MODEL_MAP = {
   [REGIONS.US_EAST_1]: {
     [MODEL_TYPES.DEFAULT]: 'us.anthropic.claude-sonnet-4-6',
     [MODEL_TYPES.CLAUDE_HAIKU]: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
     [MODEL_TYPES.FALLBACK]: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+    [MODEL_TYPES.NUMA_STANDARD]: 'numa-standard-model',
   },
   [REGIONS.AP_SOUTHEAST_2]: {
     [MODEL_TYPES.DEFAULT]: 'au.anthropic.claude-sonnet-4-6',
     [MODEL_TYPES.CLAUDE_HAIKU]: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
     [MODEL_TYPES.FALLBACK]: 'au.anthropic.claude-haiku-4-5-20251001-v1:0',
+    [MODEL_TYPES.NUMA_STANDARD]: 'numa-standard-model',
   },
   [REGIONS.AP_SOUTHEAST_3]: {
     [MODEL_TYPES.DEFAULT]: 'global.anthropic.claude-sonnet-4-6',
     [MODEL_TYPES.CLAUDE_HAIKU]: 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
     [MODEL_TYPES.FALLBACK]: 'global.anthropic.claude-haiku-4-5-20251001-v1:0',
+    [MODEL_TYPES.NUMA_STANDARD]: 'numa-standard-model',
   },
 };
 

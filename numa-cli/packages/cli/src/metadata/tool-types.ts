@@ -466,6 +466,37 @@ export interface ConvertDocumentResult {
   size: number;
 }
 
+// ─── Vision (view_image) ────────────────────────────────────────────────────
+//
+// `view_image` operates on a WORKSPACE file (path under `/workdir/...`), like
+// the document tools. It requires `conversation_id` to construct the S3 path
+// where the image lives. The numa-cli-api dispatcher injects user_sub +
+// conversation_id at the event level; workspace-chat-tools' handler promotes
+// those into `__user_sub` / `__conversation_id` (callers don't include `__`).
+//
+// Purpose: the non-multimodal Numa Standard Model can't see images natively —
+// the handler reads the image and runs it through a vision model (Haiku 4.5)
+// to return a textual description. Source: `workspace-chat-tools/tools/
+// view_image.py:handle_view_image`.
+
+export interface ViewImageParams extends HitlParams {
+  /**
+   * Workspace path to the image, e.g. `/workdir/uploads/slide.png`. Must
+   * start with `/workdir/`. Supported: png, jpg/jpeg, gif, webp.
+   */
+  file_path: string;
+  /**
+   * What to look for / question to answer about the image. Optional —
+   * defaults server-side to a full description.
+   */
+  prompt?: string;
+}
+
+export interface ViewImageResult {
+  /** The vision model's textual description / answer for the image. */
+  description: string;
+}
+
 // ─── Memories (user_profile) ────────────────────────────────────────────────
 //
 // Memory ops live on the user's chat-settings profile (DynamoDB
@@ -1037,6 +1068,7 @@ export type ToolCall =
   | { tool: 'extract_content'; params: ExtractContentParams }
   | { tool: 'transcribe'; params: TranscribeParams }
   | { tool: 'convert_document'; params: ConvertDocumentParams }
+  | { tool: 'view_image'; params: ViewImageParams }
   | { tool: 'user_profile_list_memories'; params: UserProfileListMemoriesParams }
   | { tool: 'user_profile_add_memory'; params: UserProfileAddMemoryParams }
   | { tool: 'user_profile_update_memory'; params: UserProfileUpdateMemoryParams }
@@ -1095,45 +1127,47 @@ export type ToolResult<T extends ToolName> = T extends 'query_knowledgebase'
                         ? TranscribeResult
                         : T extends 'convert_document'
                           ? ConvertDocumentResult
-                          : T extends 'user_profile_list_memories'
-                            ? UserProfileListMemoriesResult
-                            : T extends 'user_profile_add_memory'
-                              ? UserProfileAddMemoryResult
-                              : T extends 'user_profile_update_memory'
-                                ? UserProfileUpdateMemoryResult
-                                : T extends 'user_profile_delete_memory'
-                                  ? UserProfileDeleteMemoryResult
-                                  : T extends 'list_agents'
-                                    ? ListAgentsResult
-                                    : T extends 'get_agent'
-                                      ? GetAgentResult
-                                      : T extends 'create_agent'
-                                        ? CreateAgentResult
-                                        : T extends 'update_agent'
-                                          ? UpdateAgentResult
-                                          : T extends 'patch_agent_prompt'
-                                            ? PatchAgentPromptResult
-                                            : T extends 'duplicate_agent'
-                                              ? DuplicateAgentResult
-                                              : T extends 'delete_agent'
-                                                ? DeleteAgentResult
-                                                : T extends 'pipedream_list_actions'
-                                                  ? PipedreamListActionsResult
-                                                  : T extends 'pipedream_batch_get_schemas'
-                                                    ? PipedreamBatchGetSchemasResult
-                                                    : T extends 'pipedream_configure_props'
-                                                      ? PipedreamConfigurePropsResult
-                                                      : T extends 'pipedream_run_action'
-                                                        ? PipedreamRunActionResult
-                                                        : T extends 'pipedream_proxy_request'
-                                                          ? PipedreamProxyRequestResult
-                                                          : T extends 'connect_request'
-                                                            ? ConnectRequestResult
-                                                            : T extends 'connect_status'
-                                                              ? ConnectStatusResult
-                                                              : T extends `ops_${string}`
-                                                                ? OpsOperationResult
-                                                                : never;
+                          : T extends 'view_image'
+                            ? ViewImageResult
+                            : T extends 'user_profile_list_memories'
+                              ? UserProfileListMemoriesResult
+                              : T extends 'user_profile_add_memory'
+                                ? UserProfileAddMemoryResult
+                                : T extends 'user_profile_update_memory'
+                                  ? UserProfileUpdateMemoryResult
+                                  : T extends 'user_profile_delete_memory'
+                                    ? UserProfileDeleteMemoryResult
+                                    : T extends 'list_agents'
+                                      ? ListAgentsResult
+                                      : T extends 'get_agent'
+                                        ? GetAgentResult
+                                        : T extends 'create_agent'
+                                          ? CreateAgentResult
+                                          : T extends 'update_agent'
+                                            ? UpdateAgentResult
+                                            : T extends 'patch_agent_prompt'
+                                              ? PatchAgentPromptResult
+                                              : T extends 'duplicate_agent'
+                                                ? DuplicateAgentResult
+                                                : T extends 'delete_agent'
+                                                  ? DeleteAgentResult
+                                                  : T extends 'pipedream_list_actions'
+                                                    ? PipedreamListActionsResult
+                                                    : T extends 'pipedream_batch_get_schemas'
+                                                      ? PipedreamBatchGetSchemasResult
+                                                      : T extends 'pipedream_configure_props'
+                                                        ? PipedreamConfigurePropsResult
+                                                        : T extends 'pipedream_run_action'
+                                                          ? PipedreamRunActionResult
+                                                          : T extends 'pipedream_proxy_request'
+                                                            ? PipedreamProxyRequestResult
+                                                            : T extends 'connect_request'
+                                                              ? ConnectRequestResult
+                                                              : T extends 'connect_status'
+                                                                ? ConnectStatusResult
+                                                                : T extends `ops_${string}`
+                                                                  ? OpsOperationResult
+                                                                  : never;
 
 /**
  * Extracts the params type for a given tool name. Useful for typing

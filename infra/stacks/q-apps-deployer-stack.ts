@@ -12,6 +12,8 @@ import { CustomerSuccessPortalConstruct } from '../constructs/customer-success-p
 import { PortalDeploymentsConstruct } from '../constructs/portal-deployments-construct';
 import { PortalNextgenBrokerConstruct } from '../constructs/portal-nextgen-broker-construct';
 import { EmailSenderConstruct } from '../constructs/email-sender-construct';
+import { NumaStandardModelRelayConstruct } from '../constructs/numa-standard-model-relay-construct';
+import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-secret';
 import { VoiceConfigWriterConstruct } from '../constructs/voice-config-writer-construct';
 import { QuotaReportDailyConstruct } from '../constructs/quota-report-daily-construct';
 import { NumaDashboardRollupConstruct } from '../constructs/numa-dashboard-rollup-construct';
@@ -141,6 +143,37 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     new TerraformOutput(this, 'email-sender-function-name', {
       value: emailSender.functionName,
+    });
+
+    // Numa Standard Model relay — deployer-account streaming egress chokepoint
+    // for the opaque `numa-standard-model`. The only place that knows the real
+    // upstream (DeepSeek via OpenRouter→Novita) + holds the OpenRouter key.
+    // Per-tenant AgentCore containers reach it cross-account via STS proof
+    // (same pattern as the email sender).
+    //
+    // The OpenRouter key secret is created empty here and must be populated
+    // manually via the AWS console (same convention as the Pipedream
+    // credentials secret). The relay resolves it at deploy time into the
+    // OPENROUTER_API_KEY env var, so the secret must be populated before the
+    // relay can serve traffic (re-deploy after first populating).
+    const openRouterKeySecret = new SecretsmanagerSecret(this, 'openrouter-api-key', {
+      name: 'numa-standard-model-relay/openrouter-api-key',
+      description: 'OpenRouter API key for the Numa Standard Model relay (populate manually).',
+    });
+
+    const standardModelRelay = new NumaStandardModelRelayConstruct(this, 'numa-standard-model-relay', {
+      openRouterApiKeySecretArn: openRouterKeySecret.arn,
+      clientConfigTableArn: clientConfigTable.arn,
+      clientConfigTableName: clientConfigTable.name,
+      region: 'us-east-1',
+    });
+
+    new TerraformOutput(this, 'numa-standard-model-relay-function-url', {
+      value: standardModelRelay.functionUrl,
+    });
+
+    new TerraformOutput(this, 'numa-standard-model-relay-function-arn', {
+      value: standardModelRelay.functionArn,
     });
 
     // Numa Voice config write-back (FEAT-169) — STS-proof relay that lets a

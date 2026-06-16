@@ -1,4 +1,4 @@
-import type { IntegrationListItem } from './workspaceChatTypes';
+import type { IntegrationListItem, WorkspaceChatModelId } from './workspaceChatTypes';
 
 export type AgentScope = 'workspace' | 'user';
 export type AgentVisibility = 'personal' | 'public';
@@ -68,6 +68,8 @@ export type AgentSummary = {
   } | null;
   requiredIntegrations: string[];
   toolsConfig: AgentToolsConfig;
+  /** Per-agent workspace-chat model (Standard / Premium / Expert). Omitted → platform default (Premium). */
+  modelId?: WorkspaceChatModelId;
   referenceFiles: AgentReferenceFile[];
   createdBy: {
     userId: string;
@@ -107,6 +109,8 @@ export type AgentPayload = {
   } | null;
   requiredIntegrations?: string[];
   toolsConfig?: AgentToolsConfig;
+  /** Per-agent workspace-chat model (Standard / Premium / Expert). */
+  modelId?: WorkspaceChatModelId;
   referenceFiles?: AgentReferenceFile[];
   createdByName?: string;
   tags?: string[];
@@ -176,4 +180,5 @@ export type AdminAgentEntry = {
   tags: string[];
   personas: string[];
   industries: string[];
+  modelId?: WorkspaceChatModelId;
 };

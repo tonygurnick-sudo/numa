@@ -38,7 +38,8 @@ test('Nolia may extract/convert docs but not touch ops/agents/memory', () => {
   for (const tool of ['extract_content', 'convert_document', 'transcribe']) {
     assert.equal(isToolAllowedForAgentType('nolia-eda', tool).allowed, true, `${tool} should be allowed`);
   }
-  // Denied — the prompt-injection threat
+  // Denied — the prompt-injection threat. `view_image` is in the `vision`
+  // category (not `docs`), so Nolia — restricted to docs — must NOT get it.
   for (const tool of [
     'ops_delete_ticket',
     'create_agent',
@@ -47,8 +48,18 @@ test('Nolia may extract/convert docs but not touch ops/agents/memory', () => {
     'pipedream_run_action',
     'add_to_kb',
     'web_search',
+    'view_image',
   ]) {
     assert.equal(isToolAllowedForAgentType('nolia-eda', tool).allowed, false, `${tool} should be denied for nolia`);
+  }
+});
+
+test('Unrestricted types auto-permit vision (view_image)', () => {
+  // The Standard-model "eyes" are gated purely by prompt-advertisement; the
+  // server-side allow-list auto-permits the new `vision` category for any
+  // unrestricted type.
+  for (const t of ['numa-chat', 'data-analysis', undefined]) {
+    assert.equal(isToolAllowedForAgentType(t, 'view_image').allowed, true, `${t} should permit view_image`);
   }
 });
 
@@ -64,6 +75,7 @@ test('Unrestricted type may use anything, including unknown tools', () => {
 
 test('toolCategory buckets known + prefixed tools correctly', () => {
   assert.equal(toolCategory('extract_content'), 'docs');
+  assert.equal(toolCategory('view_image'), 'vision');
   assert.equal(toolCategory('web_search'), 'web');
   assert.equal(toolCategory('user_profile_add_memory'), 'memory');
   assert.equal(toolCategory('create_agent'), 'agents');

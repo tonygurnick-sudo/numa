@@ -2251,14 +2251,37 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
       }
 
       if (streamEvent?.type === 'message_delta') {
-        const usage = (streamEvent as { usage?: { output_tokens?: number } }).usage;
-        if (usage && typeof usage.output_tokens === 'number') {
-          const snapshotOutputTokens = usage.output_tokens;
+        // message_delta carries per-call usage. For Anthropic it's just the running
+        // output_tokens (input + cache were already snapshotted at message_start). For the
+        // Numa Standard Model, message_start usage is always 0 (OpenAI-style upstreams report
+        // usage only at stream END), so the REAL per-call input + cache_read arrive HERE —
+        // capture them as the snapshot, else the donut falls back to the SDK's cumulative
+        // usage (summed across every agentic sub-turn) and massively overcounts the context.
+        const usage = (
+          streamEvent as {
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_read_input_tokens?: number;
+              cache_creation_input_tokens?: number;
+            };
+          }
+        ).usage;
+        if (usage) {
           setMessages((prev) => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
             if (lastIdx < 0 || updated[lastIdx].role !== 'assistant') return prev;
-            updated[lastIdx] = { ...updated[lastIdx], snapshotOutputTokens };
+            const lastMsg = { ...updated[lastIdx] };
+            if (typeof usage.output_tokens === 'number') lastMsg.snapshotOutputTokens = usage.output_tokens;
+            // Only overwrite input/cache when the delta actually carries them (Standard model).
+            // Anthropic deltas omit these, so the message_start snapshot stands untouched.
+            if (typeof usage.input_tokens === 'number') lastMsg.snapshotInputTokens = usage.input_tokens;
+            if (typeof usage.cache_read_input_tokens === 'number')
+              lastMsg.snapshotCacheReadTokens = usage.cache_read_input_tokens;
+            if (typeof usage.cache_creation_input_tokens === 'number')
+              lastMsg.snapshotCacheCreationTokens = usage.cache_creation_input_tokens;
+            updated[lastIdx] = lastMsg;
             return updated;
           });
         }

@@ -27,6 +27,7 @@ export { createDocsCommand } from './actions/docs.js';
 export { createMemoryCommand } from './actions/memory.js';
 export { createAgentsCommand } from './actions/agents.js';
 export { createWebCommand } from './actions/web.js';
+export { createVisionCommand } from './actions/vision.js';
 export { createIntegrationsCommand } from './actions/integrations.js';
 export { createOpsCommand, VALID_OPS, type ValidOp } from './actions/ops.js';
 export { createRenderCommand } from './actions/render.js';
