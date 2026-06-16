@@ -483,6 +483,9 @@ def clear_agent_cache():
 # Call clear_user_settings_cache() at the start of each request to ensure fresh data.
 _user_settings_cache: dict[str, dict] = {}
 
+# One-shot guard so the missing-table warning logs once per container, not per request.
+_warned_missing_settings_table = False
+
 
 def clear_user_settings_cache() -> None:
     """Clear the per-request user settings cache. Call at the start of each request."""
@@ -503,6 +506,18 @@ def _get_cached_user_settings(user_sub: str) -> dict:
 
     table_name = os.environ.get("CHAT_SETTINGS_TABLE_NAME")
     if not table_name:
+        global _warned_missing_settings_table
+        if not _warned_missing_settings_table:
+            _warned_missing_settings_table = True
+            logger.error(
+                "CHAT_SETTINGS_TABLE_NAME is not set — user chat settings cannot "
+                "be read. Approval mode falls back to the default "
+                f"('{DEFAULT_APPROVAL_MODE}') for every user, so an operator's "
+                "'always'/auto-approve setting is silently ignored and integration "
+                "writes may stall at the approval gate. Set this env var on the "
+                "workspace container.",
+                _name="CHAT_SETTINGS_TABLE_MISSING",
+            )
         return {}
 
     try:

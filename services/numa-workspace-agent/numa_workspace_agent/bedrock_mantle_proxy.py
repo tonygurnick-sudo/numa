@@ -706,21 +706,48 @@ async def _stream_response(request_body: dict, model: str):
             break
         except _RelayError as e:
             last_error = e
-            if attempt == 0 and _is_missing_signature_error(e.body):
+            # P-05: retry the first attempt on the transient upstream classes —
+            # the H1 missing-signature error, any 5xx, and an empty-body 400
+            # (the peer-closed / Cloudflare-disconnect signature). One retry only
+            # (loop is capped at 2); a genuine error just costs one extra attempt
+            # before falling through to the opaque error event.
+            is_sig = _is_missing_signature_error(e.body)
+            empty_body = not (e.body or "").strip()
+            transient = is_sig or e.status >= 500 or (e.status == 400 and empty_body)
+            if attempt == 0 and transient:
                 logger.warning(
-                    "Retrying relay after missing-signature error (H1)",
-                    _name="STANDARD_PROXY_SIGNATURE_RETRY",
+                    "Retrying relay after transient upstream error",
+                    _name=(
+                        "STANDARD_PROXY_SIGNATURE_RETRY"
+                        if is_sig
+                        else "STANDARD_PROXY_TRANSIENT_RETRY"
+                    ),
                     status=e.status,
+                    empty_body=empty_body,
                 )
                 continue
             break
-        except Exception as e:  # transport-level failure
-            logger.error(
-                "Relay transport error",
-                _name="STANDARD_PROXY_RELAY_ERROR",
-                error=str(e),
-            )
+        except (
+            Exception
+        ) as e:  # transport-level failure (peer-closed, connect, protocol)
             last_error = _RelayError(0, str(e))
+            if attempt == 0:
+                # P-05: transport failures before any chunk are retryable, and
+                # log error_type — str(e) on a peer-closed RemoteProtocolError is
+                # often empty, which is what made these errors undiagnosable.
+                logger.warning(
+                    "Retrying relay after transport error",
+                    _name="STANDARD_PROXY_TRANSIENT_RETRY",
+                    error=str(e) or "<empty>",
+                    error_type=type(e).__name__,
+                )
+                continue
+            logger.error(
+                "Relay transport error (no retry left)",
+                _name="STANDARD_PROXY_RELAY_ERROR",
+                error=str(e) or "<empty>",
+                error_type=type(e).__name__,
+            )
             break
 
     if last_error is not None and first_chunk is None:
