@@ -1,7 +1,9 @@
 """
 DynamoDB operations for Numa Workspace Agent.
 
-Handles updating conversation metadata in the shared chat history table.
+Handles updating conversation metadata in the shared chat history table and
+mirroring the in-memory active-run registry to the active-runs table so the
+proxy Lambda can answer /runs/{id}/status without invoking AgentCore (BUG-140).
 """
 
 import time
@@ -10,7 +12,7 @@ from typing import Optional
 import boto3
 import structlog
 
-from .sdk_config import DYNAMODB_TABLE_NAME, REGION
+from .sdk_config import ACTIVE_RUNS_TABLE_NAME, DYNAMODB_TABLE_NAME, REGION
 
 logger = structlog.get_logger()
 
@@ -390,4 +392,99 @@ def mark_conversation_as_v2(user_sub: str, conversation_id: str) -> bool:
             conversation_id=conversation_id[:8] + "..." if conversation_id else None,
             error=str(e),
         )
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Active-run mirror (BUG-140)
+#
+# The in-memory _active_runs registry in sdk_runner is invisible outside this
+# container, and reaching it requires an AgentCore invocation that queues
+# behind the running chat. These functions mirror register/pop to a small
+# DynamoDB table so the proxy can read the flag directly. All writes are
+# best-effort: a DynamoDB hiccup must never affect the chat run itself.
+#
+# Freshness contract with the proxy: the run is considered active only while
+# last_seen_at is recent (proxy checks < ACTIVE_RUN_STALE_SECONDS). sdk_runner
+# heartbeats via upsert_active_run while the run is in flight, so a crashed
+# container goes stale within minutes instead of leaving a permanent
+# "running" flag. The ttl attribute is garbage collection only.
+# ---------------------------------------------------------------------------
+
+# Keep in sync with the heartbeat interval in sdk_runner and the staleness
+# check in lambdas/python/workspace-chat-agent-proxy/lambda_function.py.
+ACTIVE_RUN_TTL_SECONDS = 3600
+
+
+def upsert_active_run(user_sub: str, conversation_id: str, request_id: str) -> bool:
+    """Create or refresh the active-run record for a conversation.
+
+    Called on run registration and then periodically as a heartbeat.
+    UpdateItem upserts, so registration and heartbeat are the same write;
+    started_at is preserved across heartbeats via if_not_exists.
+    """
+    if not ACTIVE_RUNS_TABLE_NAME:
+        return False
+
+    now = int(time.time())
+    try:
+        client = get_dynamodb_client()
+        client.update_item(
+            TableName=ACTIVE_RUNS_TABLE_NAME,
+            Key={"conversation_id": {"S": conversation_id}},
+            UpdateExpression=(
+                "SET user_sub = :sub, request_id = :rid, last_seen_at = :now, "
+                "started_at = if_not_exists(started_at, :now), #ttl = :ttl"
+            ),
+            ExpressionAttributeNames={"#ttl": "ttl"},
+            ExpressionAttributeValues={
+                ":sub": {"S": user_sub},
+                ":rid": {"S": request_id},
+                ":now": {"N": str(now)},
+                ":ttl": {"N": str(now + ACTIVE_RUN_TTL_SECONDS)},
+            },
+        )
+        return True
+    except Exception as e:
+        logger.warning(
+            "Failed to upsert active-run record",
+            _name="ACTIVE_RUN_UPSERT_FAILED",
+            phase="sdk",
+            conversation_id=conversation_id,
+            request_id=request_id,
+            error=str(e),
+        )
+        return False
+
+
+def clear_active_run(conversation_id: str, request_id: str) -> bool:
+    """Delete the active-run record when a run finishes.
+
+    Conditional on request_id so a stale pop can't delete the record of a
+    newer run that re-registered for the same conversation.
+    """
+    if not ACTIVE_RUNS_TABLE_NAME:
+        return False
+
+    try:
+        client = get_dynamodb_client()
+        client.delete_item(
+            TableName=ACTIVE_RUNS_TABLE_NAME,
+            Key={"conversation_id": {"S": conversation_id}},
+            ConditionExpression="attribute_not_exists(request_id) OR request_id = :rid",
+            ExpressionAttributeValues={":rid": {"S": request_id}},
+        )
+        return True
+    except Exception as e:
+        # ConditionalCheckFailedException means a newer run owns the record —
+        # that's fine, leave it alone. Everything else is logged best-effort.
+        if e.__class__.__name__ != "ConditionalCheckFailedException":
+            logger.warning(
+                "Failed to clear active-run record",
+                _name="ACTIVE_RUN_CLEAR_FAILED",
+                phase="cleanup",
+                conversation_id=conversation_id,
+                request_id=request_id,
+                error=str(e),
+            )
         return False

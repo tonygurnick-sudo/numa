@@ -128,6 +128,17 @@ export const handleToolInvoke = async (auth: AuthContext, body: ToolInvokeReques
           approval_id: requestId,
         });
       }
+      if (decision === 'unattended') {
+        return jsonResponse(200, {
+          status: 'unattended',
+          message:
+            'The user was not viewing the conversation, so the approval prompt was ' +
+            'never shown to them. The action was NOT executed. Do not retry ' +
+            'automatically — summarise what you wanted to do and let the user know ' +
+            'they can ask again when they are back.',
+          approval_id: requestId,
+        });
+      }
       if (decision === 'timeout') {
         return jsonResponse(200, {
           status: 'timeout',

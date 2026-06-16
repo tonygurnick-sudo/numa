@@ -63,6 +63,14 @@ FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 SCHEDULE_RUNNER_SECRET = os.environ.get("SCHEDULE_RUNNER_SECRET", "")
 WORKSPACE_TOOLS_LAMBDA_NAME = os.environ.get("WORKSPACE_TOOLS_LAMBDA_NAME", "")
+# Active-runs mirror table written by the agent container (BUG-140). Lets
+# /runs/{id}/status answer "is a run in flight?" without an AgentCore
+# invocation, which would queue behind the running chat.
+ACTIVE_RUNS_TABLE_NAME = os.environ.get("ACTIVE_RUNS_TABLE_NAME", "")
+# A run is considered active only while its heartbeat (last_seen_at) is
+# fresher than this. The container heartbeats every 60s, so 300s tolerates
+# several missed beats while letting a crashed container go inactive quickly.
+ACTIVE_RUN_STALE_SECONDS = 300
 
 # ── numa CLI service-identity tokens ─────────────────────────────────────────
 # Non-interactive runs (scheduled agents, V2 apps, Nolia) authenticate to this
@@ -125,6 +133,9 @@ lambda_client = (
     if WORKSPACE_TOOLS_LAMBDA_NAME
     else None
 )
+
+# DynamoDB client for approval decisions and the active-runs mirror
+dynamodb_client = boto3.client("dynamodb", region_name=AWS_REGION)
 
 # Blocked path patterns for file redirect security
 _BLOCKED_PATH_PATTERNS = [".system/", ".system", "secrets/", "secrets", ".env"]
@@ -537,6 +548,98 @@ async def convert_preview(
         )
 
 
+# Resolved result prefixes must live under one of these roots. Mirrors the
+# proxy's S3 IAM grants and stops a caller-supplied s3Prefix template from
+# pointing the status lookup at arbitrary bucket paths.
+_ALLOWED_RESULT_PREFIX_ROOTS = ("numa-chat/workspace/", "v2-apps/")
+
+
+def _build_result_key(user_sub: str, run_id: str, s3_prefix: str | None) -> str:
+    """Resolve the S3 key of a run's _result.json.
+
+    Mirrors ``_build_result_key`` in the agent's s3_workspace.py: the optional
+    template supports ``{user_sub}`` and ``{conversation_id}`` placeholders.
+    Plain string replacement (not str.format) so a malicious template can't
+    use format-spec attribute access. The resolved prefix must sit under an
+    allowed root and contain the caller's own user_sub as a path segment.
+
+    Raises HTTPException(400) when the template resolves somewhere invalid.
+    """
+    if s3_prefix:
+        prefix = s3_prefix.replace("{user_sub}", user_sub).replace(
+            "{conversation_id}", run_id
+        )
+    else:
+        prefix = f"numa-chat/workspace/{user_sub}/conversations/{run_id}"
+
+    if (
+        ".." in prefix
+        or not prefix.startswith(_ALLOWED_RESULT_PREFIX_ROOTS)
+        or f"/{user_sub}/" not in f"/{prefix}/"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid s3Prefix")
+
+    return f"{prefix.rstrip('/')}/_result.json"
+
+
+def _read_json_from_s3(key: str) -> dict | None:
+    """Read and parse a JSON object from the outputs bucket.
+
+    Returns None when the object doesn't exist yet (run still in flight)
+    or can't be parsed.
+    """
+    if not s3_client:
+        return None
+    try:
+        obj = s3_client.get_object(Bucket=OUTPUTS_BUCKET_NAME, Key=key)
+        return json.loads(obj["Body"].read().decode("utf-8"))
+    except ClientError as e:
+        code = e.response.get("Error", {}).get("Code")
+        if code not in ("NoSuchKey", "404"):
+            logger.warning("Failed to read %s from S3: %s", key, e)
+        return None
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        logger.warning("Failed to parse %s from S3: %s", key, e)
+        return None
+
+
+def _has_active_run(user_sub: str, run_id: str) -> bool:
+    """Check the active-runs mirror table for a fresh in-flight run.
+
+    The agent container upserts a record on run start and heartbeats
+    last_seen_at every 60s; the record is deleted when the run finishes.
+    A record is only trusted while the heartbeat is fresh, so a crashed
+    container can't leave a conversation stuck in the "running" state.
+    """
+    if not ACTIVE_RUNS_TABLE_NAME:
+        logger.warning("ACTIVE_RUNS_TABLE_NAME not configured; reporting inactive")
+        return False
+
+    try:
+        resp = dynamodb_client.get_item(
+            TableName=ACTIVE_RUNS_TABLE_NAME,
+            Key={"conversation_id": {"S": run_id}},
+        )
+    except ClientError as e:
+        logger.warning("Active-run lookup failed for %s: %s", run_id, e)
+        return False
+
+    item = resp.get("Item")
+    if not item:
+        return False
+
+    # Only the run owner's status checks should see the flag
+    if item.get("user_sub", {}).get("S") != user_sub:
+        return False
+
+    try:
+        last_seen_at = int(item.get("last_seen_at", {}).get("N", "0"))
+    except (TypeError, ValueError):
+        return False
+
+    return (time_mod.time() - last_seen_at) < ACTIVE_RUN_STALE_SECONDS
+
+
 @app.get(f"{PREFIX}/runs/{{run_id}}/status")
 async def run_status(
     run_id: str,
@@ -548,11 +651,17 @@ async def run_status(
         None, alias="x-arcanum-cloudfront-secret"
     ),
 ):
-    """Poll for fire-and-forget run result.
+    """Poll for a run's status / fire-and-forget result.
 
-    Routes the request to the AgentCore container which checks S3 for
-    a ``_result.json`` file. Returns ``{"status": "running"}`` while the
-    agent is still working, or the full result when done.
+    Served directly from S3 + the active-runs DynamoDB mirror — NOT via
+    AgentCore. AgentCore serialises invocations per session, so routing this
+    through the container made status checks queue behind the running chat,
+    which is exactly the state this endpoint needs to report on (BUG-140).
+
+    Response shape matches the container's _handle_run_status:
+    ``{"status": "running", "run_id", "active", "events"?}`` while in
+    flight, or ``{"status", "run_id", "result": {...}}`` once
+    ``_result.json`` exists.
 
     The optional ``s3Prefix`` query parameter allows V2 apps to specify
     a custom S3 prefix template for result lookup (e.g.
@@ -561,14 +670,38 @@ async def run_status(
     validate_cloudfront_secret(x_arcanum_cloudfront_secret, authorization)
     user_sub = extract_user_sub(authorization)
 
-    return await _invoke_agentcore(
-        user_sub=user_sub,
-        http_method="GET",
-        http_path=f"/runs/{run_id}/status",
-        http_body={"s3Prefix": s3_prefix} if s3_prefix else None,
-        authorization=authorization,
-        stream=False,
-        conversation_id=run_id,
+    if not s3_client or not OUTPUTS_BUCKET_NAME:
+        raise HTTPException(status_code=500, detail="Outputs bucket not configured")
+
+    result_key = _build_result_key(user_sub, run_id, s3_prefix)
+    result = _read_json_from_s3(result_key)
+
+    if result is None:
+        # No result yet — report running state from the active-runs mirror,
+        # plus any pipeline progress events (V2 apps / Nolia).
+        progress = _read_json_from_s3(
+            result_key.replace("_result.json", "_progress.json")
+        )
+        response: Dict[str, Any] = {
+            "status": "running",
+            "run_id": run_id,
+            "active": _has_active_run(user_sub, run_id),
+        }
+        if progress and progress.get("events"):
+            response["events"] = progress["events"]
+        return JSONResponse(content=response)
+
+    return JSONResponse(
+        content={
+            "status": result.get("status", "completed"),
+            "run_id": run_id,
+            "result": {
+                "text": result.get("text", ""),
+                "artifacts": result.get("artifacts", []),
+                "usage": result.get("usage", {}),
+                "steps": result.get("steps", []),
+            },
+        }
     )
 
 
@@ -902,6 +1035,13 @@ async def invocations(
     if action == "approve":
         return await _handle_approve(body, user_sub)
 
+    # Approval card render-acknowledgement — also handled directly in the
+    # proxy (same deadlock rationale as approve). Writes seen_at so the
+    # tools Lambda's poll knows the user is actually viewing the card and
+    # grants the full approval window instead of fast-failing as unattended.
+    if action == "ack":
+        return await _handle_approval_ack(body, user_sub)
+
     # Extract conversationId for per-conversation session routing
     conversation_id = body.get("conversationId")
 
@@ -1004,6 +1144,52 @@ async def _handle_approve(body: dict, user_sub: str) -> JSONResponse:
     )
 
     return JSONResponse(content={"status": decision, "approvalId": approval_id})
+
+
+async def _handle_approval_ack(body: dict, user_sub: str) -> JSONResponse:
+    """Record that an approval card was rendered by a client (BUG-140).
+
+    Writes ``seen_at`` onto the approval record. The tools Lambda's poll
+    fast-fails an approval as "unattended" if no ack arrives within its grace
+    window — this is what prevents away-from-chat runs from burning the full
+    180s timeout per approval (the cascade that hung chats for 10-20 min).
+
+    Upsert semantics: the card can render (via the SSE event) slightly before
+    the tools Lambda creates the approval record, so this may create the item
+    first — create_approval_request tolerates that (conditional put failure is
+    expected and logged as "likely pre-approved"). if_not_exists preserves the
+    first-seen time and adds a ttl for GC on ack-created partial items.
+    """
+    approval_id = body.get("approvalId")
+    if not approval_id:
+        raise HTTPException(status_code=400, detail="Missing approvalId")
+
+    table_name = os.environ.get("INTEGRATIONS_APPROVAL_TABLE_NAME", "")
+    if not table_name:
+        raise HTTPException(status_code=500, detail="Approval table not configured")
+
+    now = int(time_mod.time())
+    dynamodb = boto3.client("dynamodb")
+    dynamodb.update_item(
+        TableName=table_name,
+        Key={"approval_id": {"S": approval_id}},
+        UpdateExpression=(
+            "SET seen_at = if_not_exists(seen_at, :now), "
+            "#ttl = if_not_exists(#ttl, :ttl)"
+        ),
+        ExpressionAttributeNames={"#ttl": "ttl"},
+        ExpressionAttributeValues={
+            ":now": {"N": str(now)},
+            ":ttl": {"N": str(now + 86400)},
+        },
+    )
+
+    logger.info(
+        "Approval card render acknowledged",
+        extra={"approval_id": approval_id, "user_sub": user_sub},
+    )
+
+    return JSONResponse(content={"status": "acknowledged", "approvalId": approval_id})
 
 
 async def _invoke_agentcore(

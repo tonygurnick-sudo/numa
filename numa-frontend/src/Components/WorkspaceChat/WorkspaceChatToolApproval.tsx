@@ -4,9 +4,9 @@
  * Shown when the agent wants to execute a Pipedream integration action
  * that requires user approval (e.g., run_action, proxy_request).
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { approveToolAction } from '../../Services/workspaceChatAgentService';
+import { ackToolApproval, approveToolAction } from '../../Services/workspaceChatAgentService';
 import type { WorkspaceChatToolApprovalSegment } from '@/types/workspaceChatTypes';
 
 interface Props {
@@ -35,6 +35,18 @@ export function WorkspaceChatToolApproval({ segment, conversationId }: Props) {
   };
 
   const decided = localDecision || segment.decision || (segment.autoApproved ? 'approved' : undefined);
+
+  // Acknowledge that the card rendered (writes seen_at via the proxy) so the
+  // backend grants the full approval window instead of fast-failing the
+  // approval as "unattended" (BUG-140). Fire-and-forget.
+  const ackSentRef = useRef(false);
+  useEffect(() => {
+    if (decided || ackSentRef.current || !segment.requestId || !conversationId) return;
+    ackSentRef.current = true;
+    ackToolApproval(segment.requestId, conversationId).catch((err) => {
+      console.warn('[WorkspaceChat] Approval ack failed:', err);
+    });
+  }, [decided, segment.requestId, conversationId]);
 
   // Format action key for display (e.g., "google_drive-find-file" -> "Find File")
   const actionLabel =

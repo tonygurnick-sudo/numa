@@ -44,6 +44,9 @@ CLOUDFRONT_SECRET = os.environ.get("CLOUDFRONT_SECRET", "")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_USER_POOL_CLIENT_ID = os.environ.get("COGNITO_USER_POOL_CLIENT_ID", "")
 DYNAMODB_TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME", "")
+# Active-runs mirror table — lets the proxy answer /runs/{id}/status without
+# an AgentCore invocation (BUG-140). Empty string disables the mirror.
+ACTIVE_RUNS_TABLE_NAME = os.environ.get("ACTIVE_RUNS_TABLE_NAME", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 
 # ── Workspace Configuration ────────────────────────────────────────────────────

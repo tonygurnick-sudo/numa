@@ -52,6 +52,7 @@ from .dynamo import (
     load_v1_conversation_history,
     mark_conversation_as_v2,
     update_conversation_meta,
+    upsert_active_run,
 )
 from .pipeline import run_pipeline
 from .prompts import format_v1_migration_context, load_company_profile_from_s3
@@ -1612,6 +1613,22 @@ async def invocations(request: Request):
         conversation_id=conversation_id,
         agent_type=agent_type_id,
     )
+
+    # Mirror the active run to DynamoDB as EARLY as possible — before cold-start
+    # sync and the parallel data loads — so that returning to a conversation
+    # DURING workspace setup (which can take ~10s) still detects the run as
+    # active and shows the "running in background" banner instead of a load
+    # error (BUG-140). register_run later starts the 60s heartbeat that keeps
+    # this fresh during streaming, and pop_run clears it on completion. If the
+    # request fails before register_run, this single write has no heartbeat and
+    # goes stale within ACTIVE_RUN_STALE_SECONDS, so the proxy stops reporting
+    # it as active — no leak. Best-effort: upsert_active_run swallows errors.
+    if action == "chat":
+        _early_request_id = body.get("requestId")
+        if _early_request_id:
+            await asyncio.to_thread(
+                upsert_active_run, user_sub, conversation_id, _early_request_id
+            )
 
     # Check for cold start
     cold_start = is_cold_start()

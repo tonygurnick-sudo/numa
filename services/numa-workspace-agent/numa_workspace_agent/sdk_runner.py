@@ -82,17 +82,59 @@ class RunHandle:
 _active_runs: dict[RunKey, RunHandle] = {}
 _active_runs_lock = asyncio.Lock()
 
+# Heartbeat tasks for the DynamoDB active-run mirror (BUG-140). The proxy
+# serves /runs/{id}/status from this table instead of invoking AgentCore,
+# treating a run as active only while last_seen_at is fresh — so the
+# heartbeat must outpace the proxy's staleness threshold (300s) comfortably.
+ACTIVE_RUN_HEARTBEAT_SECONDS = 60
+_active_run_mirror_tasks: dict[RunKey, asyncio.Task] = {}
+
+
+async def _mirror_active_run_loop(key: RunKey) -> None:
+    """Upsert the active-run record immediately, then heartbeat until cancelled."""
+    from .dynamo import upsert_active_run
+
+    user_sub, conversation_id, request_id = key
+    while True:
+        await asyncio.to_thread(
+            upsert_active_run, user_sub, conversation_id, request_id
+        )
+        await asyncio.sleep(ACTIVE_RUN_HEARTBEAT_SECONDS)
+
 
 async def register_run(key: RunKey, handle: RunHandle) -> None:
     """Register an active run so other requests can stop it."""
     async with _active_runs_lock:
         _active_runs[key] = handle
+        # Mirror to DynamoDB so the proxy can see the flag without an
+        # AgentCore invocation. Runs as a background heartbeat task;
+        # best-effort by design (upsert_active_run swallows errors).
+        if key not in _active_run_mirror_tasks:
+            _active_run_mirror_tasks[key] = asyncio.create_task(
+                _mirror_active_run_loop(key)
+            )
 
 
 async def pop_run(key: RunKey) -> Optional[RunHandle]:
     """Remove and return an active run entry."""
+    from .dynamo import clear_active_run
+
     async with _active_runs_lock:
-        return _active_runs.pop(key, None)
+        mirror_task = _active_run_mirror_tasks.pop(key, None)
+        handle = _active_runs.pop(key, None)
+
+    if mirror_task:
+        # Cancel and drain the heartbeat task BEFORE deleting the record,
+        # otherwise an in-flight upsert can land after the delete and
+        # resurrect the flag until it goes stale.
+        mirror_task.cancel()
+        try:
+            await mirror_task
+        except asyncio.CancelledError:
+            pass
+        await asyncio.to_thread(clear_active_run, key[1], key[2])
+
+    return handle
 
 
 async def get_run(key: RunKey) -> Optional[RunHandle]:
