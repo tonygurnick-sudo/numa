@@ -1,133 +1,77 @@
 ---
-api_name: 'Simpro'
-auth_type: 'oauth2'
-category: 'field-service-management'
+api_name: Simpro
+api_slug: simpro
+auth_type: oauth2 (+ Direct Access API key alternative)
+category: field-service-management
+base_url: https://{build}.simprosuite.com/api/v1.0/ (/api/v1.0 is a real path segment)
+oauth_host: per-build https://{build}.simprosuite.com — NO central host (auth.simpro.co is NXDOMAIN)
+doc: Simpro-side credential/setup walkthrough (no Numa-specific wiring)
 ---
 
 # Connecting to the Simpro API
 
-> Step-by-step setup for obtaining credentials and getting the first successful API call against Simpro. Pure Simpro-side reference — no Numa-specific wiring.
-
-Simpro is a **per-build** (per-customer-tenant) SaaS — every URL contains the customer's build subdomain. There is no centralised OAuth or API host.
-
----
+Simpro is a **per-build (per-customer-tenant) SaaS** — every OAuth URL and API URL contains the customer's `{build}` subdomain (the subdomain they sign into, e.g. `markscompany.simprosuite.com`). There is NO central OAuth or API host.
 
 ## 1. Product context
 
 |                    |                                                                         |
 | ------------------ | ----------------------------------------------------------------------- |
 | Vendor             | Simpro Software Pty Ltd (Australia)                                     |
-| Product            | Simpro — field service management for trades/contractors                |
+| Product            | Simpro — field-service management for trades/contractors                |
 | Website            | https://www.simprogroup.com                                             |
 | Developer portal   | https://developer.simprogroup.com                                       |
 | API forum          | https://apiforum.simprogroup.com                                        |
 | Customer build URL | `https://{build}.simprosuite.com` (e.g. `markscompany.simprosuite.com`) |
 
-The customer's `{build}` is the subdomain they sign into Simpro at. It appears in **every** OAuth URL and API URL — there is no shared/central API host.
-
----
-
 ## 2. Create the API application
 
-The customer (or an admin with the **Manage Applications** permission) must:
-
-1. Sign in to their Simpro build (`https://{build}.simprosuite.com`).
-2. Go to **System → Setup → API → Applications**.
-3. Click **Add** and fill in:
-
-   | Field        | Notes                                                                                                                   |
-   | ------------ | ----------------------------------------------------------------------------------------------------------------------- |
-   | Name         | Free text shown on the consent screen                                                                                   |
-   | Description  | Optional                                                                                                                |
-   | Access Type  | Choose **OAuth 2.0** for user-context access, or **Direct Access (API Key)** for server-to-server with no user consent. |
-   | Redirect URI | Must match the callback URL byte-for-byte on every OAuth request                                                        |
-   | Grant Type   | `authorization_code` for standard web-app flow; other grants below                                                      |
-
-4. Save. Simpro displays:
-   - **Client ID** — capture immediately
-   - **Client Secret** — capture immediately, shown once
-
-For API-key access (no OAuth): Simpro emits a long-lived bearer token instead of client_id/secret; treat it like a PAT.
-
----
+Customer (or admin with **Manage Applications**): sign in to `https://{build}.simprosuite.com` → **System → Setup → API → Applications** → **Add**:
+| Field | Notes |
+| --- | --- |
+| Name | free text, shown on consent screen |
+| Description | optional |
+| Access Type | **OAuth 2.0** (user-context) OR **Direct Access (API Key)** (server-to-server, no consent) |
+| Redirect URI | must match the callback URL byte-for-byte on every OAuth request |
+| Grant Type | `authorization_code` for standard web-app flow (other grants in §3.4) |
+Save → Simpro shows **Client ID** and **Client Secret** (shown once — capture immediately).
+For API-key access: Simpro emits a long-lived bearer token instead of client_id/secret — treat like a PAT.
 
 ## 3. OAuth 2.0 flow — per-build
 
-> ⚠️ **The OAuth endpoints are per-build.** A widely-cited centralised host `auth.simpro.co` **does not exist in DNS (NXDOMAIN, verified 2026-05-19)**. Every OAuth example here uses `{build}.simprosuite.com`. This is what the official PHP SDK `simPRO-Software/simpro-restapi-php/src/OAuth2/Provider.php` (lines 225 and 230) uses.
+> ⚠️ OAuth endpoints are **per-build**. The widely-cited central host `auth.simpro.co` does NOT exist in DNS (NXDOMAIN, verified 2026-05-19). Every URL uses `{build}.simprosuite.com` — matching the official PHP SDK `simPRO-Software/simpro-restapi-php/src/OAuth2/Provider.php` lines 225+230.
 
-### 3.1 Authorize URL
+### 3.1 Authorize
 
-```
-https://{build}.simprosuite.com/oauth2/login?
-  client_id={CLIENT_ID}
-  &redirect_uri={REDIRECT_URI}
-  &response_type=code
-  &state={RANDOM_OPAQUE_STRING}
-```
-
-The user signs in and is redirected to `{REDIRECT_URI}?code={AUTH_CODE}&state={STATE}` (error case: `?error={code}&error_description={message}`).
+`https://{build}.simprosuite.com/oauth2/login?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&response_type=code&state={RANDOM_OPAQUE_STRING}`
+User signs in → `{REDIRECT_URI}?code={AUTH_CODE}&state={STATE}` (error: `?error={code}&error_description={message}`).
 
 ### 3.2 Token exchange
 
-```
-POST https://{build}.simprosuite.com/oauth2/token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=authorization_code
-&client_id={CLIENT_ID}
-&client_secret={CLIENT_SECRET}
-&code={AUTH_CODE}
-&redirect_uri={REDIRECT_URI}
-```
-
-Response:
-
-```json
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "expires_in": 3600,
-  "token_type": "bearer"
-}
-```
+`POST https://{build}.simprosuite.com/oauth2/token` (Content-Type: application/x-www-form-urlencoded)
+`grant_type=authorization_code&client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}&code={AUTH_CODE}&redirect_uri={REDIRECT_URI}`
+Response: `{"access_token":"...","refresh_token":"...","expires_in":3600,"token_type":"bearer"}`
 
 ### 3.3 Refresh
 
-```
-POST https://{build}.simprosuite.com/oauth2/token
-Content-Type: application/x-www-form-urlencoded
+`POST https://{build}.simprosuite.com/oauth2/token` (application/x-www-form-urlencoded)
+`grant_type=refresh_token&client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}&refresh_token={REFRESH_TOKEN}`
 
-grant_type=refresh_token
-&client_id={CLIENT_ID}
-&client_secret={CLIENT_SECRET}
-&refresh_token={REFRESH_TOKEN}
-```
+> ⚠️ Refresh tokens are **single-use** — each refresh returns a NEW `refresh_token`; persist it immediately. The old one is dead after the response.
 
-> ⚠️ **Refresh tokens are single-use.** Each successful refresh returns a NEW `refresh_token`; persist it immediately. The old one is dead after the response is sent.
+### 3.4 Grant types (PHP SDK `OAuth2/Provider.php`)
 
-### 3.4 Other grant types
-
-The PHP SDK enumerates four grant types in `OAuth2/Provider.php`:
-
-| Grant                       | Use                               | Notes                                                           |
-| --------------------------- | --------------------------------- | --------------------------------------------------------------- |
-| `authorization_code`        | Standard web-app flow             | Recommended                                                     |
-| `client_credentials`        | Server-to-server                  | No user context                                                 |
-| `password` (resource_owner) | Direct username/password exchange | **Deprecated**, only for legacy clients                         |
-| `implicit`                  | Browser-only                      | **Deprecated by OAuth 2.1 / RFC 9700**; do not use for new work |
+| Grant                       | Use              | Notes                                              |
+| --------------------------- | ---------------- | -------------------------------------------------- |
+| `authorization_code`        | standard web-app | recommended                                        |
+| `client_credentials`        | server-to-server | no user context                                    |
+| `password` (resource_owner) | direct user/pass | **deprecated**, legacy only                        |
+| `implicit`                  | browser-only     | **deprecated by OAuth 2.1 / RFC 9700**; do not use |
 
 ### 3.5 Token lifetimes
 
-|               | Value                 | Source            |
-| ------------- | --------------------- | ----------------- |
-| Access token  | 3600 seconds (1 hour) | Forum (paywalled) |
-| Refresh token | 14 days, single-use   | Forum (paywalled) |
+Access token: 3600s (1 hour). Refresh token: 14 days, single-use. [INFERRED — forum (paywalled), not independently verifiable]
 
-[INFERRED — forum source not independently verifiable]
-
----
-
-## 4. Base URL & required headers
+## 4. Base URL & headers
 
 ```
 Base URL:       https://{build}.simprosuite.com/api/v1.0/
@@ -136,30 +80,14 @@ Accept:         application/json
 Content-Type:   application/json     ← POST/PATCH only
 ```
 
-The official PHP SDK adds these via `getAuthorizationHeaders()` (`Provider.php:200`).
-
----
+Official PHP SDK adds these via `getAuthorizationHeaders()` (Provider.php:200).
 
 ## 5. Multi-company support
 
-A single Simpro build can host multiple **companies**. Almost every resource path includes the `{companyId}` segment:
+A build can host multiple **companies**. Nearly every resource path includes `{companyId}`: `/api/v1.0/companies/{companyId}/jobs/` etc.
+Discover the company ID: `GET /api/v1.0/companies/` (no `{companyId}`) → array of company objects each with `ID`; use the one the user intends. The PHP SDK `examples/AuthorisationCode.php` does this and picks the last entry (`$companyArray[count($companyArray)-1]->ID`). **Do NOT hardcode `companyId=0`** — that is folklore from a forum post, only works on some legacy single-company builds; the canonical pattern is fetch-then-use.
 
-```
-/api/v1.0/companies/{companyId}/jobs/
-/api/v1.0/companies/{companyId}/customers/
-/api/v1.0/companies/{companyId}/invoices/customer/
-```
-
-### How to discover the company ID
-
-1. Call `GET /api/v1.0/companies/` (no `{companyId}` in the path).
-2. The response is an array of company objects, each with an `ID`. Use the one the user intends to work in.
-
-The official PHP SDK example (`examples/AuthorisationCode.php`) does exactly this and picks the last entry — `$companyArray[count($companyArray)-1]->ID`. **Do not hardcode `companyId=0`** — that's a folklore shortcut from a forum post and only works on some legacy single-company builds; the canonical pattern is to fetch and use the real ID.
-
----
-
-## 6. First successful call — smoke test
+## 6. First call — smoke test
 
 After obtaining `access_token` + `companyId`:
 
@@ -169,49 +97,36 @@ Authorization: Bearer {ACCESS_TOKEN}
 Accept: application/json
 ```
 
-Expected: `200 OK` with:
-
-- Body: array of customer objects
-- Headers: `Result-Total`, `Result-Pages`, `Result-Count`
-
-Failure modes:
-
-| Status | Meaning                                                                    | Action                                                                    |
-| ------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 401    | Access token expired/invalid                                               | Refresh token                                                             |
-| 403    | Application's Access Type doesn't grant this resource — or wrong companyId | Check Direct Access vs User Token + verify companyId                      |
-| 404    | Wrong path / unknown companyId                                             | Verify path against the developer portal; verify ID via `GET /companies/` |
-| 429    | Rate-limit (10 req/sec)                                                    | Backoff; respect 80% threshold pattern                                    |
-
----
+Expected `200 OK`: body = array of customer objects; headers `Result-Total`, `Result-Pages`, `Result-Count`.
+| Failure | Meaning | Action |
+| --- | --- | --- |
+| 401 | token expired/invalid | refresh token |
+| 403 | Access Type doesn't grant resource — or wrong companyId | check Direct vs User Token + verify companyId |
+| 404 | wrong path / unknown companyId | verify path against dev portal; verify ID via `GET /companies/` |
+| 429 | rate limit (10 req/sec) | backoff; respect 80% threshold |
 
 ## 7. Rate limits
 
-| Limit                 | Value                                                                           | Source                                |
-| --------------------- | ------------------------------------------------------------------------------- | ------------------------------------- |
-| Per build, per second | **10 requests/sec** (strict, server-enforced since Aug 2022)                    | Forum + Laravel SDK config            |
-| Recommended threshold | 8 req/sec (80%) — leaves headroom                                               | Laravel SDK config `threshold => 0.8` |
-| Daily limit           | Anecdotally exists but no public number — treat as `[INFERRED]` until confirmed | Forum                                 |
-| Exceeded              | HTTP `429`                                                                      | —                                     |
+| Limit                 | Value                                                      | Source                         |
+| --------------------- | ---------------------------------------------------------- | ------------------------------ |
+| Per build, per second | **10 req/sec** (strict, server-enforced since Aug 2022)    | forum + Laravel SDK config     |
+| Recommended threshold | 8 req/sec (80%) — leaves headroom                          | Laravel SDK `threshold => 0.8` |
+| Daily                 | exists anecdotally, no public number — treat as [INFERRED] | forum                          |
+| Exceeded              | HTTP 429                                                   | —                              |
 
-[Sources: https://github.com/stitch-digital/laravel-simpro-api — actively maintained Laravel SDK; the rate-limit threshold + per-second limit are encoded directly in the package config.]
-
----
+Source: github.com/stitch-digital/laravel-simpro-api (active Laravel SDK; rate-limit threshold + per-second limit encoded in package config).
 
 ## 8. Pagination
 
-|                     |                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------ |
-| Default page size   | 30                                                                                                     |
-| Max page size       | 250                                                                                                    |
-| Query params        | `?page={N}&pageSize={N}`                                                                               |
-| Total-count headers | `Result-Total` (total matching rows), `Result-Pages` (total pages), `Result-Count` (rows in this page) |
-| Filter              | `?Status=Open&...` (resource-specific)                                                                 |
-| Modified-since      | `If-Modified-Since` header — server returns `304` if unchanged                                         |
+|                         |                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------ |
+| Default / max page size | 30 / 250                                                                                   |
+| Query params            | `?page={N}&pageSize={N}`                                                                   |
+| Total-count headers     | `Result-Total` (total rows), `Result-Pages` (total pages), `Result-Count` (rows this page) |
+| Filter                  | `?Status=Open&...` (resource-specific)                                                     |
+| Modified-since          | `If-Modified-Since` header — server returns `304` if unchanged                             |
 
-**Known anomaly:** combining `If-Modified-Since` with `?orderby=` plus the `AssignedTo` column can return `500`. Avoid that combination. [INFERRED — forum-sourced]
-
----
+> Anomaly: `If-Modified-Since` + `?orderby=` + the `AssignedTo` column can return `500`. Avoid that combination. [INFERRED — forum]
 
 ## 9. Quick-reference URLs
 

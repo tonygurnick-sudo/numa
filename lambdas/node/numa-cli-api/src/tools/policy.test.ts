@@ -73,6 +73,23 @@ test('Unrestricted type may use anything, including unknown tools', () => {
   }
 });
 
+test('native-connector file tools are integrations — usable unrestricted, denied for nolia', () => {
+  for (const tool of [
+    'connect_synergy_list',
+    'connect_synergy_search',
+    'connect_synergy_download',
+    'oauth_list_files',
+    'oauth_search_files',
+    'oauth_download_file',
+    'oauth_get_file_metadata',
+  ]) {
+    assert.equal(toolCategory(tool), 'integrations', `${tool} should bucket as integrations`);
+    assert.equal(isToolAllowedForAgentType('numa-chat', tool).allowed, true, `${tool} allowed for numa-chat`);
+    assert.equal(isToolAllowedForAgentType(undefined, tool).allowed, true, `${tool} allowed for laptop/no-type`);
+    assert.equal(isToolAllowedForAgentType('nolia-eda', tool).allowed, false, `${tool} denied for nolia (docs-only)`);
+  }
+});
+
 test('toolCategory buckets known + prefixed tools correctly', () => {
   assert.equal(toolCategory('extract_content'), 'docs');
   assert.equal(toolCategory('view_image'), 'vision');

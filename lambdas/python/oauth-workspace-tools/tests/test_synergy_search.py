@@ -84,7 +84,7 @@ class TestHandleSynergySearchRouting(unittest.TestCase):
             connect_tools, "get_synergy_credentials", return_value=("https://s", "t")
         ), patch.object(
             connect_tools,
-            "search_jobs",
+            "search_all_jobs",
             return_value={
                 "items": [{"job_id": "8_1", "name": "Kakaho", "no_of_folders": 3}],
                 "total_rows": 1,

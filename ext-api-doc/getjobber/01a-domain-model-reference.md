@@ -1,282 +1,225 @@
+---
+doc: domain-model-reference
+api: Jobber (GraphQL)
+endpoint: POST https://api.getjobber.com/api/graphql
+id_type: EncodedId (opaque string — treat as opaque, never parse/construct)
+confidence: all field names/types/enums verified via __type introspection 2026-05-19
+scope_note: schema has 1,973 object types; this covers the ~10 used 95% of the time. For anything else, ask the schema directly (see end)
+---
+
 # Domain Model Reference — Jobber (GraphQL)
 
-> All entity field names, types, and enum values verified live against `__type(name:"…")` introspection on `https://api.getjobber.com/api/graphql` (2026-05-19). The schema has 1,973 object types; this file covers the ~10 you'll use 95% of the time. For anything else, ask the schema directly: `query { __type(name: "TypeName") { fields { name description type { name } } } }`.
+## Scalars
 
----
-
-## Scalars used everywhere
-
-| Scalar                              | Form                | Example                                  |
-| ----------------------------------- | ------------------- | ---------------------------------------- |
-| `EncodedId`                         | Opaque string       | `"Z2lkOi8vSm9iYmVyL0NsaWVudC8xMjM0NQ=="` |
-| `ISO8601DateTime`                   | RFC 3339 string     | `"2026-05-19T14:30:00Z"`                 |
-| `ISO8601Date`                       | `YYYY-MM-DD` string | `"2026-05-19"`                           |
-| `Float`, `Int`, `String`, `Boolean` | as expected         |                                          |
-
-`EncodedId` is base64-encoded internally but the agent **must treat it as opaque** — do not parse or construct one.
-
----
+| Scalar                           | Form                                               | Example                                  |
+| -------------------------------- | -------------------------------------------------- | ---------------------------------------- |
+| `EncodedId`                      | Opaque string (base64 internally; treat as opaque) | `"Z2lkOi8vSm9iYmVyL0NsaWVudC8xMjM0NQ=="` |
+| `ISO8601DateTime`                | RFC3339 string                                     | `"2026-05-19T14:30:00Z"`                 |
+| `ISO8601Date`                    | `YYYY-MM-DD`                                       | `"2026-05-19"`                           |
+| `Float`,`Int`,`String`,`Boolean` | as expected                                        |                                          |
 
 ## Connection pattern (every list)
 
 Every list field is a Relay Connection — same shape across the API:
 
 ```graphql
-{
-  <listField>(first: N, after: "<cursor>", filter: { ... }, sort: { key, direction }) {
-    nodes { ... }              # the actual records
-    edges { node { ... } cursor }   # alternative — exposes per-record cursor
-    pageInfo {
-      endCursor
-      hasNextPage
-      hasPreviousPage
-    }
-    totalCount                 # on most connections
-  }
-}
+{ <listField>(first: N, after: "<cursor>", filter: { ... }, sort: { key, direction }) {
+    nodes { ... }                  # the actual records
+    edges { node { ... } cursor }  # alternative — exposes per-record cursor
+    pageInfo { endCursor hasNextPage hasPreviousPage }
+    totalCount } }                 # on most connections
 ```
 
-Forward paginate by passing `after: "<endCursor>"` until `hasNextPage: false`. Page sizes default ~20; max varies (typically 100 — verify per endpoint).
-
----
+Forward-paginate with `after: "<endCursor>"` until `hasNextPage: false`. Page size default ~20; max typically 100 (verify per endpoint).
 
 ## Account (the tenant)
 
-Every authenticated query is scoped to one Account. Fetch via the top-level `account` query.
+Every authenticated query scoped to one Account. Fetch via top-level `account`. 40 fields total; common ones:
+| Field | Type | Notes |
+| --- | --- | --- |
+| `id` | EncodedId | |
+| `name` | String | Trading name |
+| `accountOwner` | User | |
+| `companyDetails` | AccountCompanyDetails | address, billing |
+| `countryCode` | String | ISO 3166 alpha-2 |
+| `industry` | Industry | enum-like |
+| `inTrial`,`inSubscriptionPause` | Boolean | |
+| `crews` | CrewConnection | field crews for scheduling |
+| `connectedApps` | ApplicationConnection | installed OAuth apps |
+| `dedicatedPhoneNumber` | String | if provisioned |
+| `features` | object | account feature flags |
+| `messages` | connection | messaging settings/templates |
 
-| Field                            | Type                  | Notes                                |
-| -------------------------------- | --------------------- | ------------------------------------ |
-| `id`                             | EncodedId             |                                      |
-| `name`                           | String                | Trading name                         |
-| `accountOwner`                   | User                  |                                      |
-| `companyDetails`                 | AccountCompanyDetails | address, billing details             |
-| `countryCode`                    | String                | ISO 3166 alpha-2                     |
-| `industry`                       | Industry              | enum-like                            |
-| `inTrial`, `inSubscriptionPause` | Boolean               |                                      |
-| `crews`                          | CrewConnection        | Field crews for scheduling           |
-| `connectedApps`                  | ApplicationConnection | OAuth apps the account has installed |
-| `dedicatedPhoneNumber`           | String                | If account has provisioned one       |
-| `features`                       | (object)              | Feature flags on the account         |
-| `messages`                       | (connection)          | Messaging settings/templates         |
+## Client (customer) — main CRM entity; individual or company. 55 fields total
 
-40 fields total; the above are the common ones.
+| Field                                | Type                       | Notes                                                |
+| ------------------------------------ | -------------------------- | ---------------------------------------------------- |
+| `id`                                 | EncodedId                  |                                                      |
+| `firstName`,`lastName`,`companyName` | String                     |                                                      |
+| `isCompany`                          | Boolean                    | true → company; false → individual                   |
+| `isLead`                             | Boolean                    | lead vs converted customer                           |
+| `isArchived`                         | Boolean                    | soft-deleted                                         |
+| `isArchivable`                       | Boolean                    | archive allowed? (open invoices → false)             |
+| `balance`                            | Float                      | outstanding across all invoices                      |
+| `billingAddress`                     | ClientAddress              | `{street1,street2,city,province,postalCode,country}` |
+| `billingAddressPresent`              | Boolean                    |                                                      |
+| `email`                              | String                     | primary email (legacy; prefer `emails`)              |
+| `emails`,`phones`                    | list                       | multiple per client                                  |
+| `contacts`                           | ContactModelConnection     | additional contact persons                           |
+| `clientProperties`                   | PropertyConnection         | all job sites for this client                        |
+| `jobs`                               | JobConnection              |                                                      |
+| `invoices`                           | InvoiceConnection          |                                                      |
+| `messages`                           | MessageInterfaceConnection | inbound/outbound comms                               |
+| `notes`                              | connection                 | internal notes                                       |
+| `customFields`                       | list                       | account-defined                                      |
+| `leadSource`                         | String                     |                                                      |
+| `clientHubUserId`                    | String                     | if client has Client Hub login                       |
+| `jobberWebUri`                       | String                     | direct Jobber web UI URL                             |
+| `createdAt`,`updatedAt`              | ISO8601DateTime            |                                                      |
 
----
+## Property (job site / address) — belongs to a Client; a Job is scheduled at a Property
 
-## Client (customer)
+| Field              | Type                             | Notes                                |
+| ------------------ | -------------------------------- | ------------------------------------ |
+| `id`               | EncodedId                        |                                      |
+| `client`           | Client                           | owning client                        |
+| `address`          | PropertyAddress                  | same shape as ClientAddress          |
+| `name`             | String                           | optional label (e.g. "Main Office")  |
+| `isBillingAddress` | Boolean                          | doubles as client's billing address? |
+| `taxRate`          | TaxRate                          | inherited or overridden              |
+| `jobs`             | JobConnection                    |                                      |
+| `quotes`           | QuoteConnection                  |                                      |
+| `requests`         | RequestConnection                | inbound leads                        |
+| `scheduledItems`   | ScheduledItemInterfaceConnection | all scheduled visits/tasks           |
+| `contacts`         | ContactModelConnection           | site-specific contacts               |
+| `customFields`     | list                             |                                      |
+| `routingOrder`     | Int                              | route optimisation                   |
 
-The main CRM entity. Can represent an individual or a company.
+## Request (inbound lead) — form-submitted; convert to Quote or Job
 
-| Field                    | Type                       | Notes                                                       |
-| ------------------------ | -------------------------- | ----------------------------------------------------------- |
-| `id`                     | EncodedId                  |                                                             |
-| `firstName`              | String                     |                                                             |
-| `lastName`               | String                     |                                                             |
-| `companyName`            | String                     |                                                             |
-| `isCompany`              | Boolean                    | `true` → company customer; `false` → individual             |
-| `isLead`                 | Boolean                    | Lead vs. converted customer                                 |
-| `isArchived`             | Boolean                    | Soft-deleted                                                |
-| `isArchivable`           | Boolean                    | Whether archive is allowed (e.g. has open invoices = false) |
-| `balance`                | Float                      | Outstanding balance across all invoices                     |
-| `billingAddress`         | ClientAddress              | `{ street1, street2, city, province, postalCode, country }` |
-| `billingAddressPresent`  | Boolean                    |                                                             |
-| `email`                  | String                     | Primary email (legacy; prefer `emails`)                     |
-| `emails`                 | (custom list)              | Multiple emails per client                                  |
-| `phones`                 | (custom list)              | Multiple phones per client                                  |
-| `contacts`               | ContactModelConnection     | Additional contact persons attached to this client          |
-| `clientProperties`       | PropertyConnection         | All job sites for this client                               |
-| `jobs`                   | JobConnection              | All jobs for this client                                    |
-| `invoices`               | InvoiceConnection          | All invoices for this client                                |
-| `messages`               | MessageInterfaceConnection | All inbound/outbound communications                         |
-| `notes`                  | (connection)               | Internal notes attached to the client                       |
-| `customFields`           | (list)                     | Account-defined custom fields                               |
-| `leadSource`             | String                     | Where the lead came from                                    |
-| `clientHubUserId`        | String                     | If client has a Client Hub login                            |
-| `jobberWebUri`           | String                     | Direct URL into the Jobber web UI for this client           |
-| `createdAt`, `updatedAt` | ISO8601DateTime            |                                                             |
+| Field          | Type       | Notes                               |
+| -------------- | ---------- | ----------------------------------- |
+| `id`           | EncodedId  |                                     |
+| `client`       | Client     | auto-created or matched existing    |
+| `property`     | Property   |                                     |
+| `title`        | String     |                                     |
+| `customFields` | list       |                                     |
+| `assessment`   | Assessment | optional on-site assessment booking |
+| `convertedTo`  | union      | Quote or Job after conversion       |
 
-55 fields total.
+## Quote — proposal to a client. Statuses: `draft`,`awaiting_response`,`archived`,`approved`,`converted`,`changes_requested`. 46 fields total
 
----
+| Field                      | Type                    | Notes                                       |
+| -------------------------- | ----------------------- | ------------------------------------------- |
+| `id`                       | EncodedId               |                                             |
+| `client`                   | Client                  |                                             |
+| `lineItems`                | QuoteLineItemConnection |                                             |
+| `amounts`                  | QuoteAmounts            | `{subtotal,total,discountAmount,taxAmount}` |
+| `discount`                 | CostModifier            |                                             |
+| `message`                  | String                  | free-text to client                         |
+| `contractDisclaimer`       | String                  |                                             |
+| `clientHubUri`             | String                  | public URL client receives                  |
+| `clientHubViewedAt`        | ISO8601DateTime         | when client opened it                       |
+| `lastTransitioned`         | QuoteLastTransitioned   | `{status,transitionedAt}`                   |
+| `eligibleForFinancing`     | Boolean                 | Wisetack financing                          |
+| `consumerFinancing`        | WisetackFinanced        |                                             |
+| `previewUrl`               | String                  | PDF preview                                 |
+| `jobs`                     | JobConnection           | job(s) created from this quote              |
+| `depositAmountUnallocated` | Float                   | deposit collected, not yet applied          |
+| `depositRecords`           | PaymentRecordConnection |                                             |
+| `customFields`             | list                    |                                             |
+| `createdAt`,`jobberWebUri` |                         |                                             |
 
-## Property (job site / address)
+Create: `quoteCreate`. Approve on client's behalf: `quoteApprove`. Convert to job: `jobCreateFromQuote`.
 
-Properties belong to Clients. A Job is scheduled at a Property.
+## Job — unit of work, one-off or recurring. Statuses: `requires_invoicing`,`archived`,`late`,`today`,`upcoming`,`action_required`,`on_hold`,`unscheduled`,`active`,`expiring_within_30_days`. 57 fields total
 
-| Field              | Type                             | Notes                                                         |
-| ------------------ | -------------------------------- | ------------------------------------------------------------- |
-| `id`               | EncodedId                        |                                                               |
-| `client`           | Client                           | Owning client                                                 |
-| `address`          | PropertyAddress                  | Same shape as ClientAddress                                   |
-| `name`             | String                           | Optional label (e.g. "Main Office")                           |
-| `isBillingAddress` | Boolean                          | Whether this property doubles as the client's billing address |
-| `taxRate`          | TaxRate                          | Inherited or overridden tax rate                              |
-| `jobs`             | JobConnection                    | Jobs at this property                                         |
-| `quotes`           | QuoteConnection                  | Quotes for work at this property                              |
-| `requests`         | RequestConnection                | Inbound leads for this property                               |
-| `scheduledItems`   | ScheduledItemInterfaceConnection | All scheduled visits/tasks                                    |
-| `contacts`         | ContactModelConnection           | Site-specific contact persons                                 |
-| `customFields`     | (list)                           |                                                               |
-| `routingOrder`     | Int                              | Used by route optimisation                                    |
+| Field                               | Type                     | Notes                                |
+| ----------------------------------- | ------------------------ | ------------------------------------ |
+| `id`                                | EncodedId                |                                      |
+| `jobNumber`                         | Int                      | sequential per-account               |
+| `jobStatus`                         | JobStatusTypeEnum        | see above                            |
+| `jobType`                           | JobTypeTypeEnum          | one-off vs recurring                 |
+| `billingType`                       | BillingStrategy          | fixed, per-visit, etc.               |
+| `client`                            | Client                   |                                      |
+| `startAt`,`endAt`                   | ISO8601DateTime          | job-level schedule (visits have own) |
+| `completedAt`                       | ISO8601DateTime          |                                      |
+| `instructions`                      | String                   |                                      |
+| `title`                             | via visits               |                                      |
+| `lineItems`                         | JobLineItemConnection    |                                      |
+| `visits`                            | connection               | scheduled appointments               |
+| `invoices`                          | InvoiceConnection        |                                      |
+| `invoiceSchedule`                   | InvoiceSchedule          | when to invoice                      |
+| `invoicedTotal`                     | Float                    |                                      |
+| `completedAndUninvoicedVisitsCount` | Int                      |                                      |
+| `completedAndUninvoicedVisitsTotal` | Float                    |                                      |
+| `jobBalanceTotals`                  | JobBalanceTotals         |                                      |
+| `expenses`                          | ExpenseConnection        |                                      |
+| `jobCosting`                        | JobCosting               |                                      |
+| `jobForms`                          | FormConnection           | checklists attached                  |
+| `chemicalTreatments`                | TreatmentConnection      | industry-specific (lawn care etc.)   |
+| `bookingConfirmationSentAt`         | ISO8601DateTime          |                                      |
+| `allowReviewRequest`                | Boolean                  |                                      |
+| `feedbackResults`                   | FeedbackResultConnection | client reviews                       |
+| `arrivalWindow`                     | ArrivalWindow            |                                      |
+| `customFields`                      | list                     |                                      |
+| `jobberWebUri`,`createdAt`          |                          |                                      |
 
----
+## Visit — single scheduled appointment on a Job (multiple per Job for recurring). 36 fields total
 
-## Request (inbound lead)
+| Field                           | Type                   | Notes                                   |
+| ------------------------------- | ---------------------- | --------------------------------------- |
+| `id`                            | EncodedId              |                                         |
+| `job`                           | Job                    | parent                                  |
+| `client`                        | Client                 | convenience                             |
+| `property`                      | Property               | where the visit happens                 |
+| `assignedUsers`                 | UserConnection         | team members assigned                   |
+| `startAt`,`endAt`               | ISO8601DateTime        |                                         |
+| `allDay`                        | Boolean                |                                         |
+| `duration`                      | Int                    | seconds                                 |
+| `isComplete`                    | Boolean                |                                         |
+| `completedAt`,`completedBy`     |                        |                                         |
+| `clientConfirmed`               | Boolean                |                                         |
+| `arrivalWindow`                 | ArrivalWindow          |                                         |
+| `instructions`                  | String                 |                                         |
+| `lineItems`                     | JobLineItemConnection  |                                         |
+| `jobForms`,`jobFormSubmissions` |                        |                                         |
+| `notes`                         | JobNoteUnionConnection |                                         |
+| `invoice`                       | Invoice                | invoice this visit rolled into (if any) |
+| `incompleteJobFormsCount`       | Int                    |                                         |
+| `routingOrder`,`overrideOrder`  | Int                    |                                         |
+| `isLastScheduledVisit`          | Boolean                |                                         |
+| `amounts`                       | VisitAmounts           |                                         |
 
-Form-submitted lead from Jobber's Request form. Convert to a Quote or Job.
+## Invoice — billing document. Statuses: `draft`,`awaiting_payment`,`paid`,`past_due`,`bad_debt`,`sent_not_due`. 52 fields total
 
-| Field          | Type       | Notes                                     |
-| -------------- | ---------- | ----------------------------------------- |
-| `id`           | EncodedId  |                                           |
-| `client`       | Client     | Auto-created client (or matched existing) |
-| `property`     | Property   | Site for the request                      |
-| `title`        | String     | Summary                                   |
-| `customFields` | (list)     |                                           |
-| `assessment`   | Assessment | Optional on-site assessment booking       |
-| `convertedTo`  | (union)    | Quote or Job after conversion             |
+| Field                            | Type                      | Notes                                                          |
+| -------------------------------- | ------------------------- | -------------------------------------------------------------- |
+| `id`                             | EncodedId                 |                                                                |
+| `invoiceNumber`                  | String                    | display number, NOT the EncodedId                              |
+| `invoiceStatus`                  | InvoiceStatusTypeEnum     |                                                                |
+| `invoiceTermType`                | PaymentTermKind           | Net 7 / Net 30 / on-receipt                                    |
+| `invoiceNet`                     | Int                       | days                                                           |
+| `client`                         | Client                    |                                                                |
+| `issuedDate`,`dueDate`           | ISO8601DateTime           |                                                                |
+| `lineItems`                      | InvoiceLineItemConnection |                                                                |
+| `amounts`                        | InvoiceAmounts            | `{subtotal,total,discountAmount,taxAmount,paidAmount,balance}` |
+| `discount`                       | CostModifier              |                                                                |
+| `billingAddress`                 | InvoiceBillingAddress     |                                                                |
+| `billingIsSameAsPropertyAddress` | Boolean                   |                                                                |
+| `clientHubUri`                   | String                    | public URL client receives                                     |
+| `dateViewedInClientHub`          | ISO8601DateTime           |                                                                |
+| `lastCommunication`              | MessageInterface          |                                                                |
+| `jobs`,`archivedJobs`            | JobConnection             |                                                                |
+| `automaticPaymentsError`         | String                    | auto-pay failure reason                                        |
+| `hasRefundableSurchargePayments` | Boolean                   |                                                                |
+| `customFields`                   | list                      |                                                                |
+| `contractDisclaimer`             | String                    |                                                                |
+| `eligibleForFinancing`           | Boolean                   |                                                                |
+| `consumerFinancing`              | WisetackFinanced          |                                                                |
+| `createdAt`,`jobberWebUri`       |                           |                                                                |
 
----
-
-## Quote
-
-A proposal sent to a client. Statuses: `draft`, `awaiting_response`, `archived`, `approved`, `converted`, `changes_requested`.
-
-| Field                       | Type                    | Notes                                               |
-| --------------------------- | ----------------------- | --------------------------------------------------- |
-| `id`                        | EncodedId               |                                                     |
-| `client`                    | Client                  |                                                     |
-| `lineItems`                 | QuoteLineItemConnection |                                                     |
-| `amounts`                   | QuoteAmounts            | `{ subtotal, total, discountAmount, taxAmount }`    |
-| `discount`                  | CostModifier            |                                                     |
-| `message`                   | String                  | Free-text message to client                         |
-| `contractDisclaimer`        | String                  |                                                     |
-| `clientHubUri`              | String                  | Public URL the client receives                      |
-| `clientHubViewedAt`         | ISO8601DateTime         | When client opened the quote in Client Hub          |
-| `lastTransitioned`          | QuoteLastTransitioned   | `{ status, transitionedAt }`                        |
-| `eligibleForFinancing`      | Boolean                 | Wisetack consumer financing                         |
-| `consumerFinancing`         | WisetackFinanced        |                                                     |
-| `previewUrl`                | String                  | PDF preview URL                                     |
-| `jobs`                      | JobConnection           | Job(s) created from this quote                      |
-| `depositAmountUnallocated`  | Float                   | Deposit collected but not yet applied to an invoice |
-| `depositRecords`            | PaymentRecordConnection |                                                     |
-| `customFields`              | (list)                  |                                                     |
-| `createdAt`, `jobberWebUri` |                         |                                                     |
-
-46 fields total. To create a quote: `quoteCreate`. To approve on the client's behalf: `quoteApprove`. To convert to a job: `jobCreateFromQuote`.
-
----
-
-## Job
-
-A unit of work — can be one-off or recurring. Statuses: `requires_invoicing`, `archived`, `late`, `today`, `upcoming`, `action_required`, `on_hold`, `unscheduled`, `active`, `expiring_within_30_days`.
-
-| Field                               | Type                     | Notes                                            |
-| ----------------------------------- | ------------------------ | ------------------------------------------------ |
-| `id`                                | EncodedId                |                                                  |
-| `jobNumber`                         | Int                      | Sequential per-account                           |
-| `jobStatus`                         | JobStatusTypeEnum        | See above                                        |
-| `jobType`                           | JobTypeTypeEnum          | One-off vs recurring                             |
-| `billingType`                       | BillingStrategy          | Fixed, per-visit, etc.                           |
-| `client`                            | Client                   |                                                  |
-| `startAt`, `endAt`                  | ISO8601DateTime          | Job-level schedule (visits have their own)       |
-| `completedAt`                       | ISO8601DateTime          |                                                  |
-| `instructions`                      | String                   |                                                  |
-| `title`                             | (via visits)             |                                                  |
-| `lineItems`                         | JobLineItemConnection    |                                                  |
-| `visits`                            | (connection)             | Scheduled appointments                           |
-| `invoices`                          | InvoiceConnection        |                                                  |
-| `invoiceSchedule`                   | InvoiceSchedule          | When to invoice (per-visit, on-completion, etc.) |
-| `invoicedTotal`                     | Float                    |                                                  |
-| `completedAndUninvoicedVisitsCount` | Int                      |                                                  |
-| `completedAndUninvoicedVisitsTotal` | Float                    |                                                  |
-| `jobBalanceTotals`                  | JobBalanceTotals         |                                                  |
-| `expenses`                          | ExpenseConnection        |                                                  |
-| `jobCosting`                        | JobCosting               |                                                  |
-| `jobForms`                          | FormConnection           | Forms (checklists) attached                      |
-| `chemicalTreatments`                | TreatmentConnection      | Industry-specific (lawn care etc.)               |
-| `bookingConfirmationSentAt`         | ISO8601DateTime          |                                                  |
-| `allowReviewRequest`                | Boolean                  |                                                  |
-| `feedbackResults`                   | FeedbackResultConnection | Client reviews                                   |
-| `arrivalWindow`                     | ArrivalWindow            |                                                  |
-| `customFields`                      | (list)                   |                                                  |
-| `jobberWebUri`                      | String                   |                                                  |
-| `createdAt`                         |                          |                                                  |
-
-57 fields total.
-
----
-
-## Visit
-
-A single scheduled appointment on a Job. Multiple Visits per Job for recurring work.
-
-| Field                            | Type                   | Notes                                       |
-| -------------------------------- | ---------------------- | ------------------------------------------- |
-| `id`                             | EncodedId              |                                             |
-| `job`                            | Job                    | Parent job                                  |
-| `client`                         | Client                 | Convenience                                 |
-| `property`                       | Property               | Where the visit happens                     |
-| `assignedUsers`                  | UserConnection         | Team members assigned                       |
-| `startAt`, `endAt`               | ISO8601DateTime        |                                             |
-| `allDay`                         | Boolean                |                                             |
-| `duration`                       | Int                    | Seconds                                     |
-| `isComplete`                     | Boolean                |                                             |
-| `completedAt`, `completedBy`     |                        |                                             |
-| `clientConfirmed`                | Boolean                | Has the client confirmed?                   |
-| `arrivalWindow`                  | ArrivalWindow          |                                             |
-| `instructions`                   | String                 |                                             |
-| `lineItems`                      | JobLineItemConnection  |                                             |
-| `jobForms`, `jobFormSubmissions` |                        |                                             |
-| `notes`                          | JobNoteUnionConnection |                                             |
-| `invoice`                        | Invoice                | Invoice this visit was rolled into (if any) |
-| `incompleteJobFormsCount`        | Int                    |                                             |
-| `routingOrder`, `overrideOrder`  | Int                    |                                             |
-| `isLastScheduledVisit`           | Boolean                |                                             |
-| `amounts`                        | VisitAmounts           |                                             |
-
-36 fields total.
-
----
-
-## Invoice
-
-Billing document. Statuses: `draft`, `awaiting_payment`, `paid`, `past_due`, `bad_debt`, `sent_not_due`.
-
-| Field                            | Type                      | Notes                                                                 |
-| -------------------------------- | ------------------------- | --------------------------------------------------------------------- |
-| `id`                             | EncodedId                 |                                                                       |
-| `invoiceNumber`                  | String                    | Display number; not the EncodedId                                     |
-| `invoiceStatus`                  | InvoiceStatusTypeEnum     |                                                                       |
-| `invoiceTermType`                | PaymentTermKind           | Net 7 / Net 30 / on-receipt etc.                                      |
-| `invoiceNet`                     | Int                       | Days                                                                  |
-| `client`                         | Client                    |                                                                       |
-| `issuedDate`                     | ISO8601DateTime           |                                                                       |
-| `dueDate`                        | ISO8601DateTime           |                                                                       |
-| `lineItems`                      | InvoiceLineItemConnection |                                                                       |
-| `amounts`                        | InvoiceAmounts            | `{ subtotal, total, discountAmount, taxAmount, paidAmount, balance }` |
-| `discount`                       | CostModifier              |                                                                       |
-| `billingAddress`                 | InvoiceBillingAddress     |                                                                       |
-| `billingIsSameAsPropertyAddress` | Boolean                   |                                                                       |
-| `clientHubUri`                   | String                    | Public URL the client receives                                        |
-| `dateViewedInClientHub`          | ISO8601DateTime           |                                                                       |
-| `lastCommunication`              | MessageInterface          |                                                                       |
-| `jobs`                           | JobConnection             | Jobs invoiced                                                         |
-| `archivedJobs`                   | JobConnection             |                                                                       |
-| `automaticPaymentsError`         | String                    | Auto-pay failure reason                                               |
-| `hasRefundableSurchargePayments` | Boolean                   |                                                                       |
-| `customFields`                   | (list)                    |                                                                       |
-| `contractDisclaimer`             | String                    |                                                                       |
-| `eligibleForFinancing`           | Boolean                   |                                                                       |
-| `consumerFinancing`              | WisetackFinanced          |                                                                       |
-| `createdAt`, `jobberWebUri`      |                           |                                                                       |
-
-52 fields total.
-
----
-
-## Payment
-
-Read-only on the public schema (writes go via `invoiceCreatePaymentRecord` / `clientCreatePaymentRecord`).
+## Payment — read-only on public schema (writes via `invoiceCreatePaymentRecord`/`clientCreatePaymentRecord`). 8 fields
 
 | Field           | Type            | Notes                                                   |
 | --------------- | --------------- | ------------------------------------------------------- |
@@ -284,68 +227,53 @@ Read-only on the public schema (writes go via `invoiceCreatePaymentRecord` / `cl
 | `amount`        | Float           |                                                         |
 | `currency`      | String          | ISO 4217                                                |
 | `date`          | ISO8601Date     |                                                         |
-| `invoiceNumber` | String          | Invoice this payment was applied to                     |
+| `invoiceNumber` | String          | invoice this was applied to                             |
 | `invoiceUrl`    | String          |                                                         |
 | `platform`      | PaymentPlatform | enum — Jobber Payments / external / cash / check / etc. |
 | `success`       | Boolean         |                                                         |
 
-Only 8 fields.
+## User (employee/staff). 44 fields total
 
----
+| Field                          | Type                         | Notes                           |
+| ------------------------------ | ---------------------------- | ------------------------------- |
+| `id`                           | EncodedId                    |                                 |
+| `name`                         | Name                         | `{first,last,full}`             |
+| `email`                        | UserEmail                    |                                 |
+| `phone`                        | UserPhone                    |                                 |
+| `address`                      | UserAddress                  |                                 |
+| `isAccountAdmin`               | Boolean                      |                                 |
+| `isAccountOwner`               | Boolean                      | one per account                 |
+| `isCurrentUser`                | Boolean                      | true for the token's user       |
+| `isRestricted`                 | Boolean                      |                                 |
+| `labourRate`                   | Float                        | $/hour                          |
+| `assignedColor`                | String                       | calendar colour                 |
+| `assignedVehicle`              | Vehicle                      |                                 |
+| `availableForScheduling`       | Boolean                      |                                 |
+| `account`                      | Account                      |                                 |
+| `permissions`                  | UserPermissionConnection     |                                 |
+| `paymentCollectionPermissions` | PaymentCollectionPermissions |                                 |
+| `language`                     | String                       |                                 |
+| `firstDayOfTheWeek`            | enum                         |                                 |
+| `lastLoginAt`                  | ISO8601DateTime              |                                 |
+| `hasJobberPaymentsSetup`       | Boolean                      |                                 |
+| `customFields`                 | list                         |                                 |
+| `apps`                         | ApplicationConnection        | OAuth apps this user authorised |
+| `createdAt`                    |                              |                                 |
 
-## User (employee / staff)
+## Webhook (subscription endpoint) — configure via `webhookEndpointCreate`/`webhookEndpointDelete`
 
-| Field                          | Type                         | Notes                                  |
-| ------------------------------ | ---------------------------- | -------------------------------------- |
-| `id`                           | EncodedId                    |                                        |
-| `name`                         | Name                         | `{ first, last, full }`                |
-| `email`                        | UserEmail                    |                                        |
-| `phone`                        | UserPhone                    |                                        |
-| `address`                      | UserAddress                  |                                        |
-| `isAccountAdmin`               | Boolean                      |                                        |
-| `isAccountOwner`               | Boolean                      | One per account                        |
-| `isCurrentUser`                | Boolean                      | True for the user the token belongs to |
-| `isRestricted`                 | Boolean                      |                                        |
-| `labourRate`                   | Float                        | $/hour                                 |
-| `assignedColor`                | String                       | Calendar colour                        |
-| `assignedVehicle`              | Vehicle                      |                                        |
-| `availableForScheduling`       | Boolean                      |                                        |
-| `account`                      | Account                      |                                        |
-| `permissions`                  | UserPermissionConnection     | Granular permission set                |
-| `paymentCollectionPermissions` | PaymentCollectionPermissions |                                        |
-| `language`                     | String                       |                                        |
-| `firstDayOfTheWeek`            | enum                         |                                        |
-| `lastLoginAt`                  | ISO8601DateTime              |                                        |
-| `hasJobberPaymentsSetup`       | Boolean                      |                                        |
-| `customFields`                 | (list)                       |                                        |
-| `apps`                         | ApplicationConnection        | OAuth apps this user has authorised    |
-| `createdAt`                    |                              |                                        |
+| Field    | Type               | Notes                         |
+| -------- | ------------------ | ----------------------------- |
+| `id`     | EncodedId          |                               |
+| `url`    | String             | your receiver                 |
+| `topics` | [WebHookTopicEnum] | topics this endpoint receives |
+| `active` | Boolean            |                               |
 
-44 fields total.
+Payload shape: `WebHookPayload` type — full webhook contract in `01d`.
 
----
-
-## Webhook (subscription endpoint)
-
-Configure via `webhookEndpointCreate` / `webhookEndpointDelete` mutations.
-
-| Field    | Type               | Notes                                 |
-| -------- | ------------------ | ------------------------------------- |
-| `id`     | EncodedId          |                                       |
-| `url`    | String             | Your webhook receiver                 |
-| `topics` | [WebHookTopicEnum] | List of topics this endpoint receives |
-| `active` | Boolean            |                                       |
-
-Payload shape: `WebHookPayload` type — see `01d-event-and-error-handling.md` for the full webhook contract.
-
----
-
-## Discovering anything else
-
-The schema is fully introspectable. From any agent context:
+## Discovering anything else (schema is fully introspectable)
 
 ```graphql
-# List all query fields
 query {
   __schema {
     queryType {
@@ -355,9 +283,7 @@ query {
       }
     }
   }
-}
-
-# List all mutation fields
+} # all query fields
 query {
   __schema {
     mutationType {
@@ -367,9 +293,7 @@ query {
       }
     }
   }
-}
-
-# Full shape of a specific type
+} # all mutation fields
 query {
   __type(name: "Quote") {
     fields {
@@ -384,9 +308,7 @@ query {
       }
     }
   }
-}
-
-# All enum values
+} # type shape
 query {
   __type(name: "JobStatusTypeEnum") {
     enumValues {
@@ -394,7 +316,7 @@ query {
       description
     }
   }
-}
+} # enum values
 ```
 
-This is preferable to guessing field names from naming conventions — the schema is the contract.
+Prefer introspection over guessing field names — schema is the contract.

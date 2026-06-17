@@ -30,6 +30,12 @@ import type {
   ConnectRequestResult,
   ConnectStatusParams,
   ConnectStatusResult,
+  ConnectSynergyDownloadParams,
+  ConnectSynergyListParams,
+  ConnectSynergySearchParams,
+  ConnectorDownloadResult,
+  ConnectorFileMetadataResult,
+  ConnectorListResult,
   ConvertDocumentParams,
   ConvertDocumentResult,
   CreateAgentParams,
@@ -50,6 +56,10 @@ import type {
   ListKbFilesParams,
   ListKbFilesResult,
   MoveKbFileParams,
+  OauthDownloadFileParams,
+  OauthGetFileMetadataParams,
+  OauthListFilesParams,
+  OauthSearchFilesParams,
   ParamsForTool,
   PatchAgentPromptParams,
   PatchAgentPromptResult,
@@ -176,6 +186,20 @@ const formatBytes = (bytes: number): string => {
 const folderLabel = (params: { kb_id?: unknown }): string => {
   return typeof params.kb_id === 'string' ? params.kb_id : '';
 };
+
+/** Shared result summary for native-connector list/search (folders + files counts). */
+const describeConnectorList = (r: ConnectorListResult): string | null => {
+  const folders = r?.folders?.length ?? 0;
+  const files = r?.files?.length ?? 0;
+  const parts: string[] = [];
+  if (folders) parts.push(`${folders} folder${folders === 1 ? '' : 's'}`);
+  if (files) parts.push(`${files} file${files === 1 ? '' : 's'}`);
+  return parts.length > 0 ? parts.join(', ') : 'no items';
+};
+
+/** Shared result summary for a native-connector download. */
+const describeConnectorDownload = (r: ConnectorDownloadResult): string | null =>
+  r?.filename ? `${r.filename}${typeof r.size === 'number' ? ` (${formatBytes(r.size)})` : ''}` : null;
 
 // ─── registry ───────────────────────────────────────────────────────────────
 
@@ -759,6 +783,107 @@ export const TOOL_DISPLAY: { [T in ToolName]: ToolDisplayInfo<T> } = {
       const connected = Object.values(r ?? {}).filter((e) => e?.status === 'connected').length;
       return `${connected}/${total} connected`;
     },
+  },
+
+  // ─── native connector file browsing (Synergy + OAuth cloud storage) ──────
+  // Restored after the MCP→CLI migration dropped the MCP `connect.py` file
+  // ops. Synergy uses dedicated handlers; the OAuth providers share generic
+  // `oauth_*` ops keyed by a `provider` param. All read-only.
+
+  connect_synergy_list: {
+    tool: 'connect_synergy_list',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsListFiles',
+    fallbackLabel: 'List connector files',
+    icon: 'FolderOpen',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyListParams) => {
+      if (p.query) return `Searching Synergy jobs for "${truncate(p.query, 50)}"`;
+      if (p.folder_id) return `Listing Synergy ${p.folder_id}`;
+      return 'Listing Synergy jobs';
+    },
+    describeResult: describeConnectorList,
+  },
+
+  connect_synergy_search: {
+    tool: 'connect_synergy_search',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSearchFiles',
+    fallbackLabel: 'Search connector files',
+    icon: 'Search',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergySearchParams) =>
+      p.query ? `Searching Synergy jobs for "${truncate(p.query, 50)}"` : null,
+    describeResult: describeConnectorList,
+  },
+
+  connect_synergy_download: {
+    tool: 'connect_synergy_download',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsDownloadFile',
+    fallbackLabel: 'Download connector file',
+    icon: 'Download',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyDownloadParams) => (p.file_id ? `Downloading Synergy file ${p.file_id}` : null),
+    describeResult: describeConnectorDownload,
+  },
+
+  oauth_list_files: {
+    tool: 'oauth_list_files',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsListFiles',
+    fallbackLabel: 'List connector files',
+    icon: 'FolderOpen',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: OauthListFilesParams) => {
+      if (!p.provider) return null;
+      return p.folder_id ? `Listing ${p.provider} folder ${p.folder_id}` : `Listing ${p.provider} files`;
+    },
+    describeResult: describeConnectorList,
+  },
+
+  oauth_search_files: {
+    tool: 'oauth_search_files',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSearchFiles',
+    fallbackLabel: 'Search connector files',
+    icon: 'Search',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: OauthSearchFilesParams) =>
+      p.provider && p.query ? `Searching ${p.provider} for "${truncate(p.query, 50)}"` : null,
+    describeResult: describeConnectorList,
+  },
+
+  oauth_download_file: {
+    tool: 'oauth_download_file',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsDownloadFile',
+    fallbackLabel: 'Download connector file',
+    icon: 'Download',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: OauthDownloadFileParams) =>
+      p.provider && p.file_id ? `Downloading ${p.filename ?? p.file_id} from ${p.provider}` : null,
+    describeResult: describeConnectorDownload,
+  },
+
+  oauth_get_file_metadata: {
+    tool: 'oauth_get_file_metadata',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsFileInfo',
+    fallbackLabel: 'Connector file info',
+    icon: 'Info',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: OauthGetFileMetadataParams) =>
+      p.provider && p.file_id ? `Getting ${p.provider} file info for ${p.file_id}` : null,
+    describeResult: (r: ConnectorFileMetadataResult) =>
+      r?.name ? `${r.name}${typeof r.size === 'number' ? ` (${formatBytes(r.size)})` : ''}` : null,
   },
 
   // Helper to satisfy the mapped-object exhaustiveness. Listed tools above.

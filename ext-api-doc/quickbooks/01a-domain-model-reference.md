@@ -1,92 +1,66 @@
-# Domain Model Reference — QuickBooks Online Accounting API (v3)
-
-> Source: Intuit official entity reference (developer.intuit.com/app/developer/qbo/docs/api/accounting), webhooks/CDC docs, `python-quickbooks` SDK, apideck integration guide.
-> Field names are `[DOCUMENTED]` from Intuit docs unless marked otherwise. No `[CONFIRMED]` live calls — verify exact response wrappers against a sandbox before treating as ground truth.
-
+---
+doc: domain-model-reference
+api: QuickBooks Online Accounting API v3
+confidence: all [DOCUMENTED] from Intuit per-entity reference + python-quickbooks SDK + apideck guide; NO live calls — verify exact response wrappers/edge fields against sandbox. Non-default markers tagged [INFERRED] inline.
+ref: developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/<entity>
 ---
 
-## The realm — top-level container
+# Domain Model Reference — QuickBooks Online (v3)
 
-Every entity lives inside a **company (realm)**. All calls target one realm via the `{realmId}` path segment.
+## The realm (top-level container)
 
-| Field     | Type                | Notes                                                                                                                                                                            |
-| --------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `realmId` | long numeric string | Company id, e.g. `4620816365212402417`. Captured from the OAuth callback (`?...&realmId=`), **persisted per company**, templated into every path. One authorization = one realm. |
+Every entity lives inside one **company (realm)**; all calls target it via the `{realmId}` path segment.
 
-`GET /companyinfo/{realmId}` returns realm metadata (`CompanyName`, `Country`, `LegalName`, base currency). Good smoke test.
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/companyinfo
+`realmId` — long numeric string company id (e.g. `4620816365212402417`). Captured from OAuth callback (`?...&realmId=`), persisted per company, templated into every path. One authorization = one realm. `GET /companyinfo/{realmId}` → realm metadata (`CompanyName`, `Country`, `LegalName`, base currency); good smoke test.
 
----
+## Shared envelope (every entity)
 
-## Shared envelope — every entity
+| Field                      | Type           | Writable?           | Notes                                                                                             |
+| -------------------------- | -------------- | ------------------- | ------------------------------------------------------------------------------------------------- |
+| `Id`                       | numeric string | no                  | Unique within realm; always a string in JSON                                                      |
+| `SyncToken`                | numeric string | no (sent on update) | Optimistic-lock version; send CURRENT value on update; increments per success. Stale → error 5010 |
+| `MetaData.CreateTime`      | datetime       | no                  | ISO8601 + offset, e.g. `2026-05-20T09:00:00-07:00`                                                |
+| `MetaData.LastUpdatedTime` | datetime       | no                  | Change-detection field for incremental sync                                                       |
+| `sparse` (request only)    | boolean        | yes (req)           | `true` on update → patch only supplied fields                                                     |
 
-All entities share the same id/lock/metadata envelope:
-
-| Field                      | Type           | Writable? | Notes                                                                                                                       |
-| -------------------------- | -------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `Id`                       | numeric string | no        | Unique within the realm. Always a string in JSON.                                                                           |
-| `SyncToken`                | numeric string | no (sent) | Optimistic-lock version. Send the **current** value on every update; increments each successful update. Stale → error 5010. |
-| `MetaData.CreateTime`      | datetime       | no        | ISO 8601 with offset, e.g. `2026-05-20T09:00:00-07:00`                                                                      |
-| `MetaData.LastUpdatedTime` | datetime       | no        | Change-detection field for incremental sync                                                                                 |
-| `sparse` (request only)    | boolean        | yes (req) | Set `true` on update to patch only the supplied fields                                                                      |
-
-**Relationships are `*Ref` objects, never nested entities:**
-
-```json
-"CustomerRef": { "value": "58", "name": "Amy's Bird Sanctuary" }
-```
-
-Only `value` (the foreign id) matters on write; `name` is decorative/echoed back. Resolve the id by querying before you write.
-
----
+**Relationships are `*Ref` objects, never nested entities:** `"CustomerRef":{"value":"58","name":"Amy's Bird Sanctuary"}`. Only `value` (foreign id) matters on write; `name` is decorative/echoed. Resolve the id by querying before you write.
 
 ## Entity Catalogue
 
-### Customer
+### Customer — `/customer` (name-list; someone you invoice)
 
-**Endpoint:** `/customer` · name-list entity (someone you invoice).
-**CRUD:** Create / Read / Update (full + sparse). **No hard delete** — deactivate via sparse `Active: false`.
+CRUD: Create / Read / Update (full+sparse). No hard delete — deactivate via sparse `Active:false`.
 
-| Field                      | Type    | Required?   | Writable? | Notes                                                   |
-| -------------------------- | ------- | ----------- | --------- | ------------------------------------------------------- |
-| `Id`                       | string  | system      | no        | `"58"`                                                  |
-| `SyncToken`                | string  | for update  | no (sent) |                                                         |
-| `DisplayName`              | string  | conditional | yes       | **Unique per realm**. One name field required.          |
-| `GivenName` / `FamilyName` | string  | no          | yes       | Person name parts                                       |
-| `CompanyName`              | string  | no          | yes       | Business name                                           |
-| `PrimaryEmailAddr`         | object  | no          | yes       | `{ "Address": "amy@birds.com" }`                        |
-| `PrimaryPhone`             | object  | no          | yes       | `{ "FreeFormNumber": "(650) 555-1234" }`                |
-| `BillAddr` / `ShipAddr`    | object  | no          | yes       | `Line1`, `City`, `CountrySubDivisionCode`, `PostalCode` |
-| `Balance`                  | decimal | system      | no        | Open balance (computed)                                 |
-| `Active`                   | boolean | no          | yes       | `false` = deactivated                                   |
+| Field                    | Type    | Required?   | Writable? | Notes                                                |
+| ------------------------ | ------- | ----------- | --------- | ---------------------------------------------------- |
+| `Id`                     | string  | system      | no        | `"58"`                                               |
+| `SyncToken`              | string  | for update  | no (sent) |                                                      |
+| `DisplayName`            | string  | conditional | yes       | **Unique per realm**; one name field required        |
+| `GivenName`/`FamilyName` | string  | no          | yes       | Person name parts                                    |
+| `CompanyName`            | string  | no          | yes       | Business name                                        |
+| `PrimaryEmailAddr`       | object  | no          | yes       | `{"Address":"amy@birds.com"}`                        |
+| `PrimaryPhone`           | object  | no          | yes       | `{"FreeFormNumber":"(650) 555-1234"}`                |
+| `BillAddr`/`ShipAddr`    | object  | no          | yes       | `Line1`,`City`,`CountrySubDivisionCode`,`PostalCode` |
+| `Balance`                | decimal | system      | no        | Open balance (computed)                              |
+| `Active`                 | boolean | no          | yes       | `false`=deactivated                                  |
 
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/customer
+### Vendor — `/vendor` (supplier side of Customer; referenced by Bills)
 
----
+CRUD: Create / Read / Update (full+sparse); deactivate via `Active:false`.
 
-### Vendor
+| Field                             | Type    | Required?   | Writable? | Notes                         |
+| --------------------------------- | ------- | ----------- | --------- | ----------------------------- |
+| `Id`                              | string  | system      | no        | Use in `Bill.VendorRef.value` |
+| `SyncToken`                       | string  | for update  | no (sent) |                               |
+| `DisplayName`                     | string  | conditional | yes       | Unique per realm              |
+| `CompanyName`                     | string  | no          | yes       |                               |
+| `PrimaryEmailAddr`/`PrimaryPhone` | object  | no          | yes       |                               |
+| `Balance`                         | decimal | system      | no        | Amount owed to this vendor    |
+| `Active`                          | boolean | no          | yes       |                               |
 
-**Endpoint:** `/vendor` · the supplier side of Customer. Referenced by Bills.
-**CRUD:** Create / Read / Update (full + sparse); deactivate via `Active: false`.
+### Item — `/item` (product/service line on invoices+bills)
 
-| Field                               | Type    | Required?   | Writable? | Notes                         |
-| ----------------------------------- | ------- | ----------- | --------- | ----------------------------- |
-| `Id`                                | string  | system      | no        | Use in `Bill.VendorRef.value` |
-| `SyncToken`                         | string  | for update  | no (sent) |                               |
-| `DisplayName`                       | string  | conditional | yes       | Unique per realm              |
-| `CompanyName`                       | string  | no          | yes       |                               |
-| `PrimaryEmailAddr` / `PrimaryPhone` | object  | no          | yes       |                               |
-| `Balance`                           | decimal | system      | no        | Amount owed to this vendor    |
-| `Active`                            | boolean | no          | yes       |                               |
-
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/vendor
-
----
-
-### Item
-
-**Endpoint:** `/item` · a product/service line on invoices and bills.
-**CRUD:** Create / Read / Update (full + sparse); deactivate via `Active: false`.
+CRUD: Create / Read / Update (full+sparse); deactivate via `Active:false`.
 
 | Field               | Type    | Required?  | Writable?   | Notes                                                                 |
 | ------------------- | ------- | ---------- | ----------- | --------------------------------------------------------------------- |
@@ -95,111 +69,68 @@ Only `value` (the foreign id) matters on write; `name` is decorative/echoed back
 | `Name`              | string  | yes        | yes         | **Unique per realm**                                                  |
 | `Type`              | enum    | yes        | yes(create) | `Inventory \| Service \| NonInventory \| Group \| Category \| Bundle` |
 | `UnitPrice`         | decimal | no         | yes         | Sales price                                                           |
-| `IncomeAccountRef`  | Ref     | cond.      | yes         | Required for Service / Inventory                                      |
+| `IncomeAccountRef`  | Ref     | cond.      | yes         | Required for Service/Inventory                                        |
 | `ExpenseAccountRef` | Ref     | cond.      | yes         | Required for Inventory                                                |
 | `AssetAccountRef`   | Ref     | cond.      | yes         | Required for Inventory                                                |
 | `TrackQtyOnHand`    | boolean | cond.      | yes(create) | `true` for Inventory                                                  |
 | `QtyOnHand`         | decimal | cond.      | yes(create) | Inventory only; needs `InvStartDate`                                  |
 | `Active`            | boolean | no         | yes         |                                                                       |
 
-> Inventory items require `IncomeAccountRef` + `ExpenseAccountRef` + `AssetAccountRef` + `TrackQtyOnHand: true` + `InvStartDate`. Service items only need `IncomeAccountRef`.
+Inventory item requires: `IncomeAccountRef` + `ExpenseAccountRef` + `AssetAccountRef` + `TrackQtyOnHand:true` + `InvStartDate`. Service item needs only `IncomeAccountRef`.
 
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/item
+### Account (Chart of Accounts) — `/account` (referenced by Items + account-based lines)
 
----
+CRUD: Create / Read / Update (full+sparse).
 
-### Account (Chart of Accounts)
+| Field            | Type    | Writable? | Notes                                                                                     |
+| ---------------- | ------- | --------- | ----------------------------------------------------------------------------------------- |
+| `Id`             | string  | no        | Use in `IncomeAccountRef`/`ExpenseAccountRef`/`DepositToAccountRef`                       |
+| `Name`           | string  | yes       | **Unique per realm**                                                                      |
+| `AccountType`    | enum    | yes       | `Income`,`Expense`,`Bank`,`Accounts Receivable`,`Accounts Payable`,`Cost of Goods Sold`,… |
+| `AccountSubType` | string  | yes       | e.g. `SalesOfProductIncome`,`CheckingAccount`                                             |
+| `CurrentBalance` | decimal | no        | Computed                                                                                  |
+| `Active`         | boolean | yes       |                                                                                           |
 
-**Endpoint:** `/account` · referenced by Items and account-based lines.
-**CRUD:** Create / Read / Update (full + sparse).
+### Invoice — `/invoice` (sales / A/R; references `CustomerRef` + ≥1 `Line`)
 
-| Field            | Type    | Writable? | Notes                                                                                           |
-| ---------------- | ------- | --------- | ----------------------------------------------------------------------------------------------- |
-| `Id`             | string  | no        | Use in `IncomeAccountRef` / `ExpenseAccountRef` / `DepositToAccountRef`                         |
-| `Name`           | string  | yes       | **Unique per realm**                                                                            |
-| `AccountType`    | enum    | yes       | `Income`, `Expense`, `Bank`, `Accounts Receivable`, `Accounts Payable`, `Cost of Goods Sold`, … |
-| `AccountSubType` | string  | yes       | e.g. `SalesOfProductIncome`, `CheckingAccount`                                                  |
-| `CurrentBalance` | decimal | no        | Computed                                                                                        |
-| `Active`         | boolean | yes       |                                                                                                 |
+CRUD: Create / Read / Update (full+sparse) / Delete (`?operation=delete`) / Void (`?operation=void`) / send / get-PDF.
 
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/account
+| Field         | Type    | Required?  | Writable? | Notes                               |
+| ------------- | ------- | ---------- | --------- | ----------------------------------- |
+| `Id`          | string  | system     | no        | `"130"`                             |
+| `SyncToken`   | string  | for update | no (sent) |                                     |
+| `CustomerRef` | Ref     | yes        | yes       | `{"value":"58"}`                    |
+| `Line`        | array   | yes        | yes       | see Invoice line below              |
+| `DocNumber`   | string  | no         | yes       | Invoice number (auto if omitted)    |
+| `TxnDate`     | date    | no         | yes       | `YYYY-MM-DD`                        |
+| `DueDate`     | date    | no         | yes       | `YYYY-MM-DD`                        |
+| `TotalAmt`    | decimal | system     | no        | Computed                            |
+| `Balance`     | decimal | system     | no        | Outstanding; 0 once fully paid      |
+| `EmailStatus` | enum    | no         | yes       | `NotSet \| NeedToSend \| EmailSent` |
+| `LinkedTxn`   | array   | system     | no        | Payments/CreditMemos applied        |
 
----
+Invoice line (`DetailType:"SalesItemLineDetail"`): `{"Amount":150.00,"DetailType":"SalesItemLineDetail","Description":"Consulting - 3 hours","SalesItemLineDetail":{"ItemRef":{"value":"1"},"Qty":3,"UnitPrice":50.00}}`
 
-### Invoice (sales / A/R)
+### Bill — `/bill` (purchase / A/P; references `VendorRef` + ≥1 `Line`)
 
-**Endpoint:** `/invoice` · sales transaction. References a `CustomerRef` and ≥1 `Line`.
-**CRUD:** Create / Read / Update (full + sparse) / Delete (`?operation=delete`) / Void (`?operation=void`) / send-PDF / get-PDF.
-
-| Field         | Type    | Required?  | Writable? | Notes                                        |
-| ------------- | ------- | ---------- | --------- | -------------------------------------------- |
-| `Id`          | string  | system     | no        | `"130"`                                      |
-| `SyncToken`   | string  | for update | no (sent) |                                              |
-| `CustomerRef` | Ref     | yes        | yes       | `{ "value": "58" }`                          |
-| `Line`        | array   | yes        | yes       | See "Invoice line" below                     |
-| `DocNumber`   | string  | no         | yes       | Invoice number (auto-assigned if omitted)    |
-| `TxnDate`     | date    | no         | yes       | `YYYY-MM-DD`                                 |
-| `DueDate`     | date    | no         | yes       | `YYYY-MM-DD`                                 |
-| `TotalAmt`    | decimal | system     | no        | Computed                                     |
-| `Balance`     | decimal | system     | no        | Outstanding; 0 once fully paid               |
-| `EmailStatus` | enum    | no         | yes       | `NotSet \| NeedToSend \| EmailSent`          |
-| `LinkedTxn`   | array   | system     | no        | Payments/CreditMemos applied to this invoice |
-
-**Invoice line (`DetailType: "SalesItemLineDetail"`):**
-
-```json
-{
-  "Amount": 150.0,
-  "DetailType": "SalesItemLineDetail",
-  "Description": "Consulting - 3 hours",
-  "SalesItemLineDetail": {
-    "ItemRef": { "value": "1" },
-    "Qty": 3,
-    "UnitPrice": 50.0
-  }
-}
-```
-
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/invoice
-
----
-
-### Bill (purchase / A/P)
-
-**Endpoint:** `/bill` · amount owed to a vendor. References `VendorRef` + ≥1 `Line`.
-**CRUD:** Create / Read / Update (full + sparse) / Delete (`?operation=delete`).
+CRUD: Create / Read / Update (full+sparse) / Delete (`?operation=delete`).
 
 | Field       | Type    | Required?  | Writable? | Notes                                                           |
 | ----------- | ------- | ---------- | --------- | --------------------------------------------------------------- |
 | `Id`        | string  | system     | no        | `"890"`                                                         |
 | `SyncToken` | string  | for update | no (sent) |                                                                 |
-| `VendorRef` | Ref     | yes        | yes       | `{ "value": "56" }`                                             |
+| `VendorRef` | Ref     | yes        | yes       | `{"value":"56"}`                                                |
 | `Line`      | array   | yes        | yes       | `AccountBasedExpenseLineDetail` or `ItemBasedExpenseLineDetail` |
 | `TxnDate`   | date    | no         | yes       | Bill date                                                       |
 | `DueDate`   | date    | no         | yes       |                                                                 |
 | `TotalAmt`  | decimal | system     | no        | Computed                                                        |
 | `Balance`   | decimal | system     | no        | Outstanding                                                     |
 
-**Bill line (account-based, `DetailType: "AccountBasedExpenseLineDetail"`):**
+Bill line (account-based): `{"Amount":200.00,"DetailType":"AccountBasedExpenseLineDetail","AccountBasedExpenseLineDetail":{"AccountRef":{"value":"63"}}}`
 
-```json
-{
-  "Amount": 200.0,
-  "DetailType": "AccountBasedExpenseLineDetail",
-  "AccountBasedExpenseLineDetail": { "AccountRef": { "value": "63" } }
-}
-```
+### Payment — `/payment` (customer payment received / A/R; applied to invoices via `Line[].LinkedTxn`)
 
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/bill
-
----
-
-### Payment (customer payment received / A/R)
-
-**Endpoint:** `/payment` · money received from a customer, applied to one or more invoices via `Line[].LinkedTxn`.
-**CRUD:** Create / Read / Update (full + sparse) / Delete / Void.
-
-> The **vendor-side** payment of a Bill is a separate entity: `/billpayment`. Don't confuse the two.
+CRUD: Create / Read / Update (full+sparse) / Delete / Void. **Vendor-side payment of a Bill is a separate entity `/billpayment` — don't confuse the two.**
 
 | Field                 | Type    | Required?  | Writable? | Notes                                          |
 | --------------------- | ------- | ---------- | --------- | ---------------------------------------------- |
@@ -212,101 +143,57 @@ Only `value` (the foreign id) matters on write; `name` is decorative/echoed back
 | `TxnDate`             | date    | no         | yes       | Payment date                                   |
 | `UnappliedAmt`        | decimal | system     | no        | Portion not yet applied to any invoice         |
 
-**Payment apply-to-invoice line:**
-
-```json
-{
-  "Amount": 150.0,
-  "LinkedTxn": [{ "TxnId": "131", "TxnType": "Invoice" }]
-}
-```
-
-Each `Line` applies its `Amount` to one transaction. Partial payment = `Amount` < invoice balance. Linked invoices must belong to the same `CustomerRef`.
-[DOCUMENTED] https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/payment
-
----
+Apply-to-invoice line: `{"Amount":150.00,"LinkedTxn":[{"TxnId":"131","TxnType":"Invoice"}]}`. Each `Line` applies its `Amount` to one txn; partial = `Amount` < invoice balance. Linked invoices must belong to the same `CustomerRef`.
 
 ## Entity Relationships
 
 ```
-┌──────────┐   CustomerRef    ┌──────────┐   LinkedTxn(Invoice)   ┌───────────┐
-│ Customer │◄─────────────────│ Invoice  │◄───────────────────────│  Payment  │
-└──────────┘                  └────┬─────┘                        └─────┬─────┘
-     ▲ (name list)                 │ Line[].ItemRef                     │ DepositToAccountRef
-                                   ▼                                    ▼
-┌──────────┐   VendorRef     ┌──────────┐   Line[].ItemRef       ┌───────────┐
-│  Vendor  │◄────────────────│   Bill   │───────────────────────►│   Item    │
-└──────────┘                 └────┬─────┘                        └─────┬─────┘
-                                  │ Line[].AccountRef       Income/Expense/AssetAccountRef
-                                  ▼                                    ▼
-                            ┌───────────────────────────────────────────────┐
-                            │          Account (chart of accounts)           │
-                            └───────────────────────────────────────────────┘
+Customer ◄─CustomerRef─ Invoice ◄─LinkedTxn(Invoice)─ Payment ─DepositToAccountRef─► Account
+Vendor   ◄─VendorRef─── Bill    ─Line[].ItemRef─► Item ─Income/Expense/AssetAccountRef─► Account
+Bill ─Line[].AccountRef─► Account ; Invoice ─Line[].ItemRef─► Item
 ```
 
-- All edges are `*Ref` objects (`{"value":"<Id>"}`). No nesting of full child entities.
-- A Payment links to 1..n Invoices through `Line[].LinkedTxn` with `TxnType: "Invoice"`.
-- Referenced Customer / Vendor / Item / Account must exist **before** you reference them. No inline creation.
-
-[DOCUMENTED]
-
----
+- All edges are `*Ref` objects (`{"value":"<Id>"}`); no nesting of full child entities.
+- A Payment links to 1..n Invoices via `Line[].LinkedTxn` with `TxnType:"Invoice"`.
+- Referenced Customer/Vendor/Item/Account must exist BEFORE you reference them. No inline creation.
 
 ## State Machines
 
 ### Invoice paid-state (derived, not an explicit field)
 
-```
-[open: Balance == TotalAmt] --record Payment (partial)--> [partially paid: 0 < Balance < TotalAmt]
-                            --record Payment (full)------> [paid: Balance == 0]
-[any]  --void (?operation=void)--> [voided: TotalAmt → 0, lines retained]
-[any]  --delete (?operation=delete)--> [removed]
-```
+- open (`Balance==TotalAmt`) → partial (`0<Balance<TotalAmt`) → paid (`Balance==0`) via Payment+link.
+- any → voided (`?operation=void`): `TotalAmt`→0, lines retained, audit kept; reversible only by delete.
+- any → removed (`?operation=delete`): record gone, SyncToken history lost; irreversible.
 
-| From State | Action                | To State       | Reversible?          | Side Effects                                   |
-| ---------- | --------------------- | -------------- | -------------------- | ---------------------------------------------- |
-| open       | create Payment + link | partial / paid | yes (delete Payment) | Invoice `Balance` decreases; `LinkedTxn` added |
-| open/paid  | void                  | voided         | no (delete only)     | `TotalAmt`→0, lines retained                   |
-| any        | delete                | removed        | no                   | Record gone; SyncToken history lost            |
-
-> QBO has **no single "status" enum** for paid/unpaid on Invoice — derive it from `Balance` vs `TotalAmt`. `EmailStatus` is separate (`NotSet \| NeedToSend \| EmailSent`).
-> [DOCUMENTED]/[INFERRED]
+QBO has NO single "status" enum for paid/unpaid on Invoice — derive from `Balance` vs `TotalAmt`. `EmailStatus` is separate (`NotSet|NeedToSend|EmailSent`). [INFERRED on exact transition shapes]
 
 ### Bill paid-state
 
-Same pattern, but via `/billpayment` rather than `/payment`. `Balance == 0` ⇒ fully paid.
-
----
+Same pattern but via `/billpayment` (not `/payment`). `Balance==0` ⇒ fully paid.
 
 ## Business Rules
 
-1. **Uniqueness:** `Customer.DisplayName`, `Vendor.DisplayName`, `Item.Name`, `Account.Name` are each unique per realm. Duplicate → error **6240**.
-2. **Ordering:** Create Customer/Vendor/Item/Account before referencing them. Cannot create inline inside a transaction.
-3. **Payment linkage:** A Payment can only link to existing Invoice ids belonging to the same `CustomerRef`.
-4. **Inventory items** need income + expense + asset account refs, `TrackQtyOnHand: true`, and `InvStartDate`.
-5. **Multicurrency:** `CurrencyRef` is only settable when multicurrency is enabled on the realm; otherwise transaction currency must match company currency.
-6. **Computed/read-only:** `Balance`, `TotalAmt`, `UnappliedAmt`, `MetaData.*`, `Id`, `SyncToken` — never send as intent; ignored on create.
+1. **Uniqueness:** `Customer.DisplayName`, `Vendor.DisplayName`, `Item.Name`, `Account.Name` each unique per realm. Duplicate → error **6240**.
+2. **Ordering:** create Customer/Vendor/Item/Account before referencing; no inline creation inside a transaction.
+3. **Payment linkage:** a Payment links only to existing Invoice ids of the same `CustomerRef`.
+4. **Inventory items** need income+expense+asset account refs, `TrackQtyOnHand:true`, `InvStartDate`.
+5. **Multicurrency:** `CurrencyRef` settable only when multicurrency enabled on the realm; else txn currency must match company currency.
+6. **Computed/read-only** (ignored on create, never send as intent): `Balance`, `TotalAmt`, `UnappliedAmt`, `MetaData.*`, `Id`, `SyncToken`.
 
-[DOCUMENTED]
+## Field Formats
 
----
+| Type     | Format                            | Example                     | Notes                                            |
+| -------- | --------------------------------- | --------------------------- | ------------------------------------------------ |
+| Date     | `YYYY-MM-DD`                      | `2026-05-29`                | `TxnDate`,`DueDate`                              |
+| DateTime | `YYYY-MM-DDThh:mm:ss±hh:mm`       | `2026-05-20T09:00:00-07:00` | `MetaData.*`, CDC/query filters; realm-tz offset |
+| Currency | decimal, no symbol                | `150.00`                    | `CurrencyRef` separate                           |
+| Phone    | free-form string                  | `(650) 555-1234`            | `{"FreeFormNumber":"…"}`                         |
+| Email    | string                            | `amy@birds.com`             | `{"Address":"…"}`                                |
+| Id       | numeric string (per realm)        | `"58"`                      | always a string in JSON                          |
+| realmId  | long numeric string               | `4620816365212402417`       | company id; in URL path, from OAuth callback     |
+| Ref      | `{"value":"<id>","name":"<opt>"}` | `{"value":"58"}`            | foreign key                                      |
 
-## Field Format Reference
-
-| Type     | Format                            | Example                     | Notes                                             |
-| -------- | --------------------------------- | --------------------------- | ------------------------------------------------- |
-| Date     | `YYYY-MM-DD`                      | `2026-05-29`                | `TxnDate`, `DueDate`                              |
-| DateTime | `YYYY-MM-DDThh:mm:ss±hh:mm`       | `2026-05-20T09:00:00-07:00` | `MetaData.*`, CDC / query filters                 |
-| Currency | decimal, no symbol                | `150.00`                    | `CurrencyRef` separate; amounts are plain numbers |
-| Phone    | free-form string                  | `(650) 555-1234`            | `{ "FreeFormNumber": "..." }`                     |
-| Email    | string                            | `amy@birds.com`             | `{ "Address": "..." }`                            |
-| Id       | numeric string (per realm)        | `"58"`                      | Always a string in JSON                           |
-| realmId  | long numeric string               | `4620816365212402417`       | Company id; in the URL path, from OAuth callback  |
-| Ref      | `{"value":"<id>","name":"<opt>"}` | `{"value":"58"}`            | Foreign-key reference                             |
-
----
-
-## Enum Value Reference
+## Enum Reference
 
 | Entity  | Field                 | Allowed Values                                                                                                                   |
 | ------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -315,5 +202,3 @@ Same pattern, but via `/billpayment` rather than `/payment`. `Balance == 0` ⇒ 
 | Line    | `DetailType`          | `SalesItemLineDetail`, `AccountBasedExpenseLineDetail`, `ItemBasedExpenseLineDetail`, `SubTotalLineDetail`, `DiscountLineDetail` |
 | Payment | `LinkedTxn[].TxnType` | `Invoice`, `CreditMemo`, `Deposit`                                                                                               |
 | Account | `AccountType`         | `Income`, `Expense`, `Bank`, `Accounts Receivable`, `Accounts Payable`, `Cost of Goods Sold`, `Other Income`, `Other Expense`, … |
-
-[DOCUMENTED]

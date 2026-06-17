@@ -1,263 +1,129 @@
 ---
-api_name: 'Total Synergy (API Key)'
-api_slug: 'totalsynergy-api'
-version: 'v2 (primary); v4 surface also live'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-line_count_target: '< 300 lines'
+api_name: Total Synergy (API Key)
+api_slug: totalsynergy-api
+base_url: https://api.totalsynergy.com/api/v2/
+path_version_segment: /api/v2/ is a REAL path prefix already in base_url (v4 surface also live). NOT a label — every path includes it.
+tenancy: org {Slug} in the path → /api/v2/Organisation/{Slug}/{Resource}. NOT the hostname. Resolve {Slug} first.
+auth: access-token: <apiKey> header — NOT Authorization: Bearer, NOT X-API-Key (either → 401)
+field_casing: PascalCase params (criteria.Id), field casing [INFERRED]
+id_format: string or integer per resource (unconfirmed which)
+rate_limit: 300 calls/day total + 50/day Transactions (standard); 60k/20k Premium. Per organisation, daily window. Shared across all keys.
+call_surface: HTTP via `numa integrations request` (Direct API, chat-only). NOT a file connector — no list-files/download-file. Not MCP.
+sibling: totalsynergy-oauth — identical wire API + same access-token header; only credential acquisition differs (static key here vs OAuth there)
+confidence: static-key flow, rate limits, pagination, base URL are [DOCUMENTED]. Endpoint catalog + ALL field schemas are [INFERRED] (JS-rendered Swagger SPA, NO live call made). 🔬 = must confirm on a live tenant.
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# Total Synergy (API Key) — Workspace Agent API Rules
+# Total Synergy (API Key) — API Rules
 
-> **Loaded into the workspace agent's context when the Total Synergy (API Key) integration is active.**
-> Total Synergy is practice management for **architecture & engineering** firms.
-> Companion files (01a–01d) hold the detailed reference.
->
-> 📌 **Same wire API as `totalsynergy-oauth`.** Identical base URL, resources, pagination, and
-> error model. The **only** difference is how the credential is obtained: a **long-lived static API
-> key copied from the user's profile** here, vs. the OAuth2 authorization-code flow there. The
-> `access-token` request header is identical either way. This connector is the **lower-friction**
-> Total Synergy option — no redirect, no token exchange, no refresh.
->
-> ⚠️ **Confidence:** the static-key flow, rate limits, pagination, and base URL are `[DOCUMENTED]`.
-> The endpoint catalog and every field schema are `[INFERRED]` from KB articles + UI naming — the
-> reference is a JS-rendered Swagger SPA that could not be enumerated. Items tagged **🔬** must be
-> confirmed against a live tenant before you trust them. **No live call was made.**
+Practice management for architecture & engineering firms.
 
-## Context
+## Call surface (read first)
 
-- **API:** Total Synergy v2 (`https://api.totalsynergy.com/api/v2/`). A v4 surface also exists;
-  v2 is the primary documented one — prefer **v2** unless told otherwise.
-- **Base URL:** `https://api.totalsynergy.com/api/v2/` (shared host; resources scoped by org `{Slug}`
-  in the path). **NOT** the registry's `instance_url` placeholder.
-- **Auth:** Static API key — sent in a custom `access-token` header, **not** `Authorization: Bearer`.
-  No scopes. No refresh.
-- **Integration path:** Direct API, chat-only (`surfaces: ['chat']`). No `lib/oauth-providers/` class;
-  specs read by the agent via `connect_request`.
-- **Rate limits:** **300 calls/day** standard (50/day for Transactions). Premium add-on: 60k/day
-  (20k/day Transactions). **Per organisation, daily window. Budget is the binding constraint.**
+- HTTP only, via `numa integrations request`. This is NOT a file-browse connector — there is no `list-files`/`search-files`/`download-file`. Not MCP.
+- Base `https://api.totalsynergy.com/api/v2/`. The `/api/v2/` IS a real path segment (NOT a "v1 label" — it's already in the base). A v4 surface (`/swagger/v4`) is also live; prefer v2 unless told otherwise.
+- Resource path: `…/Organisation/{Slug}/{Resource}`. `{Slug}` is the org identifier in the PATH — tenancy is path-based, NOT the hostname. Resolve `{Slug}` first (see below).
+- **Always call `api.totalsynergy.com`.** NEVER the registry `instance_url` (`https://yourcompany.totalsynergy.com`) — that placeholder is NOT the API base; hitting it → 404.
 
-## Auth Structure
+## Auth
 
-The connector layer holds the static key. You issue HTTP calls with the key in a **custom header**
-— Total Synergy does **not** use `Authorization: Bearer`. The key **is** the access token.
+Header on every call:
 
 ```
 access-token: <apiKey>
-Content-Type: application/json
+Content-Type: application/json   ← POST only
 ```
 
-**Key lifecycle:**
+- The key IS the access token (the connector injects it). **NOT `Authorization: Bearer`, NOT `X-API-Key`** — either → 401 (#1 mistake).
+- Static, long-lived (user picks a 1-year or 3-year key in Synergy profile). **No refresh, no scopes.** A 401 is never fixed by refreshing — see Gotcha 5.
 
-- The key is **long-lived and static** — the user generates it in their Synergy profile (Profile
-  settings → ellipsis ⋯ → API Key) and pastes it into Numa. Two options: a **1-year** and a
-  **3-year** key. `[DOCUMENTED]`
-- **No refresh, no rotation flow.** When the key expires (1/3-yr) or is regenerated, the user must
-  generate a **new** key and re-paste it. There is no `Oauth2/*` exchange. `[DOCUMENTED]`
-- The key is **personal** — its data access equals the issuing user's Synergy role/permissions.
-  Treat it as a high-value secret. `[DOCUMENTED]`
+## Resolve {Slug} first (every data path needs it)
 
-> 🚩 **Registry `instance_url` does NOT match the API base (build-time concern; affects you only if
-> calls 404/401).** The registry collects `api_key` + `instance_url` (placeholder
-> `https://yourcompany.totalsynergy.com`). The REST API is served from the **shared host**
-> `api.totalsynergy.com`, **not** a per-tenant subdomain — tenancy is the org `{Slug}` in the path.
-> If a customer pasted a `*.totalsynergy.com` URL expecting it to be the endpoint, calls go to the
-> wrong host. Always call `api.totalsynergy.com` and supply the org `{Slug}` in the path.
+`GET Organisation` or `GET Organisation/MySlug` 🔬 → org slug. Cache it for the session; do not re-resolve per call (saves budget). Exact path + response shape 🔬 (may return a list of orgs).
 
-## Capabilities
+## CAN
 
-### CAN
+List/search **Projects**, **Contacts**, **Staff** (read; filter `criteria.Id`, page `criteria.pagesize`). Read **timesheets** (`Timesheet/Week`, `Timesheet/Leaderboard`) and **Timers**. Read **Transactions/invoices**. **Create** timesheet entries / invoices via the Transactions API (sparingly — see Gotcha 3).
 
-1. List/search **Projects**, **Contacts**, **Staff** (read), filter by `criteria.Id` and page with `criteria.pagesize`.
-2. Read timesheets (`Timesheet/Week`, `Timesheet/Leaderboard`) and **Timers**.
-3. Read **Transactions/invoices**; **create** timesheet entries / invoices via the Transactions API (sparingly).
+## CANNOT
 
-### CANNOT
+High-frequency polling or bulk sync (300/day cap; per-org, extra keys don't help). Cross-organisation queries (one key = one org's data, only what the issuing user can see). Blind-retry Transaction POSTs (no idempotency key → duplicate invoices/entries + burns budget). Bulk/batch writes (one record per POST). File upload/download (not a doc store). Project/Contact writes are "likely" per KB but have no confirmed path/body — treat as read-only until 🔬.
 
-1. **High-frequency polling or bulk sync** — the 300/day (50/day Transactions) standard cap kills it without Premium. The budget is **per-org**, so extra keys don't help.
-2. **Cross-organisation queries** — every path is scoped to one org `{Slug}`; one key = one org's data, and only what the issuing user can see.
-3. **Blind retries of Transaction POSTs** — no idempotency key; retries risk duplicate invoices/entries and burn the tight daily budget.
+## Gotchas
 
-## Critical Gotchas
+1. **Token header is `access-token`, NOT `Authorization: Bearer`** (and NOT `X-API-Key`) → 401. #1 mistake.
+2. **Call `api.totalsynergy.com`, never the registry `instance_url`.** Tenancy = org `{Slug}` in the path (`…/Organisation/{Slug}/{Resource}`), not the hostname. Wrong host → 404.
+3. **Transactions has its own far tighter budget: 50/day standard.** Treat timesheet/invoice writes as scarce — confirm before each, never loop.
+4. **Limits are DAILY, not per-second.** Mitigation = call frugality + caching, NOT retry loops. One careless paginated scan can exhaust the day's 300; a 429 won't reset until the next day.
+5. **A 401 is NOT refreshable** — there is no refresh flow. It means the key is missing, **expired** (past its 1/3-yr life), revoked, or in the wrong header. Recovery: user regenerates a key in their Synergy profile and re-pastes it.
+6. **ID filtering still returns the LIST envelope** (`{totalItems, items[]}`), not a bare object — read `items[0]`.
+7. **No default page size** — always send `criteria.pagesize` explicitly (max 1000) 🔬.
+8. **Keyset endpoints exist** (unidentified 🔬) and won't honour `pagesize` — if a list ignores `pagesize` or returns a cursor, follow the cursor.
+9. **Field names + write bodies are `[INFERRED]` 🔬** (`staffId`, `units`, `fromDateAsInt`, …). Don't trust write keys until confirmed on a live tenant. Reads are safer than writes.
+10. **Dates serialise as strings;** some endpoints use integer dates `yyyymmdd` (`fromDateAsInt`/`toDateAsInt`).
 
-> Things that will cause errors if you get them wrong.
+## Defaults (override only if the user specifies)
 
-1. **Token header is `access-token`, NOT `Authorization: Bearer`.** A `Bearer` header → 401. This is the #1 mistake. (`X-API-Key` will also fail.)
-2. **Call `api.totalsynergy.com`, never the registry `instance_url`.** Tenancy is the org `{Slug}`
-   in the path (`…/Organisation/{Slug}/{Resource}`), not the hostname. Resolve `{Slug}` first via
-   `GET …/Organisation` or `…/Organisation/MySlug` 🔬.
-3. **Transactions has its own, far tighter budget** (50/day standard). Treat timesheet/invoice
-   writes as scarce — confirm before each, never loop.
-4. **Daily — not per-second — limits.** Mitigation is **call frugality + caching**, not retry loops.
-   One careless paginated scan can exhaust the day's 300. A 429 will not reset until the next day.
-5. **A 401 here is NOT fixable by refreshing** — there is no refresh flow. It means the key is
-   missing, **expired** (past its 1/3-yr life), revoked, or sent in the wrong header. Recovery = the
-   user regenerates a key in their profile and re-pastes it.
-6. **Field names are `[INFERRED]` 🔬.** Don't trust write-body keys (`staffId`, `units`,
-   `fromDateAsInt`) until confirmed on a live tenant. Reads are safer than writes.
+`criteria.pagesize=200` (read; up to 1000 to minimise pages), API version `v2`, host `api.totalsynergy.com`, header `access-token`.
 
-## Default Parameters
+## Operations
 
-Use these defaults unless the user specifies otherwise:
+Paths are under `https://api.totalsynergy.com/api/v2/`. Confidence: (DOC)=documented, (INF)=inferred, 🔬=verify on live tenant.
 
-| Parameter           | Default                | Reason                                              |
-| ------------------- | ---------------------- | --------------------------------------------------- |
-| `criteria.pagesize` | 200 (read), up to 1000 | Stay under the 1000 max while minimising call count |
-| API version         | `v2`                   | Primary documented surface                          |
-| API host            | `api.totalsynergy.com` | Shared host; NOT the registry `instance_url`        |
-| Token header        | `access-token`         | Vendor-mandated; never `Authorization: Bearer`      |
+| Operation                  | Method | Path                                        | Key params / notes                                               |
+| -------------------------- | ------ | ------------------------------------------- | ---------------------------------------------------------------- |
+| Resolve org slug           | GET    | `Organisation` / `Organisation/MySlug`      | Do first; needed for every path. 🔬 exact shape                  |
+| List/search projects       | GET    | `Organisation/{Slug}/Projects`              | `criteria.Id`, `criteria.pagesize`; `{totalItems,items[]}` (DOC) |
+| List/search contacts       | GET    | `Organisation/{Slug}/Contacts`              | same envelope (DOC)                                              |
+| List staff                 | GET    | `Organisation/{Slug}/Staff`                 | resolve `staffId` for writes (DOC)                               |
+| Weekly timesheet           | GET    | `Organisation/{Slug}/Timesheet/Week`        | week-start, staff 🔬 (DOC path)                                  |
+| Timesheet leaderboard      | GET    | `Organisation/{Slug}/Timesheet/Leaderboard` | aggregate metric 🔬 (DOC)                                        |
+| Timers                     | GET    | `Organisation/{Slug}/Timers`                | running/stored 🔬 (DOC)                                          |
+| List transactions/invoices | GET    | `Organisation/{Slug}/Transactions`          | keyset? 🔬 (INF)                                                 |
+| Create timesheet/invoice   | POST   | `Organisation/{Slug}/Transactions`          | body; **50/day budget; NOT idempotent** (DOC)                    |
+| Project stages             | GET    | `Organisation/{Slug}/Projects/{id}/Stages`  | referenced by `stageId` 🔬 (INF)                                 |
+| Project tasks              | GET    | `Organisation/{Slug}/Projects/{id}/Tasks`   | referenced by `taskId` 🔬 (INF)                                  |
 
-## Working Examples
-
-> Key shown in examples; the connector injects it. `{Slug}` = the org identifier (e.g. `acme-eng`).
-
-### Example 1: Resolve the org slug (do this first)
-
-```http
-GET /api/v2/Organisation/MySlug
-Host: api.totalsynergy.com
-access-token: <apiKey>
-```
-
-```json
-{ "slug": "acme-eng", "name": "Acme Engineering" }
-```
-
-> Exact path + response shape 🔬 — may be `GET /api/v2/Organisation` returning a list of orgs.
-
-### Example 2: List projects (read)
-
-```http
-GET /api/v2/Organisation/acme-eng/Projects?criteria.pagesize=50
-Host: api.totalsynergy.com
-access-token: <apiKey>
-```
-
-```json
-{
-  "totalItems": 312,
-  "items": [{ "id": "10042", "name": "Riverside Bridge Upgrade", "status": "Active", "clientId": "551" }]
-}
-```
-
-### Example 3: Get one project by id
-
-```http
-GET /api/v2/Organisation/acme-eng/Projects?criteria.Id=10042
-Host: api.totalsynergy.com
-access-token: <apiKey>
-```
-
-```json
-{ "totalItems": 1, "items": [{ "id": "10042", "name": "Riverside Bridge Upgrade", "status": "Active" }] }
-```
-
-### Example 4: List staff (resolve `staffId` for writes)
-
-```http
-GET /api/v2/Organisation/acme-eng/Staff?criteria.pagesize=200
-Host: api.totalsynergy.com
-access-token: <apiKey>
-```
-
-```json
-{ "totalItems": 24, "items": [{ "id": "88", "name": "Jordan Lee", "email": "jordan@acme-eng.com" }] }
-```
-
-### Example 5: Create a timesheet entry (write — Transactions API, rate-limited)
-
-```http
-POST /api/v2/Organisation/acme-eng/Transactions
-Host: api.totalsynergy.com
-access-token: <apiKey>
-Content-Type: application/json
-
-{ "staffId": "88", "projectId": "10042", "stageId": "3", "taskId": "17",
-  "fromDateAsInt": 20260526, "toDateAsInt": 20260526, "units": 7.5 }
-```
-
-```json
-{ "timesheetId": "990123" }
-```
-
-> Body fields + exact path are `[INFERRED]` 🔬. Counts against the **50/day** Transaction budget. **Not idempotent** — never blind-retry.
-
-## Proxy API Operations
-
-> Paths are under `https://api.totalsynergy.com/api/v2/`. Confidence in parentheses.
-
-| Operation                | Method | Path                                        | Key Parameters                     | Notes                                     |
-| ------------------------ | ------ | ------------------------------------------- | ---------------------------------- | ----------------------------------------- |
-| Resolve org slug         | GET    | `Organisation` / `Organisation/MySlug`      | —                                  | Do first; needed for every path 🔬        |
-| List/search projects     | GET    | `Organisation/{Slug}/Projects`              | `criteria.Id`, `criteria.pagesize` | `totalItems` + `items[]` (DOC)            |
-| List/search contacts     | GET    | `Organisation/{Slug}/Contacts`              | `criteria.Id`, `criteria.pagesize` | Same envelope (DOC)                       |
-| List staff               | GET    | `Organisation/{Slug}/Staff`                 | `criteria.pagesize`                | Resolve `staffId` for writes (DOC)        |
-| Weekly timesheet         | GET    | `Organisation/{Slug}/Timesheet/Week`        | week-start, staff 🔬               | Read timesheet (DOC path)                 |
-| Timesheet leaderboard    | GET    | `Organisation/{Slug}/Timesheet/Leaderboard` | 🔬                                 | Aggregate metric (DOC)                    |
-| Timers                   | GET    | `Organisation/{Slug}/Timers`                | 🔬                                 | Running/stored timers (DOC)               |
-| List transactions        | GET    | `Organisation/{Slug}/Transactions`          | keyset? 🔬                         | Invoices live here (INFERRED)             |
-| Create timesheet/invoice | POST   | `Organisation/{Slug}/Transactions`          | body                               | Rate-limited 50/day; not idempotent (DOC) |
-| Project stages           | GET    | `Organisation/{Slug}/Projects/{id}/Stages`  | 🔬                                 | Referenced by `stageId` (INFERRED)        |
-| Project tasks            | GET    | `Organisation/{Slug}/Projects/{id}/Tasks`   | 🔬                                 | Referenced by `taskId` (INFERRED)         |
-
-> 🔬 Full catalog needs Swagger enumeration (`/swagger/ui/index` v2, `/swagger/v4`) against a live static key. This is the documented/inferred subset. **No `Oauth2/*` endpoints apply** — the key is pasted directly.
+> 🔬 Full catalog needs Swagger enumeration (`/swagger/ui/index` v2, `/swagger/v4`) against a live key — this is the documented/inferred subset, not the complete inventory. **No `Oauth2/*` endpoints apply** — the key is pasted directly.
 
 ## Pagination
 
-- **Type:** offset/page via `criteria.pagesize` (+ page index). **Keyset** on some endpoints (unidentified 🔬).
-- **Default page size:** not documented — always send `criteria.pagesize` explicitly 🔬.
-- **Max page size:** **1000** (non-keyset endpoints).
-- **How to paginate:**
+Offset/page via `criteria.pagesize` (+ page index). Envelope `{ "totalItems": <int>, "items": [ … ] }`.
 
-```http
-GET /api/v2/Organisation/acme-eng/Contacts?criteria.pagesize=1000              # page 1
-GET /api/v2/Organisation/acme-eng/Contacts?criteria.pagesize=1000&criteria.page=2   # page 2 🔬 (param name unconfirmed)
-```
+- Max page size **1000**; no documented default → always send `criteria.pagesize` 🔬.
+- Page index param: `criteria.page` (**name unconfirmed** 🔬).
+- Last page: `(page * pagesize) >= totalItems`, or `items.length < pagesize`.
+- **Keyset** on some (unidentified 🔬) endpoints — don't assume `pagesize` works everywhere.
+- ⚠️ Each page = one of your 300 daily calls. Use `pagesize=1000` to minimise pages; don't scan large resources casually.
 
-- **Response envelope:** `{ "totalItems": <int>, "items": [ … ] }`.
-- **Last-page detection:** `(page * pagesize) >= totalItems`, or `items.length < pagesize`.
-- ⚠️ Each page is one of your 300 daily calls. Use `pagesize=1000` to minimise pages; don't scan huge resources casually.
+## Errors
 
-## Webhooks / Events
+**Error-body shape is NOT published** (`[UNKNOWN]` 🔬). Do NOT fabricate a `{code,message,details}` structure — surface the raw body + HTTP status. Recover by status:
 
-No webhook / WebSocket / SSE support found. Change detection is **polling-only**, and the daily
-cap makes polling **low-frequency** (Premium tenants excepted). Poll list endpoints and diff on a
-date/modified field — which field reliably exposes "modified since" is 🔬 DISCOVER.
+| Status     | Meaning            | Action                                                                                                                                          |
+| ---------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 200        | OK (JSON body)     | —                                                                                                                                               |
+| 400        | Bad request        | Fix params (`criteria.*`) or write-body fields                                                                                                  |
+| 401        | Unauthorized       | Check `access-token` header (not `Authorization`/`X-API-Key`). **No refresh** — ask user to regenerate the key (Profile settings → ⋯ → API Key) |
+| 404        | Not found          | Verify `{Slug}` and resource id; confirm host is `api.totalsynergy.com`, not `instance_url`                                                     |
+| 429 (?) 🔬 | Rate limit (daily) | Stop calling — won't reset until next day; suggest Premium add-on. Retrying same-day is futile                                                  |
+| 5xx        | Server error       | Exponential backoff, sparingly (each retry costs budget)                                                                                        |
 
-## Error Handling
+## Examples
 
-**Standard error format:** **not published** — all responses are JSON but the error-body shape
-(code/message/details) is `[UNKNOWN]`. Do **not** fabricate it; surface the raw body + status.
+1. Resolve the org slug (do first):
+   `GET /api/v2/Organisation/MySlug` (header `access-token: <apiKey>`) → `{"slug":"acme-eng","name":"Acme Engineering"}` 🔬 (may return a list)
 
-**Recovery by status:**
+2. List projects:
+   `GET /api/v2/Organisation/acme-eng/Projects?criteria.pagesize=50` → `{"totalItems":312,"items":[{"id":"10042","name":"Riverside Bridge Upgrade","status":"Active","clientId":"551"}]}`
 
-| Status  | Meaning            | Action                                                                                                     |
-| ------- | ------------------ | ---------------------------------------------------------------------------------------------------------- |
-| 200     | OK (JSON body)     | —                                                                                                          |
-| 400     | Bad request        | Fix params (`criteria.*`, body fields)                                                                     |
-| 401     | Unauthorized       | Key missing/expired/in wrong header — **check `access-token`**. No refresh: ask user to regenerate the key |
-| 404     | Not found          | Verify `{Slug}` and the resource id                                                                        |
-| 429 (?) | Rate limit (daily) | Stop calling — won't reset until next day; suggest Premium 🔬                                              |
-| 5xx     | Server error       | Retry with exponential backoff (sparingly — budget)                                                        |
+3. Get one project by id (still returns list envelope — read `items[0]`):
+   `GET /api/v2/Organisation/acme-eng/Projects?criteria.Id=10042` → `{"totalItems":1,"items":[{"id":"10042","name":"Riverside Bridge Upgrade","status":"Active"}]}`
 
-- Most common 401 cause: key in `Authorization`/`X-API-Key` instead of the `access-token` header,
-  or an **expired** static key.
-- 429 status/headers/`Retry-After` are 🔬 unconfirmed. Because limits are **daily**, retrying within the same day is futile.
+4. List staff (resolve `staffId` for writes):
+   `GET /api/v2/Organisation/acme-eng/Staff?criteria.pagesize=200` → `{"totalItems":24,"items":[{"id":"88","name":"Jordan Lee","email":"jordan@acme-eng.com"}]}`
 
-## Known Limitations
-
-1. **Daily rate budget is the dominant constraint** (300/day; 50/day Transactions) — no bulk/high-frequency use without Premium. Budget is per-org; extra keys don't help.
-2. **No webhooks** — polling only, and polling must be sparse.
-3. **No idempotency on Transaction writes** — duplicate-risk + budget-burn; track created ids client-side.
-4. **No token refresh** — an expired key needs manual regeneration + re-paste by the user.
-5. **Field schemas + error body are inferred/unknown** 🔬 — verify on a live tenant before trusting writes or parsing errors.
-6. **Registry `instance_url` doesn't match the real API base** 🚩 — always call `api.totalsynergy.com` with the org `{Slug}` in the path.
-
----
-
-_Generated from investigation questionnaire. See companion files:_
-
-- _01a-domain-model-reference.md — entities, relationships, business rules_
-- _01b-query-patterns.md — filtering, `criteria.*`, pagination_
-- _01c-mutation-patterns.md — Transactions create (timesheets/invoices)_
-- _01d-event-and-error-handling.md — no webhooks, errors, daily rate limits_
+5. Create a timesheet entry (write — Transactions API, 50/day, NOT idempotent, body `[INFERRED]` 🔬):
+   `POST /api/v2/Organisation/acme-eng/Transactions` (+ `Content-Type: application/json`)
+   body: `{"staffId":"88","projectId":"10042","stageId":"3","taskId":"17","fromDateAsInt":20260526,"toDateAsInt":20260526,"units":7.5}`
+   → `{"timesheetId":"990123"}`. Never blind-retry — record the returned id.

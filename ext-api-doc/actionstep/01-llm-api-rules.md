@@ -1,32 +1,34 @@
 ---
-api_name: 'Actionstep'
-api_slug: 'actionstep'
-version: 'v1 (vnd.api+json); v2 partial'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-27'
-line_count_target: '< 300 lines'
+api_name: Actionstep
+api_slug: actionstep
+base_url: dynamic — the api_endpoint returned in the OAuth token response (region-specific); NEVER hard-code a *.actionstep.com host
+route_prefix: /api/rest
+path_construction: "{api_endpoint}/api/rest/{resource}"  (e.g. https://ap-southeast-2.actionstep.com/api/rest/actions)
+path_version_segment: none — "v1"/"v2" are content-type/label only, NEVER a path segment; /v1/... and /v2/... do NOT exist
+api_variant: v1 (Content-Type application/vnd.api+json) is the full surface — USE v1; v2 (plain JSON) covers only Matters/FileNotes/Tags — skip unless told
+auth: Bearer {token} (OAuth2 authorization-code, user-context only; managed by Numa connector layer)
+field_casing: camelCase
+id_format: integer (numeric, not opaque)
+rate_limit: 429 live since Apr 2024; thresholds unpublished — back off on 429
+call_surface: HTTP via `numa integrations request`. Direct-API spec-driven connector, surfaces=['chat']. NOT a file-browse connector — does NOT support list-files/search-files/download-file.
+vocabulary: matter/case = Action (resource `actions`); contact = Participant (resource `participants`); time entry resource `timeentries`
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
+confidence: doc-based research 2026-05-27, no live call yet — items tagged 🔬 are SANDBOX-CONFIRM (verify against a live org before trusting)
 ---
 
-# Actionstep — Workspace Agent API Rules
+# Actionstep — API Rules
 
-> **Loaded into the workspace agent's context when the Actionstep integration is active.**
-> Actionstep is a legal practice management system. Matters are called **Actions**.
-> Companion files (01a–01d) hold the detailed reference.
+Legal practice management. Matters = **Actions**, contacts = **Participants**.
 
-## Context
+## Paths (read first)
 
-- **API:** Actionstep v1 (`application/vnd.api+json`). A newer v2 (cleaner JSON) covers only
-  Matters/FileNotes/Tags — prefer **v1** unless told otherwise.
-- **Base URL:** the `api_endpoint` returned in the OAuth token response (region-specific),
-  then `/api/rest/{resource}`. Never hard-code a region host.
-- **Auth:** OAuth2 (authorization code) bearer token, user-context only.
-- **Integration path:** Direct API, chat-only.
-- **Rate limits:** HTTP 429 since April 2024; thresholds unpublished — back off on 429.
+- Full URL = `{api_endpoint}/api/rest/{resource}`. `api_endpoint` = the region host from the OAuth token response — always use the connector's stored value; a hard-coded `*.actionstep.com` host fails for other regions.
+- NO version segment. "v1"/"v2" are API variants (content-type/label), never `/v1/` or `/v2/` → those 404. Path examples: `/api/rest/actions`, `/api/rest/actions/123`, `/api/rest/timeentries`.
+- Use **v1** (`application/vnd.api+json`) — full surface. v2 (plain JSON) only covers Matters/FileNotes/Tags; skip unless told.
 
-## Auth Structure
+## Auth
 
-Bearer token in the `Authorization` header. The token is managed by Numa's connector layer;
-you do not handle the OAuth dance yourself.
+Headers (v1):
 
 ```
 Authorization: Bearer <access_token>
@@ -34,178 +36,76 @@ Content-Type: application/vnd.api+json
 Accept: application/vnd.api+json
 ```
 
-**Token lifecycle:**
+- OAuth2 authorization-code, **user-context only** — no machine-to-machine / service-account mode.
+- Access token 8h; refresh token 21 days and **rotates** on every refresh (persist the new one). Refresh: `POST https://api.actionstep.com/api/oauth/token`.
 
-- Access token lives 8 hours; refresh token lives 21 days and **rotates** on every refresh.
-- The base URL comes from `api_endpoint` in the token response — every request goes to that host.
+## CAN
 
-## Capabilities
+Read + create + update: matters (`actions`), contacts (`participants`), time entries (`timeentries`), file notes (`filenotes`), tasks (`tasks`), bills (`bills`), documents (`actiondocuments`). DELETE per-resource. Subscribe to change events via RestHooks (24 event types — see 01d).
 
-### CAN
+## CANNOT
 
-1. Read matters (Actions), contacts (Participants), time entries, file notes, tasks, bills, documents.
-2. Create/update those records (e.g. log a time entry, add a file note, create a task).
-3. Subscribe to change events via RestHooks (24 event types).
+- Act without a user (no service-account mode).
+- Use a fixed base URL (per-region `api_endpoint`).
+- Page > 200 (`pageSize` hard cap 200, default 50).
 
-### CANNOT
+## Gotchas
 
-1. Act without a user — there is no machine-to-machine / service-account mode.
-2. Rely on a fixed base URL — it is per-region, from the token response.
-3. Assume large pages — `pageSize` is capped at 200 (default 50).
+1. **Base URL is dynamic** — use stored `api_endpoint`; hard-coded host fails cross-region.
+2. **Matters are `actions`, time is `timeentries`** — no `matters` endpoint on v1.
+3. **Content-Type `application/vnd.api+json`** on v1, not plain `application/json`.
+4. **Responses are resource-keyed objects, not bare arrays:** records sit under a key named after the resource. Read `response["actions"]`, NOT `response[0]`. Related data under `linked`/`links`; pagination under `meta.paging.{resource}` (keyed by resource name, not a flat `paging`).
+5. **Write bodies are resource-keyed too:** wrap the payload under the resource name → `{"timeentries":{...}}`. A bare `{...}` body is rejected.
+6. **v1 uses PUT for updates** (not PATCH — 🔬 confirm PATCH support). If a partial PUT isn't honoured it can blank omitted fields → GET-merge-PUT.
+7. **Writes are user-scoped:** a 403 = the connected user lacks permission, not a bad token.
+8. **Filter/sort/sideload param names are under-documented** (🔬). Don't assume `?status=Active` works; page through and filter client-side until verified.
+9. **Errors are under a top-level `errors` key** (success bodies are resource-keyed) — detect errors by presence of `errors`, not by array-vs-object shape.
 
-## Critical Gotchas
+## Defaults (override only if user specifies)
 
-> Things that will cause errors if you get them wrong.
+`pageSize=50` (raise toward 200 for bulk reads), `page=1` (1-based), API variant=v1.
 
-1. **Base URL is dynamic:** use the connector's stored `api_endpoint`; a hard-coded
-   `*.actionstep.com` host will fail for other regions.
-2. **Matters are "Actions":** the resource is `actions`, the time resource is `timeentries`.
-   Don't look for a `matters` endpoint on v1.
-3. **Content type is `application/vnd.api+json`** on v1, not plain `application/json`.
-   Responses are resource-keyed with `links`/`linked`/`meta`, not a bare array.
-4. **Filter/sort syntax is not fully documented** — confirm parameter names against the live
-   API before relying on server-side filtering; otherwise page through and filter client-side.
+## Operations
 
-## Default Parameters
+| Operation         | Method | Path                      | Key params / notes                                   |
+| ----------------- | ------ | ------------------------- | ---------------------------------------------------- |
+| List matters      | GET    | /api/rest/actions         | page, pageSize; resource-keyed response              |
+| Get matter        | GET    | /api/rest/actions/{id}    | `linked` for related records                         |
+| Create matter     | POST   | /api/rest/actions         | resource-keyed body                                  |
+| Update matter     | PUT    | /api/rest/actions/{id}    | full record (GET-merge-PUT)                          |
+| Delete matter     | DELETE | /api/rest/actions/{id}    | dangerous — confirm with user                        |
+| List contacts     | GET    | /api/rest/participants    | page, pageSize                                       |
+| List time entries | GET    | /api/rest/timeentries     | filter by matter: `?action={id}` (param spelling 🔬) |
+| Create time entry | POST   | /api/rest/timeentries     | body `{action, minutes, note, date}` — fields 🔬     |
+| Add file note     | POST   | /api/rest/filenotes       | body `{action, text}`                                |
+| Create task       | POST   | /api/rest/tasks           | body `{name, ...}`; `action` optional                |
+| List bills        | GET    | /api/rest/bills           | per-matter `?action={id}`                            |
+| Documents         | GET    | /api/rest/actiondocuments | upload mechanism 🔬                                  |
+| Matter config     | GET    | /api/rest/actiontypes     | step graph per ActionType                            |
+| Subscribe event   | POST   | /api/rest/resthooks       | `{eventName, targetUrl}`; target must return 200     |
 
-| Parameter   | Default | Reason                                           |
-| ----------- | ------- | ------------------------------------------------ |
-| `pageSize`  | 50      | API default; raise toward 200 max for bulk reads |
-| `page`      | 1       | Page-number pagination starts at 1               |
-| API version | v1      | Feature-complete; v2 only covers a few resources |
-
-## Working Examples
-
-### Example 1: List matters (Actions)
-
-```http
-GET {api_endpoint}/api/rest/actions?page=1&pageSize=50
-Authorization: Bearer <token>
-Accept: application/vnd.api+json
-```
-
-```json
-{
-  "actions": [{ "id": 123, "name": "Smith v Jones", "status": "Active" }],
-  "meta": {
-    "paging": {
-      "actions": { "recordCount": 1, "pageCount": 1, "page": 1, "pageSize": 50, "prevPage": null, "nextPage": null }
-    }
-  }
-}
-```
-
-### Example 2: Get one matter with related contacts
-
-```http
-GET {api_endpoint}/api/rest/actions/123
-Authorization: Bearer <token>
-Accept: application/vnd.api+json
-```
-
-```json
-{
-  "actions": { "id": 123, "name": "Smith v Jones" },
-  "linked": { "participants": [{ "id": 9, "displayName": "Jane Smith" }] },
-  "links": { "actions.participants": { "href": "/api/rest/participants/{actions.participants}" } }
-}
-```
-
-### Example 3: Log a time entry (create)
-
-```http
-POST {api_endpoint}/api/rest/timeentries
-Authorization: Bearer <token>
-Content-Type: application/vnd.api+json
-
-{ "timeentries": { "action": 123, "minutes": 30, "note": "Drafted advice" } }
-```
-
-```json
-{ "timeentries": { "id": 555, "action": 123, "minutes": 30, "note": "Drafted advice" } }
-```
-
-> Field names in the create body are **🔬 sandbox-confirm** — verify against the live
-> `timeentries` schema before trusting them.
-
-## Proxy API Operations
-
-| Operation         | Method | Path                     | Key Parameters           | Notes                   |
-| ----------------- | ------ | ------------------------ | ------------------------ | ----------------------- |
-| List matters      | GET    | `/api/rest/actions`      | `page`, `pageSize`       | Resource-keyed response |
-| Get matter        | GET    | `/api/rest/actions/{id}` | —                        | `linked` for related    |
-| List contacts     | GET    | `/api/rest/participants` | `page`, `pageSize`       |                         |
-| List time entries | GET    | `/api/rest/timeentries`  | `page`, `pageSize`       |                         |
-| Create time entry | POST   | `/api/rest/timeentries`  | body                     | Confirm fields 🔬       |
-| Add file note     | POST   | `/api/rest/filenotes`    | body                     |                         |
-| Create task       | POST   | `/api/rest/tasks`        | body                     |                         |
-| Subscribe events  | POST   | `/api/rest/resthooks`    | `eventName`, `targetUrl` | Target must return 200  |
+Example webhook events: `ActionCreated` (matter created), `TimeEntryCreated` (time logged), `FileNoteCreated` (file note added) — payload shape 🔬. Full 24-event catalog in 01d.
 
 ## Pagination
 
-- **Type:** page-number.
-- **Default page size:** 50. **Max page size:** 200.
-- **How to paginate:**
+Page-number. Default 50, **max 200** (clamped/rejected above). `?page=1&pageSize=200` then `page=2`… Last page when `meta.paging.{resource}.nextPage === null`. Total via `meta.paging.{resource}.recordCount`/`.pageCount`.
 
-```http
-GET {api_endpoint}/api/rest/actions?page=2&pageSize=100
-```
+## Errors
 
-- **Last page detection:** `meta.paging.{resource}.nextPage` is `null`.
+Format: `{"errors":{"id","status","code":"AS-TBC","title","detail","source":{"pointer","parameter"}}}` (codes prefixed `AS-`). Per-resource validation codes: `A01–A02` (actions), `P01–P03` (participants), `T01–T11` (tasks), `TR01–TR05` (time records).
+Recovery: 400 fix body/params · 401 refresh token then retry once · 403 check user permissions/scopes · 404 verify id + region base URL · 409 re-read then retry · 422 read `code`/`source`, fix fields · 429 exponential backoff + jitter (limits session/orgkey-based — serialise bursty work) · 5xx exponential backoff (≤3).
 
-## Webhooks / Events
+## Examples
 
-**Supported** via RestHooks (24 event types — see 01d for the full list).
+1. List matters:
+   `GET {api_endpoint}/api/rest/actions?page=1&pageSize=50`
+   → `{"actions":[{"id":123,"name":"Smith v Jones","status":"Active"}],"meta":{"paging":{"actions":{"recordCount":1,"pageCount":1,"page":1,"pageSize":50,"prevPage":null,"nextPage":null}}}}`
 
-| Event            | Trigger                | Key Payload Fields |
-| ---------------- | ---------------------- | ------------------ |
-| ActionCreated    | A matter is created    | (payload shape 🔬) |
-| TimeEntryCreated | A time entry is logged | (payload shape 🔬) |
-| FileNoteCreated  | A file note is added   | (payload shape 🔬) |
+2. Get matter + related contacts:
+   `GET {api_endpoint}/api/rest/actions/123`
+   → `{"actions":{"id":123,"name":"Smith v Jones"},"linked":{"participants":[{"id":9,"displayName":"Jane Smith"}]},"links":{"actions.participants":{"href":"/api/rest/participants/{actions.participants}"}}}`
 
-**Setup:** `POST /api/rest/resthooks` with `{"resthooks": {"eventName": "...", "targetUrl": "..."}}`.
-The target URL must return HTTP 200 or Actionstep disables the hook.
-
-## Error Handling
-
-**Standard error format:**
-
-```json
-{
-  "errors": {
-    "id": "...",
-    "status": 404,
-    "code": "AS-TBC",
-    "title": "Not Found",
-    "detail": "...",
-    "source": { "pointer": null, "parameter": null }
-  }
-}
-```
-
-**Recovery by status:**
-
-| Status | Meaning          | Action                                   |
-| ------ | ---------------- | ---------------------------------------- |
-| 400    | Bad request      | Fix request parameters                   |
-| 401    | Unauthorized     | Refresh token and retry                  |
-| 403    | Forbidden        | Check scopes / user permissions          |
-| 404    | Not found        | Verify resource ID                       |
-| 422    | Validation error | Read per-resource code (A/P/T/TR series) |
-| 429    | Rate limited     | Exponential backoff (no published limit) |
-| 5xx    | Server error     | Retry with exponential backoff           |
-
-## Known Limitations
-
-1. No machine-to-machine auth — always user-context.
-2. Filter/sort/sideload query syntax under-documented — confirm before relying on it.
-3. Webhook payload shape and rate-limit thresholds are not published.
-
----
-
-_Generated from investigation questionnaire. See companion files:_
-
-- _01a-domain-model-reference.md — entities, relationships, business rules_
-- _01b-query-patterns.md — list, filter, sideload, pagination_
-- _01c-mutation-patterns.md — create, update, delete_
-- _01d-event-and-error-handling.md — RestHooks events, errors, rate limits_
+3. Log a time entry (`POST /api/rest/timeentries`, body resource-keyed):
+   `{"timeentries":{"action":123,"minutes":30,"note":"Drafted advice","date":"2026-05-27"}}`
+   → 201 `{"timeentries":{"id":555,"action":123,"minutes":30,"note":"Drafted advice"}}`
+   🔬 Confirm whether duration is `minutes`/`units`/`hours` before trusting totals.

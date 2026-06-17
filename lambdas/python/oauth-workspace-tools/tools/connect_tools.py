@@ -33,11 +33,9 @@ from .synergy_helpers import (
     get_synergy_credentials,
     is_synergy_configured,
     list_job_folders,
+    search_all_jobs,
 )
 from .synergy_helpers import search_files as synergy_search_files
-from .synergy_helpers import (
-    search_jobs,
-)
 
 logger = structlog.get_logger()
 
@@ -303,7 +301,13 @@ def _user_connector_fields(connector: str, user_sub: str) -> Optional[Dict[str, 
     return fields if isinstance(fields, dict) else None
 
 
-_TOKEN_FIELD_KEYS = ("api_key", "bearer_token", "access_token", "token", "refresh_token")
+_TOKEN_FIELD_KEYS = (
+    "api_key",
+    "bearer_token",
+    "access_token",
+    "token",
+    "refresh_token",
+)
 
 
 def _connector_header_map(connector: str) -> Dict[str, str]:
@@ -520,7 +524,7 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
     """List Synergy jobs/folders/files using folder_id prefix routing.
 
     folder_id mapping:
-      - None/empty → search_jobs() → return jobs as folders
+      - None/empty → search_all_jobs() → return ALL jobs as folders
       - "job:{id}" → list_job_folders(id) → return folders
       - "folder:{id}" → get_folder_items(id) → return subfolders + files
     """
@@ -540,8 +544,11 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
         server, token = creds
 
         if not folder_id:
-            # Root level — list jobs
-            data = search_jobs(server, token, name=query, page=1, page_size=page_size)
+            # Root level — list ALL jobs (search_jobs returns one page; page 1
+            # only would silently truncate accounts with many jobs).
+            data = search_all_jobs(
+                server, token, name=query, page_size=max(page_size, 100)
+            )
             folders = [
                 {
                     "folder_id": f"job:{job['job_id']}",
@@ -559,6 +566,7 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
                     "files": [],
                     "total_count": data.get("total_rows") or len(folders),
                     "connector": "synergy",
+                    "truncated": data.get("truncated", False),
                 },
                 "error": None,
             }
@@ -719,7 +727,9 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         # No job scope → locate matching jobs by name (file search needs a job).
-        data = search_jobs(server, token, name=query, page=1, page_size=page_size)
+        # Walk all pages — a single page would silently truncate a name match
+        # that spans more than one page.
+        data = search_all_jobs(server, token, name=query, page_size=max(page_size, 100))
 
         folders = [
             {
@@ -745,6 +755,7 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
                     "folder_id='job:<job_id>'."
                 ),
                 "connector": "synergy",
+                "truncated": data.get("truncated", False),
             },
             "error": None,
         }
@@ -1091,7 +1102,9 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 user_fields = _user_connector_fields(connector, user_sub)
                 header_map = _connector_header_map(connector)
-                declared = str(_connector_config(connector).get("connector_type") or "").strip()
+                declared = str(
+                    _connector_config(connector).get("connector_type") or ""
+                ).strip()
                 if header_map:
                     custom_auth_headers = _headers_from_fields(header_map, user_fields)
                 elif declared == "username-password":

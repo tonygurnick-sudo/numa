@@ -7,6 +7,7 @@
  */
 
 import gmailIcon from '../assets/icons/gmail.svg';
+import genericConnectorIcon from '../assets/icons/generic-connector.svg';
 import outlookIcon from '../assets/icons/outlook.svg';
 import outlookCalendarIcon from '../assets/icons/outlook_calendar.png';
 import slackIcon from '../assets/icons/slack.svg';
@@ -649,7 +650,11 @@ export const getConnectionConfig = (id: string): ConnectionConfigEntry | null =>
 
 export const getAllConnections = (): ConnectionConfigEntry[] => Object.values(getConnectionsConfig());
 
-export const getConnectionIcon = (id: string): string => getConnectionsConfig()[id]?.img_src || gmailIcon;
+// Fall back to a neutral generic-connector glyph — NEVER a branded icon. A
+// native/unknown slug (e.g. `synergy`) that isn't in the Pipedream connections
+// config previously rendered the Gmail icon here; the generic glyph keeps every
+// callsite returning a valid, non-misleading image URL.
+export const getConnectionIcon = (id: string): string => getConnectionsConfig()[id]?.img_src || genericConnectorIcon;
 
 export const getConnectionFallbackIcon = (id: string): string =>
   getConnectionsConfig()[id]?.fallback_icon || 'bi bi-link';

@@ -1,91 +1,48 @@
 ---
-api_name: 'Gmail API'
-api_slug: 'gmail'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-source_phases: ['Phase 5: Query & Filter Capabilities', 'Phase 6: Pagination & Bulk Operations']
+api_name: Gmail API
+api_slug: gmail
+companion_of: 01-llm-api-rules.md
+base_url: https://gmail.googleapis.com/gmail/v1 (version /gmail/v1 already in base; do NOT add /v1)
+call_surface: file-browse connector (list-files/search-files/download-file); raw HTTP below is reference/debug only
+confidence: [DOCUMENTED] unless tagged [INFERRED]. Gmail `q` = same operators as the Gmail search box.
+source_phases: Phase 5 (Query & Filter), Phase 6 (Pagination & Bulk)
 ---
 
-# Gmail API — Query Patterns Reference
+# Gmail — Query Patterns Reference
 
-> Companion to `01-llm-api-rules.md`. Read operations: listing labels/messages, full-text search
-> with Gmail operators, opening messages, downloading attachments, and cursor pagination.
->
-> All reads work under `gmail.readonly`. Confidence: `[DOCUMENTED]` unless noted. The Gmail `q`
-> syntax is the **same operators as the Gmail search box** — well documented and stable.
+Read ops: listing labels/messages, full-text search with Gmail operators, opening messages, downloading attachments, cursor pagination. All reads work under `gmail.readonly`.
 
----
+## Query Capabilities
 
-## Query Capabilities Summary
+| Capability               | Supported | Syntax                                 | Notes                                        |
+| ------------------------ | --------- | -------------------------------------- | -------------------------------------------- |
+| List a label's messages  | Yes       | `messages?labelIds=<id>`               | returns `{id,threadId}` stubs                |
+| Get a message by id      | Yes       | `messages/{id}?format=full`            | `metadata`/`minimal`/`raw` also              |
+| Full-text search         | Yes       | `messages?q=invoice`                   | searches subject + body + attachment text    |
+| By sender/recipient      | Yes       | `q=from:x@y.com`, `q=to:me`            | Gmail operators                              |
+| By date range            | Yes       | `q=after:2026/01/01 before:2026/02/01` | `newer_than:`/`older_than:` also             |
+| By state                 | Yes       | `q=is:unread`, `q=is:starred`          | presence-style                               |
+| By attachment            | Yes       | `q=has:attachment filename:pdf`        |                                              |
+| Logical operators        | Yes       | space=AND, `OR`/`{}`=OR, `-`=NOT       | `from:a OR from:b`; `-in:spam`               |
+| Size comparison          | Yes       | `q=larger:5M`, `q=smaller:500K`        |                                              |
+| **Sort**                 | **No**    | —                                      | always newest-first by `internalDate`; fixed |
+| Field selection (sparse) | Partial   | `format=metadata&metadataHeaders=…`    | on `get` only, not `list`                    |
+| Include related records  | No        | —                                      | fetch thread / attachments separately        |
+| Regex / pattern matching | No        | —                                      | token matching only                          |
+| Exact count              | No        | `resultSizeEstimate` (estimate only)   | not authoritative                            |
 
-| Capability                 | Supported | Syntax                                 | Notes                                        |
-| -------------------------- | --------- | -------------------------------------- | -------------------------------------------- |
-| List a label's messages    | Yes       | `messages?labelIds=<id>`               | Returns `{id, threadId}` stubs               |
-| Get a message by id        | Yes       | `messages/{id}?format=full`            | `metadata`/`minimal`/`raw` also              |
-| Full-text search           | Yes       | `messages?q=invoice`                   | Searches subject + body + attachment text    |
-| Filter by sender/recipient | Yes       | `q=from:x@y.com`, `q=to:me`            | Gmail operators                              |
-| Filter by date range       | Yes       | `q=after:2026/01/01 before:2026/02/01` | `newer_than:`/`older_than:` also             |
-| Filter by state            | Yes       | `q=is:unread`, `q=is:starred`          | Presence-style                               |
-| Filter by attachment       | Yes       | `q=has:attachment filename:pdf`        |                                              |
-| Logical operators          | Yes       | space=AND, `OR`/`{}`=OR, `-`=NOT       | `from:a OR from:b`; `-in:spam`               |
-| Size comparison            | Yes       | `q=larger:5M`, `q=smaller:500K`        |                                              |
-| **Sort**                   | **No**    | —                                      | Always newest-first by `internalDate`; fixed |
-| Field selection (sparse)   | Partial   | `format=metadata&metadataHeaders=…`    | On `get` only, not `list`                    |
-| Include related records    | No        | —                                      | Fetch thread / attachments separately        |
-| Regex / pattern matching   | No        | —                                      | Token matching only                          |
-| Exact count                | No        | `resultSizeEstimate` (estimate only)   | Not authoritative                            |
+## Patterns
 
----
+**1. List labels (Files-Remote root):** `GET /gmail/v1/users/me/labels`
+→ `{"labels":[{"id":"INBOX","name":"INBOX","type":"system","messagesTotal":1284,"messagesUnread":12},{"id":"Label_42","name":"Clients/Acme","type":"user","messagesTotal":57}]}`
+No pagination — labels return in one call; these become root folders.
 
-## Common Patterns
+**2. List a label's messages (folder contents):** `GET /gmail/v1/users/me/messages?labelIds=Label_42&maxResults=50`
+→ `{"messages":[{"id":"17c4a7e5f8b9c2d1","threadId":"17c4a7e5f8b9c2d0"},{"id":"17c4a7e1aa00bb22","threadId":"17c4a7e1aa00bb22"}],"nextPageToken":"08945763213548163492","resultSizeEstimate":57}`
+**Stubs only** — `{id,threadId}`. For subject/sender, call `messages.get` per stub (`format=metadata`, `metadataHeaders=Subject,From,Date`). N+1 cost — keep pages ≤50.
 
-### Pattern 1: List labels (the Files-Remote root)
-
-```http
-GET /gmail/v1/users/me/labels
-Authorization: Bearer <token>
-```
-
-```json
-{
-  "labels": [
-    { "id": "INBOX", "name": "INBOX", "type": "system", "messagesTotal": 1284, "messagesUnread": 12 },
-    { "id": "Label_42", "name": "Clients/Acme", "type": "user", "messagesTotal": 57 }
-  ]
-}
-```
-
-> No pagination — labels come back in one call. These become the root folders.
-
-### Pattern 2: List a label's messages (folder contents)
-
-```http
-GET /gmail/v1/users/me/messages?labelIds=Label_42&maxResults=50
-Authorization: Bearer <token>
-```
-
-```json
-{
-  "messages": [
-    { "id": "17c4a7e5f8b9c2d1", "threadId": "17c4a7e5f8b9c2d0" },
-    { "id": "17c4a7e1aa00bb22", "threadId": "17c4a7e1aa00bb22" }
-  ],
-  "nextPageToken": "08945763213548163492",
-  "resultSizeEstimate": 57
-}
-```
-
-> **Stubs only** — `{id, threadId}`. To show subject/sender, call `messages.get` per stub
-> (`format=metadata`, `metadataHeaders=Subject,From,Date`). This is the N+1 cost — keep pages ≤50.
-
-### Pattern 3: Full-text search with operators
-
-```http
-GET /gmail/v1/users/me/messages?q=from:billing@acme.example%20has:attachment%20newer_than:30d&maxResults=25
-Authorization: Bearer <token>
-```
-
-The `q` parameter uses Gmail search syntax. Key operators:
+**3. Full-text search with operators:** `GET /gmail/v1/users/me/messages?q=from:billing@acme.example%20has:attachment%20newer_than:30d&maxResults=25`
+`q` uses Gmail search syntax. Operators:
 
 ```
 from:billing@acme.example          # sender
@@ -99,144 +56,67 @@ larger:5M  smaller:500K
 rfc822msgid:<abc@mail.example>     # exact Message-ID header lookup
 ```
 
-- **Combining:** whitespace = AND · `OR` (uppercase) or `{a b}` = OR · `-term` = NOT · `()` groups.
-- **Scope `q` to a label** with `&labelIds=<id>` alongside `q`.
+Combining: whitespace=AND · `OR` (uppercase) or `{a b}`=OR · `-term`=NOT · `()` groups. Scope `q` to a label with `&labelIds=<id>`.
 
-### Pattern 4: Open a message (read the body)
+**4. Open a message (read body):** `GET /gmail/v1/users/me/messages/17c4a7e5f8b9c2d1?format=full`
+→ `{"id":"17c4a7e5f8b9c2d1","labelIds":["INBOX","IMPORTANT"],"internalDate":"1620000000000","payload":{"mimeType":"multipart/alternative","headers":[{"name":"From","value":"Acme Billing <billing@acme.example>"},{"name":"Subject","value":"Invoice #4471"}],"parts":[{"mimeType":"text/plain","body":{"size":512,"data":"SW52b2ljZSBhdHRhY2hlZA=="}},{"mimeType":"text/html","body":{"size":1024,"data":"PGh0bWw+Li4uPC9odG1sPg=="}}]}}`
+Body extraction: walk `payload.parts[]` recursively, prefer `text/html` then `text/plain`, base64url-decode `body.data`. Headers (`From`/`Subject`/`Date`) live in `payload.headers`. [INFERRED]
 
-```http
-GET /gmail/v1/users/me/messages/17c4a7e5f8b9c2d1?format=full
-Authorization: Bearer <token>
-```
+**5. Cheap metadata-only read (subject/sender/date):** `GET /gmail/v1/users/me/messages/17c4a7e5f8b9c2d1?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`
+Use when hydrating a list view — headers without the (potentially large) body.
 
-```json
-{
-  "id": "17c4a7e5f8b9c2d1",
-  "labelIds": ["INBOX", "IMPORTANT"],
-  "internalDate": "1620000000000",
-  "payload": {
-    "mimeType": "multipart/alternative",
-    "headers": [
-      { "name": "From", "value": "Acme Billing <billing@acme.example>" },
-      { "name": "Subject", "value": "Invoice #4471" }
-    ],
-    "parts": [
-      { "mimeType": "text/plain", "body": { "size": 512, "data": "SW52b2ljZSBhdHRhY2hlZA==" } },
-      { "mimeType": "text/html", "body": { "size": 1024, "data": "PGh0bWw+Li4uPC9odG1sPg==" } }
-    ]
-  }
-}
-```
+**6. Download attachment:** `GET /gmail/v1/users/me/messages/17c4a7e5f8b9c2d1/attachments/ANGjdJ8...`
+→ `{"size":84213,"data":"JVBERi0xLjQKJ...base64url..."}` — `data` is base64url; pad to %4 then `urlsafe_b64decode`.
 
-- **Body extraction:** walk `payload.parts[]` recursively, prefer `text/html` then `text/plain`,
-  base64url-decode `body.data`. Headers (`From`/`Subject`/`Date`) live in `payload.headers`. [INFERRED]
+## Pagination
 
-### Pattern 5: Cheap metadata-only read (subject/sender/date)
+- Type: cursor (opaque page token). Default size 100 (`maxResults`), max 500 (API; connector caps lower for cost). [DOCUMENTED]
+- `resultSizeEstimate` = estimate only, never exact.
+- Applies to `messages.list`, `threads.list`, `drafts.list`, `history.list`. Labels are unpaginated.
 
-```http
-GET /gmail/v1/users/me/messages/17c4a7e5f8b9c2d1?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date
-```
+| Parameter       | Where    | Description                             |
+| --------------- | -------- | --------------------------------------- |
+| `maxResults`    | request  | page size (default 100, max 500)        |
+| `pageToken`     | request  | opaque token from prior `nextPageToken` |
+| `nextPageToken` | response | cursor for next page; **absent = done** |
 
-> Use this when hydrating a list view — returns headers without the (potentially large) body.
-
-### Pattern 6: Download an attachment
-
-```http
-GET /gmail/v1/users/me/messages/17c4a7e5f8b9c2d1/attachments/ANGjdJ8...
-Authorization: Bearer <token>
-```
-
-```json
-{ "size": 84213, "data": "JVBERi0xLjQKJ...base64url..." }
-```
-
-> `data` is **base64url** — pad to a multiple of 4, then `urlsafe_b64decode` for the raw bytes.
-
----
-
-## Pagination Handling
-
-### Model
-
-- **Type:** cursor (opaque page token). [DOCUMENTED]
-- **Default page size:** 100 (`maxResults`). **Max:** 500 (API); connector caps lower for cost.
-- **Total count:** `resultSizeEstimate` — **estimate only**, never exact.
-- **Applies to:** `messages.list`, `threads.list`, `drafts.list`, `history.list`. Labels are unpaginated.
-
-### Request / Response Parameters
-
-| Parameter       | Where    | Description                                 |
-| --------------- | -------- | ------------------------------------------- |
-| `maxResults`    | request  | Page size (default 100, max 500)            |
-| `pageToken`     | request  | Opaque token from the prior `nextPageToken` |
-| `nextPageToken` | response | Cursor for the next page; **absent = done** |
-
-### Worked Example
+Worked:
 
 ```
-Page 1: GET /users/me/messages?labelIds=INBOX&maxResults=50
-        → { messages:[…50…], nextPageToken:"08945763213548163492" }
-Page 2: GET /users/me/messages?labelIds=INBOX&maxResults=50&pageToken=08945763213548163492
-        → { messages:[…50…], nextPageToken:"11920043928374650091" }
-Last:   GET …&pageToken=11920043928374650091
-        → { messages:[…7…] }      # no nextPageToken → stop
+Page 1: GET /users/me/messages?labelIds=INBOX&maxResults=50  → {messages:[…50…], nextPageToken:"08945763213548163492"}
+Page 2: GET …&maxResults=50&pageToken=08945763213548163492    → {messages:[…50…], nextPageToken:"11920043928374650091"}
+Last:   GET …&pageToken=11920043928374650091                  → {messages:[…7…]}   # no nextPageToken → stop
 ```
 
-### Full Pagination Loop
-
-```
-token = null
-loop:
-  GET /users/me/messages?labelIds=INBOX&maxResults=50[&pageToken={token}]
-  process response.messages
-  token = response.nextPageToken
-  if token is absent: stop
-```
-
----
+Loop: `token=null; loop: GET …[&pageToken={token}]; process messages; token=nextPageToken; stop if absent`.
 
 ## Bulk Reads
 
 | Operation        | Mechanism                          | Limit       | Notes                                       |
 | ---------------- | ---------------------------------- | ----------- | ------------------------------------------- |
-| Batch HTTP reads | `POST /batch/gmail/v1` (multipart) | 100 sub-req | Per-sub-request status; partial failures OK |
-| Hydrate a page   | serial `messages.get` per stub     | —           | What the provider does today; N+1 cost      |
+| Batch HTTP reads | `POST /batch/gmail/v1` (multipart) | 100 sub-req | per-sub-request status; partial failures OK |
+| Hydrate a page   | serial `messages.get` per stub     | —           | what the provider does today; N+1 cost      |
 
-> The provider does **not** use the batch endpoint today — serial `messages.get`. Batch is a
-> future optimisation to cut round-trips. [INFERRED — provider]
+Provider does **not** use the batch endpoint today — serial `messages.get`. Batch is a future optimisation. [INFERRED — provider]
 
----
+## Quota Cost (read)
 
-## Quota Cost Awareness (read)
-
-Gmail bills **quota units**, not requests — 6,000 units/user/minute is the practical ceiling.
+Gmail bills **quota units**, not requests — 6,000 units/user/minute ceiling.
 
 | Method            | Units | Implication                                          |
 | ----------------- | ----- | ---------------------------------------------------- |
-| `labels.list`     | 1     | Cheap — list freely                                  |
-| `messages.list`   | 5     | One per page                                         |
-| `messages.get`    | 5     | **Per message** — a 50-row hydrated page ≈ 255 units |
-| `attachments.get` | 5     | Per attachment                                       |
-| `history.list`    | 2     | Polling                                              |
+| `labels.list`     | 1     | cheap — list freely                                  |
+| `messages.list`   | 5     | one per page                                         |
+| `messages.get`    | 5     | **per message** — a 50-row hydrated page ≈ 255 units |
+| `attachments.get` | 5     | per attachment                                       |
+| `history.list`    | 2     | polling                                              |
 
-> A 50-message folder listing (1×list + 50×get-metadata ≈ 255 units) is cheap; **runaway
-> pagination over thousands of messages is the real quota risk.** Bound searches with `newer_than:`
-> / `after:` rather than scanning whole labels.
+A 50-message folder listing (1×list + 50×get-metadata ≈ 255 units) is cheap; **runaway pagination over thousands of messages is the real quota risk.** Bound searches with `newer_than:`/`after:` rather than scanning whole labels.
 
----
+## Gotchas
 
-## Gotchas & Counter-Exceptions
-
-1. **List returns stubs, not full messages** — `messages.list` gives only `{id, threadId}`. Don't
-   expect subjects from it; hydrate with `messages.get`.
-2. **No sorting** — results are always newest-first. For oldest-first, bound with `after:`/`before:`
-   and reverse client-side; there is no `orderBy`.
-3. **`resultSizeEstimate` is an estimate** — don't render it as an exact count or use it to decide
-   loop termination. Use `nextPageToken` presence instead.
-4. **`format=metadata` + `q` is invalid** — metadata reads can't combine with search and return no
-   body. Use `full`/`metadata` for reading, default `format` (or `minimal`) is fine for listing.
+1. **List returns stubs** — `messages.list` gives only `{id,threadId}`; hydrate with `messages.get`.
+2. **No sorting** — always newest-first. For oldest-first, bound with `after:`/`before:` and reverse client-side; no `orderBy`.
+3. **`resultSizeEstimate` is an estimate** — don't render as exact count or use for loop termination; use `nextPageToken` presence.
+4. **`format=metadata` + `q` is invalid** — metadata reads can't combine with search and return no body. Read with `full`/`metadata`; default `format` (or `minimal`) is fine for listing.
 5. **base64url, not base64** — every `body.data` / attachment `data` is URL-safe base64; pad to %4.
-
----
-
-_Generated from the investigation questionnaire, Phases 5–6._

@@ -1,443 +1,230 @@
 ---
-api_name: 'Dropbox'
-api_slug: 'dropbox'
-base_url: 'https://api.dropboxapi.com/2 (metadata) · https://content.dropboxapi.com/2 (content)'
-version: 'API v2 (HTTP-RPC)'
-spec_format: 'Stone schema (dropbox/dropbox-api-spec); no public OpenAPI/Swagger'
-spec_url: 'https://github.com/dropbox/dropbox-api-spec'
-docs_url: 'https://www.dropbox.com/developers/documentation/http/documentation'
-date_researched: '2026-05-29'
+api_name: Dropbox
+api_slug: dropbox
+base_url_metadata: https://api.dropboxapi.com/2
+base_url_content: https://content.dropboxapi.com/2
+path_version_segment: /2 is a REAL path segment on both hosts (NOT a label). v1 fully retired.
+api_style: HTTP-RPC v2 — every call is POST + JSON body, even reads; no GET/PUT/DELETE
+spec_format: Stone schema (github.com/dropbox/dropbox-api-spec); no public OpenAPI/Swagger
+docs_url: https://www.dropbox.com/developers/documentation/http/documentation
+sdk_ref: https://dropbox-sdk-python.readthedocs.io/en/latest/api/dropbox.html
+status_page: https://status.dropbox.com/
+confidence: documentation + provider-code based 2026-05-29 (no live HTTP transcript — no app key at research time); every endpoint/payload verified against production lib/oauth-providers/oauth_providers/dropbox_provider.py. Items needing a live response tagged 🔬.
 ---
 
-# Dropbox — API Specification & Investigation
+# Dropbox — API Spec & Investigation (developer reference)
 
-> Clean developer reference for the Dropbox API v2. **Documentation + provider-code based** — no
-> live HTTP transcript was captured (no app key at research time), but every endpoint/payload below
-> is also verified against the production provider class at
-> `lib/oauth-providers/oauth_providers/dropbox_provider.py`. Items needing a live response are
-> tagged 🔬.
+**Vendor:** Dropbox, Inc. (consumer + business cloud file storage). Path-addressed cloud file store; this connector uses the read surface only — browse a folder, search by name/content, read metadata, download bytes.
 
----
+- **Two hosts:** metadata/JSON-RPC `https://api.dropboxapi.com/2`; binary content (download/upload) `https://content.dropboxapi.com/2`. `/2` is a real path segment on both.
+- **API style:** HTTP-RPC — **every call is `POST`**, even reads. No `GET`/`PUT`/`DELETE`; the operation is the URL path, the argument is a JSON body. JSON data; tagged unions use a `.tag` discriminator.
+- **Sandbox:** none — no separate sandbox host. Use a real (free) account; a dev app in **Development** mode is auto-limited to the developer's own account.
+- **OpenAPI:** not available — Dropbox publishes a **Stone** schema (github.com/dropbox/dropbox-api-spec) the SDKs/docs are generated from. The HTTP doc page is a JS-rendered SPA; SDK docs + Stone spec are the reliable field-level sources.
 
-## Overview
+## Authentication — OAuth 2.0 (Authorization Code, offline refresh)
 
-- **Vendor:** Dropbox, Inc. (consumer + business cloud file storage).
-- **API version:** v2 (HTTP-RPC). v1 is fully retired.
-- **Base URL:** **two hosts** —
-  - Metadata / JSON-RPC: `https://api.dropboxapi.com/2`
-  - Binary content (download/upload): `https://content.dropboxapi.com/2`
-- **Sandbox URL:** none — there is no separate sandbox host. Use a real (free) Dropbox account; a
-  dev app in **Development** mode is automatically limited to the developer's own account.
-- **API type:** REST-ish **HTTP-RPC** — **every call is `POST`**, even reads. There are no
-  `GET`/`PUT`/`DELETE` verbs; the operation is the URL path and the argument is a JSON body.
-- **Data format:** JSON. Tagged unions use a `.tag` discriminator field.
-- **Documentation:** [HTTP reference](https://www.dropbox.com/developers/documentation/http/documentation)
-- **API reference:** [Python SDK reference](https://dropbox-sdk-python.readthedocs.io/en/latest/api/dropbox.html)
-  (the HTTP page is a JS-rendered SPA; the SDK docs + Stone spec are the reliable field-level sources)
-- **OpenAPI spec:** Not available. Dropbox publishes a **Stone** schema
-  ([dropbox/dropbox-api-spec](https://github.com/dropbox/dropbox-api-spec)) that the SDKs and docs
-  are generated from.
-- **Status page:** [status.dropbox.com](https://status.dropbox.com/)
+Bearer token on every call. Numa's connector layer runs the full OAuth dance, stores tokens, auto-refreshes — developer/agent never handles App key/secret or the refresh flow.
+Header: `Authorization: Bearer <access_token>` + `Content-Type: application/json` (JSON-RPC on api host; the content-host download has no JSON body).
 
-**Summary:** A path-addressed cloud file store. This connector uses the read surface only —
-browse a folder, search by name/content, read metadata, and download bytes.
+| Parameter         | Value                                                                           |
+| ----------------- | ------------------------------------------------------------------------------- |
+| Grant type        | `authorization_code` (refresh via `refresh_token`)                              |
+| Authorization URL | `https://www.dropbox.com/oauth2/authorize` _(matches registry)_                 |
+| Token URL         | `https://api.dropboxapi.com/oauth2/token` _(matches registry)_                  |
+| Revocation URL    | `https://api.dropboxapi.com/2/auth/token/revoke`                                |
+| Token lifetime    | access ~4h (`expires_in`≈14400s 🔬); refresh token long-lived, **non-rotating** |
+| Refresh           | `grant_type=refresh_token` → new short-lived access token; same refresh token   |
+| PKCE              | No (confidential client with secret); supported for public clients              |
 
----
+Offline refresh tokens are issued only when `token_access_type=offline` is sent on the authorize request — registry sets exactly this via `extraAuthParams`. Without it: short-lived access token only, **no** refresh token.
 
-## Authentication
+**Scopes:**
+| Scope | Purpose | In registry? |
+| --- | --- | --- |
+| `files.metadata.read` | list folders, read metadata, search | **Yes** |
+| `files.content.read` | download file content (`/2/files/download`) | **Yes** |
+| `account_info.read` | read account profile (`/2/users/get_current_account`) | No — not requested |
+| `files.content.write` | upload/move/delete | No — read-only connector |
+| `sharing.read` | shared-link/permission info (`web_view_link`) | No — would extend connector |
 
-### Method: OAuth 2.0 (Authorization Code grant, offline refresh tokens)
-
-Bearer token on every call. The Numa connector layer runs the full OAuth dance, stores tokens, and
-auto-refreshes — the developer/agent never handles the App key/secret or the refresh flow directly.
-
-**Header format:**
-
-```
-Authorization: Bearer <access_token>
-Content-Type: application/json          # JSON-RPC calls on api.dropboxapi.com
-```
-
-(The download endpoint on `content.dropboxapi.com` has no JSON body — see Endpoint Catalog.)
-
-**For OAuth 2.0:**
-
-| Parameter         | Value                                                                             |
-| ----------------- | --------------------------------------------------------------------------------- |
-| Grant type        | `authorization_code` (refresh via `refresh_token`)                                |
-| Authorization URL | `https://www.dropbox.com/oauth2/authorize` _(matches registry)_                   |
-| Token URL         | `https://api.dropboxapi.com/oauth2/token` _(matches registry)_                    |
-| Revocation URL    | `https://api.dropboxapi.com/2/auth/token/revoke`                                  |
-| Token lifetime    | access ~4h (`expires_in` ≈ 14400s 🔬); refresh token long-lived, **non-rotating** |
-| Refresh mechanism | `grant_type=refresh_token` → new short-lived access token; same refresh token     |
-| PKCE required     | No (confidential client with secret). Supported for public clients.               |
-
-> Offline refresh tokens are only issued when `token_access_type=offline` is sent on the authorize
-> request — the registry sets exactly this via `extraAuthParams`. Without it Dropbox returns a
-> short-lived access token only and **no** refresh token.
-
-**Required scopes:**
-
-| Scope                 | Purpose                                               | Required for Integration?   |
-| --------------------- | ----------------------------------------------------- | --------------------------- |
-| `files.metadata.read` | List folders, read metadata, search                   | **Yes** (in registry)       |
-| `files.content.read`  | Download file content (`/2/files/download`)           | **Yes** (in registry)       |
-| `account_info.read`   | Read account profile (`/2/users/get_current_account`) | No — not requested          |
-| `files.content.write` | Upload / move / delete files                          | No — connector is read-only |
-| `sharing.read`        | Read shared-link / permission info (`web_view_link`)  | No — would extend connector |
-
-> The connector requests only the two **read** scopes — consistent with its read-only Files-Remote
-> role. Because `sharing.read` is not requested, `web_view_link` and `permissions` come back empty.
-
----
+Connector requests only the two **read** scopes. Because `sharing.read` is absent, `web_view_link` and `permissions` come back empty.
 
 ## Endpoint Catalog
 
-> All paths are relative to a host. `(api)` = `https://api.dropboxapi.com`, `(content)` =
-> `https://content.dropboxapi.com`. **Everything is `POST`.**
+`(api)`=api host, `(content)`=content host, `(notify)`=notify host. **Everything is `POST`.**
 
 ### Files (used by this connector)
 
-| Method | Path                                  | Purpose                     | Auth | Paginated    | Idempotent |
-| ------ | ------------------------------------- | --------------------------- | ---- | ------------ | ---------- |
-| POST   | `/2/files/list_folder` (api)          | List a folder's children    | Yes  | Yes (cursor) | Yes (read) |
-| POST   | `/2/files/list_folder/continue` (api) | Next page / delta replay    | Yes  | Yes (cursor) | Yes (read) |
-| POST   | `/2/files/get_metadata` (api)         | Single file/folder metadata | Yes  | No           | Yes (read) |
-| POST   | `/2/files/search_v2` (api)            | Search names + content      | Yes  | Yes (cursor) | Yes (read) |
-| POST   | `/2/files/search/continue_v2` (api)   | Search next page            | Yes  | Yes (cursor) | Yes (read) |
-| POST   | `/2/files/download` (content)         | Download raw bytes          | Yes  | No           | Yes (read) |
+| Path                                  | Purpose                     | Paginated    |
+| ------------------------------------- | --------------------------- | ------------ |
+| `/2/files/list_folder` (api)          | list a folder's children    | Yes (cursor) |
+| `/2/files/list_folder/continue` (api) | next page / delta replay    | Yes (cursor) |
+| `/2/files/get_metadata` (api)         | single file/folder metadata | No           |
+| `/2/files/search_v2` (api)            | search names + content      | Yes (cursor) |
+| `/2/files/search/continue_v2` (api)   | search next page            | Yes (cursor) |
+| `/2/files/download` (content)         | download raw bytes          | No           |
+
+All authed; all idempotent (reads).
 
 ### Full Endpoint Index
 
-| #   | Method | Path (host)                                         | Purpose                             | Notes                                    |
-| --- | ------ | --------------------------------------------------- | ----------------------------------- | ---------------------------------------- |
-| 1   | POST   | `/2/files/list_folder` (api)                        | List children                       | `path:""` = root; `recursive` flag       |
-| 2   | POST   | `/2/files/list_folder/continue` (api)               | Next page / delta                   | takes `cursor`; same response shape      |
-| 3   | POST   | `/2/files/list_folder/get_latest_cursor` (api)      | Cursor without entries (delta seed) | candidate for incremental sync           |
-| 4   | POST   | `/2/files/list_folder/longpoll` (notify host)       | Block until changes on a cursor     | not used (pull-based)                    |
-| 5   | POST   | `/2/files/get_metadata` (api)                       | Single item metadata                | `path` or `id:...`                       |
-| 6   | POST   | `/2/files/search_v2` (api)                          | Search                              | `query` + `options`; double-nested match |
-| 7   | POST   | `/2/files/search/continue_v2` (api)                 | Search next page                    | takes `cursor`                           |
-| 8   | POST   | `/2/files/download` (content)                       | Download bytes                      | arg in `Dropbox-API-Arg` header; no body |
-| 9   | POST   | `/2/files/get_temporary_link` (api)                 | Short-lived direct URL              | candidate for `web_view_link`            |
-| 10  | POST   | `/2/files/export` (content)                         | Export non-downloadable docs        | for Paper / cloud-native files           |
-| 11  | POST   | `/2/files/upload` (content)                         | Upload bytes                        | out of scope (no write scope)            |
-| 12  | POST   | `/2/sharing/create_shared_link_with_settings` (api) | Shareable link                      | needs `sharing.write`                    |
-| 13  | POST   | `/2/users/get_current_account` (api)                | Account profile                     | needs `account_info.read`                |
-| 14  | POST   | `/2/auth/token/revoke` (api)                        | Revoke the current token            | candidate for disconnect                 |
+| #   | Path (host)                                         | Purpose                             | Notes                                    |
+| --- | --------------------------------------------------- | ----------------------------------- | ---------------------------------------- |
+| 1   | `/2/files/list_folder` (api)                        | list children                       | `path:""`=root; `recursive` flag         |
+| 2   | `/2/files/list_folder/continue` (api)               | next page / delta                   | takes `cursor`; same response shape      |
+| 3   | `/2/files/list_folder/get_latest_cursor` (api)      | cursor without entries (delta seed) | candidate for incremental sync           |
+| 4   | `/2/files/list_folder/longpoll` (notify)            | block until changes on a cursor     | not used (pull-based)                    |
+| 5   | `/2/files/get_metadata` (api)                       | single item metadata                | `path` or `id:...`                       |
+| 6   | `/2/files/search_v2` (api)                          | search                              | `query`+`options`; double-nested match   |
+| 7   | `/2/files/search/continue_v2` (api)                 | search next page                    | takes `cursor`                           |
+| 8   | `/2/files/download` (content)                       | download bytes                      | arg in `Dropbox-API-Arg` header; no body |
+| 9   | `/2/files/get_temporary_link` (api)                 | short-lived direct URL              | candidate for `web_view_link`            |
+| 10  | `/2/files/export` (content)                         | export non-downloadable docs        | Paper / cloud-native files               |
+| 11  | `/2/files/upload` (content)                         | upload bytes                        | out of scope (no write scope)            |
+| 12  | `/2/sharing/create_shared_link_with_settings` (api) | shareable link                      | needs `sharing.write`                    |
+| 13  | `/2/users/get_current_account` (api)                | account profile                     | needs `account_info.read`                |
+| 14  | `/2/auth/token/revoke` (api)                        | revoke current token                | candidate for disconnect                 |
 
-### Endpoint detail — `POST /2/files/list_folder` (api)
+### Detail — `POST /2/files/list_folder` (api)
 
 Provider defaults (`dropbox_provider.list_files`):
+`{"path":"","recursive":false,"include_media_info":false,"include_deleted":false,"include_has_explicit_shared_members":false,"include_mounted_folders":true,"limit":100}`
+Success `200`:
+`{"entries":[{".tag":"folder","name":"2026","id":"id:a4ayc_80_OEAAAAAAAAAYa","path_lower":"/reports/2026","path_display":"/Reports/2026"},{".tag":"file","name":"Q1 Report.pdf","id":"id:a4ayc_80_OEAAAAAAAAAYb","path_lower":"/reports/q1 report.pdf","path_display":"/Reports/Q1 Report.pdf","client_modified":"2026-01-15T09:30:00Z","server_modified":"2026-01-15T09:31:12Z","rev":"0153e6a1f2c0b00000002a1c2f3","size":482113,"content_hash":"599f9c00..."}],"cursor":"AAH4f99T0taNz...","has_more":true}`
 
-```json
-{
-  "path": "",
-  "recursive": false,
-  "include_media_info": false,
-  "include_deleted": false,
-  "include_has_explicit_shared_members": false,
-  "include_mounted_folders": true,
-  "limit": 100
-}
-```
+| Param       | Type | Required | Default | Notes                                          |
+| ----------- | ---- | -------- | ------- | ---------------------------------------------- |
+| `path`      | str  | yes      | —       | `""`=root (**never `"/"`**); else `/Sub/Dir`   |
+| `recursive` | bool | no       | false   | true = whole subtree across `continue` pages   |
+| `limit`     | int  | no       | (none)  | provider sends `min(page_size,2000)`; max 2000 |
 
-Success (`200`):
+### Detail — `POST /2/files/download` (content)
 
-```json
-{
-  "entries": [
-    {
-      ".tag": "folder",
-      "name": "2026",
-      "id": "id:a4ayc_80_OEAAAAAAAAAYa",
-      "path_lower": "/reports/2026",
-      "path_display": "/Reports/2026"
-    },
-    {
-      ".tag": "file",
-      "name": "Q1 Report.pdf",
-      "id": "id:a4ayc_80_OEAAAAAAAAAYb",
-      "path_lower": "/reports/q1 report.pdf",
-      "path_display": "/Reports/Q1 Report.pdf",
-      "client_modified": "2026-01-15T09:30:00Z",
-      "server_modified": "2026-01-15T09:31:12Z",
-      "rev": "0153e6a1f2c0b00000002a1c2f3",
-      "size": 482113,
-      "content_hash": "599f9c00..."
-    }
-  ],
-  "cursor": "AAH4f99T0taNz...",
-  "has_more": true
-}
-```
+No JSON body — the argument goes in a header:
+`POST content.dropboxapi.com/2/files/download` · `Authorization: Bearer <token>` · `Dropbox-API-Arg: {"path":"/Reports/Q1 Report.pdf"}`
 
-| Param       | Type | Required | Default | Notes                                            |
-| ----------- | ---- | -------- | ------- | ------------------------------------------------ |
-| `path`      | str  | yes      | —       | `""` for root (**never `"/"`**); else `/Sub/Dir` |
-| `recursive` | bool | no       | false   | true = whole subtree across `continue` pages     |
-| `limit`     | int  | no       | (none)  | provider sends `min(page_size, 2000)`; max 2000  |
+- **Response:** raw file bytes in body; metadata JSON echoed in the **`Dropbox-API-Result`** response header. Provider returns `response.content`.
+- **Gotcha:** `Dropbox-API-Arg` must be **HTTP-header-safe JSON** — ASCII only; any non-ASCII must be `\uXXXX`-escaped or the request is rejected.
 
-### Endpoint detail — `POST /2/files/download` (content)
+### Detail — `POST /2/files/search_v2` (api)
 
-No JSON request body — the argument goes in a header.
-
-```http
-POST /2/files/download HTTP/1.1
-Host: content.dropboxapi.com
-Authorization: Bearer <token>
-Dropbox-API-Arg: {"path":"/Reports/Q1 Report.pdf"}
-```
-
-- **Response:** raw file bytes in the body; the file's metadata JSON echoed in the
-  **`Dropbox-API-Result`** response header. The provider returns `response.content`.
-- **Gotcha:** `Dropbox-API-Arg` must be **HTTP-header-safe JSON** — ASCII only; any non-ASCII
-  character must be `\uXXXX`-escaped or the request is rejected.
-
-### Endpoint detail — `POST /2/files/search_v2` (api)
-
-```json
-{
-  "query": "quarterly report",
-  "options": { "path": "", "max_results": 100, "file_status": "active", "filename_only": false }
-}
-```
-
-Success (`200`) — note the **double-nested** match shape:
-
-```json
-{
-  "matches": [
-    {
-      "metadata": {
-        ".tag": "metadata",
-        "metadata": {
-          ".tag": "file",
-          "name": "Q1 Report.pdf",
-          "path_display": "/Reports/Q1 Report.pdf",
-          "size": 482113,
-          "server_modified": "2026-01-15T09:31:12Z",
-          "rev": "0153e6a1f2c0b00000002a1c2f3"
-        }
-      }
-    }
-  ],
-  "has_more": false,
-  "cursor": "AAH..."
-}
-```
-
-The real entry is at `matches[i].metadata.metadata`. `options.max_results` is capped by the
-provider at `min(page_size, 1000)`; Dropbox max is 1000.
-
----
+`{"query":"quarterly report","options":{"path":"","max_results":100,"file_status":"active","filename_only":false}}`
+Success `200` — **double-nested** match shape:
+`{"matches":[{"metadata":{".tag":"metadata","metadata":{".tag":"file","name":"Q1 Report.pdf","path_display":"/Reports/Q1 Report.pdf","size":482113,"server_modified":"2026-01-15T09:31:12Z","rev":"0153e6a1f2c0b00000002a1c2f3"}}}],"has_more":false,"cursor":"AAH..."}`
+Real entry at `matches[i].metadata.metadata`. `options.max_results` capped by provider at `min(page_size,1000)`; Dropbox max 1000.
 
 ## Data Models
 
-Dropbox is a flat-namespace, **path-addressed** store. Two metadata types plus a search wrapper.
+Flat-namespace, **path-addressed** store. Two metadata types + a search wrapper. (`Required`=present on read; nothing is `Writable` for this connector.)
 
-### FileMetadata (`.tag = "file"`)
+### FileMetadata (`.tag="file"`)
 
-| Field             | Type     | Required | Writable | Description                                              |
-| ----------------- | -------- | -------- | -------- | -------------------------------------------------------- |
-| `.tag`            | string   | yes      | no       | Always `"file"` (union discriminator)                    |
-| `name`            | string   | yes      | no       | File name (last path segment)                            |
-| `id`              | string   | yes      | no       | Stable id `id:...` — survives rename/move                |
-| `path_lower`      | string   | yes      | no       | Lower-cased full path (use for matching)                 |
-| `path_display`    | string   | yes      | no       | Display-cased path — used as connector `file_id`         |
-| `client_modified` | datetime | yes      | no       | Client mtime (ISO 8601 `...Z`) → connector `created_at`  |
-| `server_modified` | datetime | yes      | no       | Server mtime (ISO 8601 `...Z`) → connector `modified_at` |
-| `rev`             | string   | yes      | no       | Revision id → connector `version`                        |
-| `size`            | int      | yes      | no       | Bytes                                                    |
-| `content_hash`    | string   | yes      | no       | 64-char Dropbox block-hash → connector `checksum`        |
-| `media_info`      | object   | no       | no       | Photo/video EXIF — only if `include_media_info=true`     |
-| `is_downloadable` | bool     | no       | no       | `false` for some Paper/cloud-native docs                 |
+| Field             | Type     | Description                                                    |
+| ----------------- | -------- | -------------------------------------------------------------- |
+| `.tag`            | string   | always `"file"` (union discriminator)                          |
+| `name`            | string   | file name (last path segment)                                  |
+| `id`              | string   | stable `id:...` — survives rename/move                         |
+| `path_lower`      | string   | lower-cased full path (use for matching)                       |
+| `path_display`    | string   | display-cased path — used as connector `file_id`               |
+| `client_modified` | datetime | client mtime (ISO 8601 `...Z`) → connector `created_at`        |
+| `server_modified` | datetime | server mtime (ISO 8601 `...Z`) → connector `modified_at`       |
+| `rev`             | string   | revision id → connector `version`                              |
+| `size`            | int      | bytes                                                          |
+| `content_hash`    | string   | 64-char Dropbox block-hash → connector `checksum`              |
+| `media_info`      | object   | optional — photo/video EXIF, only if `include_media_info=true` |
+| `is_downloadable` | bool     | optional — `false` for some Paper/cloud-native docs            |
 
-### FolderMetadata (`.tag = "folder"`)
+### FolderMetadata (`.tag="folder"`)
 
-| Field                     | Type   | Required | Writable | Description                                  |
-| ------------------------- | ------ | -------- | -------- | -------------------------------------------- |
-| `.tag`                    | string | yes      | no       | Always `"folder"`                            |
-| `name`                    | string | yes      | no       | Folder name                                  |
-| `id`                      | string | yes      | no       | Stable id `id:...`                           |
-| `path_lower`              | string | yes      | no       | Lower-cased path                             |
-| `path_display`            | string | yes      | no       | Display path — used as connector `folder_id` |
-| `parent_shared_folder_id` | string | no       | no       | Set when inside a shared folder              |
+| Field                     | Type   | Description                                  |
+| ------------------------- | ------ | -------------------------------------------- |
+| `.tag`                    | string | always `"folder"`                            |
+| `name`                    | string | folder name                                  |
+| `id`                      | string | stable `id:...`                              |
+| `path_lower`              | string | lower-cased path                             |
+| `path_display`            | string | display path — used as connector `folder_id` |
+| `parent_shared_folder_id` | string | optional — set when inside a shared folder   |
 
-> A third `.tag = "deleted"` (`DeletedMetadata`) appears only when `include_deleted=true` (the
-> connector sets it `false`, so tombstones are hidden).
+A third `.tag="deleted"` (`DeletedMetadata`) appears only when `include_deleted=true` (connector sets `false`, so tombstones hidden).
 
-**Relationships:**
-
-- Hierarchy is expressed purely by the **path string** — there are no IDs-as-foreign-keys.
-  Parent = `path_display` minus the last segment (the provider derives it by string-splitting).
-- `id:...` values are stable across rename/move; **paths are not**. The connector currently uses
-  `path_display` as the id (human-readable, but path-fragile — re-list the parent to recover).
+**Relationships:** hierarchy is expressed purely by the **path string** — no IDs-as-foreign-keys. Parent = `path_display` minus the last segment (provider string-splits). `id:...` stable across rename/move; **paths are not**. Connector uses `path_display` as id (human-readable but path-fragile — re-list the parent to recover).
 
 **Field formats:**
-
-| Format       | Pattern                                   | Example                       |
-| ------------ | ----------------------------------------- | ----------------------------- |
-| DateTime     | ISO 8601 UTC `YYYY-MM-DDTHH:MM:SSZ`       | `2026-01-15T09:31:12Z`        |
-| Path id      | `/Display/Cased/Path.ext`                 | `/Reports/Q1 Report.pdf`      |
-| Stable id    | `id:` + opaque string                     | `id:a4ayc_80_OEAAAAAAAAAYa`   |
-| Revision     | hex string                                | `0153e6a1f2c0b00000002a1c2f3` |
-| Content hash | 64-char hex (block-hash, **not** SHA-256) | `599f9c00...`                 |
-| Cursor       | opaque base64 string                      | `AAH4f99T0taNz...`            |
-
----
+| Format | Pattern | Example |
+| --- | --- | --- |
+| DateTime | ISO 8601 UTC `YYYY-MM-DDTHH:MM:SSZ` | `2026-01-15T09:31:12Z` |
+| Path id | `/Display/Cased/Path.ext` | `/Reports/Q1 Report.pdf` |
+| Stable id | `id:`+opaque string | `id:a4ayc_80_OEAAAAAAAAAYa` |
+| Revision | hex string | `0153e6a1f2c0b00000002a1c2f3` |
+| Content hash | 64-char hex (block-hash, NOT SHA-256) | `599f9c00...` |
+| Cursor | opaque base64 string | `AAH4f99T0taNz...` |
 
 ## Pagination
 
-- **Type:** opaque **cursor** + `has_more` boolean (same model for listing and search).
-- **Default page size:** listing 100 (provider default), search 100. **Max:** listing **2000**,
-  search **1000**.
-- **Total count:** **not available** — enumerate to count.
-
-**Parameters:**
-
-| Parameter             | Type | Default | Description                                             |
-| --------------------- | ---- | ------- | ------------------------------------------------------- |
-| `limit` (list)        | int  | (none)  | Page size; provider sends `min(page_size, 2000)`        |
-| `options.max_results` | int  | 100     | Search page size; provider sends `min(page_size, 1000)` |
-| `cursor`              | str  | —       | From the previous page → `/continue` endpoint           |
-
-**Response structure:**
-
-```json
-{ "entries": [], "cursor": "AAH...", "has_more": true }
-```
-
-**Last page detection:** `has_more == false`. After that, the final `cursor` becomes a **delta
-token** — replay it later against `/list_folder/continue` to fetch only changes since (Dropbox's
-"detecting changes" model; useful for incremental KB re-sync).
-
----
+Opaque **cursor** + `has_more` boolean (same model for listing and search). Defaults: listing 100, search 100. Max: listing **2000**, search **1000**. **No total count** — enumerate to count.
+| Param | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` (list) | int | (none) | page size; provider sends `min(page_size,2000)` |
+| `options.max_results` (search) | int | 100 | provider sends `min(page_size,1000)` |
+| `cursor` | str | — | from previous page → matching `/continue` endpoint |
+Response: `{"entries":[],"cursor":"AAH...","has_more":true}`. Last page when `has_more==false`; the final `cursor` becomes a **delta token** — replay later against `/list_folder/continue` to fetch only changes since (Dropbox "detecting changes"; useful for incremental KB re-sync). Continue endpoints: `list_folder/continue` (list) vs `search/continue_v2` (search — different shape).
 
 ## Rate Limits
 
-| Scope        | Limit                                       | Window  |
-| ------------ | ------------------------------------------- | ------- |
-| Per-app/user | Not publicly fixed; dynamic/namespace-based | rolling |
-
-**Headers:**
-
-| Header                 | Meaning                                    |
-| ---------------------- | ------------------------------------------ |
-| `Retry-After`          | Seconds to wait before retrying (on `429`) |
-| `X-Dropbox-Request-Id` | Support correlation id (on every response) |
-
-**When exceeded:** `429` with a `Retry-After` header and a body
-`{"error":{".tag":"too_many_requests"},"error_summary":"too_many_requests/...","retry_after":N}`.
-🔬 Confirm the exact body shape on a live call.
-
-**Recommended strategy:** honor `Retry-After`, then exponential backoff with jitter. The provider
-routes all calls through `_make_request_with_retry`, which is the single place to enforce this.
-
----
+Per-app/user, **not publicly fixed** — dynamic/namespace-based, rolling window, concurrency-aware. `429` carries `Retry-After` and a body `{"error":{".tag":"too_many_requests"},"error_summary":"too_many_requests/...","retry_after":N}` (🔬 confirm exact body live). Strategy: honor `Retry-After`, then exponential backoff + jitter; provider routes all calls through `_make_request_with_retry` (the single enforcement point). Headers: `Retry-After`, `X-Dropbox-Request-Id` (support correlation id, on every response).
 
 ## Error Handling
 
-**Standard error format (HTTP `409` with a typed union):**
+**Dropbox is non-standard.** Expected application errors come back as HTTP **`409`** with a typed union — NOT `404`/`422`. Branch on `error.tag` / the `error_summary` prefix, never on a bare status code.
+409 body: `{"error_summary":"path/not_found/...","error":{".tag":"path","path":{".tag":"not_found"}}}`. `error_summary` prefix-matching is officially acceptable; walk `error.tag` for programmatic handling.
 
-```json
-{
-  "error_summary": "path/not_found/...",
-  "error": { ".tag": "path", "path": { ".tag": "not_found" } }
-}
-```
+| Status | Meaning                                                     | Retryable     | Recovery                              |
+| ------ | ----------------------------------------------------------- | ------------- | ------------------------------------- |
+| 200    | success                                                     | —             | —                                     |
+| 400    | malformed request / bad JSON (not a routed app error)       | No            | fix request                           |
+| 401    | invalid/expired/insufficient-scope token                    | after refresh | refresh access token, retry once      |
+| 403    | account/team lacks access to a feature                      | maybe         | needs account-side action             |
+| 409    | endpoint-specific app error — body carries the `.tag` union | depends       | inspect `.tag`; usually not retryable |
+| 429    | rate limited                                                | Yes           | honor `Retry-After`, then backoff     |
+| 5xx    | server error                                                | Yes           | exponential backoff                   |
 
-- `error_summary` is a string you can **prefix-match** (e.g. startswith `"path/not_found"`).
-  Prefix-matching is officially acceptable.
-- `error` is a nested tagged union — walk `.tag` for programmatic handling.
-
-**Status codes (Dropbox is non-standard — read carefully):**
-
-| Status | Meaning                                                         | Retryable     | Recovery                              |
-| ------ | --------------------------------------------------------------- | ------------- | ------------------------------------- |
-| 200    | Success                                                         | —             | —                                     |
-| 400    | Malformed request / bad JSON syntax (not a routed app error)    | No            | Fix request                           |
-| 401    | Invalid / expired / insufficient-scope token                    | After refresh | Refresh access token, retry once      |
-| 403    | Account / team lacks access to a feature                        | Maybe         | Needs account-side action             |
-| 409    | **Endpoint-specific app error** — body carries the `.tag` union | Depends       | Inspect `.tag`; usually not retryable |
-| 429    | Rate limited                                                    | Yes           | Honor `Retry-After`, then backoff     |
-| 5xx    | Server error                                                    | Yes           | Exponential backoff                   |
-
-> **Critical quirk:** expected application errors come back as HTTP **`409`**, NOT `404`/`422`.
-> Branch on `error.tag` / the `error_summary` prefix, never on a bare status code.
-
-**Common `409` tags for this connector:** `path/not_found` (stale path/id — re-list the parent),
-`path/not_file` / `path/not_folder` (wrong type), `path/restricted_content` (policy block — skip),
-`unsupported_file` (Paper/cloud doc — skip or use `/2/files/export`), `too_many_requests` (also
-surfaces as `429`).
-
----
+Common 409 tags: `path/not_found` (stale path/id — re-list parent) · `path/not_file`/`path/not_folder` (wrong type) · `path/restricted_content` (policy block — skip) · `unsupported_file` (Paper/cloud doc — skip or `/2/files/export`) · `too_many_requests` (also surfaces as `429`).
 
 ## Webhooks / Events
 
-Dropbox **does** support events, but this connector is **pull-based** and does not use them.
+Dropbox supports events but this connector is **pull-based** and does not use them.
 
-- **Webhooks:** app-level URL set in the App Console (not per-call). Initial GET carries
-  `?challenge=…` to echo back verbatim; each POST carries `X-Dropbox-Signature` =
-  **HMAC-SHA256** of the raw body keyed by the app secret. Payload is thin —
-  `{ "list_folder": { "accounts": ["dbid:..."] } }` — telling you _which_ accounts changed, not
-  _what_; you then call `list_folder/continue` per account.
-- **Longpoll:** `/2/files/list_folder/longpoll` blocks on a cursor until changes exist.
-- **Polling fallback (what to use here):** cursor delta via `list_folder/continue`. Change-detection
-  fields: `server_modified`, `rev`, `content_hash`.
-
----
+- **Webhooks:** app-level URL set in the App Console (not per-call). Initial `GET ?challenge=…` to echo back verbatim; each `POST` carries `X-Dropbox-Signature` = **HMAC-SHA256** of the raw body keyed by the app secret. Thin payload `{"list_folder":{"accounts":["dbid:..."]}}` — _which_ accounts changed, not _what_; then call `list_folder/continue` per account.
+- **Longpoll:** `/2/files/list_folder/longpoll` (notify host) blocks on a cursor until changes exist.
+- **Polling fallback (used here):** cursor delta via `list_folder/continue`. Change-detection: `server_modified`, `rev`, `content_hash`.
 
 ## Known Limitations
 
-1. **Read-only:** no upload / move / rename / delete (no `files.content.write`), no shared-link
-   creation (no `sharing.write`), no permissions/account read.
-2. **Connector ids are `path_display`** — they break on rename/move; stable `id:...` exists but
-   isn't used as the id today. Re-list the parent to recover a stale path.
+1. **Read-only:** no upload/move/rename/delete (no `files.content.write`), no shared-link creation (no `sharing.write`), no permissions/account read.
+2. **Connector ids are `path_display`** — break on rename/move; stable `id:...` exists but isn't used as the id today. Re-list the parent to recover a stale path.
 3. **No total count** and **no native date-range filter** in search (filter client-side).
-4. `has_subfolders` is hard-coded `false` by the provider (skips an extra call); `web_view_link`
-   and `permissions` are always empty (no `sharing.read`).
-5. Some files (Dropbox Paper / cloud-native docs) are **non-downloadable** → `409 unsupported_file`;
-   they require `/2/files/export`.
-
----
+4. `has_subfolders` hard-coded `false` by the provider (skips an extra call); `web_view_link`/`permissions` always empty (no `sharing.read`).
+5. Some files (Dropbox Paper / cloud-native docs) **non-downloadable** → `409 unsupported_file`; require `/2/files/export`.
 
 ## SDKs & Tooling
 
-| SDK              | Language | Repository                            | Quality | Notes                                                          |
-| ---------------- | -------- | ------------------------------------- | ------- | -------------------------------------------------------------- |
-| `dropbox`        | Python   | github.com/dropbox/dropbox-sdk-python | good    | Reference only — provider uses raw httpx for streaming control |
-| `dropbox`        | Node     | github.com/dropbox/dropbox-sdk-js     | good    | Reference                                                      |
-| dropbox-sdk-java | Java     | github.com/dropbox/dropbox-sdk-java   | good    | Reference                                                      |
+| SDK              | Language | Repository                            | Notes                                                          |
+| ---------------- | -------- | ------------------------------------- | -------------------------------------------------------------- |
+| `dropbox`        | Python   | github.com/dropbox/dropbox-sdk-python | reference only — provider uses raw httpx for streaming control |
+| `dropbox`        | Node     | github.com/dropbox/dropbox-sdk-js     | reference                                                      |
+| dropbox-sdk-java | Java     | github.com/dropbox/dropbox-sdk-java   | reference                                                      |
 
-**Postman collection:** Not officially published.
-**OpenAPI spec:** Not available — Stone schema at github.com/dropbox/dropbox-api-spec.
-
----
+Postman collection: not officially published. OpenAPI: not available — Stone schema at github.com/dropbox/dropbox-api-spec.
 
 ## Integration Path Assessment
 
-**Recommended path:** **Data Connector (Files) + selective API.**
+**Recommended:** Data Connector (Files) + selective API. Dropbox is a canonical cloud file store whose primary surface is browse/search/download — the Files-Remote shape. Registry marks it `surfaces:['files','chat']`, `category:'Cloud Storage'`, and a **production backend provider already exists** (`dropbox_provider.py`) implementing the four standard connector methods. Mirrors Google Drive / OneDrive / Box — a `lib/oauth-providers/` provider class surfaced in Files > Remote, **not** a spec-driven chat-only `request` connector (that pattern is for action-oriented APIs like NetSuite / simPRO / Actionstep). This `ext-api-doc/dropbox/` package documents the API for reference/agent-context; the executable integration lives in the provider.
 
-**Justification:** Dropbox is a canonical cloud file store whose primary surface is browse / search
-/ download — exactly the Files-Remote shape. The registry marks it `surfaces: ['files', 'chat']`
-and `category: 'Cloud Storage'`, and a **production backend provider already exists**
-(`lib/oauth-providers/oauth_providers/dropbox_provider.py`) implementing the four standard connector
-methods. This mirrors Google Drive / OneDrive / Box — a `lib/oauth-providers/` provider class
-surfaced in Files > Remote, **not** a spec-driven chat-only connector (that pattern is for
-action-oriented APIs like NetSuite / simPRO / Actionstep). This `ext-api-doc/dropbox/` package
-documents the API for reference/agent-context; the executable integration lives in the provider.
-
-**Connector compatibility:**
-
-| Connector Method  | API Endpoint                                   | Feasibility |
+| Connector method  | API endpoint                                   | Feasibility |
 | ----------------- | ---------------------------------------------- | ----------- |
-| list_files        | `/2/files/list_folder` (+ `/continue`)         | good        |
+| list_files        | `/2/files/list_folder` (+`/continue`)          | good        |
 | download_file     | `/2/files/download` (content host, header arg) | good        |
-| search_files      | `/2/files/search_v2` (+ `/search/continue_v2`) | good        |
+| search_files      | `/2/files/search_v2` (+`/search/continue_v2`)  | good        |
 | get_file_metadata | `/2/files/get_metadata`                        | good        |
 
----
-
-_Researched 2026-05-29 (documentation + provider-code based; live smoke test pending). Source:
-investigation questionnaire `00-api-investigation-questionnaire.md`._
+**Sources:** HTTP reference, OAuth guide, error-handling guide, detecting-changes guide (links in 03/04). Researched 2026-05-29 (documentation + provider-code based; live smoke test pending — close the Phase 2 gate per 04).

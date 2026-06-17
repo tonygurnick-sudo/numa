@@ -1,276 +1,114 @@
 ---
-api_name: 'Connecteam (API Key)'
-api_slug: 'connecteam-api'
-version: 'per-module path versioning (v1; scheduler shifts also v2)'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-line_count_target: '< 300 lines'
+api_name: Connecteam (API Key)
+api_slug: connecteam-api
+base_url: https://api.connecteam.com
+path_construction: pass full module-versioned path, e.g. /users/v1/users; the proxy adds nothing
+path_version_segment: per-module (each module owns its segment — /users/v1, /time_clock/v1, /scheduler/v1 + /scheduler/v2, /jobs/v1, /forms/v1, /settings/v1); NO global /v1; /me is the only unversioned path
+path_style: underscores not hyphens (time_clock, form_submissions); never /v1/users
+auth: X-API-KEY header (static account key; NOT Authorization: Bearer)
+field_casing: camelCase
+id_format: MIXED — int (users/clocks/schedulers/customFields), UUID (jobs), 24-char hex (shifts); never coerce
+timestamps: Unix epoch SECONDS everywhere (not ms, not ISO-8601); EXCEPT time-activity startDate/endDate = YYYY-MM-DD
+rate_limit: per ACCOUNT shared across all keys/integrations — SBP 5/min·100/day, Expert 100/min·10k/day, Enterprise 200/min·20k/day
+plan_gate: API needs Expert+; Forms API Enterprise-only
+call_surface: HTTP via `numa integrations request` through connect_request proxy (NOT a Files connector — no list/download)
+shared_api: same REST API as connecteam-oauth; ONLY auth differs (X-API-KEY here vs Bearer there) — keep 01a/01b/01c in sync
+confidence: facts are [DOCUMENTED] from vendor docs unless tagged [INFERRED]/[UNKNOWN]; NO live call made
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# Connecteam (API Key) -- Workspace Agent API Rules
+# Connecteam (API Key) — API Rules
 
-> **This file is loaded into the workspace agent's context when the Connecteam (API Key) integration is active.**
-> It must stay under 300 lines. Be precise, not verbose.
-> Companion files (01a-01d) contain the detailed reference material.
->
-> **Shared API:** This is the **same REST API** as the `connecteam-oauth` connector. Domain model,
-> query/filter, mutation, pagination, and error behaviour are **identical** — the **only** substantive
-> difference is auth (this connector sends a static `X-API-KEY` header; the OAuth connector mints a
-> 24h bearer token). Keep 01a/01b/01c consistent across both connectors.
+## Paths (read first)
 
-## Context
+- Pass full module-versioned paths: `/users/v1/users`, `/time_clock/v1/time_clocks/{id}/time_activities`. `connect_request` prepends nothing — send the exact path.
+- Version is **per module**: `/users/v1`, `/time_clock/v1`, `/scheduler/v1` **and** `/scheduler/v2`, `/jobs/v1`, `/forms/v1`, `/settings/v1`. **NO** global `/v1`; `/v1/users` is wrong.
+- `/me` is the **only** unversioned/unprefixed path.
+- Underscores, not hyphens: `time_clock`, `form_submissions`, `clock_in`. Full-URL form is equivalent: `https://api.connecteam.com/users/v1/users`.
 
-- **API:** Connecteam REST API. Per-module path versioning: `/users/v1`, `/time_clock/v1`, `/scheduler/v1` (+ `/scheduler/v2`), `/jobs/v1`, `/forms/v1`, `/settings/v1`. [DOCUMENTED]
-- **Base URL:** `https://api.connecteam.com` (fixed — there is **no** instance/region field in the registry). [DOCUMENTED — matches `connectorRegistry.ts`]
-- **Auth:** API key in the `X-API-KEY` header. Calls go through Numa's `connect_request` proxy, which injects the stored `api_token` as `X-API-KEY` and forwards. [DOCUMENTED — registry `authType: api-key`, single field `api_token`]
-- **Integration path:** Direct API via `connect_request` (not a Files connector — structured workforce records, not browsable files).
-- **Rate limits:** Per **account** (shared by all keys/clients): SBP 5/min · 100/day; Expert 100/min · 10k/day; Enterprise 200/min · 20k/day. Six `x-ratelimit-*` headers. [DOCUMENTED]
-- **Plan gating:** API requires **Expert plan or higher**; **Forms API is Enterprise-only**. [DOCUMENTED]
+## Call surface
 
-## Auth Structure
+HTTP via `numa integrations request`. NOT a Files connector — no `list-files`/`download-file`/`search-files`.
 
-API-key authentication via an HTTP request header.
+## Auth
 
 ```
 X-API-KEY: {api_token}
 Accept: application/json
-Content-Type: application/json   (on POST/PUT bodies)
+Content-Type: application/json   (POST/PUT bodies only)
 ```
 
-**Token lifecycle:**
+- Static account-level key, **never expires**, no refresh, no `expires_in`. `connect_request` injects it; agent never sees the raw key — never log/echo it.
+- Minted by an **account owner**: web app → **Settings → API Keys → Add API key** (Expert+ account). Rotation manual.
+- **NOT** `Authorization: Bearer …` — that is the `connecteam-oauth` path (a 24h `client_credentials` bearer token; this one sends `X-API-KEY`).
 
-- The API key is a **static, account-level secret that does NOT expire**. There is no token exchange, no refresh, and no `expires_in`. This is the whole simplification vs the OAuth connector. [DOCUMENTED]
-- Keys are minted by an **account owner** in the Connecteam web app: **Settings → API Keys → Add API key**. Owner-only; account must be Expert+. [DOCUMENTED]
-- Rotation is manual (create new key, delete old in Settings; no programmatic rotation). `connect_request` attaches the header — the agent never sees the raw key. Never log or echo it. [INFERRED]
+## CAN
 
-> **Contrast with `connecteam-oauth`:** that connector sends `Authorization: Bearer {token}` from a 24h `client_credentials` token; this one sends `X-API-KEY`. Do **not** send `Authorization: Bearer …` here.
+List/search **users** (status/name/phone/email filters). Read **time clocks**, **time activities** (shift/manual_break/time_off, ≤92-day window), **timesheet** summaries. List **schedulers** (V1+V2), query **shifts** by time window, read **user unavailability**. List **forms** + read/filter **form submissions** (Enterprise-only). Read/manage **jobs/sub-jobs** (UUID ids). Writes (confirm with user first): create users; create/clock-in/clock-out/update time activities; create/update/delete shifts; add/remove unavailability; create/update jobs; update form-submission **manager fields**; manage webhooks.
 
-## Capabilities
+## CANNOT
 
-### CAN
-
-1. List/search **users** by status, name, phone, email (filters + offset/limit pagination). [DOCUMENTED]
-2. Read **time clocks**, **time activities** (shift/break/timeoff) and **timesheet** summaries (≤ 92-day window). [DOCUMENTED]
-3. List **schedulers** (V1 + V2) and query **shifts** by time window; read **user unavailability**. [DOCUMENTED]
-4. List **forms** and read/filter **form submissions** by user/date (Enterprise plan only). [DOCUMENTED]
-5. Read/manage **jobs / sub-jobs** for categorisation context (jobs use UUID ids). [DOCUMENTED]
-6. (Destructive/write ops, always with explicit user confirmation) create users, create/clock-in/clock-out time activities, create/update/delete shifts, update form manager fields, manage webhooks. [DOCUMENTED]
-
-### CANNOT
-
-1. Delete users, shifts, or unavailability without explicit confirmation (deletes are destructive). [policy]
-2. Full-text search — only whitelisted exact-match field filters per endpoint. [INFERRED]
-3. Select/sparse fields or include related records — fetch child endpoints separately. [INFERRED]
-4. Exceed batch caps (users ≤ 25 · shift-create ≤ 500 · shift-delete ≤ 20) or the 92-day activity window. [DOCUMENTED]
-5. Use features above the account's plan — Forms is **Enterprise-only**; SBP is throttled to 5 req/min. [DOCUMENTED]
+Full-text search (only whitelisted exact-match filters per endpoint). Sparse-fields/`include`/relation-expand (fetch child endpoints separately). Idempotency keys (clock-in/out + create-users non-idempotent — guard double-submit, verify with GET). Exceed batch caps (users ≤25 · shift-create ≤500 · shift-delete ≤20) or the 92-day activity window. Edit form **answer** entries (manager fields only). Create group/repeating/task/data-layer shifts via API. Use features above the plan (Forms=Enterprise; SBP throttled to 5/min).
 
 ## Critical Gotchas
 
-> Things that will cause errors if you get them wrong.
+1. **Timestamps are Unix epoch SECONDS** — `start`,`end`,`startTime`,`endTime`,`createdAt`,`modifiedAt`, all `*Timestamp` filters, rate-limit resets. NOT ms, NOT ISO-8601. #1 integration bug. Exception: time-activity `startDate`/`endDate` are `YYYY-MM-DD` strings.
+2. **Mixed ID types — never coerce.** Users/clocks/schedulers/customFields = **integer**; jobs = **UUID string**; scheduler shifts = **24-char hex string**.
+3. **Module-versioned underscore paths.** No global `/v1`. `/users/v1/...`, `/scheduler/v2/...`, `time_clock`/`form_submissions` (underscore).
+4. **Rate limits per ACCOUNT, shared across every key/integration** — not per key. On SBP (5/min) you throttle almost instantly. Cache list reads; throttle on `x-ratelimit-*-remaining`.
+5. **92-day cap on time-activity queries.** Wider `startDate`/`endDate` rejected — chunk into ≤90-day windows.
+6. **No total count.** Last page = array shorter than `limit`.
+7. **`paging` location varies.** Users → top-level `paging.offset`; jobs/shifts → nested `data.paging.offset`. Check both.
+8. **No `Retry-After` on 429.** Compute wait from `x-ratelimit-minute-reset` (UTC epoch s). API reported to return **200 with `x-ratelimit-*-remaining: 0`** instead of 429 — trust the remaining headers.
 
-1. **Timestamps are Unix epoch SECONDS**, not milliseconds and not ISO-8601. `start`, `end`, `startTime`, `endTime`, `createdAt`, `modifiedAt` and all `*Timestamp` filters use seconds. This is the #1 integration bug. (Some time-activity date filters use `YYYY-MM-DD` strings.) [DOCUMENTED]
-2. **Mixed ID types — never coerce.** Users/clocks/schedulers/custom-fields are **integers**; jobs are **UUID strings**; scheduler shifts are **24-char hex strings**. Don't assume all ids are numeric. [DOCUMENTED]
-3. **Module-versioned, underscore paths.** No global `/v1`. Each module carries its own: `/users/v1/...`, `/time_clock/v1/...`, `/scheduler/v2/...`. Paths use **underscores** (`time_clock`, `form_submissions`), not hyphens, and not `/v1/users`. [DOCUMENTED]
-4. **Rate limits are per ACCOUNT, shared across every key/client** — not per key. On SBP (5/min) you throttle almost instantly. Cache list reads; throttle proactively on `x-ratelimit-*-remaining`. [DOCUMENTED]
-5. **92-day cap on time-activity queries.** A wider `startDate`/`endDate` window is rejected. Split into ≤ 90-day chunks. [DOCUMENTED]
-6. **No total count.** Detect the last page with the "fewer-than-limit" heuristic, not a total. [DOCUMENTED]
-7. **`paging` location is inconsistent.** Users put it at the **top level**; jobs/shifts nest it under `data.paging`. Parsers must check both. [DOCUMENTED]
-8. **No `Retry-After` on 429.** Compute the wait from `x-ratelimit-minute-reset` (UTC epoch seconds). The API has also been reported to return 200 with `x-ratelimit-*-remaining: 0` instead of 429 — trust the remaining headers. [DOCUMENTED]
+## Defaults (override only if user specifies)
 
-## Default Parameters
+`limit=100` (fewer round-trips, respects day budget), `offset=0`, `order=desc`, `userStatus=active`, date window ≤90 days.
 
-Use these defaults unless the user specifies otherwise:
+## Operations
 
-| Parameter   | Default   | Reason                                                           |
-| ----------- | --------- | ---------------------------------------------------------------- |
-| limit       | 100       | Fewer round-trips; well under endpoint caps; respects day budget |
-| offset      | 0         | Start of result set                                              |
-| order       | `desc`    | Most-recent-first matches chat expectations                      |
-| userStatus  | `active`  | Exclude archived employees unless asked                          |
-| date window | ≤ 90 days | Stay safely inside the 92-day time-activity cap                  |
+(D) DOCUMENTED, (I) INFERRED. Full catalog in 01a/02.
 
-## Working Examples
-
-### Example 1: Identity smoke test (`/me`)
-
-```http
-GET /me HTTP/1.1
-Host: api.connecteam.com
-Accept: application/json
-X-API-KEY: {api_token}
-```
-
-Returns `200` with `{ "requestId": "…", "data": { "object": { "name": "Acme Field Services", "plan": "expert" } } }` — confirms the key is valid. The `/me` path is the only unversioned/unprefixed one. [DOCUMENTED — shape illustrative]
-
-### Example 2: List active users, newest first
-
-```http
-GET /users/v1/users?userStatus=active&sort=created_at&order=desc&limit=100&offset=0
-Host: api.connecteam.com
-X-API-KEY: {api_token}
-Accept: application/json
-```
-
-```json
-{
-  "requestId": "req_8f3c1a",
-  "data": {
-    "users": [
-      {
-        "userId": 7031021,
-        "firstName": "Omer",
-        "lastName": "Vered",
-        "phoneNumber": "+9720548888888",
-        "email": "user@example.com",
-        "userType": "owner",
-        "isArchived": false,
-        "createdAt": 1712573537,
-        "modifiedAt": 1723640035,
-        "smartGroupsIds": [2359154],
-        "customFields": [{ "customFieldId": 6208755, "name": "Title", "type": "str", "value": "Solution Engineer" }]
-      }
-    ]
-  },
-  "paging": { "offset": 0 }
-}
-```
-
-### Example 3: Time activities for a clock (within the 92-day window)
-
-```http
-GET /time_clock/v1/time_clocks/12345/time_activities?startDate=2025-04-01&endDate=2025-04-30&userIds=9170357&activityTypes=shift
-Host: api.connecteam.com
-X-API-KEY: {api_token}
-```
-
-```json
-{
-  "data": {
-    "timeActivities": [
-      {
-        "userId": 9170357,
-        "shifts": [
-          {
-            "id": "shift-abc123",
-            "start": { "timestamp": 1704110400, "timezone": "America/New_York" },
-            "end": { "timestamp": 1704139200, "timezone": "America/New_York" },
-            "jobId": "job-123"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-> `startDate`/`endDate` are `YYYY-MM-DD`; the range must be ≤ 92 days. `start`/`end` timestamps are epoch seconds.
-
-### Example 4: Shifts for a scheduler over a window (V2)
-
-```http
-GET /scheduler/v2/schedulers/6833518/shifts?startTime=1736900000&endTime=1737500000&isPublished=true&limit=100
-Host: api.connecteam.com
-X-API-KEY: {api_token}
-```
-
-```json
-{
-  "data": {
-    "shifts": [
-      {
-        "id": "6784dacb3c07733b0a849f49",
-        "title": "Morning Shift",
-        "assignedUserIds": [9170357],
-        "startTime": 1736924400,
-        "endTime": 1736953200,
-        "jobId": "d4ad7232-576f-2ff6-c57d-8240f1089b00",
-        "isPublished": true,
-        "isOpenShift": false,
-        "color": "#4B7AC5"
-      }
-    ]
-  }
-}
-```
-
-> `startTime`/`endTime` (epoch seconds) are **required**; shifts that **overlap** the window are returned.
-
-### Example 5: List jobs (UUID ids, `paging` nested under `data`)
-
-```http
-GET /jobs/v1/jobs?instanceIds=6833518&limit=100
-Host: api.connecteam.com
-X-API-KEY: {api_token}
-```
-
-```json
-{
-  "requestId": "abc123-def456",
-  "data": {
-    "paging": { "offset": 100 },
-    "jobs": [
-      {
-        "jobId": "9fdebf1f-0c69-4914-89d2-8f86c3e5f47d",
-        "title": "Delivery Driver",
-        "code": "DD-001",
-        "color": "#3968BB",
-        "isDeleted": false,
-        "assign": { "type": "both", "userIds": [7031021] },
-        "instanceIds": [6833518]
-      }
-    ]
-  }
-}
-```
-
-## Proxy API Operations
-
-> Quick reference. Full catalog in 01a. Confidence per row: (D) DOCUMENTED, (I) INFERRED.
-
-| Operation              | Method | Path                                                     | Key Parameters                                                                                                      |
-| ---------------------- | ------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Identity smoke test    | GET    | `/me`                                                    | — (D)                                                                                                               |
-| List users             | GET    | `/users/v1/users`                                        | limit, offset, sort, order, userStatus, userIds, fullNames, phoneNumbers, emailAddresses, createdAt, modifiedAt (D) |
-| Get user               | GET    | `/users/v1/users/{userId}`                               | — (I)                                                                                                               |
-| Create users (≤25)     | POST   | `/users/v1/users`                                        | body `users[]`; `?sendActivation` (D)                                                                               |
-| Update users           | PUT    | `/users/v1/users`                                        | body `users[]` (I)                                                                                                  |
-| Archive users          | DELETE | `/users/v1/users`                                        | body ids (D)                                                                                                        |
-| List time clocks       | GET    | `/time_clock/v1/time_clocks`                             | limit, offset (D)                                                                                                   |
-| List time activities   | GET    | `/time_clock/v1/time_clocks/{id}/time_activities`        | startDate, endDate (≤92d), userIds, activityTypes (D)                                                               |
-| Create time activities | POST   | `/time_clock/v1/time_clocks/{id}/time_activities`        | body `timeActivities[]` (D)                                                                                         |
-| Clock in / out         | POST   | `/time_clock/v1/time_clocks/{id}/clock_in` / `clock_out` | body (D)                                                                                                            |
-| Timesheet summary      | GET    | `/time_clock/v1/time_clocks/{id}/timesheet`              | date range (D)                                                                                                      |
-| List schedulers        | GET    | `/scheduler/v1/schedulers`                               | limit, offset (D)                                                                                                   |
-| List shifts (V1/V2)    | GET    | `/scheduler/{v1\|v2}/schedulers/{sid}/shifts`            | startTime, endTime, isPublished, isOpenShift, limit, offset (D)                                                     |
-| Create shifts (≤500)   | POST   | `/scheduler/{v1\|v2}/schedulers/{sid}/shifts`            | body `shifts[]` (D)                                                                                                 |
-| Delete shifts (≤20)    | DELETE | `/scheduler/{v1\|v2}/schedulers/{sid}/shifts`            | body ids (D)                                                                                                        |
-| User unavailability    | GET    | `/scheduler/{v1\|v2}/schedulers/user_unavailability`     | limit, offset (D)                                                                                                   |
-| List jobs / sub-jobs   | GET    | `/jobs/v1/jobs`                                          | instanceIds, jobIds, jobCodes, includeDeleted, limit, offset (D)                                                    |
-| List forms             | GET    | `/forms/v1/forms`                                        | limit, offset (D)                                                                                                   |
-| List form submissions  | GET    | `/forms/v1/forms/{formId}/form_submissions`              | userIds, date window, limit, offset (D)                                                                             |
-| Create webhook         | POST   | `/settings/v1/webhooks`                                  | body `{name,url,featureType,eventTypes,objectId,secretKey}` (D)                                                     |
+| Operation                      | Method | Path                                                       | Key params / notes                                                                                                  |
+| ------------------------------ | ------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Identity smoke test            | GET    | `/me`                                                      | — (D)                                                                                                               |
+| List users                     | GET    | `/users/v1/users`                                          | limit, offset, sort, order, userStatus, userIds, fullNames, phoneNumbers, emailAddresses, createdAt, modifiedAt (D) |
+| Get user                       | GET    | `/users/v1/users/{userId}`                                 | (I)                                                                                                                 |
+| Create users (≤25)             | POST   | `/users/v1/users`                                          | body `users[]`; `?sendActivation` (D)                                                                               |
+| Update users                   | PUT    | `/users/v1/users`                                          | body `users[]` (I)                                                                                                  |
+| Archive users (bulk)           | DELETE | `/users/v1/users`                                          | body ids — destructive (D)                                                                                          |
+| Delete user                    | DELETE | `/users/v1/users/{userId}`                                 | destructive (D)                                                                                                     |
+| List time clocks               | GET    | `/time_clock/v1/time_clocks`                               | limit, offset (D)                                                                                                   |
+| List time activities           | GET    | `/time_clock/v1/time_clocks/{id}/time_activities`          | startDate, endDate (≤92d), userIds, activityTypes (D)                                                               |
+| Create time activities         | POST   | `/time_clock/v1/time_clocks/{id}/time_activities`          | body `timeActivities[]` (D)                                                                                         |
+| Clock in / out                 | POST   | `/time_clock/v1/time_clocks/{id}/clock_in` \| `/clock_out` | body `{userId}` (D)                                                                                                 |
+| Timesheet summary              | GET    | `/time_clock/v1/time_clocks/{id}/timesheet`                | date range (D)                                                                                                      |
+| List schedulers                | GET    | `/scheduler/v1/schedulers`                                 | limit, offset (D)                                                                                                   |
+| List shifts (V1/V2)            | GET    | `/scheduler/{v1\|v2}/schedulers/{sid}/shifts`              | startTime, endTime (req), isPublished, isOpenShift, limit, offset (D)                                               |
+| Create shifts (≤500)           | POST   | `/scheduler/{v1\|v2}/schedulers/{sid}/shifts`              | body `shifts[]` (D)                                                                                                 |
+| Delete shifts (≤20)            | DELETE | `/scheduler/{v1\|v2}/schedulers/{sid}/shifts`              | body `shiftIds[]` — destructive (D)                                                                                 |
+| User unavailability            | GET    | `/scheduler/{v1\|v2}/schedulers/user_unavailability`       | limit, offset (D)                                                                                                   |
+| List jobs / sub-jobs           | GET    | `/jobs/v1/jobs`                                            | instanceIds, jobIds, jobCodes, includeDeleted, limit, offset (D)                                                    |
+| List forms                     | GET    | `/forms/v1/forms`                                          | limit, offset — Enterprise (D)                                                                                      |
+| List form submissions          | GET    | `/forms/v1/forms/{formId}/form_submissions`                | userIds, date window, limit, offset (D)                                                                             |
+| Update submission (mgr fields) | PUT    | `/forms/v1/forms/{formId}/form_submissions/{id}`           | body `{managerFields}` only (D)                                                                                     |
+| Create webhook                 | POST   | `/settings/v1/webhooks`                                    | body `{name,url,featureType,eventTypes,objectId,secretKey}` (D)                                                     |
 
 ## Pagination
 
-- **Type:** offset / limit [DOCUMENTED]
-- **Default page size:** 10 [DOCUMENTED]
-- **Max page size:** 500 (documented on users + jobs; assume 500 elsewhere). [DOCUMENTED / INFERRED]
-- **How to paginate:**
+offset/limit. Default page size **10** — always set `limit`. Max 500 (documented users+jobs; assume 500 elsewhere). No total count — last page = array shorter than `limit`. `paging` top-level for users, nested under `data` for jobs/shifts; check both. Result array keyed by resource name (`data.users`, `data.shifts`, `data.jobs`, `data.formSubmissions`).
 
 ```http
-GET /users/v1/users?limit=500&offset=0     -> 500 items (full page, continue)
-GET /users/v1/users?limit=500&offset=500   -> 500 items (full page, continue)
-GET /users/v1/users?limit=500&offset=1000  -> 137 items (< limit -> LAST PAGE)
+GET /users/v1/users?limit=500&offset=0     -> 500 (full page, continue)
+GET /users/v1/users?limit=500&offset=500   -> 500 (full page, continue)
+GET /users/v1/users?limit=500&offset=1000  -> 137 (< limit -> LAST PAGE)
 ```
-
-- **Last page detection:** the array returns **fewer items than `limit`**. There is no total count. [DOCUMENTED]
-- **`paging` location varies:** top-level (`paging.offset`) for users; nested (`data.paging.offset`) for jobs/shifts. [DOCUMENTED]
 
 ## Webhooks / Events
 
-**Supported (register via `POST /settings/v1/webhooks`):**
+Register via `POST /settings/v1/webhooks`. Body: `{name, url(HTTPS), featureType, eventTypes[], objectId, secretKey?, isDisabled?}`. `objectId` required for every featureType **except `users`**. `secretKey` optional (signature verification; header/algorithm **UNKNOWN**). `retryLimit` fixed at **3**. Webhook **payload body shape UNKNOWN** — verify against a live delivery.
 
-| featureType       | Example events                                                                   |
+| featureType       | Events                                                                           |
 | ----------------- | -------------------------------------------------------------------------------- |
 | `users`           | `user_created`, `user_updated`, `user_deleted`, `user_archived`, `user_promoted` |
 | `time_activity`   | `clock_in`, `clock_out`, `admin_add`, `admin_edit`, `admin_approved_add_request` |
@@ -278,52 +116,41 @@ GET /users/v1/users?limit=500&offset=1000  -> 137 items (< limit -> LAST PAGE)
 | `forms`           | `form_submission`, `form_submission_edited`, `manager_field_updated`             |
 | `tasks`           | `task_published`, `task_completed`                                               |
 
-**Setup:** body `{ name, url (HTTPS), featureType, eventTypes[], objectId, secretKey?, isDisabled? }`.
-`objectId` is required for every featureType **except `users`**. `secretKey` is optional (signature
-verification; header/algorithm **not documented**). `retryLimit` is fixed at **3**. Webhook **payload body
-shape is UNKNOWN** — discovery needed. [DOCUMENTED — catalog; UNKNOWN — payload/signature]
+**Polling fallback:** poll any list endpoint with a `modifiedAt` epoch-second filter (e.g. `GET /users/v1/users?modifiedAt={epoch_s}`) every few minutes, respecting the per-account minute cap.
 
-**Polling fallback:** poll any list endpoint with a `modifiedAt` epoch-second filter (e.g.
-`GET /users/v1/users?modifiedAt={epoch_s}`) every few minutes, respecting the per-account minute cap. [DOCUMENTED]
+## Errors
 
-## Error Handling
+Success envelope: `{requestId, data, paging?}`. Error shape uses a **`detail`** string field (e.g. `{"detail":"Too many requests"}`); full per-status bodies not published — confirm 401/403/422 via discovery.
 
-**Standard error format** — the success envelope is `{ requestId, data, paging? }`; the documented error
-shape uses a **`detail`** field (a comprehensive per-status table is not published — confirm 401/403/422
-bodies via discovery):
+| Status | Meaning          | Action                                                                                                                |
+| ------ | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| 400    | Bad request      | Fix params per `detail`                                                                                               |
+| 401    | Unauthorized     | `X-API-KEY` missing/invalid/revoked — verify the stored key (re-mint in Settings); NOT retryable, no token to refresh |
+| 403    | Forbidden        | Plan-gated (need Expert+, Forms=Enterprise)                                                                           |
+| 404    | Not found        | Verify id (int vs UUID vs hex) + path module/version (V1 vs V2)                                                       |
+| 422    | Validation error | Fix offending field(s) per `detail`                                                                                   |
+| 429    | Rate limited     | Back off using `x-ratelimit-minute-reset`; no `Retry-After`                                                           |
+| 5xx    | Server error     | Exponential backoff + jitter (≤3)                                                                                     |
 
-```json
-{ "detail": "Too many requests" }
-```
+**Rate-limit headers (six):** `x-ratelimit-minute-limit/-remaining/-reset` + `x-ratelimit-day-limit/-remaining/-reset` (reset = UTC epoch seconds).
 
-**Recovery by status:**
+## Examples
 
-| Status | Meaning          | Action                                                                |
-| ------ | ---------------- | --------------------------------------------------------------------- |
-| 400    | Bad request      | Fix request parameters per `detail`                                   |
-| 401    | Unauthorized     | Invalid/revoked `X-API-KEY` — verify the key; not retryable           |
-| 403    | Forbidden        | Plan-gated (need Expert+/Enterprise) or feature not on plan (Forms)   |
-| 404    | Not found        | Verify the id (int vs UUID vs hex string) and the path module/version |
-| 422    | Validation error | Fix the offending field(s) per `detail`                               |
-| 429    | Rate limited     | Back off using `x-ratelimit-minute-reset`; no `Retry-After`           |
-| 5xx    | Server error     | Retry with exponential backoff + jitter                               |
+1. **Identity smoke test** — `GET /me` (with `X-API-KEY`) confirms the key:
+   → `200 {"requestId":"…","data":{"object":{"name":"Acme Field Services","plan":"expert"}}}`
 
-**Rate-limit headers:** `x-ratelimit-minute-limit/-remaining/-reset` and `x-ratelimit-day-limit/-remaining/-reset` (reset = UTC epoch seconds). [DOCUMENTED]
+2. **List active users, newest first:**
+   `GET /users/v1/users?userStatus=active&sort=created_at&order=desc&limit=100&offset=0`
+   → `{"requestId":"req_8f3c1a","data":{"users":[{"userId":7031021,"firstName":"Omer","lastName":"Vered","phoneNumber":"+9720548888888","email":"user@example.com","userType":"owner","isArchived":false,"createdAt":1712573537,"modifiedAt":1723640035,"smartGroupsIds":[2359154],"customFields":[{"customFieldId":6208755,"name":"Title","type":"str","value":"Solution Engineer"}]}]},"paging":{"offset":0}}`
 
-> **Auth note:** a bad/revoked `X-API-KEY` returns 401/403 (exact body unconfirmed). This is the **one**
-> error surface whose cause differs from the OAuth connector (which would fail at the token-mint step).
+3. **Time activities for a clock** (≤92-day window; `startDate`/`endDate` = `YYYY-MM-DD`, `start`/`end` = epoch s):
+   `GET /time_clock/v1/time_clocks/12345/time_activities?startDate=2025-04-01&endDate=2025-04-30&userIds=9170357&activityTypes=shift`
+   → `{"data":{"timeActivities":[{"userId":9170357,"shifts":[{"id":"shift-abc123","start":{"timestamp":1704110400,"timezone":"America/New_York"},"end":{"timestamp":1704139200,"timezone":"America/New_York"},"jobId":"job-123"}]}]}}`
 
-## Known Limitations
+4. **Shifts for a scheduler over a window** (V2; `startTime`/`endTime` epoch s **required**, overlapping shifts returned):
+   `GET /scheduler/v2/schedulers/6833518/shifts?startTime=1736900000&endTime=1737500000&isPublished=true&limit=100`
+   → `{"data":{"shifts":[{"id":"6784dacb3c07733b0a849f49","title":"Morning Shift","assignedUserIds":[9170357],"startTime":1736924400,"endTime":1736953200,"jobId":"d4ad7232-576f-2ff6-c57d-8240f1089b00","isPublished":true,"isOpenShift":false,"color":"#4B7AC5"}]}}`
 
-1. **No live-tested examples.** Response envelopes, error bodies (401/403/422), and webhook payloads are [DOCUMENTED-shape]/[INFERRED]/[UNKNOWN].
-2. **No full-text search, field selection, `include`, or idempotency keys.** Clock-in/out and create-users are non-idempotent — guard against double-submit and verify with a GET. [DOCUMENTED/INFERRED]
-3. **Plan gating + shared per-account rate limits:** API needs Expert+; Forms is Enterprise-only; SBP is 5 req/min; the minute/day budget is shared across every key and integration. [DOCUMENTED]
-
----
-
-_Generated from investigation questionnaire. See companion files for detailed reference:_
-
-- _01a-domain-model-reference.md — Entity catalog, relationships, state machines_
-- _01b-query-patterns.md — Filtering, search, pagination examples_
-- _01c-mutation-patterns.md — Create, update, delete patterns_
-- _01d-event-and-error-handling.md — Events, webhooks, error recovery_
+5. **List jobs** (UUID ids, `paging` nested under `data`):
+   `GET /jobs/v1/jobs?instanceIds=6833518&limit=100`
+   → `{"requestId":"abc123-def456","data":{"paging":{"offset":100},"jobs":[{"jobId":"9fdebf1f-0c69-4914-89d2-8f86c3e5f47d","title":"Delivery Driver","code":"DD-001","color":"#3968BB","isDeleted":false,"assign":{"type":"both","userIds":[7031021]},"instanceIds":[6833518]}]}}`

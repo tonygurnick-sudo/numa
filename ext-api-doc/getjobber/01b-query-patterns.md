@@ -1,12 +1,17 @@
-# Query Patterns — Jobber (GraphQL)
-
-> Natural-language → GraphQL read operations. Every list uses Relay-style pagination — see the **Pagination** section below before iterating.
-
+---
+doc: query-patterns
+api: Jobber (GraphQL)
+endpoint: POST https://api.getjobber.com/api/graphql
+rule: every list is a Relay Connection — ALWAYS select pageInfo { endCursor hasNextPage } alongside nodes, or you can't continue past page 1
 ---
 
-## Pagination — required reading
+# Query Patterns — Jobber (GraphQL)
 
-Every list field returns a Connection. The agent MUST always select `pageInfo` alongside `nodes` to be able to continue past page 1.
+Natural-language → GraphQL read operations.
+
+## Pagination (required)
+
+Loop until `pageInfo.hasNextPage: false`, passing `after: "<endCursor>"`. `totalCount` on most connections gives an upfront total.
 
 ```graphql
 query Page1 {
@@ -23,8 +28,6 @@ query Page1 {
     totalCount
   }
 }
-
-# Then for page 2:
 query Page2 {
   clients(first: 50, after: "<endCursor-from-page-1>") {
     nodes {
@@ -40,21 +43,19 @@ query Page2 {
 }
 ```
 
-Loop until `pageInfo.hasNextPage` is `false`. `totalCount` is available on most connections if you need an upfront total.
-
 | Arg                        | Purpose                                                                                |
 | -------------------------- | -------------------------------------------------------------------------------------- |
-| `first: N`                 | Forward page size (1–100 typical max)                                                  |
-| `after: "<cursor>"`        | Continue forward from cursor                                                           |
-| `last: N`                  | Backward page size                                                                     |
-| `before: "<cursor>"`       | Continue backward from cursor                                                          |
-| `offset: N`                | Offset-based — also accepted on most connections                                       |
-| `sort: { key, direction }` | Per-connection sort (key enum varies)                                                  |
-| `filter: { … }`            | Per-connection filter object (shape varies — introspect the connection's input filter) |
+| `first: N`                 | forward page size (1–100 typical max)                                                  |
+| `after: "<cursor>"`        | continue forward                                                                       |
+| `last: N`                  | backward page size                                                                     |
+| `before: "<cursor>"`       | continue backward                                                                      |
+| `offset: N`                | offset-based — also accepted on most connections                                       |
+| `sort: { key, direction }` | per-connection sort (key enum varies)                                                  |
+| `filter: { … }`            | per-connection filter object (shape varies — introspect the connection's input filter) |
 
----
+## Auth smoke test
 
-## Authentication smoke test
+Any 200 with `data.account.id` populated proves the token works.
 
 ```graphql
 query Me {
@@ -76,13 +77,9 @@ query Me {
 }
 ```
 
-Returns the account name + owner. Any 200 with `data.account.id` populated proves the token works.
+## Clients
 
----
-
-## Clients (customers)
-
-### "All active customers"
+All active customers:
 
 ```graphql
 query ActiveClients($cursor: String) {
@@ -113,7 +110,7 @@ query ActiveClients($cursor: String) {
 }
 ```
 
-### "Find customer named Acme"
+Find customer named Acme (`searchTerm` searches name, company, and email; most list endpoints accept it):
 
 ```graphql
 query FindClient {
@@ -133,9 +130,7 @@ query FindClient {
 }
 ```
 
-`searchTerm` searches across name, company, and email. Most list endpoints accept it.
-
-### "Get one client by ID with all their jobs and invoices"
+One client by ID with jobs + invoices:
 
 ```graphql
 query ClientDeep($id: EncodedId!) {
@@ -193,7 +188,7 @@ query ClientDeep($id: EncodedId!) {
 }
 ```
 
-### "All leads (not yet converted to customers)"
+All leads (not yet converted):
 
 ```graphql
 query Leads {
@@ -214,11 +209,9 @@ query Leads {
 }
 ```
 
----
-
 ## Quotes
 
-### "All quotes awaiting client response"
+Awaiting client response:
 
 ```graphql
 query OpenQuotes {
@@ -250,35 +243,13 @@ query OpenQuotes {
 }
 ```
 
-### "Single quote with line items"
+Single quote with line items:
 
 ```graphql
-query QuoteDetail($id: EncodedId!) {
-  quote(id: $id) {
-    id
-    client { id firstName lastName companyName }
-    message
-    amounts { subtotal total discountAmount taxAmount }
-    discount { amount unit }
-    lineItems(first: 50) {
-      nodes {
-        id
-        name
-        description
-        quantity
-        unitCost
-        totalCost
-        taxable
-      }
-    }
-    clientHubUri
-    eligibleForFinancing
-    customFields { ... }
-  }
-}
+query QuoteDetail($id: EncodedId!) { quote(id: $id) { id client { id firstName lastName companyName } message amounts { subtotal total discountAmount taxAmount } discount { amount unit } lineItems(first: 50) { nodes { id name description quantity unitCost totalCost taxable } } clientHubUri eligibleForFinancing customFields { ... } } }
 ```
 
-### "Recently approved quotes (ready to convert to jobs)"
+Recently approved (ready to convert):
 
 ```graphql
 query ApprovedQuotes {
@@ -304,11 +275,9 @@ query ApprovedQuotes {
 }
 ```
 
----
-
 ## Jobs
 
-### "Jobs scheduled for today"
+Scheduled today:
 
 ```graphql
 query TodayJobs {
@@ -343,7 +312,7 @@ query TodayJobs {
 }
 ```
 
-### "Jobs requiring invoicing (work complete, not yet billed)"
+Requiring invoicing (work complete, not billed):
 
 ```graphql
 query NeedInvoicing {
@@ -368,7 +337,7 @@ query NeedInvoicing {
 }
 ```
 
-### "All visits for a specific job"
+All visits for a job:
 
 ```graphql
 query JobVisits($jobId: EncodedId!) {
@@ -407,7 +376,7 @@ query JobVisits($jobId: EncodedId!) {
 }
 ```
 
-### "Overdue jobs"
+Overdue jobs:
 
 ```graphql
 query OverdueJobs {
@@ -427,11 +396,9 @@ query OverdueJobs {
 }
 ```
 
----
-
 ## Invoices
 
-### "Unpaid invoices for a customer"
+Unpaid for a customer:
 
 ```graphql
 query Unpaid($clientId: EncodedId!) {
@@ -459,7 +426,7 @@ query Unpaid($clientId: EncodedId!) {
 }
 ```
 
-### "All overdue invoices across the account"
+All overdue across account:
 
 ```graphql
 query AllOverdue {
@@ -488,7 +455,7 @@ query AllOverdue {
 }
 ```
 
-### "Single invoice with line items + payment history"
+Single invoice with line items + payment history:
 
 ```graphql
 query InvoiceDetail($id: EncodedId!) {
@@ -539,14 +506,12 @@ query InvoiceDetail($id: EncodedId!) {
 }
 ```
 
----
-
 ## Payments
+
+No top-level `payments` list for arbitrary date ranges — access via `invoice.payments`, or list paid invoices. Writes via `invoiceCreatePaymentRecord`.
 
 ```graphql
 query RecentPayments {
-  # Payments are usually accessed via invoice.payments — there's no top-level `payments` list
-  # for arbitrary date ranges. Use the invoiceCreatePaymentRecord mutation for writes.
   invoices(first: 50, filter: { invoiceStatus: paid }, sort: { key: updated_at, direction: descending }) {
     nodes {
       id
@@ -563,11 +528,9 @@ query RecentPayments {
 }
 ```
 
----
-
 ## Schedule
 
-### "All scheduled items at a property"
+All scheduled items at a property (`scheduledItems` is a union — use inline fragments per type):
 
 ```graphql
 query PropertySchedule($propId: EncodedId!) {
@@ -605,13 +568,9 @@ query PropertySchedule($propId: EncodedId!) {
 }
 ```
 
-`scheduledItems` is a union — use inline fragments to pull the right fields per type.
-
----
-
 ## Account / config
 
-### "Account info + features enabled"
+Account info + features:
 
 ```graphql
 query Account {
@@ -642,7 +601,7 @@ query Account {
 }
 ```
 
-### "Users (employees) on this account"
+Users (employees):
 
 ```graphql
 query Users {
@@ -673,14 +632,11 @@ query Users {
 }
 ```
 
----
+## Schema discovery
 
-## Schema discovery (the LLM's best friend)
-
-When in doubt, ask the schema:
+Cheaper than guessing; `__schema`/`__type` need no auth.
 
 ```graphql
-# What fields does Quote have?
 query {
   __type(name: "Quote") {
     fields {
@@ -692,9 +648,7 @@ query {
       }
     }
   }
-}
-
-# What arguments does the jobs query accept?
+} # fields on a type
 query {
   __schema {
     queryType {
@@ -713,9 +667,7 @@ query {
       }
     }
   }
-}
-
-# What enum values are valid for InvoiceStatusTypeEnum?
+} # args of query fields
 query {
   __type(name: "InvoiceStatusTypeEnum") {
     enumValues {
@@ -723,16 +675,12 @@ query {
       description
     }
   }
-}
+} # enum values
 ```
 
-This is cheaper than guessing — Jobber's schema is fully introspectable on the production endpoint, no auth required for the `__schema` and `__type` queries.
+## Response shapes
 
----
-
-## Response shape (worked example)
-
-A successful query returns:
+Success:
 
 ```json
 {
@@ -755,7 +703,7 @@ A successful query returns:
 }
 ```
 
-A query with a per-field error (rare for reads — common for mutations):
+Per-field error (rare for reads, common for mutations):
 
 ```json
 {
@@ -771,4 +719,4 @@ A query with a per-field error (rare for reads — common for mutations):
 }
 ```
 
-Full error handling in `01d-event-and-error-handling.md`.
+Full error handling in `01d`.
