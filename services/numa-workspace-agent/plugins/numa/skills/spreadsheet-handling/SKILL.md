@@ -13,6 +13,11 @@ Read, write, and analyze spreadsheet files using pandas, openpyxl, and XlsxWrite
 
 These five rules prevent the most damaging spreadsheet failures — the ones that put wrong numbers into board-level deliverables. Read them before any non-trivial spreadsheet work.
 
+> **Saving/uploading to Files: save the workbook, not a PDF rendition.** When the user asks to save,
+> store, or upload the spreadsheet, upload the source **`.xlsx`/`.csv`** — never a PDF you generated to
+> read recalculated values. Only save a PDF if the user explicitly asks for one, and report the actual
+> extension you uploaded.
+
 1. **Enumerate ALL sheets before processing.** Workbooks are usually multi-tab (one sheet per month / region / entity). Never assume the first sheet is the whole story. List every sheet and decide which are in scope _before_ you aggregate anything:
 
    ```python

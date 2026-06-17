@@ -26,6 +26,22 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 
 ---
 
+## Saving or uploading the deck — save the `.pptx`, never the QA PDF
+
+The deliverable the user keeps is the **`.pptx`** — the editable source. When the user asks you to
+**save, store, upload, or put the presentation in Numa Files / a folder**, upload the **source
+`.pptx`**, **never** a PDF rendition of it.
+
+The PDF you produce during Visual QA (below) is a **throwaway** for your own visual inspection — it is
+_not_ the deliverable, so don't upload it as the saved file. Only save/upload a PDF when the user
+**explicitly** asks for a PDF copy (and keep the `.pptx` too unless told otherwise).
+
+After saving, report the **actual** filename and extension you uploaded — never tell the user you saved
+a `.pptx` when you in fact uploaded a `.pdf`. (This silent `.pptx → .pdf` swap on save was a real
+customer bug: the agent converted the deck for QA, then uploaded the PDF while reporting the `.pptx`.)
+
+---
+
 ## Reading Content
 
 ```bash
@@ -197,6 +213,8 @@ pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/s
 ```
 
 > `numa docs convert` **auto-detects** the conversion mode from the file type — for any Office/PDF file just pass `--format pdf`, no `--mode` needed (binary formats are routed to direct LibreOffice conversion automatically). It accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx`.
+
+> ⚠️ **The `converted_*.pdf` this produces is a QA throwaway, not a deliverable.** If the user later asks you to save/upload the deck, upload the source `.pptx` — not this PDF. See "Saving or uploading the deck" above.
 
 ### Content QA
 

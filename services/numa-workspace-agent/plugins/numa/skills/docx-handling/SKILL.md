@@ -24,6 +24,11 @@ doc = Document()
 doc.save('/workdir/outputs/result.docx')
 ```
 
+> **Saving/uploading to Files: save the `.docx`, not a PDF rendition.** When the user asks to save,
+> store, or upload the document, upload the source **`.docx`** — never a PDF you generated for
+> rendering/QA. Only save a PDF if the user explicitly asks for one, and report the actual extension you
+> uploaded (don't claim you saved a `.docx` when you uploaded a `.pdf`).
+
 ---
 
 ## Editing strategy & text fidelity
