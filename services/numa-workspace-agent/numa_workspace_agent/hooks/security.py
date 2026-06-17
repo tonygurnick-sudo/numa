@@ -573,6 +573,19 @@ def strip_data_content(command: str) -> str:
     return result
 
 
+# The numa CLI is an allow-listed, API-gated tool that takes URL paths as
+# arguments (e.g. `numa integrations request <slug> GET /jobs`). Such a
+# relative URL path starts with "/" and would otherwise trip the
+# outside-/workdir filesystem-path guard. We allow a leading-slash token ONLY
+# when it is a numa-CLI request URL — the command starts with the numa binary
+# AND the token is immediately preceded by an HTTP method. That stays
+# exfiltration-safe: it does NOT relax filesystem-path args such as
+# `numa files upload /etc/passwd` (preceded by `upload`, not a method) or
+# `-o /etc/...`, nor a non-numa command like `cat GET /etc/passwd`.
+_NUMA_CLI_BINARIES = frozenset({"numa", "numa-dev"})
+_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
+
+
 def check_bash_command(
     command: str, cwd: str = WORKSPACE_ROOT
 ) -> tuple[bool, str | None]:
@@ -655,7 +668,8 @@ def check_bash_command(
                 continue
             return True, f"Command references path outside workspace: {path}"
     else:
-        for token in tokens:
+        is_numa_cli = bool(tokens) and tokens[0] in _NUMA_CLI_BINARIES
+        for i, token in enumerate(tokens):
             # Only inspect tokens that look like absolute paths.
             # Skip data tokens (no leading /), flags, command names, redirect
             # residue like "2>/dev/null", and shell operators.
@@ -666,6 +680,14 @@ def check_bash_command(
                 continue
             # Allow common harmless device paths used in shell redirection
             if token in ALLOWED_DEVICE_PATHS:
+                continue
+            # Allow a relative URL path passed to the numa CLI as a request URL
+            # (immediately preceded by an HTTP method, e.g.
+            # `numa integrations request <slug> GET /jobs`). Scoped to numa AND
+            # the method position so a stray `cat GET /etc/passwd` or
+            # `numa files upload /etc/passwd` stays blocked.
+            prev = tokens[i - 1] if i > 0 else ""
+            if is_numa_cli and prev.upper() in _HTTP_METHODS:
                 continue
             return True, f"Command references path outside workspace: {token}"
 

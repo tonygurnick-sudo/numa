@@ -984,6 +984,137 @@ export interface ConnectStatusEntry {
 /** Server returns a map of connector-slug → status entry. */
 export type ConnectStatusResult = Record<string, ConnectStatusEntry>;
 
+// ── Native — connector file browsing (Synergy + OAuth cloud storage) ────────
+//
+// Restores the file ops the MCP `connect.py` tool exposed before the MCP→CLI
+// migration (commit 6bebe5603) deleted them. Two backends, one surface:
+//   - Synergy 12d  → `connect_synergy_{list,search,download}` (jobs-as-folders;
+//                     folder_id uses `job:{id}` / `folder:{id}` prefixes).
+//   - OAuth cloud storage (Google Drive / Gmail / OneDrive / Dropbox) →
+//     `oauth_{list_files,search_files,download_file,get_file_metadata}`, keyed
+//     by a `provider` param (== the connector slug).
+// All read-only / auto-approved. The CLI's `numa integrations list-files`
+// etc. pick the right tool per connector. user_sub is dispatcher-injected.
+// Source: `lambdas/python/oauth-workspace-tools/tools/{connect,oauth}_tools.py`.
+
+export interface ConnectorFolderEntry {
+  /** Opaque, backend-scoped id. Synergy prefixes with `job:` / `folder:`. */
+  folder_id: string;
+  name: string;
+  path?: string;
+  has_subfolders?: boolean;
+  no_of_subfolders?: number | null;
+  [key: string]: unknown;
+}
+
+export interface ConnectorFileEntry {
+  file_id: string;
+  name: string;
+  size?: number | null;
+  content_type?: string | null;
+  modified_at?: string | null;
+  path?: string;
+  web_view_link?: string;
+  [key: string]: unknown;
+}
+
+/** Shared list/search result shape. `connector` (Synergy) or `provider` (OAuth). */
+export interface ConnectorListResult {
+  folders: ConnectorFolderEntry[];
+  files: ConnectorFileEntry[];
+  total_count: number;
+  connector?: string;
+  provider?: string;
+  /** OAuth providers paginate; Synergy omits this. */
+  next_page_token?: string | null;
+  /** Echoed back on search. */
+  query?: string;
+  /** Synergy: true when the all-pages fetch hit its safety cap (more jobs exist). */
+  truncated?: boolean;
+}
+
+/**
+ * Download result. The bytes ride one of two ways (the `build_download_payload`
+ * inline-or-staged shape): small files inline as `file_content` (hex) with a
+ * `content_sha256`; large files as a presigned `file_content_url` (+ sha256).
+ * `workspace_path` is the suggested in-workspace destination.
+ */
+export interface ConnectorDownloadResult {
+  filename: string;
+  size: number;
+  connector?: string;
+  provider?: string;
+  original_file_id?: string;
+  workspace_path?: string;
+  /** Inline hex-encoded bytes (small files). */
+  file_content?: string;
+  /** Presigned S3 URL (large files). */
+  file_content_url?: string;
+  /** sha256 of the file bytes — present on BOTH inline and presigned paths. */
+  content_sha256?: string;
+  s3_key?: string;
+}
+
+/** OAuth-only single-file metadata (Synergy has no separate endpoint). */
+export interface ConnectorFileMetadataResult {
+  name: string;
+  size?: number;
+  content_type?: string;
+  modified_at?: string;
+  created_at?: string;
+  path?: string;
+  checksum?: string;
+  version?: string;
+  file_id: string;
+  provider: string;
+  [key: string]: unknown;
+}
+
+export interface ConnectSynergyListParams extends HitlParams {
+  /** Empty/omitted = list jobs; `job:{id}` = job folders; `folder:{id}` = items. */
+  folder_id?: string;
+  /** Filter jobs by name at the root level. */
+  query?: string;
+  page_size?: number;
+}
+
+export interface ConnectSynergySearchParams extends HitlParams {
+  query: string;
+  page_size?: number;
+}
+
+export interface ConnectSynergyDownloadParams extends HitlParams {
+  file_id: string;
+}
+
+export interface OauthListFilesParams extends HitlParams {
+  /** Provider id == connector slug (e.g. `googledrive`, `onedrive`, `dropbox`). */
+  provider: string;
+  folder_id?: string;
+  page_size?: number;
+  page_token?: string;
+}
+
+export interface OauthSearchFilesParams extends HitlParams {
+  provider: string;
+  query: string;
+  folder_id?: string;
+  page_size?: number;
+  page_token?: string;
+}
+
+export interface OauthDownloadFileParams extends HitlParams {
+  provider: string;
+  file_id: string;
+  /** Optional filename hint; the provider supplies the canonical name otherwise. */
+  filename?: string;
+}
+
+export interface OauthGetFileMetadataParams extends HitlParams {
+  provider: string;
+  file_id: string;
+}
+
 // ─── Ops — generic operation pass-through ──────────────────────────────────
 //
 // The ops surface has 50+ operations (tickets, boards, customers, suppliers,
@@ -1087,6 +1218,13 @@ export type ToolCall =
   | { tool: 'pipedream_proxy_request'; params: PipedreamProxyRequestParams }
   | { tool: 'connect_request'; params: ConnectRequestParams }
   | { tool: 'connect_status'; params: ConnectStatusParams }
+  | { tool: 'connect_synergy_list'; params: ConnectSynergyListParams }
+  | { tool: 'connect_synergy_search'; params: ConnectSynergySearchParams }
+  | { tool: 'connect_synergy_download'; params: ConnectSynergyDownloadParams }
+  | { tool: 'oauth_list_files'; params: OauthListFilesParams }
+  | { tool: 'oauth_search_files'; params: OauthSearchFilesParams }
+  | { tool: 'oauth_download_file'; params: OauthDownloadFileParams }
+  | { tool: 'oauth_get_file_metadata'; params: OauthGetFileMetadataParams }
   // Ops uses a dynamic tool name pattern (`ops_<operation>`) — template
   // literal type captures the convention without enumerating all 50+ ops.
   // Server-side dispatcher routes anything prefixed `ops_` to a single
@@ -1165,9 +1303,23 @@ export type ToolResult<T extends ToolName> = T extends 'query_knowledgebase'
                                                               ? ConnectRequestResult
                                                               : T extends 'connect_status'
                                                                 ? ConnectStatusResult
-                                                                : T extends `ops_${string}`
-                                                                  ? OpsOperationResult
-                                                                  : never;
+                                                                : T extends 'connect_synergy_list'
+                                                                  ? ConnectorListResult
+                                                                  : T extends 'connect_synergy_search'
+                                                                    ? ConnectorListResult
+                                                                    : T extends 'connect_synergy_download'
+                                                                      ? ConnectorDownloadResult
+                                                                      : T extends 'oauth_list_files'
+                                                                        ? ConnectorListResult
+                                                                        : T extends 'oauth_search_files'
+                                                                          ? ConnectorListResult
+                                                                          : T extends 'oauth_download_file'
+                                                                            ? ConnectorDownloadResult
+                                                                            : T extends 'oauth_get_file_metadata'
+                                                                              ? ConnectorFileMetadataResult
+                                                                              : T extends `ops_${string}`
+                                                                                ? OpsOperationResult
+                                                                                : never;
 
 /**
  * Extracts the params type for a given tool name. Useful for typing

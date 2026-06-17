@@ -1,268 +1,108 @@
 ---
-api_name: 'Flowingly'
-api_slug: 'flowingly'
-version: 'unversioned (paths under /public/)'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-line_count_target: '< 300 lines'
-confidence: 'LOW — documented from Flowingly Help Center, NOT live-tested. Discovery required.'
+api_name: Flowingly
+api_slug: flowingly
+base_url: https://publicapi.flowingly.net
+route_prefix: /public (literal path segment — part of every path, NOT a version)
+path_version_segment: none (no /v1/; "unversioned" — never put /v1/ in a path → would 404)
+base_url_warning: connector brief said api.flowingly.io — UNCONFIRMED, likely wrong (marketing site). Use publicapi.flowingly.net [UNKNOWN]
+call_surface: HTTP via `numa integrations request` (action-oriented Direct-API connector). NOT a file-browser — does NOT support list-files/search-files/download-file. NOT MCP.
+auth: Bearer {accessToken} (backend exchanges stored username+password at POST /public/authorise; re-authorises on 401)
+field_casing: INCONSISTENT per endpoint — authorise response=camelCase; startflow REQUEST=PascalCase; startflow RESPONSE + step-field bodies=camelCase. Preserve exactly per endpoint.
+id_format: flowIdentifier=FLOW-<number> (FLOW-9042) · field identifier=field<digits> (field4938201746) · stepIdentifier=step display NAME (e.g. "Step 1", "New Customer (Debtor) Form"), URL-encoded in path
+rate_limit: none documented [UNKNOWN] — throttle conservatively; exponential backoff on 429/5xx
+confidence: EVERY fact is [DOCUMENTED] (Flowingly Help Center, 2026-05-29) or [INFERRED]/[UNKNOWN] — NOT live-tested, NO [CONFIRMED] facts. Non-default markers are inline; treat unexpected behaviour as a doc gap, not an agent bug. Auth placement, token lifetime, error HTTP codes, full endpoint catalogue need live verification.
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# Flowingly -- Workspace Agent API Rules
+# Flowingly — API Rules
 
-> **This file is loaded into the workspace agent's context when the Flowingly integration is active.**
-> It must stay under 300 lines. Be precise, not verbose.
-> Companion files (01a-01d) contain the detailed reference material.
->
-> ⚠️ **DISCOVERY-REQUIRED BANNER.** Everything here is [DOCUMENTED] (from the Flowingly Help
-> Center) or [INFERRED]/[UNKNOWN]. **No live API call has been made.** There are NO [CONFIRMED]
-> facts. Auth placement, token lifetime, error HTTP codes, and the full endpoint catalogue must
-> be verified against a live instance before relying on them. Treat unexpected behaviour as a
-> documentation gap, not an agent bug.
+## Paths (read first)
 
-## Context
+- Pass FULL paths including the literal `/public` segment: `/public/authorise`, `/public/startflow`, `/public/flow/{flowId}/step/{stepId}`. The host is `https://publicapi.flowingly.net`.
+- `/public` is a real path segment, NOT a version. There is NO `/v1/` anywhere — adding it → 404.
+- `stepIdentifier` is the step's display NAME and must be URL-encoded in the path (spaces→`%20`, parens→`%28`/`%29`). E.g. `New%20Customer%20(Debtor)%20Form`.
+- Use `api.flowingly.io` ONLY if discovery confirms it; default to `publicapi.flowingly.net`.
 
-- **API:** Flowingly Public API (Business Process Management / workflow automation, NZ vendor)
-- **Base URL:** `https://publicapi.flowingly.net/public/` [DOCUMENTED]
-  - ⚠️ The connector brief named `api.flowingly.io` — **could NOT be confirmed**. Do not use it without verification. [UNKNOWN]
-- **Auth:** username/password → bearer access token (custom token exchange, not standard OAuth2) [DOCUMENTED]
-- **Integration path:** Direct API via `connect_request`. This is NOT a Files/Data-Connector — there is nothing to browse. [DOCUMENTED]
-- **Rate limits:** None documented. Throttle conservatively + exponential backoff on 429/5xx. [UNKNOWN]
-- **Field casing:** ⚠️ **INCONSISTENT.** Auth response = camelCase. Start Flow REQUEST = **PascalCase** (`Name`, `Subject`, `ActorsToStartFlowFor`). Start Flow RESPONSE + step-field bodies = camelCase. Preserve exactly per endpoint. [DOCUMENTED]
-- **ID format:** `flowIdentifier` = `FLOW-<number>` (e.g. `FLOW-9042`). Field `identifier` = `field<digits>`. `stepIdentifier` = the step's display name (e.g. `Step 1`). [DOCUMENTED]
+## Surface (entire documented API = 4 endpoints)
 
-## Auth Structure
+| #   | Method | Path                                                | Purpose                                      | Auth | Idempotent |
+| --- | ------ | --------------------------------------------------- | -------------------------------------------- | ---- | ---------- |
+| 1   | POST   | /public/authorise                                   | username+password → bearer token             | No   | Yes        |
+| 2   | POST   | /public/startflow                                   | start a flow instance from a published model | Yes  | **No**     |
+| 3   | GET    | /public/flow/{flowIdentifier}/step/{stepIdentifier} | read a step's fields + values                | Yes  | Yes        |
+| 4   | POST   | /public/flow/{flowIdentifier}/step/{stepIdentifier} | update a step's field values (bulk array)    | Yes  | Yes        |
 
-Custom token exchange. The connector is registered `authType: 'username-password'` with `username` +
-`password` credential fields — the backend exchanges them for a bearer token, then sends:
+`startflow` is documented as both `/public/startflow` and `/public/startFlow` — server is almost certainly case-insensitive; use lowercase. [verify on live]
 
-```
-Authorization: Bearer {accessToken}
-```
+## Auth
 
-**Token exchange (`POST /public/authorise`):** credentials go in the **QUERY STRING** with
-`Content-Type: application/x-www-form-urlencoded`. [DOCUMENTED — verify query vs body on live]
+Backend exchanges stored credentials at `POST /public/authorise` and sends `Authorization: Bearer {accessToken}` on calls 2–4. Authorising user MUST be a Flowingly **Business Administrator** or calls are rejected.
 
-```
-POST /public/authorise?username=admin@company.com&password=******** HTTP/1.1
-Host: publicapi.flowingly.net
-Content-Type: application/x-www-form-urlencoded
-```
+- `/authorise`: credentials in the **QUERY STRING** with `Content-Type: application/x-www-form-urlencoded` (body may also work — unverified). Token check happens before payload validation.
+- Response: `{accessToken, refreshToken:null, idToken:"", tokenType:"Bearer", expiresIn:0}`. `expiresIn` real value/unit UNKNOWN. `refreshToken` is null → no refresh; on 401 **re-run /authorise and retry once** (safe for GET/update; NOT for startflow). [INFERRED]
 
-Returns: `{ "accessToken": "...", "refreshToken": null, "idToken": "", "tokenType": "Bearer", "expiresIn": 0 }`
+## CAN
 
-**Token lifecycle:**
+1. Start a flow instance from a published flow MODEL name (`POST /public/startflow`) — assign actors, CC, assignee, initiator.
+2. Read a known step's fields (definitions + current values): `GET /public/flow/{flowId}/step/{stepId}`.
+3. Update step field values in bulk (array of field objects) for a known flow+step: `POST /public/flow/{flowId}/step/{stepId}`.
 
-- `expiresIn` shown as `0` in docs — real value/unit **unknown**. [UNKNOWN]
-- `refreshToken` shown as `null` — refresh likely **not supported**. On 401, **re-run `/authorise` and retry once**. [INFERRED]
-- The authenticating user MUST be a Flowingly **Business Administrator** or the API will not work. [DOCUMENTED]
+## CANNOT
 
-## Capabilities
+List/search/browse flows, models, steps, actors, or teams — **no list endpoints exist** (must already hold the model name + flowIdentifier). Advance/approve/complete/reassign/cancel a flow or step (in-app only). Upload/download files; `FileUpload`/`Signature`/`Instruction` fields are not API-writable. Configure/list/delete webhooks or edit flow models (modeller web UI only). Poll for "what changed" (no list/changed-since endpoint — use the Webhook step). Bulk-start flows (one instance per call).
 
-### CAN
+## Gotchas
 
-1. Start a flow instance from a published flow **model name** (`POST /public/startflow`), assigning actors, CC, initiator. [DOCUMENTED]
-2. Read the fields (definitions + current values) of a specific step in a known flow (`GET /public/flow/{flowId}/step/{stepId}`). [DOCUMENTED]
-3. Update/populate step field values in bulk (array of fields) for a known flow + step (`POST /public/flow/{flowId}/step/{stepId}`). [DOCUMENTED]
+1. **Casing flips per endpoint.** startflow REQUEST = PascalCase (`Name`, `Subject`, `ActorsToStartFlowFor`, `CCActors`, `AssignedActor`, `FlowInitiator`). authorise response + startflow response + step-field bodies = camelCase. Mixing fails validation.
+2. **`Name` = flow MODEL name (published template), NOT the instance subject.** `Subject` = this instance's title. Model must exist + be published. No API to discover model names → get it from the user.
+3. **Credentials go in the query string of `/authorise`** despite the form-urlencoded Content-Type. URL-encode the password.
+4. **GET a step before you POST it.** Field `identifier`s (`field<digits>`) are model-assigned and required in the write body — read them, set `value`, POST the same array shape back. Preserve `name`/`type`/`order`/`identifier` exactly.
+5. **`AssignedActor` is conditionally required** — only when the flow's first step needs an approver selected; else optional/omit.
+6. **Errors may arrive as HTTP 200 with `success:false`.** Always inspect `success`/`errorCode`/`errorMessage` in the body, not just HTTP status. (Whether failures are 200 or 4xx is UNKNOWN; `errorCode` catalogue undocumented.)
+7. **`startflow` is NOT idempotent** — each call starts a new flow + notifies/assigns people. Never blind-retry; on ambiguous failure confirm with the user before re-calling. [INFERRED]
+8. **Per-`type` `value` encoding differs** (see Field types). CheckBox is the string `"true"`/`"false"`, not a boolean. SelectList/RadioButtonList values are option OBJECTS with `isSelected:true`.
 
-### CANNOT
+## Field types → `value` encoding (for update)
 
-1. **List / search / browse** flows, flow models, steps, actors, or teams — **no such endpoints documented**. The agent must already hold the model name and `flowIdentifier`. [UNKNOWN/None]
-2. Advance, approve, complete, reassign, or cancel a flow/step — not in the documented surface. [UNKNOWN/None]
-3. Upload or download files/attachments — no file endpoints. [UNKNOWN/None]
-4. Configure webhooks or edit flow models — modeller (web UI) only, not via API. [DOCUMENTED — unavailable]
+| type            | UI                   | value encoding                                               | Notes                                            |
+| --------------- | -------------------- | ------------------------------------------------------------ | ------------------------------------------------ |
+| Text            | short text           | `"..."` (string)                                             |                                                  |
+| TextArea        | long text            | `"..."` (string)                                             |                                                  |
+| SelectList      | dropdown (single)    | `{"key":"2","value":"Option 2","isSelected":true}`           | object; isSelected must be true                  |
+| RadioButtonList | option list (single) | `{"key":"1","value":"Option 1","isSelected":true}`           | object; isSelected must be true                  |
+| MultiSelectList | multi-select         | array of option objects, each `isSelected` true/false        | `false` un-sets a value                          |
+| CheckBox        | checkbox             | `"true"` / `"false"`                                         | **string, not boolean**                          |
+| Email           | email                | string, valid email                                          |                                                  |
+| Date            | date                 | `"dd/MM/yyyy"` (e.g. `"19/07/1990"`)                         | only Custom Value validation runs                |
+| Datetime        | date+time            | `"dd/MM/yyyy hh:mm:ss tt"` (e.g. `"02/07/2021 02:05:00 PM"`) | only Custom Value validation runs                |
+| Currency        | currency             | number `5000.50`                                             | max len 15; currency code auto-set if configured |
+| Number          | number               | number `35`                                                  | max len 15                                       |
 
-## Critical Gotchas
+Not API-writable: `Instruction`, `FileUpload`, `Signature`. GET returns the first **10,000** options for list-type fields.
 
-> Things that will cause errors if you get them wrong.
+## Defaults (override only if the user specifies)
 
-1. **Start Flow request body is PascalCase.** `Name`, `Subject`, `ActorsToStartFlowFor`, `CCActors`, `AssignedActor`, `FlowInitiator`. Step-field bodies are camelCase. Mixing casing will fail validation. [DOCUMENTED]
-2. **`Name` is the flow MODEL name, not the instance subject.** `Name` = the published template's unique name; `Subject` = the title of this new instance. The model must already exist and be published. There is no API to discover model names — get it from the user. [DOCUMENTED]
-3. **Credentials go in the query string of `/authorise`**, even though Content-Type is form-urlencoded. (Verify on live — body may also work.) [DOCUMENTED]
-4. **`stepIdentifier` is the step's display NAME and must be URL-encoded** in the path (spaces, parens). E.g. `New%20Customer%20(Debtor)%20Form`. [DOCUMENTED]
-5. **`AssignedActor` is conditionally required:** only when the flow's first step requires an approver to be selected. Otherwise optional. [DOCUMENTED]
-6. **Errors may arrive as HTTP 200 with `success:false`.** Always inspect `success` / `errorCode` / `errorMessage` in the body, not just the HTTP status. (Whether failures are 200 or 4xx is unverified.) [DOCUMENTED envelope / UNKNOWN codes]
-7. **You must GET a step before you POST it.** Field `identifier` values (`fieldXXXXXXXXXX`) are model-assigned — read them first, then write values back into the same array shape. [DOCUMENTED]
-8. **`startflow` is NOT idempotent** — each call starts a new flow instance. Never blind-retry it; on ambiguous failure, confirm with the user before re-calling. [INFERRED]
+`FlowInitiator` = the authenticated user. `ActorsToStartFlowFor` = no default (must ask — no safe default). `AssignedActor` = omit (set only when first step needs an approver). `CCActors` = omit.
 
-## Default Parameters
+## Errors
 
-Use these defaults unless the user specifies otherwise:
+Application envelope (startflow; likely shared by update): `{"success":false,"errorCode":"SOME_CODE","errorMessage":"Human readable reason","dataModel":null}`. HTTP status on failure UNKNOWN — check BOTH status AND `success`. Don't branch on specific `errorCode`s (catalogue undocumented); surface `errorMessage`.
+Recovery (all INFERRED): 200 → if `success:false` surface `errorMessage`, do not retry blindly · 400 fix payload (casing, required fields, value type) · 401 re-run `/authorise` then retry once (no refresh token) · 403 confirm account is Business Administrator · 404 verify `flowIdentifier` + URL-encoded step name · 429 backoff (no `retry-after`), exponential ≤60s · 5xx exponential backoff + jitter (≤3). NEVER auto-retry `startflow`.
 
-| Parameter            | Default                 | Reason                                                     |
-| -------------------- | ----------------------- | ---------------------------------------------------------- |
-| FlowInitiator        | the authenticated user  | Sensible default if the caller doesn't name an initiator   |
-| ActorsToStartFlowFor | (no default — must ask) | No safe default; the agent must obtain who the flow is for |
-| AssignedActor        | omit                    | Only set when the first step needs an approver selected    |
-| CCActors             | omit                    | Optional                                                   |
+## Examples
 
-## Working Examples
+1. Get a token (`POST /public/authorise?username=admin@acme.com&password=********`, `Content-Type: application/x-www-form-urlencoded`)
+   → `{"accessToken":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...","refreshToken":null,"idToken":"","tokenType":"Bearer","expiresIn":0}`
 
-### Example 1: Get an access token
+2. Start a flow (`POST /public/startflow`, `Authorization: Bearer {accessToken}`, PascalCase body)
+   `{"Name":"New Customer Onboarding","Subject":"Acme Ltd onboarding","ActorsToStartFlowFor":[{"UserEmail":"jo@acme.com"}],"CCActors":[{"Team":"Finance"}],"AssignedActor":"manager@acme.com","FlowInitiator":"system@acme.com"}`
+   → `{"success":true,"errorCode":null,"errorMessage":null,"dataModel":[{"flowIdentifier":"FLOW-9042","stepIdentifier":"Step 1"}]}`
+   Actor = `{"UserEmail":"jo@acme.com"}` (individual) OR `{"Team":"Finance"}` (team) — supply one per actor.
 
-```http
-POST /public/authorise?username=admin@acme.com&password=******** HTTP/1.1
-Host: publicapi.flowingly.net
-Content-Type: application/x-www-form-urlencoded
-```
+3. Read a step's fields (discover identifiers): `GET /public/flow/FLOW-9042/step/New%20Customer%20(Debtor)%20Form`
+   → `[{"name":"Customer Name","type":"Text","order":1,"identifier":"field4938201746","value":"","options":null},{"name":"Email","type":"Email","order":2,"identifier":"field4938201747","value":"","options":null},{"name":"Account Type","type":"RadioButtonList","order":3,"identifier":"field4938201748","value":"","options":["Standard","Premium"]}]`
+   Response is a raw array (wrapper vs envelope UNKNOWN). `options` populated for list-type fields, else `null`.
 
-```json
-{
-  "accessToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": null,
-  "idToken": "",
-  "tokenType": "Bearer",
-  "expiresIn": 0
-}
-```
-
-### Example 2: Start a flow instance
-
-```http
-POST /public/startflow HTTP/1.1
-Host: publicapi.flowingly.net
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-{
-  "Name": "New Customer Onboarding",
-  "Subject": "Acme Ltd onboarding",
-  "ActorsToStartFlowFor": [{ "UserEmail": "jo@acme.com" }],
-  "CCActors": [{ "Team": "Finance" }],
-  "AssignedActor": "manager@acme.com",
-  "FlowInitiator": "system@acme.com"
-}
-```
-
-```json
-{
-  "success": true,
-  "errorCode": null,
-  "errorMessage": null,
-  "dataModel": [{ "flowIdentifier": "FLOW-9042", "stepIdentifier": "Step 1" }]
-}
-```
-
-### Example 3: Read a step's fields (discover identifiers)
-
-```http
-GET /public/flow/FLOW-9042/step/New%20Customer%20(Debtor)%20Form HTTP/1.1
-Host: publicapi.flowingly.net
-Authorization: Bearer {accessToken}
-```
-
-```json
-[
-  {
-    "name": "Customer Name",
-    "type": "Text",
-    "order": 1,
-    "identifier": "field4938201746",
-    "value": "",
-    "options": null
-  },
-  { "name": "Email", "type": "Email", "order": 2, "identifier": "field4938201747", "value": "", "options": null },
-  {
-    "name": "Account Type",
-    "type": "RadioButtonList",
-    "order": 3,
-    "identifier": "field4938201748",
-    "value": "",
-    "options": ["Standard", "Premium"]
-  }
-]
-```
-
-### Example 4: Update step field values (write back the same array)
-
-```http
-POST /public/flow/FLOW-9042/step/New%20Customer%20(Debtor)%20Form HTTP/1.1
-Host: publicapi.flowingly.net
-Authorization: Bearer {accessToken}
-Content-Type: application/json
-
-[
-  { "name": "Customer Name", "type": "Text",  "order": 1, "identifier": "field4938201746", "value": "Acme Ltd",   "options": null },
-  { "name": "Email",         "type": "Email", "order": 2, "identifier": "field4938201747", "value": "jo@acme.com", "options": null }
-]
-```
-
-```json
-{ "success": true, "errorCode": null, "errorMessage": null }
-```
-
-> Update response shape is [INFERRED] (mirrors the Start Flow envelope). Verify on live — it may instead echo the updated field array or return a bare 200. [UNKNOWN]
-
-## Proxy API Operations
-
-> The entire documented surface. There may be undocumented endpoints (list flows, complete step, comments, attachments) — none found in public docs; discovery required. [UNKNOWN]
-
-| Operation          | Method | Path                                                | Key Parameters                                             | Notes                                        |
-| ------------------ | ------ | --------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- |
-| Authorise          | POST   | /public/authorise                                   | username, password (query string)                          | No auth. Returns bearer token [DOCUMENTED]   |
-| Start flow         | POST   | /public/startflow                                   | Name (model), Subject, ActorsToStartFlowFor, FlowInitiator | PascalCase body. NOT idempotent [DOCUMENTED] |
-| Read step fields   | GET    | /public/flow/{flowIdentifier}/step/{stepIdentifier} | path: flowIdentifier, stepIdentifier (URL-encoded name)    | Returns array of fields [DOCUMENTED]         |
-| Update step fields | POST   | /public/flow/{flowIdentifier}/step/{stepIdentifier} | body: array of field objects with `value` set              | Bulk per step. camelCase body [DOCUMENTED]   |
-
-## Pagination
-
-- **Type:** None / not applicable. No list endpoints exist. The only multi-item response (GET step fields) returns a complete array with no paging. [INFERRED]
-- **Default / max page size:** N/A
-- **How to paginate:** N/A — there is nothing to page through. To act on a flow you must already hold its `flowIdentifier` (from a Start Flow response or an inbound webhook).
-
-## Webhooks / Events
-
-**Supported events:**
-
-| Event               | Trigger                                              | Key Payload Fields                           |
-| ------------------- | ---------------------------------------------------- | -------------------------------------------- |
-| Webhook step submit | A "Webhook - Form" step in a flow model is submitted | JSON of that step's form fields [DOCUMENTED] |
-
-**Setup:** Outbound only, configured in the flow modeller (web UI) — NOT via the API. You set an
-Endpoint URL on a Webhook step; Flowingly POSTs the form JSON when that step is submitted. There is
-**no documented signature/HMAC or secret** — treat inbound webhooks as unauthenticated unless a
-shared-secret is added manually to the URL. Flag for security review. [DOCUMENTED / signature UNKNOWN]
-
-> Webhooks are the **only viable event trigger** — polling cannot discover new/changed flows (no list endpoint). The canonical pattern is: Webhook step → middleware → Public API `startflow` of another flow.
-
-## Error Handling
-
-**Standard error envelope (Start Flow; likely shared by update):** [DOCUMENTED]
-
-```json
-{ "success": false, "errorCode": "SOME_CODE", "errorMessage": "Human readable reason", "dataModel": null }
-```
-
-⚠️ It is **unknown** whether failures return HTTP 200 + `success:false` or a 4xx/5xx. Check both the
-HTTP status AND the `success` field. The `errorCode` catalogue is undocumented. [UNKNOWN]
-
-**Recovery by status (all INFERRED — none confirmed):**
-
-| Status | Meaning                  | Action                                          |
-| ------ | ------------------------ | ----------------------------------------------- |
-| 200    | OK — **check `success`** | If `success:false`, surface `errorMessage`      |
-| 400    | Bad request / validation | Fix payload (casing, required fields)           |
-| 401    | Unauthorized / expired   | Re-run `/authorise`, retry once                 |
-| 403    | Forbidden                | Confirm the account is a Business Administrator |
-| 404    | Flow/step not found      | Verify `flowIdentifier` + URL-encoded step name |
-| 429    | Rate limited (assumed)   | Backoff + retry                                 |
-| 5xx    | Server error             | Exponential backoff, max 3 retries              |
-
-## Known Limitations
-
-1. **No browse/list surface** — cannot enumerate flows, models, steps, actors, or teams. Caller must supply identifiers/model names. [UNKNOWN]
-2. **No step-progression API** — cannot advance/approve/complete/cancel flows or steps. [UNKNOWN]
-3. **No file handling** in the Public API. [UNKNOWN]
-4. **Webhooks are modeller-configured and outbound-only**; no API to manage them; no documented signature. [DOCUMENTED]
-5. **Base URL, auth placement, token lifetime, refresh, and error HTTP codes are all UNVERIFIED.** Run the discovery checklist (see 00-questionnaire appendix) before production use. [UNKNOWN]
-6. **`startflow` is not idempotent** and there is no idempotency-key support — duplicate flows on retry are a real risk. [INFERRED]
-
----
-
-_Generated from investigation questionnaire (2026-05-29). LOW confidence — documented, not live-tested._
-_See companion files for detailed reference:_
-
-- _01a-domain-model-reference.md — Entity catalog, relationships, state machines_
-- _01b-query-patterns.md — Read patterns (minimal; no query surface)_
-- _01c-mutation-patterns.md — Start flow, update step fields, business rules_
-- _01d-event-and-error-handling.md — Webhook step, error envelope, recovery_
+4. Update step field values (`POST /public/flow/FLOW-9042/step/New%20Customer%20(Debtor)%20Form`, camelCase array body — write back the GET array with `value` set)
+   `[{"name":"Customer Name","type":"Text","order":1,"identifier":"field4938201746","value":"Acme Ltd","options":null},{"name":"Email","type":"Email","order":2,"identifier":"field4938201747","value":"jo@acme.com","options":null}]`
+   → `{"success":true,"errorCode":null,"errorMessage":null}` (response shape INFERRED — may instead echo the field array or return bare 200; re-GET to confirm). Partial-failure behaviour unknown — treat as all-or-nothing.

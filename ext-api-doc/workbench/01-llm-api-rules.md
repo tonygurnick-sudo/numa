@@ -1,292 +1,117 @@
 ---
-api_name: 'Workbench International (ERP)'
-api_slug: 'workbench'
-version: 'per-instance (Swagger-defined)'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-line_count_target: '< 300 lines'
+api_name: Workbench International (ERP)
+api_slug: workbench
+base_url: stored instance_url (per-customer, e.g. https://yourcompany.workbench.com)
+route_prefix: discover from Swagger base path (likely /api or /api/v1) — [INFERRED] 🔬
+path_version_segment: UNCONFIRMED 🔬 — a "/v1/" may be a real path segment OR absent. Do NOT assume /api/v1 — read the Swagger base path. Examples below use /api/v1 as a PLACEHOLDER only.
+auth: Authorization Bearer {bearer_token} [INFERRED 🔬 — verify header; fallback X-Api-Key/apikey]; static, no refresh
+field_casing: UNCONFIRMED 🔬 (examples use camelCase as placeholder)
+id_format: UNCONFIRMED 🔬 (jobNo human string vs numeric internal id may differ)
+rate_limit: UNKNOWN 🔬 — be conservative, cache reads, no tight loops
+call_surface: HTTP via `numa integrations request` (spec-driven, chat-only). NOT a Files connector — no list-files/search-files/download-file. No lib/oauth-providers class.
+confidence: NOTHING here is live-confirmed. Every path/field/envelope/status is [INFERRED]/[UNKNOWN] 🔬 unless tagged [DOCUMENTED] (= in Workbench's own material). Pull the instance Swagger FIRST; when it contradicts this file, the Swagger wins. Do not invent endpoints.
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# Workbench International — Workspace Agent API Rules
+# Workbench International — API Rules
 
-> **Loaded into the workspace agent when the Workbench integration is active.** Keep under 300 lines.
-> Companion files (01a–01d) hold the detailed reference.
->
-> ⚠️ **DISCOVERY-FIRST CONNECTOR — READ THIS.** Workbench publishes that it has "a JSON REST API"
-> with "Swagger … metadata and a code generation facility for all the API methods", but the **actual
-> reference is served per-customer instance and is NOT public.** Endpoint paths, field names, query
-> params, pagination, rate limits and the token-issuance flow could **not be verified**. Every path,
-> field and envelope in these docs is marked `[INFERRED]` or `[UNKNOWN]` unless tagged `[DOCUMENTED]`
-> (= stated in Workbench's own material). **Nothing here is `[CONFIRMED]` against a live call.**
-> **Before trusting any endpoint below, pull the instance Swagger** (see First-Call Playbook). When
-> the live spec contradicts this file, the live spec wins. Do not invent endpoints.
+⚠️ **DISCOVERY-FIRST CONNECTOR.** Workbench states it has "a JSON REST API" with "Swagger … metadata and a code generation facility" `[DOCUMENTED]`, but the reference is served **per-customer instance and is NOT public**. Paths, fields, query params, pagination, rate limits and token issuance are all unverified. **Pull the Swagger before trusting any endpoint here.**
 
-## Context
+## Call surface
 
-- **API:** Workbench International ERP — JSON REST API `[DOCUMENTED]`. Job-costing / construction
-  ERP (NZ / APAC): jobs, cost transactions, GL distribution, AP, AR, POs, timesheets, plant.
-- **Base URL:** the stored **`instance_url`** (e.g. `https://yourcompany.workbench.com`) `[DOCUMENTED — registry]`.
-  API path prefix (`/api`, `/api/v1`, or Swagger-defined) is **`[INFERRED]` 🔬 discover**.
-- **Auth:** static **bearer token** + per-tenant `instance_url`, both stored credential fields. No OAuth.
-- **Integration path:** **Direct API via `connect_request`** (spec-driven, chat-only). Not a Files connector — no folder/file tree. No `lib/oauth-providers` class.
-- **Rate limits:** **`[UNKNOWN]` 🔬** — undocumented. Be conservative; cache reads; no tight loops.
+HTTP via `numa integrations request` using stored `bearer_token` + `instance_url`. Chat-only, spec-driven. NOT file-browsing — does NOT support list-files/search-files/download-file.
 
-## Auth Structure
+## Domain (well-grounded `[DOCUMENTED]`)
 
-Bearer-token auth in the HTTP `Authorization` header against the per-tenant `instance_url`.
+Job-costing / construction ERP (NZ/APAC): jobs, cost transactions + GL distribution, AP (creditors), AR (debtors/claims), purchase orders, timesheets, plant.
 
-```
-Authorization: Bearer {bearer_token}
-Accept: application/json
-```
+## Paths (read first)
 
-**Token lifecycle:**
+- Base = stored `instance_url`; normalise it (see Gotcha 1).
+- API prefix is `[INFERRED]` 🔬 — likely `/api` or `/api/v1`. **All `/api/v1/...` paths below are PLACEHOLDERS.** Whether `/v1/` is a real path segment is UNCONFIRMED — read it from the Swagger base path; do NOT hard-prepend `/api/v1`.
+- Call what the Swagger says, not what this file guesses.
 
-- Token is **pre-issued inside the customer's Workbench instance** (by an admin/user) and pasted into
-  the connector. **How it is generated/rotated is `[UNKNOWN]` 🔬** — confirm against a live tenant.
-- **No refresh token** in the connector → treat as **static**. On `401`, the user must re-issue and
-  re-paste a new token; the agent cannot refresh it.
-- **🔬 Verify the header name.** Bearer is assumed `[INFERRED]`. Some ERPs use `X-Api-Key`/`apikey`.
-  If `Authorization: Bearer` returns `401` on a known-good path, try the alternate header.
+## Auth
 
-## First-Call Playbook (run once per new connection)
+`Authorization: Bearer {bearer_token}` + `Accept: application/json` `[INFERRED 🔬]`.
 
-Stop at the first failure. **Step 1 is the most important thing you do.**
+- Verify header name: if `Bearer` returns 401 on a known-good path, try `X-Api-Key`/`apikey` 🔬.
+- Static token, pre-issued inside the customer's Workbench instance. **No refresh** → on 401 the user must re-issue and re-paste; the agent cannot refresh. Issuance/rotation flow `[UNKNOWN]` 🔬.
 
-```
-1. PULL THE SWAGGER. GET {instance_url}/swagger  (UI) and the raw spec
-   {instance_url}/swagger/v1/swagger.json   [exact path 🔬].
-   This single step resolves: API path prefix, real resource names, field
-   schemas, query params, pagination envelope. Read it before any other call.
-   Cannot reach it → instance_url wrong/normalisation issue (see Gotcha 1).
+## First-Call Playbook (run once per new connection; stop at first failure)
 
-2. SMOKE TEST AUTH. GET {instance_url}/{prefix}/jobs?pageSize=1
-   (use the real jobs path from the Swagger).
-   200 → auth works, gate satisfied.
-   401 → token invalid/expired OR wrong auth header (try X-Api-Key).
-   403 → token valid but the issuing user's Workbench role lacks permission.
-   404 (HTML) → wrong path prefix; re-read the Swagger base path.
-```
+1. **PULL THE SWAGGER (most important step).** `GET {instance_url}/swagger` (UI) + `{instance_url}/swagger/v1/swagger.json` (raw; exact path 🔬). Resolves: prefix, real resource names, field schemas, query params, pagination envelope. Read before any other call. Cannot reach it → `instance_url` wrong/normalisation issue (Gotcha 1).
+2. **SMOKE-TEST AUTH.** `GET {instance_url}/{prefix}/jobs?pageSize=1` (real jobs path from Swagger). `200`→auth works, gate satisfied. `401`→token invalid/expired OR wrong header (try `X-Api-Key`). `403`→token valid but issuing user's Workbench role lacks permission. `404` (HTML)→wrong prefix; re-read Swagger base path.
 
-## Capabilities
+## CAN (once Swagger confirmed)
 
-### CAN (once Swagger is confirmed)
+- Read/search: jobs, transactions (+ GL distribution lines), purchase orders, creditors/AP, debtors/AR + claims, timesheets, plant — filter by job/date/status.
+- Answer cost questions ("spent on job X by activity/GL?") by reading a job's transactions and summing distribution lines.
+- Create (gated, **HITL only**, off by default): timesheets, purchase orders, cost transactions — via the business-rule-validated API, only if the customer enables writes.
 
-1. **Read & search** Jobs, cost Transactions (+ their GL **distribution** lines), Purchase Orders,
-   Creditors/AP invoices, Debtors/AR invoices & claims, Timesheets, Plant — filter by job / date / status.
-2. **Answer cost questions** — "what's been spent on job X, by activity / GL account?" — by reading a
-   job's transactions and summing their distribution lines.
-3. **Create (gated, HITL only)** timesheets / purchase orders / cost transactions through the
-   business-rule-validated API — only if the customer enables writes.
+## CANNOT
 
-### CANNOT
+- Cross-tenant queries — every call is scoped to one `instance_url`; one token cannot see another customer.
+- Blind retries of financial POSTs — no known idempotency key; a retry can double-post and corrupt job costs. GET to verify before re-sending.
+- High-frequency polling / bulk sync — rate limits unknown; stay slow.
 
-1. **Cross-tenant queries** — every call is scoped to one `instance_url`. One token cannot see another customer.
-2. **Blind retries of financial POSTs** — no known idempotency key; a retry can double-post a
-   timesheet/invoice/transaction and corrupt job costs. Verify before re-sending.
-3. **High-frequency polling / bulk sync** — rate limits are unknown; stay slow until measured.
+## Gotchas
 
-## Critical Gotchas
+1. **Normalise `instance_url` first.** Free-form field. Ensure a scheme is present, strip trailing slash so `{instance_url}/{prefix}/...` never double-slashes. Wrong base URL is the #1 cause of "nothing works".
+2. **Paths are `[INFERRED]`, not fact.** Call what the instance Swagger says, not `/api/v1/jobs` because this file says so. Treat every path as a hypothesis.
+3. **Writes are real financial postings.** Workbench "retains its business rules and validations" on writes `[DOCUMENTED]`, so a syntactically valid POST can still be rejected (closed job, invalid activity, unbalanced distribution). HITL-confirm every write; never auto-retry on ambiguity.
+4. **Distribution must balance.** A cost/invoice splits across job/activity/GL/tax lines summing to the document total. `[DOCUMENTED]` rule: **the Activity Code carries the debit GL account** — post to a job + activity; the GL account follows from the activity → GL mapping. Do not invent `glAccount` codes.
+5. **Two product lines share the name.** Cloud "Workbench Online" vs SAP Business One companion "Workbench SBO" may expose different surfaces. Confirm which the customer runs 🔬.
+6. **`jobNo` ≠ internal `id`.** Human job number ("J-10042") and internal id ("10042") can differ; a filter taking one may reject the other. Capture both from list responses 🔬.
+7. **Date format may not be ISO.** A NZ/AU ERP may want `dd/mm/yyyy` on filters even if it returns ISO. If a date filter errors/returns nothing, try the alternate 🔬.
 
-1. **Normalise `instance_url` before composing URLs.** It is free-form. Ensure a scheme is present
-   and strip any trailing slash so `{instance_url}/{prefix}/...` never double-slashes. A wrong/odd
-   base URL is the #1 cause of "nothing works".
-2. **Endpoint paths are `[INFERRED]`, not fact.** Do not call `/api/v1/jobs` because this file says
-   so — call what the **instance Swagger** says. Treat every path here as a hypothesis.
-3. **Writes are real financial postings.** Workbench "retains its business rules and validations" on
-   API writes, so a syntactically valid POST can still be rejected (closed job, invalid activity,
-   unbalanced distribution). Always HITL-confirm writes; never auto-retry on ambiguity.
-4. **Distribution must balance.** A cost/invoice splits across job/activity/GL/tax lines that sum to
-   the document total. A `[DOCUMENTED]` rule: **the Activity Code carries the debit GL account** — you
-   post to a job + activity, and the GL account follows from the activity mapping.
-5. **Two product lines share the name.** Cloud "Workbench Online" vs the SAP Business One companion
-   "Workbench SBO" may expose different surfaces. Confirm which the customer runs before trusting endpoints. 🔬
+## Defaults (override only if the user specifies)
 
-## Default Parameters
+`pageSize=200` (read; back off if rejected — max unknown 🔬). Always send an explicit `pageSize` — default is unknown, omitting it can silently truncate. Writes **off by default**.
 
-| Parameter   | Default                   | Reason                                               |
-| ----------- | ------------------------- | ---------------------------------------------------- |
-| `pageSize`  | 200 (read)                | Reasonable batch while limits are unknown 🔬         |
-| Auth header | `Authorization: Bearer …` | Per registry (bearer token) — confirm header name 🔬 |
-| Base URL    | stored `instance_url`     | Per-tenant routing is mandatory                      |
-| Writes      | **off by default**        | Workbench writes are real financial postings         |
+## Operations (every path `[INFERRED]` 🔬 — replace from Swagger)
 
-## Working Examples
-
-> All paths/fields/envelopes below are `[INFERRED]` 🔬 — placeholders to be replaced from the Swagger.
-> Realistic shapes shown so you know what to expect, NOT what to assume.
-
-### Example 1: List jobs (smoke test) — `[INFERRED]` 🔬
-
-```http
-GET /api/v1/jobs?pageSize=50&page=1 HTTP/1.1
-Host: yourcompany.workbench.com
-Authorization: Bearer <bearer_token>
-Accept: application/json
-```
-
-```json
-{
-  "items": [
-    {
-      "id": "10042",
-      "jobNo": "J-10042",
-      "name": "Riverside Bridge Upgrade",
-      "status": "Active",
-      "clientId": "551",
-      "manager": "Aroha Ngata"
-    }
-  ],
-  "totalCount": 312,
-  "page": 1,
-  "pageSize": 50
-}
-```
-
-### Example 2: Job cost transactions with distribution — `[INFERRED]` 🔬
-
-```http
-GET /api/v1/jobs/10042/transactions?fromDate=2026-01-01&pageSize=200 HTTP/1.1
-Host: yourcompany.workbench.com
-Authorization: Bearer <bearer_token>
-Accept: application/json
-```
-
-```json
-{
-  "items": [
-    {
-      "id": "TX-88231",
-      "jobNo": "J-10042",
-      "type": "Purchase",
-      "date": "2026-03-14",
-      "amount": 4200.0,
-      "taxCode": "GST",
-      "taxAmount": 630.0,
-      "lines": [{ "activityCode": "STEEL", "glAccount": "6100", "amount": 4200.0, "tax": 630.0 }]
-    }
-  ],
-  "totalCount": 47,
-  "page": 1,
-  "pageSize": 200
-}
-```
-
-### Example 3: Create a timesheet (write — HITL required) — `[INFERRED]` 🔬
-
-```http
-POST /api/v1/timesheets HTTP/1.1
-Host: yourcompany.workbench.com
-Authorization: Bearer <bearer_token>
-Content-Type: application/json
-
-{ "jobNo": "J-10042", "activityCode": "LABOUR", "employeeId": "E-204",
-  "date": "2026-05-29", "hours": 7.5, "notes": "Formwork, pier 3" }
-```
-
-```json
-{
-  "id": "TS-55120",
-  "jobNo": "J-10042",
-  "activityCode": "LABOUR",
-  "hours": 7.5,
-  "date": "2026-05-29",
-  "status": "Submitted"
-}
-```
-
-### Example 4: AP / creditor invoices for a supplier — `[INFERRED]` 🔬
-
-```http
-GET /api/v1/creditors?supplierId=SUP-77&fromDate=2026-01-01&pageSize=100 HTTP/1.1
-Authorization: Bearer <bearer_token>
-Accept: application/json
-```
-
-```json
-{
-  "items": [
-    {
-      "id": "AP-9001",
-      "supplierId": "SUP-77",
-      "invoiceNo": "INV-4471",
-      "date": "2026-02-20",
-      "total": 12450.0,
-      "status": "Approved",
-      "lines": [{ "jobNo": "J-10042", "activityCode": "SUBBIE", "glAccount": "6300", "amount": 12450.0 }]
-    }
-  ],
-  "totalCount": 8,
-  "page": 1,
-  "pageSize": 100
-}
-```
-
-## Proxy API Operations
-
-> Quick reference. **Every path is `[INFERRED]` 🔬 — replace from the instance Swagger.**
-
-| Operation               | Method   | Path (under `{instance_url}`)        | Key Parameters                   | Notes                            |
-| ----------------------- | -------- | ------------------------------------ | -------------------------------- | -------------------------------- |
-| Read Swagger spec       | GET      | `/swagger` (+ `/swagger/v1/...json`) | —                                | **Do this first** — ground truth |
-| List/search jobs        | GET      | `/api/v1/jobs`                       | `pageSize`, `page`, `status`     | Central record                   |
-| Get one job             | GET      | `/api/v1/jobs/{id}`                  | —                                |                                  |
-| Job transactions        | GET      | `/api/v1/jobs/{id}/transactions`     | `fromDate`, `toDate`, `pageSize` | Carries distribution lines       |
-| List transactions       | GET      | `/api/v1/transactions`               | `jobNo`, `fromDate`, `toDate`    |                                  |
-| Create transaction      | POST     | `/api/v1/transactions`               | body w/ balanced `lines[]`       | Write — HITL                     |
-| Timesheets              | GET/POST | `/api/v1/timesheets`                 | `jobNo`, `employeeId`, `date`    | Write — HITL                     |
-| Purchase orders         | GET/POST | `/api/v1/purchaseorders`             | `jobNo`, `supplierId`            | Write — HITL                     |
-| Creditors / AP invoices | GET      | `/api/v1/creditors`                  | `supplierId`, `fromDate`         | AP                               |
-| Debtors / AR / claims   | GET      | `/api/v1/debtors`, `/invoices`       | `clientId`, `fromDate`           | AR / progress claims             |
-| GL / chart of accounts  | GET      | `/api/v1/accounts`                   | —                                | Distribution targets             |
-| Plant / assets          | GET      | `/api/v1/plant`                      | —                                | Read                             |
+| Operation               | Method   | Path (under `{instance_url}/{prefix}`) | Key params / notes                                               |
+| ----------------------- | -------- | -------------------------------------- | ---------------------------------------------------------------- |
+| Read Swagger spec       | GET      | /swagger (+ /swagger/v1/swagger.json)  | **Do this first** — ground truth                                 |
+| List/search jobs        | GET      | /jobs                                  | pageSize, page, status; central record                           |
+| Get one job             | GET      | /jobs/{id}                             | —                                                                |
+| Job transactions        | GET      | /jobs/{id}/transactions                | fromDate, toDate, pageSize; carries distribution lines           |
+| List transactions       | GET      | /transactions                          | jobNo, fromDate, toDate                                          |
+| Create transaction      | POST     | /transactions                          | body w/ balanced lines[]; write — HITL                           |
+| Timesheets              | GET/POST | /timesheets                            | jobNo, employeeId, date; POST write — HITL                       |
+| Purchase orders         | GET/POST | /purchaseorders                        | jobNo, supplierId; POST write — HITL; may need approve/send step |
+| Creditors / AP invoices | GET      | /creditors                             | supplierId, fromDate                                             |
+| Debtors / AR / claims   | GET      | /debtors, /invoices                    | clientId, fromDate                                               |
+| GL / chart of accounts  | GET      | /accounts                              | distribution targets                                             |
+| Subcontracts            | GET      | /subcontracts                          | scope, claims, retentions                                        |
+| Plant / assets          | GET      | /plant                                 | rates, depreciation                                              |
+| Suppliers / Employees   | GET      | /suppliers, /employees                 | address book + people                                            |
 
 ## Pagination
 
-- **Type:** `[INFERRED]` 🔬 — likely page/offset (`page` + `pageSize`). Confirm from Swagger.
-- **Default page size:** `[UNKNOWN]` 🔬 — always send an explicit `pageSize`.
-- **Max page size:** `[UNKNOWN]` 🔬 — start at 200; back off if rejected.
-- **How to paginate:**
-
-```http
-GET /api/v1/transactions?jobNo=J-10042&page=1&pageSize=200
-```
-
-- **Last-page detection:** `(page * pageSize) >= totalCount`, or a short/empty `items[]` page. Verify the envelope field names (`items`/`data`, `totalCount`/`total`) against a live response. 🔬
+Type `[INFERRED]` 🔬 — likely page/offset (`page`+`pageSize`), possibly `offset`/`limit`. Send explicit `pageSize` (start 200). Assumed envelope (field names 🔬): `{"items":[…],"totalCount":312,"page":1,"pageSize":50}`. Last page = `(page*pageSize) >= totalCount`, or a short/empty `items[]` page. Verify `items`/`data` and `totalCount`/`total` against a live response. No bulk/batch endpoint documented — paginate one resource at a time.
 
 ## Webhooks / Events
 
-No webhook support found `[INFERRED]` 🔬 — partner syncs (Xero/MYOB) appear poll/batch-based. **Polling
-only.** Poll list endpoints and diff on a date/modified field (**which field is reliable is `[UNKNOWN]`
-🔬**). Keep intervals low (≥ 15 min) until rate limits are known. See `01d`.
+No webhook support found `[INFERRED]` 🔬 — partner syncs (Xero/MYOB) appear poll/batch. **Polling only.** Poll list endpoints, diff on a date/modified field (reliable field `[UNKNOWN]` 🔬). Intervals ≥ 15 min until rate limits known. See 01d.
 
-## Error Handling
+## Errors
 
-**Standard error format:** `[UNKNOWN]` 🔬 — Workbench's error body schema is not published. Do **not**
-assume a shape. Check the HTTP status first, then defensively parse the body and surface the raw text.
+Error-body schema `[UNKNOWN]` 🔬 — not published. Do NOT assume a shape. Key off HTTP status, defensively parse the body, surface raw text (ERP domain errors like "distribution does not balance"/"job is closed" are actionable).
+Recovery (statuses `[INFERRED]` 🔬): 400/422 fix payload (balance distribution, valid job/activity, open job), don't retry · 401 token invalid/expired or wrong header — user re-issues (no auto-refresh), try `X-Api-Key` · 403 issuing user's role lacks permission · 404 verify path/id + `instance_url` normalisation, re-check Swagger base path · 409 GET current state then decide · 429 honour `Retry-After` then backoff (≤3) · 5xx exponential backoff (≤3). Empty `items[]`/`totalCount:0` is a valid result, not an error. Create may return `200` not `201` — look for a new `id` in the body, don't branch on status alone.
 
-**Recovery by status (statuses `[INFERRED]`):**
+## Examples (paths/fields `[INFERRED]` 🔬 — placeholders, replace from Swagger)
 
-| Status  | Meaning                              | Action                                                              |
-| ------- | ------------------------------------ | ------------------------------------------------------------------- |
-| 400/422 | Validation / business-rule rejection | Fix payload (balance distribution, valid job/activity); don't retry |
-| 401     | Unauthorized                         | Token invalid/expired or wrong header — user must re-issue token    |
-| 403     | Forbidden                            | Issuing user's Workbench role lacks permission                      |
-| 404     | Not found                            | Verify path/id and `instance_url` normalisation                     |
-| 429     | Rate limited (if any)                | Honour `Retry-After`; exponential backoff 🔬                        |
-| 5xx     | Server error                         | Retry with exponential backoff                                      |
+1. List active jobs:
+   `GET /api/v1/jobs?status=Active&pageSize=200` → `{"items":[{"id":"10042","jobNo":"J-10042","name":"Riverside Bridge Upgrade","status":"Active","clientId":"551","manager":"Aroha Ngata"}],"totalCount":312,"page":1,"pageSize":50}`
 
-## Known Limitations
+2. Job cost transactions with distribution:
+   `GET /api/v1/jobs/10042/transactions?fromDate=2026-01-01&pageSize=200` → `{"items":[{"id":"TX-88231","jobNo":"J-10042","type":"Purchase","date":"2026-03-14","amount":4200.0,"taxCode":"GST","taxAmount":630.0,"lines":[{"activityCode":"STEEL","glAccount":"6100","amount":4200.0,"tax":630.0}]}],"totalCount":47,"page":1,"pageSize":200}`
+   → Distribution lives in `lines[]` — sum those for cost-by-activity/GL, not the header `amount`.
 
-1. **Reference not public** — endpoints, fields, pagination, errors all need Swagger discovery. 🔬
-2. **No idempotency key known** — financial POSTs are not safe to blind-retry.
-3. **Rate limits & token lifetime undocumented** — be conservative; expect manual token re-issue on expiry.
+3. Create a timesheet (write — HITL required):
+   `POST /api/v1/timesheets` body `{"jobNo":"J-10042","activityCode":"LABOUR","employeeId":"E-204","date":"2026-05-29","hours":7.5,"notes":"Formwork, pier 3"}` → `{"id":"TS-55120","jobNo":"J-10042","activityCode":"LABOUR","hours":7.5,"date":"2026-05-29","status":"Submitted"}`
 
----
-
-_See companion files for detailed reference:_
-
-- _01a-domain-model-reference.md — Entities (Job, Transaction, Distribution, AP/AR, PO, Timesheet, Plant), relationships, state machines_
-- _01b-query-patterns.md — Filtering, search, pagination, cost-analysis read patterns_
-- _01c-mutation-patterns.md — Create transaction/timesheet/PO, distribution balancing, dangerous ops_
-- _01d-event-and-error-handling.md — Polling (no webhooks), error recovery, discovery playbook_
+4. AP/creditor invoices for a supplier:
+   `GET /api/v1/creditors?supplierId=SUP-77&fromDate=2026-01-01&pageSize=100` → `{"items":[{"id":"AP-9001","supplierId":"SUP-77","invoiceNo":"INV-4471","date":"2026-02-20","total":12450.0,"status":"Approved","lines":[{"jobNo":"J-10042","activityCode":"SUBBIE","glAccount":"6300","amount":12450.0}]}],"totalCount":8,"page":1,"pageSize":100}`

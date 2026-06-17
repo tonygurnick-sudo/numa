@@ -1,223 +1,168 @@
 ---
-api_name: 'GoHighLevel'
-api_slug: 'gohighlevel'
-version: 'API 2.0 (services.leadconnectorhq.com)'
-generated_from: '00-api-investigation (GoHighLevel, 2026-05-04) + official marketplace docs'
-generated_date: '2026-06-10'
-update_source: 'Docs-only investigation 2026-05-04 — no live API calls made'
-line_count_target: '< 300 lines'
+api_name: GoHighLevel
+api_slug: gohighlevel
+base_url: https://services.leadconnectorhq.com
+url_form: relative path against base_url (e.g. /contacts/); backend expands it
+path_version_segment: none (no /v1/ etc.; API version is the Version HEADER, never a path)
+legacy_host_never_use: rest.gohighlevel.com (API 1.0, deprecated)
+auth: Bearer PIT (pit-...) — injected by backend; agent NEVER sets Authorization
+required_header: Version (mandatory every call; default 2021-07-28; 2023-02-21 for contacts)
+field_casing: camelCase
+id_format: opaque strings (e.g. locationId 110411007T) — never parse/synthesize
+tenant_key: locationId (required on most list/search + many write bodies)
+rate_limit: numeric thresholds UNPUBLISHED — 429 is the only authoritative signal
+call_surface: HTTP via `numa integrations request gohighlevel <METHOD> <URL> --headers '{"Version":"..."}' [--body '{...}']`. NOT a file-store connector — does NOT support list-files/search-files/download-file.
+confidence: every fact docs-derived from the 2026-05-04 investigation [DOCS], NOT live-validated through Numa; non-default markers [UNVERIFIED]/[INFERRED] inline. Trust real responses over this file; note discrepancies.
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# GoHighLevel -- Workspace Agent API Rules
+# GoHighLevel — API Rules
 
-> ⚠️ **Docs-derived — NOT yet live-validated through the Numa connector path.**
->
-> **This file is loaded into the workspace agent's context when the GoHighLevel integration is active.**
-> It must stay under 300 lines. Companion files (01a–01d) contain the detailed reference material.
-> Facts are tagged [DOCS] (official docs / SDK README, investigation 2026-05-04) or [UNVERIFIED] (inferred).
-> Never claim live-confirmed behaviour — nothing here has been exercised with real credentials.
+GoHighLevel (HighLevel) API 2.0 — CRM + marketing: contacts, conversations (SMS/email/call), opportunities/pipelines, calendars, payments, workflows.
 
-## Context
-
-- **API:** GoHighLevel (HighLevel) API 2.0 — CRM + marketing platform: contacts, conversations (SMS/email), opportunities/pipelines, calendars, payments, workflows [DOCS]
-- **Base URL:** `https://services.leadconnectorhq.com` — configured in Numa; use **relative URLs** like `/contacts/...`. (API 1.0 at `rest.gohighlevel.com` is legacy — never use it.) [DOCS]
-- **Auth:** Private Integration Token (PIT, `pit-...`) sent as `Authorization: Bearer` — **injected automatically by Numa. Never set it.**
-- **Integration path:** Data Connector — call via the `connectors` MCP tool, `request` operation
-- **Rate limits:** numeric thresholds **publicly undocumented** — treat any 429 as authoritative and back off [DOCS — limits searched, not found]
-- **Field casing:** camelCase (`firstName`, `locationId`, `startAfterId`) [DOCS]
-- **ID format:** opaque strings (e.g. locationId `110411007T`) [DOCS]
-
-## How to Call
+## How to call
 
 ```
-connectors(name="request", params={
-  "connector": "gohighlevel",
-  "url": "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100",
-  "method": "GET",
-  "headers": {"Version": "2021-07-28"}
-})
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"2021-07-28"}' --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","email":"jane@acme.co"}' -m "create contact"
 ```
 
-Two headers matter on EVERY request:
+- URL = relative path (`/contacts/...`); backend prepends base_url. No version segment — `/v1/...` does NOT exist.
+- `Authorization: Bearer pit-...` is backend-injected from the user's vault. NEVER set it; you never see the token.
+- `Version` is NOT auto-added — pass it via `--headers` on EVERY call (per-call value wins).
+- POST/PUT body = single JSON object (no arrays). `--body '{...}'` or ad-hoc `--field value` flags (auto-camelized).
 
-1. **`Authorization: Bearer pit-...`** — Numa injects this from the user's vault. **NEVER set it yourself; you never see the token.**
-2. **`Version`** — Numa auto-injects `Version: 2021-07-28` on every request (admin-configured static header), so plain calls work without it. **Override it per call** via `headers: {"Version": "2023-02-21"}` for endpoint families pinned to a different version (contacts — see below); your per-call header wins.
+## The Version header
 
-POST/PUT: pass JSON in `body` (single objects, not arrays). `Content-Type: application/json` [DOCS].
+- Selects the response schema. Required every call.
+- Values: `2023-02-21` (current), `2021-07-28`, `2021-04-15` (legacy, supported).
+- **Default `2021-07-28`** (works across families). Contacts docs target `2023-02-21`; if a contacts response looks wrong under `2021-07-28`, retry with `2023-02-21` [UNVERIFIED which differences exist].
+- Missing/invalid Version → expected 400/401-class [UNVERIFIED body]. First suspect on any odd 4xx.
 
-## The `Version` Header
+## locationId — the tenant key
 
-- Required on every API 2.0 call; it selects the response schema [DOCS].
-- Documented values: `2023-02-21` (current), `2021-07-28`, `2021-04-15` (legacy, supported) [DOCS].
-- **Default to `2021-07-28`** — it is the value shown in the MCP/SDK examples and works across endpoint families [DOCS]. The contacts docs are written against `2023-02-21`; if a contacts response looks wrong under `2021-07-28`, retry with `{"Version": "2023-02-21"}` [UNVERIFIED which differences exist].
-- A missing/invalid `Version` is expected to surface as 400/401-class errors [UNVERIFIED — error body unknown]. If an otherwise-correct call fails oddly, check the header first.
+Multi-tenant: Agency (company) → Locations (sub-accounts). A PIT is created inside ONE location, scoped to it.
 
-## `locationId` — The Tenant Key
+- Required on most list/search endpoints (query param) and many write bodies.
+- **Resolve first:** `GET /locations/search` lists locations the token sees. Cache for the session; ask the user if several return. Other locations' data → 403/404.
+- Missing locationId → 4xx [UNVERIFIED format].
 
-GoHighLevel is multi-tenant: **Agency (company) → Locations (sub-accounts)**. A PIT is created inside ONE location and scoped to it [DOCS].
+## Auth structure
 
-- `locationId` is **required on most list/search endpoints** as a query param (and in many write bodies) [DOCS].
-- **Discover it first:** `GET /locations/search` (with the Version header) lists locations visible to the token [DOCS]. Cache the id for the session; ask the user which location if several come back.
-- Missing `locationId` → expect a 4xx validation error [UNVERIFIED format].
+PIT = long-lived token from HighLevel → Settings → Private Integrations → Create New Integration; scopes chosen at creation.
 
-## Auth Structure
+- **403 = missing scope** (NOT bad credentials). User edits/recreates the Private Integration with the needed scope (e.g. "View Contacts", "Edit Opportunities"), then reconnects. Name the scope. Do not retry.
+- **401 = bad/rotated/revoked PIT.** Rotation kills the old token immediately. User reconnects via the chat credential card. Do not retry.
+- OAuth2 marketplace apps exist (24h tokens + refresh) but are NOT this connector's path — see 02.
 
-PIT = long-lived token created in HighLevel → **Settings → Private Integrations → Create New Integration**; scopes are selected at creation time [DOCS].
+## CAN
 
-- **403 = the PIT lacks a scope.** Not bad credentials. The user (or their admin) must edit/recreate the Private Integration in HighLevel with the missing scope (e.g. "View Contacts", "Edit Opportunities"), then reconnect. Name the operation so they know which scope to add. Do not retry. [DOCS]
-- **401 = bad, rotated, or revoked PIT.** Tokens can be rotated in the same settings screen; the old token dies immediately. The user reconnects GoHighLevel via the chat credential card. Do not retry. [DOCS]
-- OAuth2 marketplace apps exist (24h access tokens + refresh) but are NOT this connector's auth path — see 02-api-spec-investigation [DOCS].
+1. Contacts: CRUD, upsert, tags, tasks, notes, search.
+2. Opportunities: read + update; read pipelines/stages.
+3. Conversations + messages: read; send a message (SMS/email) into a thread.
+4. Calendars, calendar events, appointment notes (read).
+5. Payments: orders, transactions (read).
+6. Locations, users, custom fields, forms, surveys, workflows (read).
+7. Page any list: `limit` (max 100) + `startAfter`/`startAfterId` cursors.
 
-## Capabilities
+## CANNOT
 
-### CAN
+1. Receive webhooks — they require an OAuth Marketplace app; PIT gets none. **Polling only.**
+2. Exceed 100 records/page (default 20).
+3. Call anything the PIT wasn't scoped for (→ 403).
+4. Know numeric rate limits (undocumented; 429 is the only signal).
+5. Use API 1.0 (`rest.gohighlevel.com`).
 
-1. Read + write contacts: CRUD, upsert, tags, tasks, notes, search [DOCS]
-2. Read + update opportunities; read pipelines/stages [DOCS]
-3. Read conversations + messages; send a new message (SMS/email) into a thread [DOCS]
-4. Read calendars, calendar events, appointment notes [DOCS]
-5. Read payments: orders, transactions [DOCS]
-6. Read locations (sub-accounts), users, custom fields, forms, surveys, workflows [DOCS]
-7. Page any list with `limit` (max 100) + `startAfter`/`startAfterId` cursors [DOCS]
+## Critical gotchas
 
-### CANNOT
+1. **Version header is required and NOT auto-injected** — pass it every call. First thing to check on any 4xx.
+2. **locationId required on most lists.** Resolve via `GET /locations/search` first; don't guess.
+3. **403 ≠ bad credentials** — missing PIT scope. Fix in HighLevel Settings → Private Integrations, not by re-entering the token.
+4. **`GET /contacts/` is deprecated** in favour of `/contacts/search` — still works, is the documented cursor-pagination path; prefer for full listing until search shape is validated; expect eventual removal.
+5. **Pagination cursors come from `meta`** — pass BOTH `startAfter` (epoch ms) and `startAfterId` from the previous response. Page until no cursor / empty page.
+6. **Phone numbers → E.164** (`+15551234567`) on contact writes [UNVERIFIED — community best practice].
+7. **Upsert dedupe depends on the location's "Allow Duplicate Contact" setting** — email/phone match priority is per-location, so upsert may update a different record than expected.
+8. **Error body format unknown** [needs-testing] — read the HTTP status first, surface the body verbatim.
+9. **Official MCP server** at `https://services.leadconnectorhq.com/mcp/` (PIT auth, 36 tools) — possible future second surface; today use this REST connector. Do not call `/mcp/` via `request`.
+10. **`country` values are restricted** — see marketplace.gohighlevel.com/docs/other/country.
 
-1. Receive webhooks — webhooks require an OAuth **Marketplace app**; PIT auth gets none. **Polling only.** [DOCS]
-2. Exceed 100 records per page (default 20) [DOCS]
-3. Call anything the PIT wasn't scoped for at creation (→ 403) [DOCS]
-4. Know the numeric rate limits — undocumented; treat 429 as the only signal [DOCS]
-5. Use API 1.0 (`rest.gohighlevel.com`) — deprecated legacy surface [DOCS]
-6. Confirm exact runtime response shapes — **nothing validated live yet**; trust what the API actually returns over this file
+## Default parameters (override only if the user specifies)
 
-## Critical Gotchas
+| Param                     | Default                                  | Reason                                        |
+| ------------------------- | ---------------------------------------- | --------------------------------------------- |
+| Version                   | 2021-07-28 (header, every call)          | SDK/MCP example value                         |
+| locationId                | from `GET /locations/search`, cached     | required on most lists                        |
+| limit                     | 20 (API default); use 100 for bulk reads | max 100                                       |
+| startAfter / startAfterId | omit on page 1; then from `meta`         | cursor pagination                             |
+| Pacing                    | ≥ 1 call/sec, sequential                 | limits unknown — be conservative [UNVERIFIED] |
 
-1. **The `Version` header is auto-injected (`2021-07-28`) by Numa's static-header config.** If a connector was configured before that landed (admin hasn't re-saved the wizard), inject it yourself: `headers: {"Version": "2021-07-28"}`. Adding it explicitly is always safe — per-call headers win. [DOCS]
-2. **`locationId` is required on most list endpoints.** Resolve it via `GET /locations/search` before anything else; don't guess. [DOCS]
-3. **403 ≠ bad credentials.** It means a missing PIT scope — fix is in HighLevel Settings → Private Integrations, not re-entering the token. [DOCS]
-4. **`GET /contacts/` is officially deprecated** in favour of `/contacts/search` — it still works and is the documented cursor-pagination path; prefer it for full listing until search is validated, but expect eventual removal. [DOCS]
-5. **Pagination cursors come from `meta`** — pass BOTH `startAfter` (epoch ms) and `startAfterId` from the previous response. Page until no cursor / empty page. [DOCS]
-6. **Trailing slash:** documented list paths are `/contacts/`, `/conversations/...` — copy paths exactly as documented; slash-sensitivity is [UNVERIFIED].
-7. **Phone numbers should be E.164** (`+15551234567`) on contact writes [UNVERIFIED — community best practice].
-8. **Upsert dedupe depends on the location's "Allow Duplicate Contact" setting** — email/phone match priority is configured per location, so upsert may update a different record than you expect. [DOCS]
-9. **Error body format is unknown** — read the HTTP status first, surface the body verbatim. [DOCS — flagged needs-testing]
-10. **Official MCP server exists** at `https://services.leadconnectorhq.com/mcp/` (PIT auth, 36 tools) — a possible future second surface for Numa via `mcp_call`; today, use this REST connector. [DOCS]
+## Core operations (full catalog in 01a)
 
-## Default Parameters
-
-| Parameter      | Default                                  | Reason                                  |
-| -------------- | ---------------------------------------- | --------------------------------------- |
-| `Version`      | `2021-07-28` (header, every call)        | SDK/MCP example value [DOCS]            |
-| `locationId`   | from `GET /locations/search`, cached     | Required on most lists [DOCS]           |
-| `limit`        | 20 (API default); use 100 for bulk reads | Max 100 [DOCS]                          |
-| `startAfter` / `startAfterId` | omit on first page; then from `meta` | Cursor pagination [DOCS]   |
-| Pacing         | ≥ 1 call/sec, sequential                 | Limits unknown — be conservative [UNVERIFIED] |
-
-## Working Examples
-
-### Example 1: Resolve the location, then list contacts
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/locations/search", "headers": {"Version": "2021-07-28"}})
-
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100",
-  "headers": {"Version": "2021-07-28"}})
-```
-
-Response: `{ "contacts": [...], "meta": { ... "startAfter": ..., "startAfterId": ... } }` [DOCS].
-
-### Example 2: Next page (both cursors)
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100&startAfter=1717977600000&startAfterId=ocQHyuzHvysMo5N5VsXc",
-  "headers": {"Version": "2021-07-28"}})
-```
-
-### Example 3: Create a contact
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "POST",
-  "url": "/contacts/", "headers": {"Version": "2021-07-28"},
-  "body": {"locationId": "ve9EPM428h8vShlRW1KT", "firstName": "Jane", "lastName": "Smith",
-           "email": "jane.smith@acme.co.nz", "phone": "+6495551234"}})
-```
-
-Response: `{ "contact": { "id": "...", ... } }` [DOCS — wrapper inferred from SDK]. Capture the `id`.
-
-### Example 4: Pipelines, then update an opportunity
-
-```
-connectors(name="request", params={"connector": "gohighlevel", "method": "GET",
-  "url": "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT",
-  "headers": {"Version": "2021-07-28"}})
-
-connectors(name="request", params={"connector": "gohighlevel", "method": "PUT",
-  "url": "/opportunities/{opportunityId}", "headers": {"Version": "2021-07-28"},
-  "body": {"pipelineStageId": "...", "status": "won"}})
-```
-
-Field names on the PUT body are [UNVERIFIED] — GET the opportunity first and mirror its field names.
-
-## Proxy API Operations (documented core set)
-
-All paths relative to base; **every call needs the `Version` header**. Full catalog in 01a. [DOCS]
-
-| Operation               | Method | Path                              | Notes                                   |
-| ----------------------- | ------ | --------------------------------- | --------------------------------------- |
-| Search locations        | GET    | /locations/search                 | Do this FIRST — resolves `locationId`   |
-| Get location            | GET    | /locations/{locationId}           |                                         |
-| List contacts           | GET    | /contacts/?locationId=...         | Deprecated-but-documented; cursor paging |
-| Search contacts         | —      | /contacts/search                  | Preferred per docs; request shape [UNVERIFIED] — see 01b |
-| Get / update / delete contact | GET/PUT/DELETE | /contacts/{contactId} |                                         |
-| Create contact          | POST   | /contacts/                        | `locationId` in body                    |
-| Upsert contact          | POST   | /contacts/upsert                  | Dedupe per location settings            |
-| Add / remove tags       | POST/DELETE | /contacts/{contactId}/tags   | Body: `{"tags": [...]}` [UNVERIFIED]    |
-| Contact tasks           | GET    | /contacts/{contactId}/tasks       |                                         |
-| Search opportunities    | GET    | /opportunities/search             | `location_id` param casing [UNVERIFIED] |
-| Get / update opportunity| GET/PUT| /opportunities/{id}               |                                         |
-| Get pipelines           | GET    | /opportunities/pipelines          | Stage ids for opportunity moves         |
-| Search conversations    | GET    | /conversations/search             |                                         |
-| Get messages            | GET    | /conversations/{id}/messages      |                                         |
-| Send message            | POST   | /conversations/messages           | SMS/Email into a thread — confirm with user first |
-| Calendar events         | GET    | /calendars/events                 | Requires userId, groupId, or calendarId |
-| Payments                | GET    | /payments/orders/{id}, /payments/transactions | Read-only scopes        |
+| Operation                 | Method         | Path                                          | Notes                                                    |
+| ------------------------- | -------------- | --------------------------------------------- | -------------------------------------------------------- |
+| Search locations          | GET            | /locations/search                             | FIRST — resolves locationId                              |
+| Get location              | GET            | /locations/{locationId}                       |                                                          |
+| List contacts             | GET            | /contacts/?locationId=...                     | deprecated-but-documented; cursor paging                 |
+| Search contacts           | —              | /contacts/search                              | preferred per docs; request shape [UNVERIFIED] — see 01b |
+| Get/update/delete contact | GET/PUT/DELETE | /contacts/{contactId}                         |                                                          |
+| Create contact            | POST           | /contacts/                                    | locationId in body                                       |
+| Upsert contact            | POST           | /contacts/upsert                              | dedupe per location settings                             |
+| Add/remove tags           | POST/DELETE    | /contacts/{contactId}/tags                    | body `{"tags":[...]}` [UNVERIFIED]                       |
+| Contact tasks             | GET            | /contacts/{contactId}/tasks                   |                                                          |
+| Search opportunities      | GET            | /opportunities/search                         | `location_id` casing [UNVERIFIED]                        |
+| Get/update opportunity    | GET/PUT        | /opportunities/{id}                           |                                                          |
+| Get pipelines             | GET            | /opportunities/pipelines                      | stage ids for moves                                      |
+| Search conversations      | GET            | /conversations/search                         |                                                          |
+| Get messages              | GET            | /conversations/{id}/messages                  |                                                          |
+| Send message              | POST           | /conversations/messages                       | REAL SMS/email — confirm with user first                 |
+| Calendar events           | GET            | /calendars/events                             | requires userId, groupId, OR calendarId                  |
+| Payments                  | GET            | /payments/orders/{id}, /payments/transactions | read-only scopes                                         |
 
 ## Pagination
 
-- **Cursor (keyset):** `limit` (default 20, max 100) + `startAfter` (epoch ms) + `startAfterId` (record id) [DOCS]
-- Next-page cursors arrive in `meta.startAfter` / `meta.startAfterId`; **stop when they are absent/null or a page comes back empty** [DOCS; stop condition [UNVERIFIED]]
-- No total-count guarantees — phrase results as "at least N" unless you paged to the end
+Cursor/keyset: `limit` (default 20, max 100) + `startAfter` (epoch ms) + `startAfterId` (record id). Next-page cursors arrive in `meta.startAfter`/`meta.startAfterId`. Stop when cursors absent/null OR a page returns empty. No total-count guarantee — phrase results "at least N" unless paged to the end. Envelope: `{"<collection>":[...],"meta":{...}}` (e.g. `contacts`).
 
-## Error Handling
+## Errors
 
-Error **body format is unknown** ([DOCS — never observed live]) — status code is the contract; quote bodies verbatim.
+Body format unknown — status code is the contract; quote bodies verbatim.
+| Status | Meaning | Action |
+| --- | --- | --- |
+| 400 | bad request / validation / missing param | check Version, locationId, body fields; do NOT retry unchanged |
+| 401 | bad/rotated/revoked PIT (or bad Version) [UNVERIFIED split] | reconnect via chat credential card; do not retry |
+| 403 | PIT missing a scope | user adds scope in Settings → Private Integrations; do not retry |
+| 404 | wrong id or path (or record in another location) | verify entity id + exact documented path |
+| 422 | unprocessable (field validation) | fix values (phone E.164, country); don't retry unchanged |
+| 429 | rate limited (thresholds unknown) | back off 2s→10s→30s→stop; reduce pacing for the session |
+| 5xx | server error | retry once after 5s; for writes, check first whether it landed |
 
-| Status | Meaning                                | Action                                                              |
-| ------ | -------------------------------------- | ------------------------------------------------------------------- |
-| 400    | Bad request / validation / missing param | Check `Version` header, `locationId`, body fields; do NOT retry unchanged |
-| 401    | Bad/rotated/revoked PIT (or bad Version) [UNVERIFIED split] | Reconnect via chat credential card; do not retry |
-| 403    | PIT missing a scope                    | User adds the scope in Settings → Private Integrations; do not retry |
-| 404    | Wrong id or path                       | Verify entity id and exact documented path                          |
-| 422    | Unprocessable entity (validation)      | Fix field values (e.g. phone format, country values); don't retry unchanged |
-| 429    | Rate limited (thresholds unknown)      | Back off 2s → 10s → 30s → stop; reduce pacing for the rest of the session |
-| 5xx    | Server error                           | Retry once after 5s; for writes, check first whether it landed      |
+## Examples
 
-## Known Limitations
+1. Resolve location, then list contacts:
 
-1. **Nothing live-validated through Numa** — request/response shapes are docs-derived; trust actual responses over this file and note discrepancies
-2. **No webhooks on PIT auth** — change detection is polling only (see 01d)
-3. **Rate limits and error bodies undocumented** — fly conservatively
-4. **`/contacts/search` request shape not pinned down** — the safe documented read path is `GET /contacts/` with cursors
-5. **PIT is location-scoped** — agency-wide operations (other locations' data) will 403/404; one connection ≈ one location
-6. No OpenAPI spec is publicly fetchable (swagger.json returns empty) [DOCS]
+```
+numa integrations request gohighlevel GET /locations/search --headers '{"Version":"2021-07-28"}' -m "find location"
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+```
 
----
+→ `{"contacts":[...],"meta":{"startAfter":...,"startAfterId":...}}`
 
-_Generated 2026-06-10 from the 2026-05-04 docs investigation. See companion files:_
+2. Next page (BOTH cursors):
 
-- _01a-domain-model-reference.md — Entity catalog, hierarchy, fields, scopes_
-- _01b-query-patterns.md — locationId discovery, pagination, search patterns_
-- _01c-mutation-patterns.md — Create/upsert/update/delete patterns_
-- _01d-event-and-error-handling.md — Polling (no webhooks on PIT), 429/error recovery_
+```
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100&startAfter=1717977600000&startAfterId=ocQHyuzHvysMo5N5VsXc" --headers '{"Version":"2021-07-28"}' -m "next page"
+```
+
+3. Create a contact:
+
+```
+numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"2021-07-28"}' --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","lastName":"Smith","email":"jane.smith@acme.co.nz","phone":"+6495551234"}' -m "create contact"
+```
+
+→ `{"contact":{"id":"...",...}}` [wrapper inferred from SDK]. Capture the `id`.
+
+4. Pipelines, then update an opportunity (mirror field names from a GET first — PUT body names are [UNVERIFIED]):
+
+```
+numa integrations request gohighlevel GET "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT" --headers '{"Version":"2021-07-28"}' -m "list pipelines"
+numa integrations request gohighlevel PUT /opportunities/{opportunityId} --headers '{"Version":"2021-07-28"}' --body '{"pipelineStageId":"...","status":"won"}' -m "move deal"
+```

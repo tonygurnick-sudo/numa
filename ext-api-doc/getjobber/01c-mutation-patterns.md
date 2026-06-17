@@ -1,30 +1,25 @@
+---
+doc: mutation-patterns
+api: Jobber (GraphQL)
+endpoint: POST https://api.getjobber.com/api/graphql
+rule: every mutation returns a Payload with the entity AND a userErrors list — ALWAYS select both. 200 OK with non-empty userErrors = FAILURE (entity is null), not success
+---
+
 # Mutation Patterns — Jobber (GraphQL)
 
-> Natural-language → GraphQL write operations. **Every mutation returns a Payload type containing both the result entity and a `userErrors` list — always select both.** A 200 OK with non-empty `userErrors` is a failure, not a success.
+Natural-language → GraphQL write operations.
 
----
-
-## Universal mutation shape
+## Universal shape
 
 ```graphql
-mutation {
-  <mutationName>(input: { … }) {
-    <entityField> { id … }       # the created/updated entity, or null on failure
-    userErrors {
-      message                    # human-readable error message
-      path                       # JSON path to the offending field (e.g. ["emails","0","address"])
-    }
-  }
-}
+mutation { <mutationName>(input: { … }) { <entityField> { id … } userErrors { message path } } }
 ```
 
-> Always select `userErrors`. A mutation that hits a business-rule rejection (duplicate email, missing required field, invalid date) returns **200 OK with `<entityField>: null` and a populated `userErrors`**. Treating it as a success silently loses data.
-
----
+`<entityField>` is the created/updated entity, or null on failure. A business-rule rejection (duplicate email, missing required field, invalid date) returns **200 OK with `<entityField>: null` and populated `userErrors`** — treating it as success silently loses data. `path` is a JSON path to the offending field, e.g. `["emails","0","address"]`.
 
 ## Client mutations (CRM)
 
-### Create a client (individual)
+Create individual:
 
 ```graphql
 mutation CreateIndividual {
@@ -52,39 +47,19 @@ mutation CreateIndividual {
 }
 ```
 
-### Create a client (company)
+Create company:
 
 ```graphql
-mutation CreateCompany {
-  clientCreate(input: {
-    companyName: "Acme Plumbing Ltd",
-    isCompany: true,
-    emails: [{ address: "ops@acme.example", primary: true }],
-    billingAddress: { street1: "1 Industrial Way", city: "Sydney", province: "NSW", postalCode: "2000", country: "AU" },
-    contacts: [
-      { firstName: "James", lastName: "Smith", role: "Accounts", emails: [{ address: "james@acme.example" }] }
-    ],
-    customFields: { /* shape per account-defined fields */ }
-  }) {
-    client { id companyName }
-    userErrors { message path }
-  }
-}
+mutation CreateCompany { clientCreate(input: { companyName: "Acme Plumbing Ltd", isCompany: true, emails: [{ address: "ops@acme.example", primary: true }], billingAddress: { street1: "1 Industrial Way", city: "Sydney", province: "NSW", postalCode: "2000", country: "AU" }, contacts: [{ firstName: "James", lastName: "Smith", role: "Accounts", emails: [{ address: "james@acme.example" }] }], customFields: { /* shape per account-defined fields */ } }) { client { id companyName } userErrors { message path } } }
 ```
 
-`ClientCreateInput` fields (verified via introspection 2026-05-19):
-`title`, `firstName`, `lastName`, `companyName`, `isCompany`, `sampleData`, `trackingOrigin`, `receivesReminders`, `receivesFollowUps`, `receivesQuoteFollowUps`, `receivesInvoiceFollowUps`, `receivesReviewRequests`, `isBillingContact`, `role`, `phones`, `emails`, `properties`, `billingAddress`, `customFields`, `sourceAttribution`, `contacts`.
+`ClientCreateInput` fields (introspection 2026-05-19): `title`, `firstName`, `lastName`, `companyName`, `isCompany`, `sampleData`, `trackingOrigin`, `receivesReminders`, `receivesFollowUps`, `receivesQuoteFollowUps`, `receivesInvoiceFollowUps`, `receivesReviewRequests`, `isBillingContact`, `role`, `phones`, `emails`, `properties`, `billingAddress`, `customFields`, `sourceAttribution`, `contacts`.
 
-### Update a client
+Update (only include fields to change):
 
 ```graphql
 mutation EditClient($id: EncodedId!) {
-  clientEdit(
-    input: {
-      id: $id
-      firstName: "Anthony" # only include fields you want to change
-    }
-  ) {
+  clientEdit(input: { id: $id, firstName: "Anthony" }) {
     client {
       id
       firstName
@@ -98,7 +73,7 @@ mutation EditClient($id: EncodedId!) {
 }
 ```
 
-### Archive / unarchive (soft delete)
+Archive (soft delete):
 
 ```graphql
 mutation Archive($id: EncodedId!) {
@@ -115,9 +90,9 @@ mutation Archive($id: EncodedId!) {
 }
 ```
 
-`clientUnarchive`, `clientDelete` (hard delete — gated by NO open invoices), `clientsDelete` (bulk).
+Related: `clientUnarchive`, `clientDelete` (hard delete — gated by NO open invoices), `clientsDelete` (bulk).
 
-### Add a note to a client
+Add a note:
 
 ```graphql
 mutation AddNote($id: EncodedId!) {
@@ -135,18 +110,11 @@ mutation AddNote($id: EncodedId!) {
 }
 ```
 
-### Bulk operations
-
-- `clientsCreate(input: { clients: [...] })` — create up to N clients in one call
-- `clientsDelete(input: { ids: [...] })` — bulk delete
-- `clientsEditTags(input: { ids, addTags, removeTags })` — tag operations
-- `clientsImport` / `clientsImportRevert` — CSV import flow
-
----
+Bulk: `clientsCreate(input: { clients: [...] })` (create up to N), `clientsDelete(input: { ids: [...] })`, `clientsEditTags(input: { ids, addTags, removeTags })`, `clientsImport`/`clientsImportRevert` (CSV flow).
 
 ## Quote mutations
 
-### Create a quote
+Create:
 
 ```graphql
 mutation CreateQuote($clientId: EncodedId!, $propertyId: EncodedId!) {
@@ -179,7 +147,7 @@ mutation CreateQuote($clientId: EncodedId!, $propertyId: EncodedId!) {
 }
 ```
 
-### Send a quote to the client
+Send to client:
 
 ```graphql
 mutation SendQuote($id: EncodedId!) {
@@ -199,7 +167,7 @@ mutation SendQuote($id: EncodedId!) {
 }
 ```
 
-### Mark a quote as approved on the client's behalf
+Approve on client's behalf:
 
 ```graphql
 mutation Approve($id: EncodedId!) {
@@ -219,7 +187,7 @@ mutation Approve($id: EncodedId!) {
 }
 ```
 
-### Convert a quote into a job
+Convert to job:
 
 ```graphql
 mutation QuoteToJob($quoteId: EncodedId!) {
@@ -244,11 +212,9 @@ mutation QuoteToJob($quoteId: EncodedId!) {
 }
 ```
 
----
-
 ## Job mutations
 
-### Create a one-off job from scratch
+Create one-off from scratch:
 
 ```graphql
 mutation CreateJob($clientId: EncodedId!, $propertyId: EncodedId!) {
@@ -278,7 +244,7 @@ mutation CreateJob($clientId: EncodedId!, $propertyId: EncodedId!) {
 }
 ```
 
-### Edit a job
+Edit:
 
 ```graphql
 mutation EditJob($id: EncodedId!) {
@@ -295,7 +261,7 @@ mutation EditJob($id: EncodedId!) {
 }
 ```
 
-### Close / reopen a job
+Close / reopen:
 
 ```graphql
 mutation CloseJob($id: EncodedId!) {
@@ -311,7 +277,6 @@ mutation CloseJob($id: EncodedId!) {
     }
   }
 }
-
 mutation ReopenJob($id: EncodedId!) {
   jobReopen(input: { id: $id }) {
     job {
@@ -326,7 +291,7 @@ mutation ReopenJob($id: EncodedId!) {
 }
 ```
 
-### Add a note to a job
+Add a note:
 
 ```graphql
 mutation JobNote($id: EncodedId!) {
@@ -344,15 +309,13 @@ mutation JobNote($id: EncodedId!) {
 }
 ```
 
-### Edit line items on a job
-
-`jobCreateLineItems`, `jobEditLineItems`, `jobDeleteLineItems`, `jobEditLineItemsSection`, `jobOrderLineItems`.
-
----
+Line items: `jobCreateLineItems`, `jobEditLineItems`, `jobDeleteLineItems`, `jobEditLineItemsSection`, `jobOrderLineItems`.
 
 ## Visit / scheduling mutations
 
-### Reschedule a visit
+`appointmentEditSchedule` is the unified mutation for Visit, Task, Assessment, and Event (Jobber's appointment supertype). `appointmentEditAssignment` reassigns the team member; `appointmentEditCompleteness` marks complete/incomplete.
+
+Reschedule:
 
 ```graphql
 mutation EditVisitSchedule($visitId: EncodedId!) {
@@ -370,9 +333,7 @@ mutation EditVisitSchedule($visitId: EncodedId!) {
 }
 ```
 
-`appointmentEditSchedule` is the unified mutation for Visit, Task, Assessment, and Event (Jobber's appointment supertype). `appointmentEditAssignment` reassigns the team member, `appointmentEditCompleteness` marks complete/incomplete.
-
-### Mark a visit complete
+Mark complete:
 
 ```graphql
 mutation VisitComplete($visitId: EncodedId!) {
@@ -389,11 +350,9 @@ mutation VisitComplete($visitId: EncodedId!) {
 }
 ```
 
----
-
 ## Invoice mutations
 
-### Create an invoice from a job
+From a job (`invoiceCreateFromQuote(quoteId:...)` and `invoiceCreateFromVisits(visitIds:[...])` follow the same shape):
 
 ```graphql
 mutation FromJob($jobId: EncodedId!) {
@@ -415,9 +374,7 @@ mutation FromJob($jobId: EncodedId!) {
 }
 ```
 
-`invoiceCreateFromQuote(quoteId: ...)`, `invoiceCreateFromVisits(visitIds: [...])` follow the same shape.
-
-### Create a standalone invoice (no job)
+Standalone (no job):
 
 ```graphql
 mutation CreateInvoice($clientId: EncodedId!) {
@@ -441,7 +398,7 @@ mutation CreateInvoice($clientId: EncodedId!) {
 }
 ```
 
-### Mark a draft invoice as sent
+Mark draft as sent:
 
 ```graphql
 mutation MarkSent($id: EncodedId!) {
@@ -458,18 +415,12 @@ mutation MarkSent($id: EncodedId!) {
 }
 ```
 
-### Record a payment against an invoice
+Record payment (`paymentType` enum — also check / bank_transfer / etc.):
 
 ```graphql
 mutation RecordPayment($invoiceId: EncodedId!) {
   invoiceCreatePaymentRecord(
-    input: {
-      invoiceId: $invoiceId
-      amount: 1200.00
-      date: "2026-05-19"
-      paymentType: cash # enum — also check / bank_transfer / etc.
-      note: "Cash on completion"
-    }
+    input: { invoiceId: $invoiceId, amount: 1200.00, date: "2026-05-19", paymentType: cash, note: "Cash on completion" }
   ) {
     paymentRecord {
       id
@@ -484,13 +435,11 @@ mutation RecordPayment($invoiceId: EncodedId!) {
 }
 ```
 
-### Close, reopen, refund
-
-`invoiceClose`, `invoiceReopen`, `invoiceDelete`, `invoiceUnmarkBadDebt`, `jobberPaymentsCreateRefunds` (for Jobber Payments transactions only).
-
----
+Related: `invoiceClose`, `invoiceReopen`, `invoiceDelete`, `invoiceUnmarkBadDebt`, `jobberPaymentsCreateRefunds` (Jobber Payments transactions only).
 
 ## Webhook subscription mutations
+
+46 topics in `WebHookTopicEnum` — full list in `01d`.
 
 ```graphql
 mutation CreateHook {
@@ -512,7 +461,6 @@ mutation CreateHook {
     }
   }
 }
-
 mutation DeleteHook($id: EncodedId!) {
   webhookEndpointDelete(input: { id: $id }) {
     deletedId
@@ -524,11 +472,7 @@ mutation DeleteHook($id: EncodedId!) {
 }
 ```
 
-46 topics available in `WebHookTopicEnum` — full list in `01d-event-and-error-handling.md`.
-
----
-
-## State transitions summary
+## State transitions
 
 | Entity  | Transition                   | Mutation                                                                   |
 | ------- | ---------------------------- | -------------------------------------------------------------------------- |
@@ -536,7 +480,7 @@ mutation DeleteHook($id: EncodedId!) {
 | Quote   | awaiting_response → approved | `quoteApprove` (or client approves via Client Hub)                         |
 | Quote   | approved → converted         | `jobCreateFromQuote`                                                       |
 | Quote   | \* → archived                | `quoteArchive`                                                             |
-| Job     | active → requires_invoicing  | (automatic when visits complete with billing strategy)                     |
+| Job     | active → requires_invoicing  | automatic when visits complete with billing strategy                       |
 | Job     | active → archived            | `jobClose`                                                                 |
 | Job     | archived → active            | `jobReopen`                                                                |
 | Visit   | scheduled → complete         | `appointmentEditCompleteness(isComplete: true)`                            |
@@ -545,19 +489,15 @@ mutation DeleteHook($id: EncodedId!) {
 | Invoice | paid → awaiting_payment      | `invoiceReopen`                                                            |
 | Invoice | \* → bad_debt                | `invoiceClose` with bad-debt flag (verify exact arg)                       |
 
----
-
 ## Dangerous operations
 
-| Operation                                         | Risk                                                                                                                                                |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `clientDelete` / `clientsDelete`                  | Hard-delete. Use `clientArchive` for soft-delete in most cases.                                                                                     |
-| `invoiceDelete`                                   | Hard-delete. Better to use `invoiceUnmarkBadDebt` + close, or just leave it past-due.                                                               |
-| `webhookEndpointDelete`                           | Silently stops your integration from receiving events.                                                                                              |
-| `appDisconnect` / `appRemove`                     | Disconnects the OAuth app from the account — invalidates all tokens. The customer has to re-consent.                                                |
-| Bulk mutations (`clientsCreate`, `clientsDelete`) | One bad row can fail the whole batch or partially succeed depending on the mutation — read the `userErrors` shape carefully before bulk operations. |
-
----
+| Operation                               | Risk                                                                                                     |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `clientDelete` / `clientsDelete`        | Hard-delete. Prefer `clientArchive` for soft-delete.                                                     |
+| `invoiceDelete`                         | Hard-delete. Prefer `invoiceUnmarkBadDebt` + close, or leave past-due.                                   |
+| `webhookEndpointDelete`                 | Silently stops your integration from receiving events.                                                   |
+| `appDisconnect` / `appRemove`           | Disconnects the OAuth app — invalidates all tokens; customer must re-consent.                            |
+| Bulk (`clientsCreate`, `clientsDelete`) | One bad row can fail the whole batch or partially succeed — read the `userErrors` shape carefully first. |
 
 ## Common rejection causes (`userErrors`)
 

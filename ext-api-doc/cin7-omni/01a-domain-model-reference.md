@@ -1,167 +1,165 @@
 ---
-api_name: 'Cin7 Omni'
-api_slug: 'cin7-omni'
-generated_from: '00-api-investigation (2026-05-22) + live OpenAPI 3.0 spec'
-generated_date: '2026-06-10'
-source_phases: ['Phase 3: Domain Model & Behavior']
+api_name: Cin7 Omni
+api_slug: cin7-omni
+base_url: https://api.cin7.com/api
+path_version_segment: /v1/ all entities, /v2/ BomMasters only — part of the path, not a label
+id_format: integer
+field_casing: PascalCase in bodies
+call_surface: HTTP via `numa integrations request` (relative url + method)
+doc_role: on-demand reference — entity catalog, fields, relationships, state machines
+confidence: every fact live-API-confirmed 2026-05-22 unless tagged [SPEC] (BETA OpenAPI 3.0 spec) or [UNVERIFIED] (inferred). NOT yet validated through the Numa connector path.
 ---
 
-# Cin7 Omni -- Domain Model Reference
+# Cin7 Omni — Domain Model Reference
 
-> ⚠️ Investigation-confirmed (live API tests 2026-05-22) but NOT yet validated through the Numa connector path.
-> Field-level detail extracted from the live OpenAPI 3.0 spec (`api.cin7.com/api/OpenApi/GetSpec`, marked BETA) — tagged [SPEC].
-> Behavioural claims from the HTML docs verified 2026-05-22 — tagged [CONFIRMED — API investigation 2026-05-22].
+## ID semantics
 
-## ID Semantics
+- All entity IDs are integers assigned by Cin7 (`Id`).
+- Human keys alongside: `Reference` (orders — unique, auto-generated if blank), `StyleCode` (products), `ProductOptionCode` (variant SKU), `Barcode`.
+- Dates UTC `yyyy-MM-ddTHH:mm:ssZ`.
 
-- All entity IDs are **integers** assigned by Cin7 (`Id`) [SPEC].
-- Human-facing keys exist alongside: `Reference` (orders — unique, auto-generated when blank), `StyleCode` (products), `ProductOptionCode` (variant SKU), `Barcode` [SPEC].
-- All dates UTC, `yyyy-MM-ddTHH:mm:ssZ` [CONFIRMED — API investigation 2026-05-22].
+## Entity catalogue (44 paths)
 
-## Entity Catalog
+| Entity                 | Description                          | list | /{id} | POST | PUT | DELETE |
+| ---------------------- | ------------------------------------ | ---- | ----- | ---- | --- | ------ |
+| Products               | Inventory items with variants        | ✓    | ✓     | ✓    | ✓   | —      |
+| ProductOptions         | Variants/SKUs (prices, stock)        | ✓    | ✓     | ✓    | ✓   | —      |
+| ProductCategories      | Categories                           | ✓    | ✓     | ✓    | ✓   | —      |
+| ProductImages          | Image upload                         | —    | —     | ✓    | —   | —      |
+| SizeRanges             | Size grids (apparel/footwear)        | ✓    | ✓     | —    | —   | —      |
+| SalesOrders            | Customer orders                      | ✓    | ✓     | ✓    | ✓   | —      |
+| SalesOrdersWithCartons | Orders incl. carton detail           | ✓    | ✓     | —    | —   | —      |
+| Cartons                | Packing cartons for a sales order    | —    | ✓     | —    | ✓   | —      |
+| Quotes                 | Pre-order quotes                     | ✓    | ✓     | ✓    | ✓   | —      |
+| PurchaseOrders         | Supplier orders                      | ✓    | ✓     | ✓    | ✓   | —      |
+| Contacts               | Customers AND suppliers (one entity) | ✓    | ✓     | ✓    | ✓   | ✓      |
+| CreditNotes            | Credit notes                         | ✓    | ✓     | ✓    | ✓   | —      |
+| Payments               | Payments against orders              | ✓    | ✓     | ✓    | ✓   | ✓      |
+| PaymentFeesAndPayouts  | Cin7 Pay fees + payouts              | ✓    | —     | —    | —   | —      |
+| Adjustments            | Stock adjustments                    | ✓    | ✓     | ✓    | ✓   | —      |
+| Branches               | Warehouses/locations                 | ✓    | ✓     | ✓    | ✓   | —      |
+| BranchTransfers        | Inter-branch stock movements         | ✓    | ✓     | ✓    | ✓   | —      |
+| BomMasters (v1+v2)     | Bills of Materials                   | ✓    | ✓     | —    | —   | —      |
+| ProductionJobs         | Manufacturing jobs                   | ✓    | ✓     | ✓    | ✓   | —      |
+| Stock                  | Stock units by branch/SKU/barcode    | ✓    | —     | —    | —   | —      |
+| SerialNumbers          | Serial tracking                      | ✓    | ✓     | —    | —   | —      |
+| Voucher                | Gift vouchers / promo codes          | ✓    | —     | —    | —   | —      |
+| Users                  | Cin7 user accounts                   | ✓    | ✓     | —    | —   | —      |
 
-All from the live OpenAPI spec (44 paths) [SPEC].
+**Only Contacts and Payments support DELETE.** Everything else is voided/deactivated via PUT (`IsVoid`, `IsActive`, `Status:"Disabled"`).
 
-| Entity                  | Description                                | GET list | GET /{id} | POST | PUT | DELETE |
-| ----------------------- | ------------------------------------------ | -------- | --------- | ---- | --- | ------ |
-| Products                | Inventory items with variants              | ✓        | ✓         | ✓    | ✓   | —      |
-| ProductOptions          | Variants/SKUs (prices, stock)              | ✓        | ✓         | ✓    | ✓   | —      |
-| ProductCategories       | Product categories                         | ✓        | ✓         | ✓    | ✓   | —      |
-| ProductImages           | Product image upload                       | —        | —         | ✓    | —   | —      |
-| SizeRanges              | Size grids (apparel/footwear)              | ✓        | ✓         | —    | —   | —      |
-| SalesOrders             | Customer orders                            | ✓        | ✓         | ✓    | ✓   | —      |
-| SalesOrdersWithCartons  | Orders incl. carton detail                 | ✓        | ✓         | —    | —   | —      |
-| Cartons                 | Packing cartons for a sales order          | —        | ✓         | —    | ✓   | —      |
-| Quotes                  | Pre-order quotes                           | ✓        | ✓         | ✓    | ✓   | —      |
-| PurchaseOrders          | Supplier orders                            | ✓        | ✓         | ✓    | ✓   | —      |
-| Contacts                | Customers AND suppliers (one entity)       | ✓        | ✓         | ✓    | ✓   | ✓      |
-| CreditNotes             | Credit notes                               | ✓        | ✓         | ✓    | ✓   | —      |
-| Payments                | Payments against orders                    | ✓        | ✓         | ✓    | ✓   | ✓      |
-| PaymentFeesAndPayouts   | Cin7 Pay fees + payouts                    | ✓        | —         | —    | —   | —      |
-| Adjustments             | Stock adjustments                          | ✓        | ✓         | ✓    | ✓   | —      |
-| Branches                | Warehouses/locations                       | ✓        | ✓         | ✓    | ✓   | —      |
-| BranchTransfers         | Inter-branch stock movements               | ✓        | ✓         | ✓    | ✓   | —      |
-| BomMasters (v1 + v2)    | Bills of Materials                         | ✓        | ✓         | —    | —   | —      |
-| ProductionJobs          | Manufacturing jobs                         | ✓        | ✓         | ✓    | ✓   | —      |
-| Stock                   | Stock units by branch/SKU/barcode          | ✓        | —         | —    | —   | —      |
-| SerialNumbers           | Serial tracking                            | ✓        | ✓         | —    | —   | —      |
-| Voucher                 | Gift vouchers / promo codes                | ✓        | —         | —    | —   | —      |
-| Users                   | Cin7 user accounts                         | ✓        | ✓         | —    | —   | —      |
+## Key entities
 
-**Only Contacts and Payments support DELETE.** Everything else is voided/deactivated via PUT (`IsVoid`, `IsActive`, `Status: "Disabled"`).
+### Product
 
-## Key Entities
-
-### Product [SPEC]
-
-The parent style; sellable SKUs live in `ProductOptions` underneath.
-
+Parent style; sellable SKUs live in `ProductOptions` underneath.
 | Field | Type | Notes |
-| ----- | ---- | ----- |
-| `Id` | integer | Read-only |
-| `Status` | enum | `Inactive`, `Public`, `ShowInB2B`, `Internal` |
-| `StyleCode` | string | Unique; duplicate on POST → 400 for whole batch [CONFIRMED — API investigation 2026-05-22] |
-| `Name` | string (250) | **Required on POST** |
-| `Description`, `Brand`, `Category`, `SubCategory`, `Tags` | string | `Tags` is comma-delimited |
-| `CategoryIdArray` | int[] | Category IDs assigned |
-| `SupplierId` | integer | Links to a Contact of Type Supplier |
+| --- | --- | --- |
+| `Id` | int | read-only |
+| `Status` | enum | `Inactive`,`Public`,`ShowInB2B`,`Internal` |
+| `StyleCode` | string | unique; duplicate on POST → 400 whole batch |
+| `Name` | string(250) | **required on POST** |
+| `Description`,`Brand`,`Category`,`SubCategory`,`Tags` | string | `Tags` comma-delimited |
+| `CategoryIdArray` | int[] | assigned category IDs |
+| `SupplierId` | int | links a Contact of Type Supplier |
 | `Weight`/`Height`/`Width`/`Length`/`Volume` | number | 0–999 |
-| `StockControl` | enum | `Undefined`, `Batch`, `Machine`, `Serial`, `Labour`, `FIFO` |
+| `StockControl` | enum | `Undefined`,`Batch`,`Machine`,`Serial`,`Labour`,`FIFO` |
 | `OrderType` | string | Order, Kit, Limited Stock, Buy To Order, Pre-order, Gift Voucher |
-| `OptionLabel1..3` | string | Labels for the variant axes (e.g. Color/Size/Fabric) |
-| `SalesAccount`, `PurchasesAccount` | string | GL account codes |
-| `ProductOptions` | array | **Required on POST** — at least one variant |
-| `Images[].Link`, `PdfUpload`, `CustomFields` | — | Media + custom fields |
-| `CreatedDate`, `ModifiedDate` | datetime | Read-only; `ModifiedDate` is the polling watermark |
+| `OptionLabel1..3` | string | variant-axis labels (Color/Size/Fabric) |
+| `SalesAccount`,`PurchasesAccount` | string | GL account codes |
+| `ProductOptions` | array | **required on POST** — ≥1 variant |
+| `Images[].Link`,`PdfUpload`,`CustomFields` | — | media + custom fields |
+| `CreatedDate`,`ModifiedDate` | datetime | read-only; `ModifiedDate` = polling watermark |
 
-### ProductOption (variant / SKU) [SPEC]
+(Spec also lists: `PdfDescription`,`Channels`,`ProductType`,`ProductSubtype`,`ProjectName`,`ImportCustomsDuty`,`SizeRangeId`. [SPEC])
 
-| Field | Type | Notes |
-| ----- | ---- | ----- |
-| `Id`, `ProductId` | integer | |
-| `Status` | enum | `Primary`, `Active`, `Disabled` |
-| `ProductOptionCode` | string (20) | The SKU. Unique; duplicate on POST → 400. (`Code` is OBSOLETE — don't write it) |
-| `ProductOptionBarcode` | string (13) | (`Barcode` is OBSOLETE) |
-| `ProductOptionSizeCode` / `ProductOptionSizeBarcode` | string | Size-grid variants |
-| `Option1`/`Option2`/`Option3` | string (50) | Variant values (e.g. Red / XL / Cotton) |
-| `SupplierCode` | string (20) | |
-| `RetailPrice`, `WholesalePrice`, `VIPPrice`, `SpecialPrice` | number | Plus `PriceColumns` array for custom price tiers |
-| `SpecialsStartDate`, `SpecialDays` | — | Special-pricing window |
-| `StockAvailable`, `StockOnHand` | number | Read-only convenience copies of stock |
-| `UomOptions` | array | Unit-of-measure packs (`Code`, `Quantity`, `Barcode`, `PriceColumns`) |
-| `Image.Link` | string | |
+### ProductOption (variant / SKU)
 
-### SalesOrder [SPEC]
+| Field                                                    | Type       | Notes                                                                           |
+| -------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------- |
+| `Id`,`ProductId`                                         | int        |                                                                                 |
+| `Status`                                                 | enum       | `Primary`,`Active`,`Disabled`                                                   |
+| `ProductOptionCode`                                      | string(20) | the SKU. Unique; duplicate on POST → 400. (`Code` is OBSOLETE — don't write it) |
+| `ProductOptionBarcode`                                   | string(13) | (`Barcode` is OBSOLETE)                                                         |
+| `ProductOptionSizeCode`/`ProductOptionSizeBarcode`       | string     | size-grid variants                                                              |
+| `Option1`/`Option2`/`Option3`                            | string(50) | variant values (Red / XL / Cotton)                                              |
+| `SupplierCode`                                           | string(20) |                                                                                 |
+| `RetailPrice`,`WholesalePrice`,`VIPPrice`,`SpecialPrice` | number     | + `PriceColumns` array for custom tiers                                         |
+| `SpecialsStartDate`,`SpecialDays`                        | —          | special-pricing window                                                          |
+| `StockAvailable`,`StockOnHand`                           | number     | read-only convenience copies                                                    |
+| `UomOptions`                                             | array      | UOM packs (`Code`,`Quantity`,`Barcode`,`PriceColumns`)                          |
+| `Image.Link`                                             | string     |                                                                                 |
 
-Shares its base shape with PurchaseOrders, Quotes, and CreditNotes (one "transaction" model).
+### SalesOrder
 
-| Field group | Fields / notes |
-| ----------- | -------------- |
-| Identity | `Id` (RO), `Reference` (string 30, unique — leave blank to auto-generate), `CreatedDate`/`ModifiedDate` (RO), `CreatedBy`/`ProcessedBy` (user IDs), `Source` (RO) |
-| Customer link | `MemberId` (Contact Id) OR `MemberEmail` — one should be set to link the customer; plus free-text `FirstName`, `LastName`, `Company`, `Email`, `Phone`, `Mobile` for the order contact |
-| Workflow | `Status` enum `Draft`/`Approved`/`Void` (**read-only**), `IsApproved` (default true), `Stage` (New, Awaiting Payment, Declined, Dispatched, Processing, On Hold; default New), `IsVoid` (set true to void — **irreversible**), `DispatchedDate` (populate to mark dispatched and drive `QtyShipped`), `InvoiceDate`, `InvoiceNumber` (RO, set when invoice date set), `EstimatedDeliveryDate`, `CancellationDate` (RO) |
-| Addresses | `DeliveryFirstName/.../DeliveryCountry`, `BillingFirstName/.../BillingCountry` (string 250 each) |
-| Logistics | `BranchId` (defaults to Main Branch; **not updatable once dispatched**), `DistributionBranchId`, `TrackingCode`, `LogisticsCarrier`, `FreightTotal`, `FreightDescription`, `DeliveryInstructions` (2000) |
-| Money | `ProductTotal`, `DiscountTotal`, `Surcharge`, `Total` (incl. everything), `CurrencyCode` (ISO, omit for account default), `CurrencyRate` (omit → Cin7 looks up), `TaxStatus` enum `Undefined`/`Incl`/`Excl`/`Exempt`, `TaxRate` |
-| Misc | `CustomerOrderNo`, `PaymentTerms`, `InternalComments`, `SalesPersonId`, `VoucherCode` (30), `CustomFields`, `AccountingAttributes.AccountingImportStatus` enum `NotImported`/`Imported`/`DoNotImport`/`Error` |
+Shares its base shape with PurchaseOrders, Quotes, CreditNotes (one "transaction" model).
+| Group | Fields / notes |
+| --- | --- |
+| Identity | `Id` (RO), `Reference` (string30, unique — blank to auto-generate), `CreatedDate`/`ModifiedDate` (RO), `CreatedBy`/`ProcessedBy` (user IDs), `Source` (RO) |
+| Customer link | `MemberId` (Contact Id) OR `MemberEmail` — set one to link the customer; plus free-text `FirstName`,`LastName`,`Company`,`Email`,`Phone`,`Mobile` order-contact snapshot |
+| Workflow | `Status` enum `Draft`/`Approved`/`Void` (**RO**), `IsApproved` (default true), `Stage` (New, Awaiting Payment, Declined, Dispatched, Processing, On Hold; default New), `IsVoid` (true to void — **irreversible**), `DispatchedDate` (set to mark dispatched, drives `QtyShipped`), `InvoiceDate`, `InvoiceNumber` (RO, set when InvoiceDate set), `EstimatedDeliveryDate`, `CancellationDate` (RO) |
+| Addresses | `DeliveryFirstName/…/DeliveryCountry`, `BillingFirstName/…/BillingCountry` (string250 each) |
+| Logistics | `BranchId` (defaults Main Branch; **not updatable once dispatched**), `DistributionBranchId`, `TrackingCode`, `LogisticsCarrier`, `LogisticsStatus`, `FreightTotal`, `FreightDescription`, `DeliveryInstructions` (2000), `EdiStatus` |
+| Money | `ProductTotal`, `DiscountTotal`, `Surcharge`, `Total` (incl. everything), `CurrencyCode` (ISO, omit→account default), `CurrencyRate` (omit→Cin7 looks up), `TaxStatus` enum `Undefined`/`Incl`/`Excl`/`Exempt`, `TaxRate` |
+| Misc | `CustomerOrderNo`, `PaymentTerms`, `InternalComments`, `SalesPersonId`, `VoucherCode` (30), `ProjectName`, `CustomFields`, `AccountingAttributes.AccountingImportStatus` enum `NotImported`/`Imported`/`DoNotImport`/`Error` |
 
-**LineItem** (shared by orders/quotes/credit notes) [SPEC]: `Id`, `TransactionId` (parent order), `ProductId` (RO), `ProductOptionId` OR `Code` (SKU) to link the product, `Name`, `StyleCode`, `Barcode`, `Option1..3`, `Qty`, `QtyShipped` (RO — derived from `DispatchedDate`), `UnitPrice`, `UnitCost`, `Discount`, `LineComments`, `AccountCode` (alt GL), `Sort`, `StockControl`, `StockMovements[]` (RO: Batch/Serial/Quantity), UOM fields (`UomPrice`, `UomQtyOrdered`, `UomSize` RO), `SizeCodes` (RO), `HoldingQty` (RO), `IntegrationRef`.
+**LineItem** (shared by orders/quotes/credit notes): `Id`, `TransactionId` (parent), `ProductId` (RO), `ProductOptionId` OR `Code` (SKU) to link the product, `Name`, `StyleCode`, `Barcode`, `Option1..3`, `Qty`, `QtyShipped` (RO — derived from `DispatchedDate`), `UnitPrice`, `UnitCost`, `Discount`, `LineComments`, `AccountCode` (alt GL), `Sort`, `StockControl`, `StockMovements[]` (RO: Batch/Serial/Quantity), UOM fields (`UomPrice`,`UomQtyOrdered`,`UomSize` RO), `SizeCodes` (RO; `Qty|Size|Code|Barcode` packed string), `HoldingQty` (RO), `IntegrationRef`. If the SKU exists in Cin7, only quantity is required on the line.
 
-### PurchaseOrder [SPEC]
+### PurchaseOrder
 
-Same transaction base as SalesOrder, plus: `SupplierInvoiceReference`, `SupplierAcceptanceDate`, `Port` (indent orders), `EstimatedArrivalDate`, `FullyReceivedDate`. The "member" here is the **supplier** Contact. `loadboms` query param on POST/PUT.
+Same transaction base as SalesOrder, plus: `SupplierInvoiceReference`, `SupplierAcceptanceDate`, `Port` (indent orders), `EstimatedArrivalDate`, `FullyReceivedDate`. The "member" is the **supplier** Contact. `loadboms` query param on POST/PUT.
 
-### Quote [SPEC]
+### Quote
 
 Transaction base plus: `Probability` (of winning), `ExpectedOrderDate`, `AcceptanceDate`. No documented quote→order conversion endpoint — create a SalesOrder from the quote's data [UNVERIFIED].
 
-### CreditNote [SPEC]
+### CreditNote
 
-Transaction base plus: `CreditNoteNumber` (RO), `CreditNoteDate`, `SalesReference` (links the originating sales order), `CustomerReport` (notes to customer/reason), `CompletedDate`.
+Transaction base plus: `CreditNoteNumber` (RO), `CreditNoteDate`, `SalesReference` (links originating sales order), `CustomerReport` (notes/reason), `CompletedDate`.
 
-### Contact [SPEC]
+### Contact
 
 One entity for customers AND suppliers.
-
 | Field | Notes |
-| ----- | ----- |
-| `Type` | **Required on POST** — enum `Customer`, `Supplier` (also `Internal`) |
-| `Id`, `CreatedDate`, `ModifiedDate` | RO |
-| `IsActive`, `OnHold` | booleans |
-| `Company` (250), `FirstName`/`LastName` (250), `JobTitle`, `Email` (**unique**), `Phone`/`Mobile`/`Fax` (50), `Website` | identity fields |
-| `Address1/2`, `City`, `State`, `PostCode`, `Country` (50 each) | physical address |
-| `PostalAddress1/2`, `PostalCity`, `PostalState`, `PostalPostCode`, `PostalCountry` | billing/postal address |
-| `AccountNumber` (10), `BillingId`/`BillingCompany` (parent company), `BillingEmail`, `AccountsFirstName`/`AccountsLastName`/`AccountsPhone` | accounts contact |
-| `PriceColumn` (price tier name — valid names come from ProductOptions), `PercentageOff`, `PaymentTerms`, `TaxStatus`, `TaxNumber`, `CreditLimit`, `BalanceOwing`, `CostCenter` | commercial terms |
-| `Group`, `SubGroup`, `Stages`, `SalesPersonId`, `Notes` (250), `IntegrationRef`, `CustomFields` | CRM-ish extras |
-| `AccountingIntegrationId` | RO — Xero / QuickBooksOnline / QuickBooksDesktop IDs |
+| --- | --- |
+| `Type` | **required on POST** — enum `Customer`,`Supplier` (also `Internal`) |
+| `Id`,`CreatedDate`,`ModifiedDate` | RO |
+| `IsActive`,`OnHold` | bool |
+| `Company`(250),`FirstName`/`LastName`(250),`JobTitle`,`Email` (**unique**),`Phone`/`Mobile`/`Fax`(50),`Website` | identity |
+| `Address1/2`,`City`,`State`,`PostCode`,`Country`(50 each) | physical address |
+| `PostalAddress1/2`,`PostalCity`,`PostalState`,`PostalPostCode`,`PostalCountry` | billing/postal address |
+| `AccountNumber`(10),`BillingId`/`BillingCompany` (parent),`BillingEmail`,`AccountsFirstName`/`AccountsLastName`/`AccountsPhone` | accounts contact |
+| `PriceColumn` (tier name — valid names from ProductOptions),`PercentageOff`,`PaymentTerms`,`TaxStatus`,`TaxNumber`,`CreditLimit`,`BalanceOwing`,`CostCenter` | commercial terms |
+| `Group`,`SubGroup`,`Stages`,`SalesPersonId`,`Notes`(250),`IntegrationRef`,`CustomFields` | CRM extras |
+| `AccountingIntegrationId` | RO — Xero/QuickBooksOnline/QuickBooksDesktop IDs |
 | `SecondaryContacts[]` | Id, Company, First/LastName, JobTitle, Email, Phone, Mobile |
 
-### Stock (read-only) [SPEC]
+### Stock (read-only)
 
-One row per product-option per branch: `ProductId`, `ProductOptionId`, `StyleCode`, `Code` (SKU), `Barcode`, `ProductName`, `Option1..3`, `Size`, `BranchId`, `BranchName`, `ModifiedDate` (last transaction date), and the quantities — `Available` (= StockOnHand − OpenSales), `StockOnHand`, `OpenSales`, `Incoming` (inbound POs), `Virtual` (kit products), `Holding`.
+One row per product-option per branch: `ProductId`,`ProductOptionId`,`StyleCode`,`Code` (SKU),`Barcode`,`ProductName`,`Option1..3`,`Size`,`BranchId`,`BranchName`,`ModifiedDate` (last transaction date), and quantities — `Available` (=StockOnHand−OpenSales),`StockOnHand`,`OpenSales`,`Incoming` (inbound POs),`Virtual` (kit products),`Holding`. (Exact `Available` formula [UNVERIFIED].)
+Example row: `{"productId":1,"productOptionId":0,"modifiedDate":"2026-06-10T05:28:32Z","styleCode":"StyleCode123","code":"ABC123","barcode":"123456789012","branchId":1,"branchName":"Main Branch","productName":"T-Shirt","option1":"Red","option2":null,"option3":null,"size":"XXL","available":2.0,"stockOnHand":9.0,"openSales":7.0,"incoming":8.0,"virtual":0.0,"holding":0.0}`
 
-### Payment [SPEC]
+### Payment
 
-`Id`, `OrderId` (sales OR purchase order), `OrderRef` (RO), `PaymentDate`, `Amount`, `Method`, `IsAuthorized`, `TransactionRef` (gateway ref), `BatchReference` (RO), `ReconcileDate`, `BranchId`, `Comments`, `OrderType` enum (SalesOrder, PurchaseOrder, Quote, CreditNote, Layby, … 19 values).
+`Id`, `OrderId` (sales OR purchase order), `OrderRef` (RO), `PaymentDate`, `Amount`, `Method`, `IsAuthorized`, `TransactionRef` (gateway ref), `BatchReference` (RO), `ReconcileDate`, `BranchId`, `Comments`, `OrderType` enum (19 values — see Enums).
 
-### Others (brief) [SPEC]
+### Others (brief)
 
-- **Adjustment:** `Reference`, `BranchId`, `AdjustmentReason`, `CompletedDate`, `AdjustInAccountingSystem` (date), `AlternativeAccountCode`, `LineItems[]`, `IsApproved`.
-- **Branch:** Contact-shaped (it IS a contact subtype) + `BranchType`, `StockControlOptions`, `TaxStatus`, `BranchLocations[]`.
-- **BranchTransfer:** `SourceBranchId`, `DestinationBranchId`, `Stage`, `ApprovalDate`, `DispatchedDate`, `ReceivedDate`, `LineItems[]`.
-- **ProductionJob:** `Reference`, `BranchId`, `DueDate`, `CompletedDate`, `ProductionNotes`, `TotalCost`, `Products[]`.
-- **BomMaster component:** `ProductId`, `ProductOptionId`, `Type` enum `Undefined`/`Make`/`Use`/`Addon`, `Code`, `Name`, `Qty` (**required**), `UnitCost`, `Sort`, `Notes`.
-- **SerialNumber:** `Serialnumber`, `ProductId`, `ProductOptionId`, `LineItemId`, `BranchId`, `Available`, `HoldingGroup`.
-- **Voucher:** `Code`, `Type`, `Status` (Active = has balance, Inactive = fully redeemed/expired), `Amount`, `RedeemedAmount`, `RedeemedCount`/`RedeemedCountLimit`, `ExpiryDate`, `CustomerID`/`CustomerEmail`.
-- **User:** `Id`, `IsActive`, `FirstName`, `LastName`, `JobTitle`, `Email`. New users take up to 2h to appear [CONFIRMED — API investigation 2026-05-22].
+- **Adjustment:** `Reference`,`BranchId`,`AdjustmentReason`,`CompletedDate`,`AdjustInAccountingSystem` (date),`AlternativeAccountCode`,`LineItems[]` (lines use `QtyAdjusted` delta),`IsApproved`.
+- **Branch:** Contact-shaped (it IS a contact subtype) + `BranchType`,`StockControlOptions`,`TaxStatus`,`BranchLocations[]`.
+- **BranchTransfer:** `SourceBranchId`,`DestinationBranchId`,`Stage`,`ApprovalDate`,`DispatchedDate`,`ReceivedDate`,`LineItems[]`.
+- **ProductionJob:** `Reference`,`BranchId`,`DueDate`,`CompletedDate`,`ProductionNotes`,`TotalCost`,`Products[]`.
+- **BomMaster component:** `Id`,`ProductId`,`ProductOptionId`,`Type` enum `Undefined`/`Make`/`Use`/`Addon`,`Code`,`Name`,`Option1..3`,`Qty` (**required**),`UnitCost`,`Sort`,`Notes`.
+- **SerialNumber:** `Serialnumber`,`ProductId`,`ProductOptionId`,`LineItemId`,`BranchId`,`Available`,`HoldingGroup`.
+- **Voucher:** `Code`,`Type`,`Status` (Active=has balance, Inactive=fully redeemed/expired),`Amount`,`RedeemedAmount`,`RedeemedCount`/`RedeemedCountLimit`,`ExpiryDate`,`CustomerID`/`CustomerEmail`.
+- **User:** `Id`,`IsActive`,`FirstName`,`LastName`,`JobTitle`,`Email`. New users take up to 2h to appear.
 
-## Entity Relationships
+## Entity relationships
 
 ```
-Contacts (Type=Customer) 1 ──< SalesOrders / Quotes / CreditNotes   (via MemberId/MemberEmail)
-Contacts (Type=Supplier) 1 ──< PurchaseOrders                       (via MemberId)
-Contacts (Type=Supplier) 1 ──< Products                             (via SupplierId)
+Contacts(Type=Customer) 1 ──< SalesOrders / Quotes / CreditNotes   (via MemberId/MemberEmail)
+Contacts(Type=Supplier) 1 ──< PurchaseOrders                       (via MemberId)
+Contacts(Type=Supplier) 1 ──< Products                             (via SupplierId)
 Products 1 ──< ProductOptions (variants/SKUs)
 Products 1 ──< ProductImages;   Products >──< ProductCategories (CategoryIdArray)
 Products 1 ── BomMasters 1 ──< BomMaster components (Type=Make/Use/Addon)
@@ -172,74 +170,66 @@ ProductionJobs ──< Products[];  SerialNumbers >── ProductOptions + LineI
 Voucher >── Contacts (CustomerID);  Users ── CreatedBy/ProcessedBy/SalesPersonId on transactions
 ```
 
-## State Machines
+## State machines
 
-### Order lifecycle (SalesOrders / PurchaseOrders / Quotes / CreditNotes) [SPEC]
-
-```
-                    IsApproved=false            IsApproved=true (default)
-   create ────────► Status: Draft ────────────► Status: Approved
-                                                      │
-                              IsVoid=true (IRREVERSIBLE)
-                                                      ▼
-                                                Status: Void
-```
-
-- `Status` is **read-only** — it reflects `IsApproved`/`IsVoid`.
-- Operational progress is `Stage`: `New → Processing → Dispatched` (or `Awaiting Payment`, `Declined`, `On Hold`). Exact allowed transitions are configured per account [UNVERIFIED].
-- Dispatch is driven by setting `DispatchedDate` (this populates `QtyShipped` on lines) [SPEC].
-
-### ProductOption status [SPEC]
+### Order lifecycle (SalesOrders / PurchaseOrders / Quotes / CreditNotes)
 
 ```
-Primary / Active ⇄ Disabled      (one Primary per product [UNVERIFIED])
+create ──(IsApproved=false)──► Status: Draft
+create ──(IsApproved=true, default)──► Status: Approved ──(IsVoid=true, IRREVERSIBLE)──► Status: Void
 ```
 
-### Voucher status [SPEC]
+- `Status` is **read-only** — reflects `IsApproved`/`IsVoid`.
+- Operational progress = `Stage`: `New → Processing → Dispatched` (or `Awaiting Payment`, `Declined`, `On Hold`). Allowed transitions are account-configured [UNVERIFIED].
+- Dispatch is driven by setting `DispatchedDate` (populates `QtyShipped` on lines).
 
-```
-Active (has balance) ──► Inactive (fully redeemed or expired)
-```
+### ProductOption status
 
-## Business Rules
+`Primary / Active ⇄ Disabled` (one Primary per product [UNVERIFIED]).
 
-| Rule | Source |
-| ---- | ------ |
-| `StyleCode` and `ProductOptionCode` must be unique; a duplicate in a POST batch rejects the ENTIRE batch with 400 | [CONFIRMED — API investigation 2026-05-22] |
-| PUT semantics: `null` = leave unchanged, `""` = clear the field | [CONFIRMED — API investigation 2026-05-22] |
-| POST/PUT bodies are arrays; max 250 records per batch | [SPEC] |
-| `Reference` left blank on insert → auto-generated; must be unique otherwise | [SPEC] |
+### Voucher status
+
+`Active (has balance) ──► Inactive (fully redeemed or expired)`.
+
+## Business rules
+
+| Rule                                                                                                                        |        |
+| --------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `StyleCode`/`ProductOptionCode` must be unique; a duplicate in a POST batch rejects the ENTIRE batch with 400               |        |
+| PUT: `null` (or omit) = leave unchanged, `""` = clear                                                                       |        |
+| POST/PUT bodies are arrays; max 250 records/batch                                                                           | [SPEC] |
+| `Reference` blank on insert → auto-generated; must be unique otherwise                                                      | [SPEC] |
 | `MemberId`/`MemberEmail`: provide one to link a customer; `ProductOptionId`/`Code`: provide one to link a product to a line | [SPEC] |
-| `BranchId` not updatable after SO dispatched / PO received | [SPEC] |
-| `IsVoid: true` is irreversible; `loadboms=true` BOM expansion cannot be undone | [SPEC] |
-| Contact `Email` must be unique | [SPEC] |
-| New Users take up to 2 hours to appear via API | [CONFIRMED — API investigation 2026-05-22] |
-| Omit `CurrencyCode`/`CurrencyRate`/`TaxStatus` to inherit account defaults | [SPEC] |
+| `BranchId` not updatable after SO dispatched / PO received                                                                  | [SPEC] |
+| `IsVoid:true` irreversible; `loadboms=true` BOM expansion cannot be undone                                                  | [SPEC] |
+| Contact `Email` must be unique                                                                                              | [SPEC] |
+| New Users take up to 2h to appear via API                                                                                   |        |
+| Omit `CurrencyCode`/`CurrencyRate`/`TaxStatus` to inherit account defaults                                                  | [SPEC] |
 
-## Field Format Reference
+## Field formats
 
-| Format | Value | Notes |
-| ------ | ----- | ----- |
-| Date/time | `yyyy-MM-ddTHH:mm:ssZ` UTC | e.g. `2026-06-09T13:45:00Z` [CONFIRMED — API investigation 2026-05-22] |
-| IDs | integer | All entities |
-| Currency code | ISO 4217 (e.g. `NZD`) | Omit to use account default [SPEC] |
-| SKU (`ProductOptionCode`) | string, max 20 | [SPEC] |
-| Barcode | string, max 13 | [SPEC] |
-| `Reference` | string, max 30, unique | [SPEC] |
-| Tags / Channels | comma-delimited string | [SPEC] |
-| Field casing | PascalCase in payloads | `where`/`fields`/`order` params accept lowercase names in vendor examples (`modifieddate`) — casing appears case-insensitive in queries [UNVERIFIED] |
+| Format                    | Value                      | Notes                                                                                                                 |
+| ------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Date/time                 | `yyyy-MM-ddTHH:mm:ssZ` UTC | e.g. `2026-06-09T13:45:00Z`                                                                                           |
+| IDs                       | integer                    | all entities                                                                                                          |
+| Currency                  | ISO 4217 (`NZD`)           | omit → account default [SPEC]                                                                                         |
+| SKU (`ProductOptionCode`) | string, max 20             | [SPEC]                                                                                                                |
+| Barcode                   | string, max 13             | [SPEC]                                                                                                                |
+| `Reference`               | string, max 30, unique     | [SPEC]                                                                                                                |
+| Tags / Channels           | comma-delimited string     | [SPEC]                                                                                                                |
+| Field casing              | PascalCase in payloads     | `where`/`fields`/`order` accept lowercase in vendor examples (`modifieddate`) — appears case-insensitive [UNVERIFIED] |
 
-## Enum Value Reference [SPEC]
+## Enums [SPEC]
 
-| Field | Values |
-| ----- | ------ |
-| Product.Status | `Inactive`, `Public`, `ShowInB2B`, `Internal` |
-| ProductOption.Status | `Primary`, `Active`, `Disabled` |
-| StockControl | `Undefined`, `Batch`, `Machine`, `Serial`, `Labour`, `FIFO` |
-| Order Status (RO) | `Draft`, `Approved`, `Void` |
-| Order Stage | `New`, `Awaiting Payment`, `Declined`, `Dispatched`, `Processing`, `On Hold` |
-| TaxStatus | `Undefined`, `Incl`, `Excl`, `Exempt` |
-| Contact.Type | `Internal`, `Customer`, `Supplier` |
-| Payment.OrderType | `Undefined`, `GenericOrder`, `SalesOrder`, `PreOrder`, `ProductionJob`, `PurchaseOrder`, `PurchaseQuote`, `Quote`, `Adjustment`, `BatchOrSplitInvoice`, `BinLocationTransfer`, `BranchTransfer`, `SupplierConsignment`, `Consignment`, `CreditNote`, `SupplierCreditNote`, `Layby`, `BomMaster`, `SalesOrdersWithCartons` |
-| BomMaster component Type | `Undefined`, `Make`, `Use`, `Addon` |
-| AccountingImportStatus | `NotImported`, `Imported`, `DoNotImport`, `Error` |
+| Field                    | Values                                                                                                                                                                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product.Status           | `Inactive`,`Public`,`ShowInB2B`,`Internal`                                                                                                                                                                                                                                                              |
+| ProductOption.Status     | `Primary`,`Active`,`Disabled`                                                                                                                                                                                                                                                                           |
+| StockControl             | `Undefined`,`Batch`,`Machine`,`Serial`,`Labour`,`FIFO`                                                                                                                                                                                                                                                  |
+| Order Status (RO)        | `Draft`,`Approved`,`Void`                                                                                                                                                                                                                                                                               |
+| Order Stage              | `New`,`Awaiting Payment`,`Declined`,`Dispatched`,`Processing`,`On Hold`                                                                                                                                                                                                                                 |
+| TaxStatus                | `Undefined`,`Incl`,`Excl`,`Exempt`                                                                                                                                                                                                                                                                      |
+| Contact.Type             | `Internal`,`Customer`,`Supplier`                                                                                                                                                                                                                                                                        |
+| Payment.OrderType        | `Undefined`,`GenericOrder`,`SalesOrder`,`PreOrder`,`ProductionJob`,`PurchaseOrder`,`PurchaseQuote`,`Quote`,`Adjustment`,`BatchOrSplitInvoice`,`BinLocationTransfer`,`BranchTransfer`,`SupplierConsignment`,`Consignment`,`CreditNote`,`SupplierCreditNote`,`Layby`,`BomMaster`,`SalesOrdersWithCartons` |
+| BomMaster component Type | `Undefined`,`Make`,`Use`,`Addon`                                                                                                                                                                                                                                                                        |
+| AccountingImportStatus   | `NotImported`,`Imported`,`DoNotImport`,`Error`                                                                                                                                                                                                                                                          |

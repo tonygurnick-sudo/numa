@@ -1,262 +1,113 @@
-# MYOB Acumatica -- Workspace Agent API Rules
+---
+api_name: MYOB Acumatica
+api_slug: myob-acumatica
+api_type: Contract-Based REST API + OData query syntax
+api_version: 24.200.001 (2024 R2)
+base_url: https://{instance}.myobadvanced.com
+path_template: /entity/Default/{api_version}/{Entity}   # e.g. /entity/Default/24.200.001/Customer
+path_version_segment: REQUIRED — 24.200.001 is a literal PATH segment (the contract version), NOT a label. Never drop it; no "latest" alias.
+endpoint_name_segment: Default (the standard Web Service Endpoint; ~280 entities). Custom endpoint names possible per-instance.
+call_surface: HTTP via `numa integrations request` (build the full path incl. /entity/Default/24.200.001/). NOT a file-store connector.
+auth: OAuth2 Authorization Code, per-instance IdentityServer, Bearer {access_token}
+field_casing: PascalCase field names; every business field value wrapped {"value": ...}
+id_format: system `id` = GUID (NOT wrapped). Business keys (CustomerID, OrderNbr…) are strings.
+mutation_method: PUT = upsert (create + update). NO POST for create, NO PATCH.
+rate_limit: concurrency-based (6 concurrent L-series [DOCUMENTED]; queue depth 20 / timeout 60s [INFERRED, single forum post]). No Retry-After header. Shared per-instance.
+integration_path: hybrid (Data Connector OAuth2 + Direct API)
+confidence: facts [DOCUMENTED] unless tagged [INFERRED]/[VERIFIED <date>]
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
+---
 
-> **This file is loaded into the workspace agent's context when the MYOB Acumatica integration is active.**
-> It must stay under 300 lines. Be precise, not verbose.
-> Companion files (01a-01d) contain the detailed reference material.
+# MYOB Acumatica — API Rules
 
-## Context
+## Paths (read first)
 
-- **API:** MYOB Acumatica Contract-Based REST API v24.200.001
-- **Base URL:** `https://{instance}.myobadvanced.com/entity/Default/24.200.001/{Entity}`
-- **Auth:** OAuth 2.0 per-instance, Bearer token
-- **Integration path:** Data Connector (OAuth2) + Direct API
-- **Rate limits:** 6 concurrent requests per instance (L-series) [DOCUMENTED]; queue depth/timeout values commonly cited as 20/60s but only sourced from a single community-forum post [INFERRED]
+- Full path = `/entity/Default/24.200.001/{Entity}`. Send via `numa integrations request` against base `https://{instance}.myobadvanced.com`.
+- `24.200.001` IS a real path segment (the contract version). Keep it verbatim. No "latest" alias; a version is never just a label here.
+- `{instance}` is the per-tenant hostname (e.g. `mgccivil`). Domain is `.myobadvanced.com` (NOT `.myob.com`).
+- `Default` is the endpoint name. Per-instance custom endpoints can exist; assume `Default`.
 
-## Auth Structure
+## Auth
 
-OAuth 2.0 Authorization Code flow. Per-instance endpoints (no central gateway).
+`Authorization: Bearer {access_token}` + `Content-Type: application/json`. Per-instance OAuth2 (Authorization Code + refresh). 403 on every call = paid **API License** add-on missing (not a token problem). **`client_id` MUST carry a `@CompanyId` suffix** (e.g. `{GUID}@Company`) — without it the OAuth server can't resolve the tenant and the token request fails. [VERIFIED 2026-05-19]
 
-```
-Authorization: Bearer {access_token}
-Content-Type: application/json
-```
+## CAN
 
-**Token lifecycle:**
+CRUD on 200+ entities (Customer, Vendor, SalesOrder, SalesInvoice, Bill, PurchaseOrder, StockItem, Lead, Opportunity, Project, Employee, JournalTransaction). OData query (filter, sort, paginate, `$select`, `$expand`). Execute actions (release invoices, confirm orders, convert leads). Attach/download files on entities. Read Generic Inquiries.
 
-- Access token: ~1 hour (instance-configurable), returned as `expires_in` in seconds
-- Refresh token: 30 days default (configurable from 2023 R2). Rotates on each use.
+## CANNOT
 
-**`client_id` format (critical):** The `client_id` includes a `@CompanyId` suffix, e.g. `{GUID}@Company`. Without the suffix the OAuth server cannot resolve the tenant and the token request fails. [VERIFIED 2026-05-19]
+Create/modify/delete webhook subscriptions via API (Push Notifications are UI-only). Bulk/batch in one request (no `$batch`). Edit released financial docs (void + recreate). Get a total record count from list queries.
 
-## Capabilities
+## Critical rules (violation = broken request)
 
-### CAN
+1. **Every business field value is wrapped `{"value": ...}`.** CORRECT `{"CustomerName":{"value":"Acme"}}`; WRONG `{"CustomerName":"Acme"}`. Nested too: `{"MainContact":{"Email":{"value":"a@b.com"}}}`. System `id` (GUID) is NOT wrapped.
+2. **PUT = create AND update (upsert).** PUT without `id`/key match = create; PUT with `id` or matching key = update. NO POST for create. NO PATCH. (POST/PATCH → 405.)
+3. **Filters use bare field names + single quotes.** CORRECT `$filter=Status eq 'Active'`; WRONG `$filter=Status.value eq 'Active'`; WRONG `$filter=Status eq "Active"` (no double quotes).
+4. **Always set `$top` on list queries.** Omitting it returns ALL records (thousands). Use `$top=100` (max practical 200, hard ceiling ~500).
+5. **Totals/balances are computed, read-only** (`OrderTotal`, `Amount`, `Balance`, `LineTotal`). Sending them in PUT is ignored or errors.
+6. **Released documents are immutable** (SalesInvoice/Bill/JournalTransaction). Must void + recreate.
+7. **Line-item update replaces the ENTIRE `Details` array.** Include `id` on existing lines to preserve; omit `id` for new lines; any existing line NOT in the array is DELETED. GET with `$expand=Details` first to get line `id`s.
+8. **Actions return 202 OR 204 — both success.** 204 = done immediately. 202 = long-running; poll the `Location` header URL (202 = still processing, 204 = done).
 
-1. CRUD on 200+ business entities (Customer, Vendor, SalesOrder, SalesInvoice, Bill, PurchaseOrder, StockItem, Lead, Opportunity, Project, Employee, JournalTransaction)
-2. Query with OData filters, sort, pagination, field selection, and related entity expansion
-3. Execute business actions (release invoices, confirm orders, convert leads)
-4. Attach/download files on entities
-5. Access Generic Inquiries for custom reporting data
+## Defaults (override only if user specifies)
 
-### CANNOT
+`$top=100`, `$orderby` always set when paginating (deterministic order, else duplicates/misses). For polling: `$filter=LastModifiedDateTime gt datetimeoffset'...'`.
 
-1. Create/modify/delete webhook subscriptions via API (UI-only Push Notifications)
-2. Perform bulk/batch operations in a single request (no $batch)
-3. Edit released financial documents (must void and recreate)
-4. Get a total record count from list queries
+## HTTP methods
 
-## Critical Rules (Violations = Broken Requests)
+| Method | Purpose                    | Example                                                                                                       |
+| ------ | -------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| GET    | List/read                  | `/entity/Default/24.200.001/Customer?$top=20`                                                                 |
+| PUT    | Create or update (upsert)  | `/entity/Default/24.200.001/Customer`                                                                         |
+| DELETE | Delete by GUID or key path | `/entity/Default/24.200.001/Customer/{guid}`                                                                  |
+| POST   | Execute action             | `/entity/Default/24.200.001/SalesInvoice/{guid}/action/ReleaseSalesInvoice`                                   |
+| PUT    | Attach file                | `/entity/Default/24.200.001/SalesOrder/SO/000042/files/{filename}` (`Content-Type: application/octet-stream`) |
 
-1. **Every field is wrapped in `{"value": "..."}`**
-   - CORRECT: `{"CustomerName": {"value": "Acme"}}`
-   - WRONG: `{"CustomerName": "Acme"}`
-   - Nested objects follow same pattern: `{"MainContact": {"Email": {"value": "a@b.com"}}}`
+## OData query params
 
-2. **PUT = create AND update (upsert)**
-   - PUT without `id` / without matching key fields = create new record
-   - PUT with `id` or matching key fields = update existing record
-   - There is NO POST for creation. There is NO PATCH.
-
-3. **Filters use bare field names + single quotes**
-   - CORRECT: `$filter=Status eq 'Active'`
-   - WRONG: `$filter=Status.value eq 'Active'`
-   - WRONG: `$filter=Status eq "Active"`
-
-4. **Always specify `$top` on list queries**
-   - Without `$top`, the API returns ALL records (can be thousands)
-   - Recommended: `$top=100` for listing, `$top=200` max per page
-
-5. **Totals and balances are computed (read-only)**
-   - `OrderTotal`, `Amount`, `Balance`, `LineTotal` are calculated from line items
-   - Sending these fields in PUT is ignored or causes errors
-
-6. **Released documents are immutable**
-   - Cannot edit a released SalesInvoice, Bill, or JournalTransaction
-   - Must void the document and create a new one
-
-7. **Line item updates replace the entire array**
-   - When updating an entity's `Details`, send ALL line items
-   - Existing lines: include their `id` to preserve them
-   - New lines: omit `id`
-   - Any existing line NOT in the array is deleted
-
-8. **Actions may return 202 or 204 -- both are success**
-   - 204 No Content = action completed immediately
-   - 202 Accepted = long-running operation. Poll the `Location` header URL.
-
-## HTTP Methods
-
-| Method | Purpose                | Example                                                                          |
-| ------ | ---------------------- | -------------------------------------------------------------------------------- |
-| GET    | List/read              | `GET /entity/Default/24.200.001/Customer?$top=20`                                |
-| PUT    | Create or update       | `PUT /entity/Default/24.200.001/Customer`                                        |
-| DELETE | Delete by GUID or keys | `DELETE /entity/Default/24.200.001/Customer/{guid}`                              |
-| POST   | Execute action         | `POST /entity/Default/24.200.001/SalesInvoice/{guid}/action/ReleaseSalesInvoice` |
-| PUT    | Attach file            | `PUT /entity/Default/24.200.001/SalesOrder/SO/000042/files/{filename}`           |
-
-## OData Query Parameters
-
-| Parameter  | Example                           | Notes                              |
-| ---------- | --------------------------------- | ---------------------------------- |
-| `$top`     | `$top=100`                        | Always include. Max practical: 200 |
-| `$skip`    | `$skip=100`                       | For pagination                     |
-| `$filter`  | `$filter=Status eq 'Active'`      | Bare field names, single quotes    |
-| `$select`  | `$select=CustomerID,CustomerName` | Reduces payload                    |
-| `$orderby` | `$orderby=CustomerName asc`       | asc/desc                           |
-| `$expand`  | `$expand=Details`                 | Include line items / sub-entities  |
-
-## Working Examples
-
-### Example 1: List active customers
-
-```http
-GET /entity/Default/24.200.001/Customer?$top=20&$filter=Status eq 'Active'&$select=CustomerID,CustomerName,Status,Balance&$orderby=CustomerName asc
-Authorization: Bearer {token}
-```
-
-### Example 2: Create a customer
-
-```http
-PUT /entity/Default/24.200.001/Customer
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-    "CustomerID": {"value": "ACME01"},
-    "CustomerName": {"value": "Acme Corporation"},
-    "CustomerClass": {"value": "DEFAULT"},
-    "Status": {"value": "Active"},
-    "MainContact": {
-        "Email": {"value": "billing@acme.com"}
-    }
-}
-```
-
-### Example 3: Create a sales order with line items
-
-```http
-PUT /entity/Default/24.200.001/SalesOrder
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{
-    "OrderType": {"value": "SO"},
-    "CustomerID": {"value": "ACME01"},
-    "Description": {"value": "Q1 2026 Order"},
-    "Details": [
-        {
-            "InventoryID": {"value": "WIDGET01"},
-            "Quantity": {"value": 10},
-            "UnitPrice": {"value": 25.00}
-        }
-    ]
-}
-```
-
-### Example 4: Release an invoice (action)
-
-```http
-POST /entity/Default/24.200.001/SalesInvoice/{guid}/action/ReleaseSalesInvoice
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{"entity": {"id": "{guid}"}}
-```
-
-Response: `204 No Content` (immediate success) or `202 Accepted` (poll Location header).
-
-### Example 5: Paginated listing with filter
-
-```http
-GET /entity/Default/24.200.001/StockItem?$top=100&$skip=0&$filter=ItemStatus eq 'Active'&$orderby=InventoryID asc
-Authorization: Bearer {token}
-```
-
-Stop when `results.length < 100`.
-
-## Proxy Table (Numa Workspace Agent)
-
-| User Intent        | Method | Endpoint                                        | Key Parameters                                        |
-| ------------------ | ------ | ----------------------------------------------- | ----------------------------------------------------- |
-| List customers     | GET    | `/Customer`                                     | `$top`, `$filter`, `$select`                          |
-| Get customer       | GET    | `/Customer/{id}`                                | --                                                    |
-| Create customer    | PUT    | `/Customer`                                     | Body (no `id`)                                        |
-| Update customer    | PUT    | `/Customer`                                     | Body (with `id`)                                      |
-| Delete customer    | DELETE | `/Customer/{id}`                                | --                                                    |
-| List sales orders  | GET    | `/SalesOrder`                                   | `$top`, `$filter`, `$expand=Details`                  |
-| Create sales order | PUT    | `/SalesOrder`                                   | Body with `Details[]`                                 |
-| Release invoice    | POST   | `/SalesInvoice/{id}/action/ReleaseSalesInvoice` | Action body                                           |
-| List stock items   | GET    | `/StockItem`                                    | `$top`, `$filter`                                     |
-| Create bill        | PUT    | `/Bill`                                         | Body with `Details[]`                                 |
-| List vendors       | GET    | `/Vendor`                                       | `$top`, `$filter`                                     |
-| Attach file        | PUT    | `/{Entity}/{keys}/files/{filename}`             | Binary body, `Content-Type: application/octet-stream` |
-
-All endpoint paths are relative to `/entity/Default/24.200.001`.
+`$top` (always; max ~200) · `$skip` (pagination offset) · `$filter` (bare fields, single quotes) · `$select=CustomerID,CustomerName` (top-level fields only; reduces payload) · `$orderby=CustomerName asc` (asc/desc) · `$expand=Details` (line items/sub-entities; without it arrays are omitted) · `$custom=true` (include UDFs).
 
 ## Pagination
 
-- **Type:** Offset-based ($top + $skip)
-- **Default page size:** None (returns ALL if $top omitted)
-- **Recommended page size:** 100
-- **How to paginate:** `$top=100&$skip=0`, then `$skip=100`, etc.
-- **Last page detection:** `results.length < $top`
-- **Total count:** Not available. No @odata.count in contract-based API.
-- **Always include `$orderby`** when paginating for deterministic order.
+Offset-based: `$top=100&$skip=0`, then `$skip=100`… Always add `$orderby`. No total count, no `@odata.count`, no `@odata.nextLink`. **Last page when `results.length < $top`.** `$skip` past the end returns `[]` (not an error).
 
-## Webhooks / Events
+## Webhooks / events
 
-No API-managed webhooks. Push Notifications are UI-configured only.
-Use polling with `LastModifiedDateTime` filter for change detection:
+No API-managed webhooks. Push Notifications are UI-configured only. Detect changes by polling: `$filter=LastModifiedDateTime gt datetimeoffset'2026-03-30T10:00:00Z'`. Interval 5–15 min.
 
-```
-$filter=LastModifiedDateTime gt datetimeoffset'2026-03-30T10:00:00Z'
-```
+## Errors
 
-Recommended interval: 5-15 minutes.
+Format: `{"message":"An error has occurred.","exceptionMessage":"Error: 'CustomerClass' cannot be empty.","exceptionType":"PX.Data.PXException"}`. `exceptionMessage` carries the actionable detail — surface it. Multi-field errors use `PX.Data.PXOuterException` with `innerException.message` listing each field.
 
-## Error Handling
+Recovery by status: 400 fix per `exceptionMessage` · 401 refresh token, retry once · 403 API License inactive OR role lacks permission (do NOT refresh-loop) · 404 verify entity name + id · 409 optimistic-concurrency conflict → re-GET, merge, retry PUT · 422 business rule (state/credit hold/closed period) · 429 wait 2–5s, exponential backoff (no Retry-After) · 500 retry once with backoff.
 
-**Standard error format:**
+Common error strings (verbatim — match on these):
 
-```json
-{
-  "message": "An error has occurred.",
-  "exceptionMessage": "Error: 'CustomerClass' cannot be empty.",
-  "exceptionType": "PX.Data.PXException"
-}
-```
-
-**Recovery by status:**
-
-| Status | Meaning          | Action                                      |
-| ------ | ---------------- | ------------------------------------------- |
-| 400    | Validation error | Check `exceptionMessage` for field details  |
-| 401    | Unauthorized     | Refresh token and retry                     |
-| 403    | Forbidden        | No API license or insufficient permissions  |
-| 404    | Not found        | Verify entity name and record ID            |
-| 409    | Conflict         | Re-GET record, merge changes, retry PUT     |
-| 422    | Business rule    | State violation, credit hold, closed period |
-| 429    | Rate limit       | Wait 2-5s, retry with exponential backoff   |
-| 500    | Server error     | Retry once with backoff                     |
+- `"Document is already released and cannot be modified."` → void + recreate.
+- `"Another process has updated the 'SOOrder' record. Your changes will be lost."` → re-GET, merge, retry (409 path).
+- `"The API license is not valid or has expired."` → 403; customer renews API License add-on.
+- `"The document cannot be processed because Customer 'ACME01' is on credit hold."` → 422.
+- `"The financial period '01-2026' is closed. Transactions cannot be posted to this period."` → use an open period.
 
 ## Do NOT
 
-- Use POST to create records (use PUT)
-- Use PATCH to update records (use PUT)
-- Send `{"CustomerName": "Acme"}` without the value wrapper
-- Send `$filter=Status.value eq 'Active'` (use bare `Status`)
-- Use double quotes in filters (use single quotes)
-- Omit `$top` on list requests
-- Send partial line item arrays on update (send ALL lines)
-- Try to edit released documents (void and recreate)
-- Assume actions always return 204 (may return 202 for long-running)
-- Forget the API License requirement (403 without it)
+POST/PATCH to create or update (use PUT) · drop the `{"value":...}` wrapper · `$filter=Status.value eq ...` (use bare `Status`) · double-quote filter strings · omit `$top` · send partial `Details` array on update (send ALL lines) · edit released docs · assume actions always 204 (may be 202) · drop the `24.200.001` path segment.
 
----
+## Examples
 
-_Companion files for detailed reference:_
+1. List active customers (`GET`):
+   `/entity/Default/24.200.001/Customer?$top=20&$filter=Status eq 'Active'&$select=CustomerID,CustomerName,Status,Balance&$orderby=CustomerName asc`
 
-- _01a-domain-model-reference.md -- Entity catalog, relationships, state machines_
-- _01b-query-patterns.md -- Filtering, search, pagination examples_
-- _01c-mutation-patterns.md -- Create, update, delete patterns_
-- _01d-event-and-error-handling.md -- Events, webhooks, error recovery_
+2. Create a customer (`PUT /entity/Default/24.200.001/Customer`):
+   `{"CustomerID":{"value":"ACME01"},"CustomerName":{"value":"Acme Corporation"},"CustomerClass":{"value":"DEFAULT"},"Status":{"value":"Active"},"MainContact":{"Email":{"value":"billing@acme.com"}}}`
+   → `200 OK` with full entity incl. generated `id`, `rowNumber`, `note`.
+
+3. Create a sales order with lines (`PUT /entity/Default/24.200.001/SalesOrder`):
+   `{"OrderType":{"value":"SO"},"CustomerID":{"value":"ACME01"},"Description":{"value":"Q1 2026 Order"},"Details":[{"InventoryID":{"value":"WIDGET01"},"Quantity":{"value":10},"UnitPrice":{"value":25.00}}]}`
+
+4. Release an invoice (`POST /entity/Default/24.200.001/SalesInvoice/{guid}/action/ReleaseSalesInvoice`):
+   `{"entity":{"id":"{guid}"}}` → `204` (done) or `202` (poll `Location`).
+
+5. Paginated stock list (`GET`):
+   `/entity/Default/24.200.001/StockItem?$top=100&$skip=0&$filter=ItemStatus eq 'Active'&$orderby=InventoryID asc` — stop when `results.length < 100`.

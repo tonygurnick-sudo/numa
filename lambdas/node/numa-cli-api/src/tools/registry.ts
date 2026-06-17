@@ -19,12 +19,13 @@
  *      same way bootstrap does for the same Lambda.
  *
  *   3. oauth_workspace_tools  (simpler event shape)
- *      The native-connector Lambda backing the LLM's `mcp__connectors__*`
- *      tools. Event: {tool, user_sub, conversation_id, params}. Tool
- *      names are `connect_*` (status / request) and `oauth_*` (per-provider
- *      file ops, none of which we currently expose via CLI). Lives in a
- *      separate Lambda from workspace-chat-tools because it predates the
- *      unified dispatcher and is still being incubated.
+ *      The native-connector Lambda backing the LLM's connector tools.
+ *      Event: {tool, user_sub, conversation_id, params}. Tool names are
+ *      `connect_*` (status / request / Synergy file ops) and `oauth_*`
+ *      (per-provider file ops for the OAuth cloud-storage connectors —
+ *      Google Drive / Gmail / OneDrive / Dropbox, keyed by a `provider`
+ *      param). Lives in a separate Lambda from workspace-chat-tools because
+ *      it predates the unified dispatcher and is still being incubated.
  *
  * Adding a new tool:
  *   - If it lives in workspace-chat-tools → no registry entry needed.
@@ -86,10 +87,26 @@ export const TOOL_REGISTRY: Record<string, ToolRoute> = {
     pathTemplate: '/api/kb/{kb_id}/folders/delete',
   },
 
-  // oauth_workspace_tools — native-connector backend. The LLM hits these
-  // via `mcp__connectors__*` in the workspace agent; CLI hits them direct.
+  // oauth_workspace_tools — native-connector backend. The CLI hits these
+  // directly (these tool names default-route to workspace_chat_tools, which
+  // doesn't have them — so they MUST be registered here explicitly).
   connect_status: { target: 'oauth_workspace_tools' },
   connect_request: { target: 'oauth_workspace_tools' },
+
+  // Native-connector file browsing. These were the agent's only path to
+  // connector files via the MCP `connect.py` tool, which the MCP→CLI
+  // migration (6bebe5603) deleted without porting — re-exposed here as
+  // `numa integrations list-files/search-files/download-file/file-info`.
+  // Synergy 12d uses dedicated handlers (jobs-as-folders); the OAuth
+  // cloud-storage providers (Google Drive / Gmail / OneDrive / Dropbox)
+  // share the generic `oauth_*` ops with a `provider` param. All read-only.
+  connect_synergy_list: { target: 'oauth_workspace_tools' },
+  connect_synergy_search: { target: 'oauth_workspace_tools' },
+  connect_synergy_download: { target: 'oauth_workspace_tools' },
+  oauth_list_files: { target: 'oauth_workspace_tools' },
+  oauth_search_files: { target: 'oauth_workspace_tools' },
+  oauth_download_file: { target: 'oauth_workspace_tools' },
+  oauth_get_file_metadata: { target: 'oauth_workspace_tools' },
 };
 
 /**

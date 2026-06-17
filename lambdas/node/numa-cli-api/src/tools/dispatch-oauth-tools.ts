@@ -34,6 +34,10 @@ export interface OauthToolsDispatchOutput {
   status?: string;
   result?: unknown;
   error?: string;
+  /** Machine-readable error tag (e.g. `needs_credential`, `auth_error`) the
+   *  native-connector handlers set; relayed verbatim to the CLI so commands
+   *  can surface a connect/reconnect hint. */
+  error_code?: string;
 }
 
 export const invokeOauthTools = async (input: OauthToolsDispatchInput): Promise<OauthToolsDispatchOutput> => {

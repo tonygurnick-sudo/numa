@@ -1,317 +1,195 @@
 ---
-api_name: 'WorkflowMax (by Xero)'
-api_slug: 'workflowmax'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-source_phases: ['Phase 3: Domain Model & Behavior']
+api_name: WorkflowMax (by Xero)
+api_slug: workflowmax
+doc: domain model reference (companion to 01-llm-api-rules.md)
+call_surface: HTTP via `numa integrations request`; legacy `/{resource}.api/{action}` paths reused on the OAuth2 tier; modern `/{resource}/{UUID}`
+field_casing: PascalCase
+id_format: dual — UUID (link key) + human ID (J000123 / INV-001234, display only)
+source: synchub data model, Airbyte stream list, legacy WorkflowMax XML schemas, community Node SDK (indemandly/workflowmax)
+confidence: every field [INFERRED] (names/casing UNCONFIRMED until a live call) unless tagged [DOCUMENTED]
 ---
 
-# WorkflowMax (by Xero) -- Domain Model Reference
+# WorkflowMax — Domain Model Reference
 
-> Companion to `01-llm-api-rules.md`. Full entity catalog, relationships, state machines,
-> and business rules the workspace agent references when working with WorkflowMax data.
->
-> **Source:** synchub data model, Airbyte stream list, legacy WorkflowMax XML schemas,
-> community Node SDK (`indemandly/workflowmax`). **All fields [INFERRED] unless tagged
-> otherwise — field names and casing are UNCONFIRMED until a live call is captured.**
-> Both `UUID` (stable, use for links) and `ID` (human number) exist on most entities.
-
----
+> Field-table columns: Req=required on create, W=writable. Read-only (W=no): `UUID`,`ID`,`WhenCreated`,`WhenModified`, computed amounts. See Field Formats for value patterns. Example UUIDs/strings carrying real info appear inline in Description.
 
 ## Entity Catalog
 
-### Job
+### Job — `/job.api/*` (`list`,`current`,`get`,`add`,`update`) · modern `/job/{UUID}`
 
-**Resource path:** legacy `/job.api/*` (`list`, `current`, `get`, `add`, `update`) · modern `/job/{UUID}`
-**Description:** The central work container — a piece of client work with tasks, time, costs, a budget, and a lifecycle state. This is the entity most user questions revolve around.
-**CRUD:** Create / Read / Update. No hard delete — jobs are completed/cancelled, not deleted. [INFERRED]
+The central work container (tasks, time, costs, budget, lifecycle state) — most user questions revolve around it. CRUD: Create/Read/Update; no hard delete (jobs are completed/cancelled).
 
-| Field               | Type     | Required | Writable | Description                           | Example                                  |
-| ------------------- | -------- | -------- | -------- | ------------------------------------- | ---------------------------------------- |
-| `UUID`              | uuid     | n/a      | no       | Stable job identifier (use for links) | `"e3b0c442-98fc-1c14-9afb-f4c8996fb1a2"` |
-| `ID`                | string   | n/a      | no       | Human job number                      | `"J000123"`                              |
-| `Name`              | string   | yes      | yes      | Job name                              | `"Website Redesign"`                     |
-| `Description`       | string   | no       | yes      | Job description                       | `"Phase 1 discovery"`                    |
-| `ClientUUID`        | uuid     | yes      | yes      | Owning client                         | `"a1b2c3d4-...-5555"`                    |
-| `State`             | enum     | n/a      | partial  | Lifecycle state (see State Machines)  | `"In Progress"`                          |
-| `StartDate`         | date     | no       | yes      | Job start                             | `"2026-05-01"`                           |
-| `DueDate`           | date     | no       | yes      | Job due date                          | `"2026-06-30"`                           |
-| `Budget`            | decimal  | no       | yes      | Job budget                            | `"12000.00"`                             |
-| `ManagerUUID`       | uuid     | no       | yes      | Job manager (staff)                   | `"c3d4...-aaaa"`                         |
-| `PartnerUUID`       | uuid     | no       | yes      | Partner/owner (staff)                 | `"d5e6...-bbbb"`                         |
-| `ApprovedQuoteUUID` | uuid     | no       | no       | Quote this job was created from       | `"f7a8...-cccc"`                         |
-| `WhenCreated`       | datetime | n/a      | no       | Creation timestamp                    | `"2026-05-01T09:30:00Z"`                 |
-| `WhenModified`      | datetime | n/a      | no       | Last-modified (use for change detect) | `"2026-05-27T14:02:11Z"`                 |
+| Field               | Type     | Req | W       | Description                          |
+| ------------------- | -------- | --- | ------- | ------------------------------------ |
+| `UUID`              | uuid     | n/a | no      | stable job id (link key)             |
+| `ID`                | string   | n/a | no      | human job number (`J000123`)         |
+| `Name`              | string   | yes | yes     | job name                             |
+| `Description`       | string   | no  | yes     | job description                      |
+| `ClientUUID`        | uuid     | yes | yes     | owning client                        |
+| `State`             | enum     | n/a | partial | lifecycle state (see State Machines) |
+| `StartDate`         | date     | no  | yes     | job start                            |
+| `DueDate`           | date     | no  | yes     | job due date                         |
+| `Budget`            | decimal  | no  | yes     | job budget (`12000.00`)              |
+| `ManagerUUID`       | uuid     | no  | yes     | job manager (staff)                  |
+| `PartnerUUID`       | uuid     | no  | yes     | partner/owner (staff)                |
+| `ApprovedQuoteUUID` | uuid     | no  | no      | quote this job came from             |
+| `WhenCreated`       | datetime | n/a | no      | creation timestamp                   |
+| `WhenModified`      | datetime | n/a | no      | last-modified (change detect)        |
 
-**Relationships:**
+Rel: Client N:1 (`ClientUUID`, every job has one) · JobTask 1:N (`Tasks[]` in detail) · Time 1:N (`Job`/`JobUUID` on entries) · JobCost 1:N (`Costs[]` in detail) · Staff N:M (JobAssignee link) · Invoice 1:N.
 
-| Related Entity | Type | Expression                         | Notes                         |
-| -------------- | ---- | ---------------------------------- | ----------------------------- |
-| Client         | N:1  | `ClientUUID`                       | Every job belongs to a client |
-| JobTask        | 1:N  | sub-resource / `Tasks[]` in detail | Tasks within a job            |
-| Time           | 1:N  | `Job`/`JobUUID` on time entries    | Time logged against the job   |
-| JobCost        | 1:N  | `JobID` / `Costs[]` in detail      | Costs / disbursements         |
-| Staff          | N:M  | JobAssignee link                   | Assigned staff                |
-| Invoice        | 1:N  | invoice references the job         | Invoices raised for the job   |
+### Client (ClientDetails) — `/client.api/*` (`list`,`get`,`add`,`update`,`archive`,`delete`) · modern `/client/{UUID}`
 
----
+A customer org/person; parent of contacts, jobs, invoices. CRUD: Create/Read/Update/Archive/Delete [DOCUMENTED via Node SDK] — Archive + Delete are **destructive, gate behind explicit confirmation**.
 
-### Client (ClientDetails)
+| Field                                 | Type     | Req | W   | Description                               |
+| ------------------------------------- | -------- | --- | --- | ----------------------------------------- |
+| `UUID`                                | uuid     | n/a | no  | client id                                 |
+| `Name`                                | string   | yes | yes | client name                               |
+| `Email`                               | string   | no  | yes | primary email                             |
+| `Phone`                               | string   | no  | yes | phone                                     |
+| `Address`/`City`/`PostCode`/`Country` | string   | no  | yes | postal address parts                      |
+| `AccountManagerUUID`                  | uuid     | no  | yes | account manager (staff)                   |
+| `JobManagerUUID`                      | uuid     | no  | yes | default job manager                       |
+| `TypePaymentTerm`                     | string   | no  | yes | payment terms (e.g. `20th of next month`) |
+| `WhenModified`                        | datetime | n/a | no  | change-detection field                    |
 
-**Resource path:** legacy `/client.api/*` (`list`, `get`, `add`, `update`, `archive`, `delete`) · modern `/client/{UUID}`
-**Description:** A customer organisation or person you do work for. Parent of contacts, jobs, and invoices.
-**CRUD:** Create / Read / Update / Archive / Delete. [DOCUMENTED via community Node SDK method set] — Archive and Delete are **destructive**, gate behind explicit confirmation.
+Rel: Contact 1:N · Job 1:N · Invoice 1:N.
 
-| Field                                 | Type     | Required | Writable | Description             | Example                  |
-| ------------------------------------- | -------- | -------- | -------- | ----------------------- | ------------------------ |
-| `UUID`                                | uuid     | n/a      | no       | Client identifier       | `"a1b2c3d4-...-5555"`    |
-| `Name`                                | string   | yes      | yes      | Client name             | `"Acme Ltd"`             |
-| `Email`                               | string   | no       | yes      | Primary email           | `"accounts@acme.co.nz"`  |
-| `Phone`                               | string   | no       | yes      | Phone                   | `"+64 9 123 4567"`       |
-| `Address`/`City`/`PostCode`/`Country` | string   | no       | yes      | Postal address parts    | `"Auckland"` / `"1010"`  |
-| `AccountManagerUUID`                  | uuid     | no       | yes      | Account manager (staff) | `"c3d4...-aaaa"`         |
-| `JobManagerUUID`                      | uuid     | no       | yes      | Default job manager     | `"d5e6...-bbbb"`         |
-| `TypePaymentTerm`                     | string   | no       | yes      | Payment terms           | `"20th of next month"`   |
-| `WhenModified`                        | datetime | n/a      | no       | Change-detection field  | `"2026-05-20T10:00:00Z"` |
+### Contact — managed under the client resource (`/client.api/contact*` style); links via `ClientContact`
 
-**Relationships:** Contact (1:N), Job (1:N), Invoice (1:N).
+A person at a client org. CRUD: Create/Read/Update/Delete (via the client).
 
----
+| Field        | Type   | Req | W   |
+| ------------ | ------ | --- | --- |
+| `UUID`       | uuid   | n/a | no  |
+| `Name`       | string | yes | yes |
+| `Email`      | string | no  | yes |
+| `Phone`      | string | no  | yes |
+| `Mobile`     | string | no  | yes |
+| `Position`   | string | no  | yes |
+| `Salutation` | string | no  | yes |
+| `IsPrimary`  | bool   | no  | yes |
 
-### Contact
+Rel: Client N:1 (via `ClientContact`).
 
-**Resource path:** managed under the client resource (`/client.api/contact*` style); contacts link to clients via `ClientContact`.
-**Description:** A person at a client organisation.
-**CRUD:** Create / Read / Update / Delete (via the client). [INFERRED]
+### Invoice — `/invoice.api/*` (`list`,`current`,`get`) · modern `/invoice/{UUID}`
 
-| Field        | Type   | Required | Writable | Description          | Example               |
-| ------------ | ------ | -------- | -------- | -------------------- | --------------------- |
-| `UUID`       | uuid   | n/a      | no       | Contact identifier   | `"b2c3...-d4e5"`      |
-| `Name`       | string | yes      | yes      | Contact name         | `"Jordan Lee"`        |
-| `Email`      | string | no       | yes      | Email                | `"jordan@acme.co.nz"` |
-| `Phone`      | string | no       | yes      | Phone                | `"+64 9 123 4567"`    |
-| `Mobile`     | string | no       | yes      | Mobile               | `"+64 21 555 0000"`   |
-| `Position`   | string | no       | yes      | Job title            | `"Marketing Manager"` |
-| `Salutation` | string | no       | yes      | Salutation           | `"Ms"`                |
-| `IsPrimary`  | bool   | no       | yes      | Primary contact flag | `"Yes"`               |
+A bill against a client/job; amounts roll up from line collections. CRUD: Read confirmed; Create (raise from job/time) likely but **financial — confirm with user**.
 
-**Relationships:** Client (N:1 via `ClientContact`).
+| Field            | Type    | W       | Description                         |
+| ---------------- | ------- | ------- | ----------------------------------- |
+| `UUID`           | uuid    | no      | invoice id                          |
+| `ID`             | string  | no      | human invoice number (`INV-001234`) |
+| `Type`           | string  | partial | invoice type (e.g. `Standard`)      |
+| `Status`         | enum    | partial | Draft/Approved/Paid (approx)        |
+| `Date`           | date    | partial | invoice date                        |
+| `DueDate`        | date    | partial | due date                            |
+| `Amount`         | decimal | no      | total (computed from lines)         |
+| `AmountTax`      | decimal | no      | tax (computed)                      |
+| `AmountPaid`     | decimal | no      | paid to date (computed)             |
+| `ClientUUID`     | uuid    | no      | billed client                       |
+| `InvoiceTask`    | array   | partial | task line items                     |
+| `InvoiceCost`    | array   | partial | cost line items                     |
+| `InvoicePayment` | array   | no      | payments applied                    |
 
----
+Rel: Client N:1 · Job N:1 (the job billed) · Time 1:N (entries get `InvoiceUUID` set once billed).
 
-### Invoice
+### Time (Time Entry / Timesheet) — `/time.api/*` (`list`,`get`,`add`) · modern `/time/{UUID}`
 
-**Resource path:** legacy `/invoice.api/*` (`list`, `current`, `get`) · modern `/invoice/{UUID}`
-**Description:** A bill raised against a client/job. Amounts roll up from line collections.
-**CRUD:** Read confirmed. Create (raise from job/time) likely but **financial — confirm with user**. [INFERRED]
+A unit of time logged by a staff member against a job (usually a task). CRUD: Create/Read; Update/Delete uncertain.
 
-| Field            | Type    | Required | Writable | Description                      | Example          |
-| ---------------- | ------- | -------- | -------- | -------------------------------- | ---------------- |
-| `UUID`           | uuid    | n/a      | no       | Invoice identifier               | `"c3d4...-e5f6"` |
-| `ID`             | string  | n/a      | no       | Human invoice number             | `"INV-001234"`   |
-| `Type`           | string  | n/a      | partial  | Invoice type                     | `"Standard"`     |
-| `Status`         | enum    | n/a      | partial  | Draft / Approved / Paid (approx) | `"Approved"`     |
-| `Date`           | date    | no       | partial  | Invoice date                     | `"2026-05-31"`   |
-| `DueDate`        | date    | no       | partial  | Due date                         | `"2026-06-20"`   |
-| `Amount`         | decimal | n/a      | no       | Total (computed from lines)      | `"3450.00"`      |
-| `AmountTax`      | decimal | n/a      | no       | Tax (computed)                   | `"450.00"`       |
-| `AmountPaid`     | decimal | n/a      | no       | Paid to date (computed)          | `"0.00"`         |
-| `ClientUUID`     | uuid    | n/a      | no       | Billed client                    | `"a1b2...-5555"` |
-| `InvoiceTask`    | array   | n/a      | partial  | Task line items                  | `[ ... ]`        |
-| `InvoiceCost`    | array   | n/a      | partial  | Cost line items                  | `[ ... ]`        |
-| `InvoicePayment` | array   | n/a      | no       | Payments applied                 | `[ ... ]`        |
+| Field               | Type        | Req     | W   | Description                                     |
+| ------------------- | ----------- | ------- | --- | ----------------------------------------------- |
+| `UUID`              | uuid        | n/a     | no  | time-entry id                                   |
+| `Job`/`JobUUID`     | uuid/string | yes     | yes | job logged against                              |
+| `Staff`/`StaffUUID` | uuid        | yes     | yes | staff who logged it                             |
+| `Task`/`TaskUUID`   | uuid        | usually | yes | task within the job                             |
+| `Date`              | date        | yes     | yes | date worked (`YYYY-MM-DD`)                      |
+| `Minutes`           | int         | yes     | yes | duration in minutes (display as `Minutes/60` h) |
+| `Billable`          | bool        | no      | yes | billable flag (`Yes`/`No`)                      |
+| `Note`              | string      | no      | yes | free-text note                                  |
+| `InvoiceUUID`       | uuid        | n/a     | no  | set (non-null) once invoiced                    |
 
-**Relationships:** Client (N:1), Job (N:1, the job billed), Time (1:N — time entries get `InvoiceUUID` set once billed).
+Rel: Job N:1 · Staff N:1 · Task N:1 · Invoice N:1 (once billed).
 
----
+### Staff — `/staff.api/list` (+ `get`) · modern `/staff`
 
-### Time (Time Entry / Timesheet)
+A user/employee in the org. Reference data — best connectivity check. CRUD: Read only (writes not exposed). Fields: `UUID`, `Name`, `Email`, `Phone`, `Mobile`, `PayrollCode` (e.g. `PR-014`) — all read-only.
 
-**Resource path:** legacy `/time.api/*` (`list`, `get`, `add`) · modern `/time/{UUID}`
-**Description:** A unit of time logged by a staff member against a job (and usually a task).
-**CRUD:** Create / Read. Update/Delete uncertain. [INFERRED]
+### Secondary entities (lower priority, read-mostly)
 
-| Field               | Type        | Required | Writable | Description                      | Example          |
-| ------------------- | ----------- | -------- | -------- | -------------------------------- | ---------------- |
-| `UUID`              | uuid        | n/a      | no       | Time-entry identifier            | `"7a8b...-ff11"` |
-| `Job`/`JobUUID`     | uuid/string | yes      | yes      | Job the time is logged against   | `"J000123"`      |
-| `Staff`/`StaffUUID` | uuid        | yes      | yes      | Staff member who logged the time | `"0d6d...-9f1a"` |
-| `Task`/`TaskUUID`   | uuid        | usually  | yes      | Task within the job              | `"...-task01"`   |
-| `Date`              | date        | yes      | yes      | Date the time was worked         | `"2026-05-27"`   |
-| `Minutes`           | int         | yes      | yes      | Duration in minutes              | `90`             |
-| `Billable`          | bool        | no       | yes      | Billable flag (`Yes`/`No`)       | `"Yes"`          |
-| `Note`              | string      | no       | yes      | Free-text note                   | `"Workshop"`     |
-| `InvoiceUUID`       | uuid        | n/a      | no       | Set once the time is invoiced    | `null`           |
-
-**Relationships:** Job (N:1), Staff (N:1), Task (N:1), Invoice (N:1 once billed).
-
----
-
-### Staff
-
-**Resource path:** legacy `/staff.api/list` (and `get`) · modern `/staff`
-**Description:** A user/employee in the WorkflowMax org. Reference data — good for the connectivity check.
-**CRUD:** Read only (list/get). Writes not exposed. [INFERRED]
-
-| Field            | Type   | Required | Writable | Description       | Example             |
-| ---------------- | ------ | -------- | -------- | ----------------- | ------------------- |
-| `UUID`           | uuid   | n/a      | no       | Staff identifier  | `"0d6d...-9f1a"`    |
-| `Name`           | string | n/a      | no       | Staff name        | `"Jane Smith"`      |
-| `Email`          | string | n/a      | no       | Email             | `"jane@acme.co.nz"` |
-| `Phone`/`Mobile` | string | n/a      | no       | Contact numbers   | `"+64 21 ..."`      |
-| `PayrollCode`    | string | n/a      | no       | Payroll reference | `"PR-014"`          |
-
----
-
-### Secondary entities (lower priority)
-
-> Present in the synchub model / Airbyte streams. Field detail [INFERRED]; treat as read-mostly.
-
-| Entity          | Resource path          | Key fields                                              | Notes                                                                            |
+| Entity          | Path                   | Key fields                                              | Notes                                                                            |
 | --------------- | ---------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Quote           | `/quote.api/*`         | `UUID`,`ID`,`Type`,`State`,`Date`,`Amount`,`ClientUUID` | Wins convert to a Job [INFERRED]                                                 |
-| Purchase Order  | `/purchaseorder.api/*` | `UUID`,`ID`,`SupplierUUID`,`JobUUID`,`Amount`           | `purchaseorderlist` stream [INFERRED]                                            |
-| Supplier        | `/supplier.api/*`      | `UUID`,`Name`,`Email`,`Phone`                           | `supplierlist` stream [INFERRED]                                                 |
+| Quote           | `/quote.api/*`         | `UUID`,`ID`,`Type`,`State`,`Date`,`Amount`,`ClientUUID` | wins convert to a Job                                                            |
+| Purchase Order  | `/purchaseorder.api/*` | `UUID`,`ID`,`SupplierUUID`,`JobUUID`,`Amount`           | `purchaseorderlist` stream                                                       |
+| Supplier        | `/supplier.api/*`      | `UUID`,`Name`,`Email`,`Phone`                           | `supplierlist` stream                                                            |
 | Lead            | `/lead.api/*`          | `UUID`,`Name`,`Category`,`Date`,`ClientUUID`            | `list`/`current`/`get`/`add`/`categories`, `from`/`to` [DOCUMENTED via Node SDK] |
-| Cost / JobCost  | `/cost.api/*`          | `UUID`,`JobID`,`Description`,`Amount`,`Date`            | `costlist` stream [INFERRED]                                                     |
-| Task / JobTask  | sub-resource of Job    | `UUID`,`Name`,`EstimatedMinutes`,`JobUUID`              | `tasklist`/`job_tasks` streams [INFERRED]                                        |
-| Category        | `/categories.api/list` | `UUID`,`Name`                                           | Reference data; cacheable [DOCUMENTED]                                           |
-| Client Group    | `/clientgroup*`        | `UUID`,`Name`                                           | `clientgrouplist` stream [INFERRED]                                              |
-| Client Document | under client           | `UUID`,`Name`,`FileName`                                | Upload/download support UNKNOWN                                                  |
+| Cost / JobCost  | `/cost.api/*`          | `UUID`,`JobID`,`Description`,`Amount`,`Date`            | `costlist` stream                                                                |
+| Task / JobTask  | sub-resource of Job    | `UUID`,`Name`,`EstimatedMinutes`,`JobUUID`              | `tasklist`/`job_tasks` streams                                                   |
+| Category        | `/categories.api/list` | `UUID`,`Name`                                           | reference data, cacheable [DOCUMENTED]                                           |
+| Client Group    | `/clientgroup*`        | `UUID`,`Name`                                           | `clientgrouplist` stream                                                         |
+| Client Document | under client           | `UUID`,`Name`,`FileName`                                | upload/download support UNKNOWN                                                  |
 
----
-
-## Entity Relationship Diagram
+## Entity Relationships
 
 ```
-                          ┌───────────┐
-                          │  Client   │
-                          └─────┬─────┘
-                 1:N            │            1:N
-       ┌──────────────────────┼───────────────────────┐
-       ▼                      ▼                         ▼
-  ┌─────────┐           ┌──────────┐              ┌──────────┐
-  │ Contact │           │   Job    │              │ Invoice  │
-  └─────────┘           └────┬─────┘              └────┬─────┘
-                             │ 1:N                     │ 1:N
-             ┌───────────────┼───────────┐            ▼
-             ▼               ▼           ▼      ┌──────────────────┐
-       ┌──────────┐   ┌───────────┐ ┌────────┐ │ Invoice line     │
-       │ JobTask  │   │   Time    │ │ JobCost│ │ (Task/Cost/Pay)  │
-       └────┬─────┘   └─────┬─────┘ └────────┘ └──────────────────┘
-            │ N:M           │ N:1
-            ▼               ▼
-       ┌──────────┐   ┌───────────┐
-       │  Staff   │◄──┤   Staff   │
-       └──────────┘   └───────────┘
-
- Quote ──1:1 (on win)──► Job        Supplier ──1:N──► PurchaseOrder ──N:1──► Job
- Lead  ──(convert)─────► Client/Job
+Client 1:N → Contact, Job, Invoice
+Job 1:N → JobTask, Time, JobCost   Job N:M → Staff (assignee)   Job 1:N → Invoice
+Invoice 1:N → InvoiceTask/InvoiceCost/InvoicePayment lines
+Time N:1 → Staff (logger)
+Quote 1:1 (on win) → Job    Supplier 1:N → PurchaseOrder N:1 → Job    Lead (convert) → Client/Job
 ```
 
 [INFERRED from synchub relationship tables: `ClientContact`, `JobAssignee`, `JobTaskAssignee`, `Time.InvoiceUUID`.]
-
----
 
 ## State Machines
 
 ### Job Lifecycle
 
-```
-[Planned/Quote] ──start──> [In Progress] ──complete──> [Completed] ──invoice──> [Invoiced]
-                                 \
-                                  ──cancel──> [Cancelled]
-```
+`[Planned/Quote] --start--> [In Progress] --complete--> [Completed] --invoice--> [Invoiced]` · any `--cancel--> [Cancelled]`.
 
-**Transitions:**
+| From        | Action        | To          | Reversible | Side effects                         |
+| ----------- | ------------- | ----------- | ---------- | ------------------------------------ |
+| Planned     | start         | In Progress | yes        | time/costs can now be logged         |
+| In Progress | complete      | Completed   | yes        | often a precondition for invoicing   |
+| Completed   | raise invoice | Invoiced    | partial    | billable time/costs flagged invoiced |
+| any         | cancel        | Cancelled   | no         | stops further work                   |
 
-| From        | Action / Trigger | To          | Reversible? | Side Effects                         |
-| ----------- | ---------------- | ----------- | ----------- | ------------------------------------ |
-| Planned     | start            | In Progress | yes         | Time/costs can now be logged         |
-| In Progress | complete         | Completed   | yes         | Often a precondition for invoicing   |
-| Completed   | raise invoice    | Invoiced    | partial     | Billable time/costs flagged invoiced |
-| any         | cancel           | Cancelled   | no          | Stops further work                   |
+Per-state capabilities: Planned — no time, no invoice (set up tasks/budget first) · In Progress — time yes, invoice partial (normal working state) · Completed — time limited, invoice yes (ready to bill) · Invoiced — none (historical) · Cancelled — none (terminal).
 
-**Per-State Capabilities:**
-
-| State       | Can log time? | Can invoice? | Notes                       |
-| ----------- | ------------- | ------------ | --------------------------- |
-| Planned     | no            | no           | Set up tasks/budget first   |
-| In Progress | yes           | partial      | Normal working state        |
-| Completed   | limited       | yes          | Ready to bill               |
-| Invoiced    | no            | —            | Billed; treat as historical |
-| Cancelled   | no            | no           | Terminal                    |
-
-> **[INFERRED]** Exact `State` enum strings/casing MUST be read from a live `job.api/list` /
-> `/job` response. `job.api/current` returns only currently-active jobs, implying a
-> current-vs-historical split that you can exploit instead of a status filter.
+> Exact `State` enum strings/casing MUST be read from a live `job.api/list`/`/job` response. `job.api/current` returns only currently-active jobs — exploit this current-vs-historical split instead of a status filter.
 
 ### Invoice Status (approx)
 
-```
-[Draft] ──approve──> [Approved] ──payment──> [Paid]
-```
-
-[INFERRED — confirm exact `Status` values live.]
-
----
+`[Draft] --approve--> [Approved] --payment--> [Paid]`. Confirm exact `Status` values live.
 
 ## Business Rules
 
-### Ordering / Dependency Rules
+- **Dependency order:** Client before Job; Job (+usually Task) before Time/Cost. Time entries must reference existing `StaffUUID`, `JobUUID`/`Job`, usually a `TaskUUID`.
+- **References use the target's `UUID`, never the human `ID`.**
+- **Dates:** `from`/`to` list filters use compact `YYYYMMDD`; date fields in bodies use `YYYY-MM-DD`.
+- **Cascades:** archiving/deleting a Client affects its Jobs; invoicing flips affected time entries' `InvoiceUUID` from null to the invoice UUID.
+- **Uniqueness:** Job `ID` (`J000123`) and Invoice `ID` (`INV-001234`) are unique within the org.
+- **Computed/read-only:** `UUID`,`ID`,`WhenCreated`,`WhenModified` server-managed; invoice `Amount`/`AmountTax`/`AmountPaid` roll up from lines — never write them.
+- **Access:** connecting staff member must have "Authorise 3rd Party Full Access" on their staff record or the API 403s. [DOCUMENTED]
 
-- Must create a **Client** before a **Job**.
-- Must have a **Job** (and usually a **Task**) before logging **Time** or **Cost**.
-- Time entries must reference an existing `StaffUUID`, `JobUUID`/`Job`, and usually a `TaskUUID`.
+## Field Formats
 
-### Field-Level Rules
+| Format        | Pattern                                      | Example                                | Notes                                             |
+| ------------- | -------------------------------------------- | -------------------------------------- | ------------------------------------------------- |
+| Date (body)   | `YYYY-MM-DD`                                 | `2026-05-01`                           | modern field values                               |
+| Date (filter) | `YYYYMMDD`                                   | `20260501`                             | legacy `from`/`to` [DOCUMENTED]                   |
+| DateTime      | ISO-8601                                     | `2026-05-01T09:30:00Z`                 | `WhenCreated`/`WhenModified`                      |
+| Currency      | decimal string, org currency, 2dp, no symbol | `12000.00`                             | —                                                 |
+| ID (link)     | UUID v4                                      | `e3b0c442-98fc-1c14-9afb-f4c8996fb1a2` | use for relationships [DOCUMENTED]                |
+| ID (human)    | prefixed number                              | `J000123` / `INV-001234`               | display only, not a relationship key [DOCUMENTED] |
+| Boolean       | `Yes`/`No` (legacy) or `true`/`false`        | `Yes`                                  | confirm representation live                       |
 
-- Cross-entity references use the target's `UUID`, never its human `ID`.
-- Dates on `from`/`to` list filters use compact `YYYYMMDD`; date fields in bodies use `YYYY-MM-DD`.
+## Enums (approx — confirm live)
 
-### Cascading Effects
-
-- Archiving/deleting a Client affects its Jobs.
-- Invoicing flips affected time entries' `InvoiceUUID` from null to the invoice's UUID.
-
-### Uniqueness Constraints
-
-- Job `ID` (e.g. `J000123`) and Invoice `ID` (e.g. `INV-001234`) are unique within the org.
-
-### Computed / Read-Only Fields
-
-- `UUID`, `ID`, `WhenCreated`, `WhenModified` are server-managed.
-- Invoice `Amount`/`AmountTax`/`AmountPaid` roll up from line collections — never write them directly.
-
-### Access Rule
-
-- The connecting staff member must have **"Authorise 3rd Party Full Access"** enabled on their
-  WorkflowMax staff record, or the API rejects calls (403). [DOCUMENTED]
-
----
-
-## Field Format Reference
-
-| Format        | Pattern                               | Example                                | Notes                                              |
-| ------------- | ------------------------------------- | -------------------------------------- | -------------------------------------------------- |
-| Date (body)   | `YYYY-MM-DD`                          | `2026-05-01`                           | Modern field values [INFERRED]                     |
-| Date (filter) | `YYYYMMDD`                            | `20260501`                             | Legacy `from`/`to` filters [DOCUMENTED]            |
-| DateTime      | ISO-8601                              | `2026-05-01T09:30:00Z`                 | `WhenCreated`/`WhenModified` [INFERRED]            |
-| Currency      | Decimal string, org currency, 2 dp    | `12000.00`                             | No currency symbol embedded [INFERRED]             |
-| ID (link)     | UUID v4                               | `e3b0c442-98fc-1c14-9afb-f4c8996fb1a2` | Use for relationships [DOCUMENTED]                 |
-| ID (human)    | Prefixed number                       | `J000123` / `INV-001234`               | Display only — not a relationship key [DOCUMENTED] |
-| Boolean       | `Yes`/`No` (legacy) or `true`/`false` | `Yes`                                  | Confirm representation live [INFERRED]             |
-
----
-
-## Enum Value Reference
-
-| Entity  | Field      | Allowed Values (approx)                                  | Default | Notes                     |
-| ------- | ---------- | -------------------------------------------------------- | ------- | ------------------------- |
-| Job     | `State`    | Planned · In Progress · Completed · Cancelled · Invoiced | —       | [INFERRED — confirm live] |
-| Invoice | `Status`   | Draft · Approved · Paid                                  | —       | [INFERRED — confirm live] |
-| Time    | `Billable` | Yes · No (or true/false)                                 | —       | [INFERRED]                |
-
----
-
-_Generated from the investigation questionnaire, Phase 3._
+| Entity  | Field      | Allowed values                                           |
+| ------- | ---------- | -------------------------------------------------------- |
+| Job     | `State`    | Planned · In Progress · Completed · Cancelled · Invoiced |
+| Invoice | `Status`   | Draft · Approved · Paid                                  |
+| Time    | `Billable` | Yes · No (or true/false)                                 |

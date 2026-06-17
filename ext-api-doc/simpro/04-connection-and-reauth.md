@@ -1,374 +1,225 @@
-# simPRO REST API — Connection & Reauthorization Guide
-
-> Complete setup instructions for connecting Numa to the simPRO REST API.
-> Auth type: **OAuth 2.0** (authorization-code flow, **per-build** endpoints) — with a
-> documented **API-key / "Direct Access"** alternative for server-to-server use.
-> Goal: enough detail that Numa could automate connector setup via script.
->
-> simPRO is a **per-build (per-customer-tenant) SaaS** — every OAuth URL and every API URL
-> contains the customer's `{build}` subdomain (e.g. `markscompany.simprosuite.com`). There is
-> **no shared/central OAuth host**. The verified endpoints come from the official PHP SDK
-> `simPRO-Software/simpro-restapi-php/src/OAuth2/Provider.php` (lines 225 + 230) and the
-> sibling docs `02-api-spec-investigation.md` and `03-connector-setup.md`. Do not substitute a
-> centralized host — see the discrepancy note in §1.
-
+---
+api_name: simPRO
+api_slug: simpro
+doc: connection & reauthorization guide (Numa connector wiring)
+base_url: https://{build}.simprosuite.com/api/v1.0/ (/api/v1.0 is a real path segment)
+auth: OAuth 2.0 authorization_code (primary) + Direct Access API key (alternative)
+oauth_host: per-build https://{build}.simprosuite.com — NO central host
+registry_id: simpro (connectorRegistry.ts, authType 'oauth2')
+confidence: auth endpoints [VERIFIED 2026-05-19] vs official PHP SDK Provider.php:225,230; others as tagged
 ---
 
-## Auth Type: OAuth 2.0 (primary) + API Key / Direct Access (alternative)
+# simPRO — Connection & Reauthorization
 
-simPRO supports **two** access models, both selected when creating the API application under
-**System → Setup → API → Applications**:
+simPRO is a **per-build (per-customer-tenant) SaaS** — every OAuth URL and API URL contains the customer's `{build}` subdomain (e.g. `markscompany.simprosuite.com`). There is NO shared/central OAuth host. Verified endpoints come from the official PHP SDK `simPRO-Software/simpro-restapi-php/src/OAuth2/Provider.php` (lines 225+230) and siblings 02/03. Do NOT substitute a centralized host (see §A1 discrepancy).
 
-- **OAuth 2.0 (Option A — primary).** Authorization-code flow with per-build endpoints. The user
-  signs in and consents; access is scoped to that user's permissions when the app uses **User
-  Token Access** ("3 Legged" OAuth). This is the flow the Numa connector is configured for
-  (`authType: 'oauth2'` in `connectorRegistry.ts`, `id: 'simpro'`).
-- **API Key / Direct Access (Option B — alternative).** simPRO emits a **long-lived bearer
-  token** that is **not** tied to an employee's credentials and grants access to all company
-  data. No user consent / redirect dance. Use for server-to-server automation. Treat the token
-  like a PAT (capture once, store in the vault, regenerate manually on compromise/expiry). See
-  Option B below.
+Two access models, both selected when creating the API app under **System → Setup → API → Applications**:
 
-> **Why keep both:** simPRO genuinely ships both. Option A is the documented primary flow for
-> Numa. Option B is the correct path for headless/server-to-server scenarios where there is no
-> interactive user to consent. The same base API URL and `Authorization: Bearer …` header scheme
-> work for either — only how the token is obtained differs.
+- **OAuth 2.0 (A — primary):** authorization-code flow, per-build endpoints. User signs in + consents; access scoped to that user's permissions under **User Token Access** ("3-legged"). This is what the Numa connector is configured for (`connectorRegistry.ts`, `id:'simpro'`, `authType:'oauth2'`).
+- **Direct Access / API Key (B — alternative):** long-lived bearer token NOT tied to an employee, grants access to all company data; no consent/redirect. For headless/server-to-server. Treat like a PAT.
+  Same base API URL + `Authorization: Bearer …` for both — only how the token is obtained differs.
 
 ---
 
 ## Option A: OAuth 2.0
 
-### 1. Create the OAuth Application in simPRO
+### A1. Create the OAuth application
 
-simPRO API applications are created **inside the customer's own build**, not on a central
-developer portal. The customer (or an admin with the **Manage Applications** permission) must:
+Customer (or admin with **Manage Applications**): sign in to `https://{build}.simprosuite.com` → **System → Setup → API → Applications** → **Add**:
+| Field | Value | Notes |
+| --- | --- | --- |
+| Name | `Numa Integration` (or per-client) | shown on consent screen |
+| Description | optional | |
+| Access Type | **OAuth 2.0** (User Token Access) | (Direct Access = Option B) |
+| Grant Type | `authorization_code` | other grants in §A2.4 |
+| Redirect URI | exact URI from the Numa connector wizard | byte-for-byte match (incl. trailing slash), HTTPS |
+Save → copy **Client ID** + **Client Secret** (shown once; format opaque string [UNKNOWN — exact pattern]).
 
-1. Sign in to the simPRO build at `https://{build}.simprosuite.com`
-   (`{build}` is the subdomain the customer signs into simPRO at, e.g. `markscompany`).
-2. Navigate to: **System → Setup → API → Applications**.
-3. Click **"Add"**.
-4. Fill in:
+> ⚠️ **Registry discrepancy — fix before going live.** Current `connectorRegistry.ts` (`id:'simpro'`) hardcodes a centralized host: `authUrl:'https://login.simprogroup.com/oauth2/authorize'`, `tokenUrl:'https://login.simprogroup.com/oauth2/token'`, empty `scopes`. The SDK-verified authoritative endpoints are **per-build** (`https://{build}.simprosuite.com/oauth2/login` and `/oauth2/token`); the legacy central `auth.simpro.co` is NXDOMAIN (verified 2026-05-19); `login.simprogroup.com` is **[UNKNOWN — unverified]**, not confirmed by the SDK. The connector must template `{build}` (collected from the user at connect time) into the OAuth URLs, not rely on a fixed host.
 
-   | Field        | Value                                                         | Notes                                                                                                    |
-   | ------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-   | Name         | `Numa Integration` (or per-client name)                       | Free text; shown on the consent screen.                                                                  |
-   | Description  | Optional                                                      | —                                                                                                        |
-   | Access Type  | **OAuth 2.0** (User Token Access)                             | Choose this for Option A. (Choose **Direct Access (API Key)** for Option B.)                             |
-   | Grant Type   | `authorization_code`                                          | Standard web-app flow. Other grants in §2.4.                                                             |
-   | Redirect URI | the **exact** redirect URI shown in the Numa connector wizard | **Must match byte-for-byte** (incl. trailing slash) on every OAuth request. HTTPS required. [DOCUMENTED] |
+### A2. OAuth flow
 
-5. Save, then copy:
-   - **Client ID** — capture immediately. Format: opaque string. [UNKNOWN — exact pattern not documented]
-   - **Client Secret** — capture immediately, **shown once**. Format: opaque string. [UNKNOWN — exact pattern not documented]
+| Property          | Value                                                                                                                                                                                                                 | Source                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Grant type        | `authorization_code`                                                                                                                                                                                                  | PHP SDK                                  |
+| Authorization URL | `https://{build}.simprosuite.com/oauth2/login?client_id={CLIENT_ID}`                                                                                                                                                  | [VERIFIED 2026-05-19 — Provider.php:230] |
+| Token URL         | `https://{build}.simprosuite.com/oauth2/token`                                                                                                                                                                        | [VERIFIED 2026-05-19 — Provider.php:225] |
+| Revocation URL    | none documented                                                                                                                                                                                                       | [UNKNOWN]                                |
+| Redirect URI      | registered Numa connector URI (exact match)                                                                                                                                                                           |                                          |
+| Scopes            | empty/not publicly enumerated — access governed by Access Type, NOT request-time scope strings; keep `scopes:''` unless the build's consent screen presents specific values (then capture verbatim + update registry) | [UNKNOWN]                                |
+| PKCE required?    | not documented                                                                                                                                                                                                        | [UNKNOWN]                                |
+| State parameter   | recommended (CSRF); validate on callback                                                                                                                                                                              | SDK                                      |
 
-> **⚠️ Registry discrepancy — fix before going live.** The current Numa connector registry
-> entry (`connectorRegistry.ts`, `id: 'simpro'`) hardcodes a **centralized** host:
-> `authUrl: 'https://login.simprogroup.com/oauth2/authorize'` and
-> `tokenUrl: 'https://login.simprogroup.com/oauth2/token'` with empty `scopes`. The
-> SDK-verified, sibling-doc-authoritative endpoints are **per-build**
-> (`https://{build}.simprosuite.com/oauth2/login` and `.../oauth2/token`) — and the legacy
-> central host `auth.simpro.co` **does not resolve in DNS (NXDOMAIN, verified 2026-05-19)**.
-> `login.simprogroup.com` is **not** confirmed by the official PHP SDK and is treated here as
-> **[UNKNOWN — unverified]**. The connector must template the build subdomain into the OAuth
-> URLs (collect `{build}` from the user at connect time) rather than rely on a fixed host.
+A2.1 Authorization request:
 
-### 2. OAuth Flow
-
-| Property          | Value                                                                                                        | Source                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
-| Grant type        | `authorization_code`                                                                                         | [DOCUMENTED — PHP SDK]                   |
-| Authorization URL | `https://{build}.simprosuite.com/oauth2/login?client_id={CLIENT_ID}`                                         | [VERIFIED 2026-05-19 — Provider.php:230] |
-| Token URL         | `https://{build}.simprosuite.com/oauth2/token`                                                               | [VERIFIED 2026-05-19 — Provider.php:225] |
-| Revocation URL    | None documented                                                                                              | [UNKNOWN]                                |
-| Redirect URI      | the registered Numa connector redirect URI (exact match)                                                     | [DOCUMENTED]                             |
-| Scopes            | Empty / not publicly enumerated — simPRO scopes exist but are not exposed; access is governed by Access Type | [UNKNOWN — scopes not enumerated]        |
-| PKCE required?    | Not documented                                                                                               | [UNKNOWN]                                |
-| State parameter   | Recommended (CSRF protection); validate on callback                                                          | [DOCUMENTED — SDK code]                  |
-
-> **Scopes:** simPRO does **not** publicly enumerate OAuth scope strings. The registry `scopes`
-> field is empty (`''`) and should stay empty unless the build's consent screen presents specific
-> scope values — capture them verbatim and update the registry if so. Effective access is decided
-> by the application's **Access Type** (Direct vs User Token), not by request-time scope strings.
-> [UNKNOWN — scopes not publicly enumerated]
-
-#### 2.1 Authorization Request
-
-```http
-GET https://{build}.simprosuite.com/oauth2/login?
-  response_type=code&
-  client_id={CLIENT_ID}&
-  redirect_uri={REDIRECT_URI}&
-  state={RANDOM_OPAQUE_STRING}
+```
+GET https://{build}.simprosuite.com/oauth2/login?response_type=code&client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&state={RANDOM_OPAQUE_STRING}
 ```
 
-| Parameter       | Required             | Notes                                                                |
-| --------------- | -------------------- | -------------------------------------------------------------------- |
-| `response_type` | yes                  | Always `code`                                                        |
-| `client_id`     | yes                  | From the simPRO API application                                      |
-| `redirect_uri`  | yes                  | Must match a registered URI **exactly** (incl. trailing slash)       |
-| `state`         | strongly recommended | CSRF protection — validate on callback                               |
-| `scope`         | n/a                  | Not used — simPRO scope values are not publicly enumerated [UNKNOWN] |
+`response_type` (req, always `code`) · `client_id` (req) · `redirect_uri` (req, exact match incl. trailing slash) · `state` (strongly recommended, CSRF — validate on callback) · `scope` (n/a — not enumerated).
+User authorizes → `{REDIRECT_URI}?code={AUTH_CODE}&state={STATE}` (error: `?error={code}&error_description={message}`).
 
-The user signs in and authorizes. simPRO redirects to
-`{REDIRECT_URI}?code={AUTH_CODE}&state={STATE}`
-(error case: `{REDIRECT_URI}?error={code}&error_description={message}`). [CONFIRMED — SDK]
+A2.2 Token exchange:
 
-#### 2.2 Token Exchange
-
-```http
-POST https://{build}.simprosuite.com/oauth2/token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=authorization_code&
-code={AUTH_CODE}&
-redirect_uri={REDIRECT_URI}&
-client_id={CLIENT_ID}&
-client_secret={CLIENT_SECRET}
+```
+POST https://{build}.simprosuite.com/oauth2/token   (Content-Type: application/x-www-form-urlencoded)
+grant_type=authorization_code&code={AUTH_CODE}&redirect_uri={REDIRECT_URI}&client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}
 ```
 
-[CONFIRMED — SDK code; sibling `02` §Authorization Code Flow]
+A2.3 Token response: `{"access_token":"...","refresh_token":"...","expires_in":3600,"token_type":"bearer"}`
 
-#### 2.3 Token Response
-
-```json
-{
-  "access_token": "...",
-  "refresh_token": "...",
-  "expires_in": 3600,
-  "token_type": "bearer"
-}
-```
-
-- `access_token` — bearer token, **1-hour** lifetime (`expires_in: 3600`). [CONFIRMED — forum]
-- `refresh_token` — opaque string, **persist it immediately** — it is **single-use** and a new
-  one is returned on every refresh (see §3). [CONFIRMED — forum]
+- `access_token` — bearer, 1-hour lifetime (`expires_in:3600`).
+- `refresh_token` — opaque, **single-use**; persist immediately (a new one is returned on every refresh — see §3).
 - `token_type` — `bearer`.
 
-#### 2.4 Other Grant Types
+A2.4 Grant types (Numa uses `authorization_code`; others for completeness):
+| Grant | Use | Notes |
+| --- | --- | --- |
+| `authorization_code` | standard web-app | recommended — what Numa uses |
+| `client_credentials` | server-to-server | no user context |
+| `password` (resource_owner) | direct user/pass | **deprecated**, legacy only |
+| `implicit` | browser-only | **deprecated by OAuth 2.1 / RFC 9700**; do not use |
 
-The official PHP SDK (`OAuth2/Provider.php`) enumerates four grant types. Numa uses
-`authorization_code`; the others are listed for completeness.
-
-| Grant                       | Use                               | Notes                                                                     |
-| --------------------------- | --------------------------------- | ------------------------------------------------------------------------- |
-| `authorization_code`        | Standard web-app flow             | Recommended — what the Numa connector uses [DOCUMENTED — PHP SDK]         |
-| `client_credentials`        | Server-to-server                  | No user context [DOCUMENTED — PHP SDK]                                    |
-| `password` (resource_owner) | Direct username/password exchange | **Deprecated** — legacy clients only [DOCUMENTED — PHP SDK]               |
-| `implicit`                  | Browser-only                      | **Deprecated by OAuth 2.1 / RFC 9700**; do not use [DOCUMENTED — PHP SDK] |
-
-> For headless/server-to-server scenarios prefer **Direct Access (Option B)** over
-> `client_credentials` — Option B is the path the simPRO admin UI and PHP SDK document for
-> non-interactive automation.
+> For headless/server-to-server prefer **Direct Access (Option B)** over `client_credentials` — Option B is the documented non-interactive path.
 
 ---
 
-## 3. Token Refresh
+## 3. Token refresh
 
-```http
-POST https://{build}.simprosuite.com/oauth2/token
-Content-Type: application/x-www-form-urlencoded
-
-grant_type=refresh_token&
-refresh_token={REFRESH_TOKEN}&
-client_id={CLIENT_ID}&
-client_secret={CLIENT_SECRET}
+```
+POST https://{build}.simprosuite.com/oauth2/token   (Content-Type: application/x-www-form-urlencoded)
+grant_type=refresh_token&refresh_token={REFRESH_TOKEN}&client_id={CLIENT_ID}&client_secret={CLIENT_SECRET}
 ```
 
-Response is the same shape as §2.3 — **including a brand-new `refresh_token`**.
+Response = same shape as A2.3, **including a brand-new `refresh_token`**.
+| Property | Value |
+| --- | --- |
+| Access token lifetime | 3600s (1 hour) |
+| Refresh token lifetime | 14 days |
+| Rotation | **Yes — single-use.** Each refresh returns a NEW `refresh_token`; the old is invalidated. |
+| Re-consent when | refresh token expired (>14 days), already-used, or user revokes the app |
 
-| Property                | Value                                                                                         | Source              |
-| ----------------------- | --------------------------------------------------------------------------------------------- | ------------------- |
-| Access token lifetime   | **3600 seconds (1 hour)** (`expires_in: 3600`)                                                | [CONFIRMED — forum] |
-| Refresh token lifetime  | **14 days**                                                                                   | [CONFIRMED — forum] |
-| Refresh token rotation? | **Yes — single-use.** Each refresh returns a NEW `refresh_token`; the old one is invalidated. | [CONFIRMED — forum] |
-| Re-consent required?    | When the refresh token is expired (>14 days), already-used, or the user revokes the app       | [CONFIRMED — forum] |
+> ⚠️ **Headline operational risk.** Refresh tokens are single-use → the storage layer **must persist the new `refresh_token` atomically on every refresh**. If a refresh response is lost before persist, the stored token is dead → full re-consent. **Never fire two concurrent refreshes with the same token** — one wins, the other kills the shared token. The 14-day window is an idle/inactivity clock: a connector that refreshes regularly stays alive; idle >14 days without refreshing → re-consent.
 
-> ⚠️ **The headline operational risk.** Because refresh tokens are **single-use**, the storage
-> layer **must persist the new `refresh_token` atomically on every refresh**. If a refresh
-> response is lost before persist, the stored token is dead → full re-consent. **Never fire two
-> concurrent refreshes with the same token** — one wins, the other kills the shared token. The
-> 14-day window is an **idle/inactivity** clock: each successful refresh returns a fresh
-> `refresh_token` (rotation), so a connector that refreshes regularly stays alive, but one that
-> goes idle for more than 14 days without refreshing will require re-consent.
+## 4. Token revocation
 
----
+No public revocation endpoint is documented [UNKNOWN]. To disconnect:
 
-## 4. Token Revocation
+- OAuth: discard stored `access_token` + `refresh_token` Numa-side, AND the customer admin deletes the API application under **System → Setup → API → Applications** to fully invalidate the client (refresh tokens also expire naturally after 14 days).
+- Direct Access: delete/regenerate the application's API key under the same admin screen (Option B §3).
 
-```http
-# No public token revocation endpoint is documented for simPRO.
-```
+## 5. Reauthorization triggers (OAuth)
 
-simPRO does **not** document an OAuth revocation endpoint. [UNKNOWN — `02` lists Revocation URL
-as UNKNOWN; SDK exposes no revoke call.]
+| Trigger                    | Detection                        | Action                                                             |
+| -------------------------- | -------------------------------- | ------------------------------------------------------------------ |
+| Access token expired (1hr) | 401 on a data call               | refresh, retry once                                                |
+| Refresh token expired/used | refresh POST → 401/error         | full re-consent                                                    |
+| Refresh token >14 days old | refresh POST → 401/error         | full re-consent                                                    |
+| User revoked / app deleted | refresh fails, or data calls 401 | full re-consent                                                    |
+| Wrong Access Type / 403    | 403 on a data call               | check Direct vs User Token + verify companyID; do NOT loop refresh |
 
-To disconnect:
-
-- **OAuth:** discard the stored `access_token` + `refresh_token` on the Numa side, **and** the
-  customer admin should delete the API application under **System → Setup → API → Applications**
-  in their build to fully invalidate the client. (Refresh tokens also expire naturally after 14
-  days.)
-- **Direct Access (API key):** delete/regenerate the application's API key under the same admin
-  screen (see Option B §3).
-
----
-
-## 5. Reauthorization Triggers (OAuth)
-
-When to prompt the user to reauthorize:
-
-| Trigger                       | Detection                                | Action                                                                 |
-| ----------------------------- | ---------------------------------------- | ---------------------------------------------------------------------- |
-| Access token expired (1 hour) | 401 on a data call                       | Refresh using refresh token, retry once                                |
-| Refresh token expired/used    | Refresh POST returns 401 / error         | Full re-consent flow                                                   |
-| Refresh token >14 days old    | Refresh POST returns 401 / error         | Full re-consent flow                                                   |
-| User revoked / app deleted    | Refresh fails, or data calls 401         | Full re-consent flow                                                   |
-| Wrong Access Type / 403       | 403 on a data call (not a token problem) | Check Direct vs User Token + verify companyID; do **not** loop refresh |
-
-> A **403 is an access-type / permission problem, not an expired token** — it means the
-> application's Access Type doesn't grant the resource, or the `companyID` in the path is wrong.
-> Do **not** trigger a refresh/reconsent loop for a 403. [CONFIRMED — `01d` recovery playbook]
+> A **403 is an access-type/permission problem, not an expired token** (Access Type doesn't grant the resource, or wrong `companyID`). Do NOT trigger refresh/reconsent for a 403.
 
 ---
 
 ## Option B: API Key / Direct Access (server-to-server)
 
-Use this when there is **no interactive user** to complete an OAuth consent (headless
-automation, scheduled syncs). simPRO's **Direct Access** mode issues a **long-lived bearer
-token** that is not associated with an employee's credentials and grants access to all company
-data — so treat it like a PAT.
+Use when there is **no interactive user** to consent (headless automation, scheduled syncs). Direct Access issues a long-lived bearer token not tied to an employee, granting access to all company data — treat like a PAT.
 
-### 1. Generate a Direct Access token in simPRO
+### B1. Generate the token
 
-1. Sign in to the simPRO build at `https://{build}.simprosuite.com`.
-2. Navigate to: **System → Setup → API → Applications**. [DOCUMENTED — FAQ]
-3. Click **"Add"** and set **Access Type = Direct Access (API Key)**.
-4. Save. simPRO emits a **long-lived bearer token** (instead of a client_id/secret OAuth pair).
-5. **Copy the token immediately** and store it in the Numa vault.
+Sign in to `https://{build}.simprosuite.com` → **System → Setup → API → Applications** → **Add**, set **Access Type = Direct Access (API Key)** → Save → Simpro emits a long-lived bearer token (instead of client_id/secret) → copy immediately, store in the Numa vault.
 
-### 2. Token Format
+### B2. Token format
 
-| Property           | Value                                                                                | Source             |
-| ------------------ | ------------------------------------------------------------------------------------ | ------------------ |
-| Header             | `Authorization: Bearer {API_KEY}`                                                    | [CONFIRMED — SDK]  |
-| Token format       | Opaque long-lived bearer token                                                       | [INFERRED — SDK]   |
-| Max lifetime       | Long-lived (no expiry documented; revoke by deleting the application)                | [UNKNOWN]          |
-| Scopes/permissions | **Direct Access = all company data** (not tied to a user; bypasses user permissions) | [DOCUMENTED — FAQ] |
+| Property     | Value                                                                       |
+| ------------ | --------------------------------------------------------------------------- |
+| Header       | `Authorization: Bearer {API_KEY}`                                           |
+| Format       | opaque long-lived bearer token [INFERRED]                                   |
+| Max lifetime | long-lived, no expiry documented; revoke by deleting the app [UNKNOWN]      |
+| Scopes       | Direct Access = all company data (not user-tied; bypasses user permissions) |
 
-The official PHP SDK uses it as:
-`(new \simPRO\RestClient\OAuth2\APIKey())->withBuildURL($buildURL)->withToken($token)`
-[CONFIRMED — SDK code].
+SDK usage: `(new \simPRO\RestClient\OAuth2\APIKey())->withBuildURL($buildURL)->withToken($token)`.
 
-### 3. Token Refresh / Rotation
+### B3. Refresh / rotation
 
-| Property           | Value                                                                         |
-| ------------------ | ----------------------------------------------------------------------------- |
-| Refresh mechanism  | **None** — Direct Access tokens are static; there is no refresh endpoint      |
-| Can extend expiry? | N/A (no documented expiry)                                                    |
-| Rotation strategy  | Manual: delete the application (or regenerate its key) in the simPRO admin UI |
+None — Direct Access tokens are static; no refresh endpoint, no documented expiry. Rotate manually: delete/regenerate the key in the simPRO admin UI. On 401 the key was deleted/regenerated → prompt the customer admin to issue a new Direct Access key and re-enter it (old key unrecoverable).
 
-If the token stops working:
+### B4. Programmatic key management
 
-- On `401`: the key was deleted/regenerated → prompt the customer admin to issue a new Direct
-  Access key under **System → Setup → API → Applications** and re-enter it in Numa.
-- The old key cannot be recovered — a new one must be created.
+No public API for creating/listing/revoking API keys — managed ONLY via the simPRO web UI (System → Setup → API → Applications) [UNKNOWN].
 
-### 4. Programmatic Key Management
+### B5. Reauthorization triggers (Direct Access)
 
-No public API exists for creating/listing/revoking API keys — Direct Access keys are managed
-**only** through the simPRO web UI (**System → Setup → API → Applications**). [UNKNOWN — no
-programmatic key-management endpoints documented]
-
-### 5. Reauthorization Triggers (Direct Access)
-
-| Trigger                   | Detection    | Action                                                                  |
-| ------------------------- | ------------ | ----------------------------------------------------------------------- |
-| Key deleted / regenerated | 401 response | Prompt admin to generate a new Direct Access key in simPRO, re-enter it |
-| Insufficient permissions  | 403 response | Verify Access Type is Direct Access and `companyID` in the path         |
+| Trigger                  | Detection | Action                                                     |
+| ------------------------ | --------- | ---------------------------------------------------------- |
+| Key deleted/regenerated  | 401       | prompt admin to generate a new Direct Access key, re-enter |
+| Insufficient permissions | 403       | verify Access Type = Direct Access + `companyID` in path   |
 
 ---
 
-## Numa Connector Wiring
+## Numa connector wiring
 
-### Credentials to Store
+### Credentials to store
 
-**OAuth 2.0 (Option A):**
+OAuth 2.0 (Option A):
+| Key | Type | Scope | Description |
+| --- | --- | --- | --- |
+| `build` | string | Company | build subdomain (e.g. `markscompany`) — templated into every URL |
+| `client_id` | string | Company | API app Client ID |
+| `client_secret` | secret | Company | API app Client Secret (shown once) |
+| `access_token` | secret | User | 1-hour bearer; auto-refreshed |
+| `refresh_token` | secret | User | 14-day, single-use; re-persist on every refresh |
+| `company_id` | string | User | resolved from `GET /companies/`; required in nearly every path |
 
-| Key             | Type   | Scope   | Description                                                                     |
-| --------------- | ------ | ------- | ------------------------------------------------------------------------------- |
-| `build`         | string | Company | The customer's build subdomain (e.g. `markscompany`) — templated into every URL |
-| `client_id`     | string | Company | simPRO API application Client ID (from System → Setup → API → Applications)     |
-| `client_secret` | secret | Company | simPRO API application Client Secret (shown once — store in the vault)          |
-| `access_token`  | secret | User    | 1-hour bearer token; refreshed automatically                                    |
-| `refresh_token` | secret | User    | 14-day, **single-use**; **re-persist on every refresh**                         |
-| `company_id`    | string | User    | Resolved from `GET /companies/`; required in almost every resource path         |
+Direct Access (Option B):
+| Key | Type | Scope | Description |
+| --- | --- | --- | --- |
+| `build` | string | Company | build subdomain — templated into every URL |
+| `api_key` | secret | Company | long-lived Direct Access bearer token (treat like a PAT) |
+| `company_id` | string | Company | resolved from `GET /companies/`; required in nearly every path |
 
-**Direct Access (Option B):**
+> `build`, `client_id`/`client_secret` (or `api_key`) are **company** credentials the admin supplies once per client. OAuth `access_token`/`refresh_token` are **per-user**, captured during connect. `company_id` must be discovered, never hardcoded.
 
-| Key          | Type   | Scope   | Description                                                             |
-| ------------ | ------ | ------- | ----------------------------------------------------------------------- |
-| `build`      | string | Company | The customer's build subdomain — templated into every URL               |
-| `api_key`    | secret | Company | Long-lived Direct Access bearer token (treat like a PAT)                |
-| `company_id` | string | Company | Resolved from `GET /companies/`; required in almost every resource path |
-
-> The `build`, `client_id`/`client_secret` (or `api_key`) are **company** credentials the admin
-> supplies once per client. The OAuth `access_token`/`refresh_token` are **per-user**, captured
-> during the user connect flow. `company_id` must be **discovered**, never hardcoded — see the
-> test sequence below.
-
-### Test Connection Sequence
+### Test connection sequence
 
 ```
 1. GET https://{build}.simprosuite.com/api/v1.0/companies/
      Authorization: Bearer {access_token | api_key}
      Accept: application/json
-   → 200 with [ { "ID": 1, "Name": "..." }, ... ]
-     (verifies token validity + build subdomain + lists company IDs)
-     Pick the intended company's ID for {company_id}.
-     Do NOT hardcode companyId=0 — that is a legacy single-build folklore shortcut.
-
+   → 200 with [{"ID":1,"Name":"..."}, ...]
+     (verifies token + build subdomain + lists company IDs) Pick the intended company's ID.
+     Do NOT hardcode companyId=0 — legacy single-build folklore shortcut.
 2. GET https://{build}.simprosuite.com/api/v1.0/companies/{company_id}/customers/?pageSize=1
      Authorization: Bearer {access_token | api_key}
      Accept: application/json
-   → 200 with an array of customer objects
-     Response headers: Result-Total, Result-Pages, Result-Count
+   → 200 with array of customer objects; headers Result-Total, Result-Pages, Result-Count
      (verifies the company_id path segment + read access)
 ```
 
-> Step 1 (`GET /companies/`) is the canonical smoke test from the official PHP SDK
-> (`examples/AuthorisationCode.php`), which fetches the company list and uses a real `ID` —
-> `$companyArray[count($companyArray)-1]->ID`. [CONFIRMED — SDK]
+Step 1 is the canonical SDK smoke test (`examples/AuthorisationCode.php`: `$companyArray[count($companyArray)-1]->ID`).
 
-### Auto-Reconnect Logic
+### Auto-reconnect logic
 
 ```
-on 401 response (data call):
-  if auth_type == "oauth":
-    refresh_token()                    # POST {build}.simprosuite.com/oauth2/token, grant_type=refresh_token
-    persist the NEW refresh_token      # single-use — must save before next call
-    retry the original request once
-    if refresh fails (token used / >14 days / revoked):
-      trigger full re-consent flow
-  if auth_type == "direct_access":
+on 401 (data call):
+  if oauth:
+    refresh_token()                # POST {build}.simprosuite.com/oauth2/token, grant_type=refresh_token
+    persist NEW refresh_token       # single-use — save before next call
+    retry original request once
+    if refresh fails (used / >14 days / revoked): trigger full re-consent
+  if direct_access:
     notify admin "simPRO API key invalid — generate a new Direct Access key in System → Setup → API → Applications"
     disable connector until a new key is provided
-
-on 403 response (data call):
-  do NOT refresh — this is an access-type / companyID problem
-  verify Access Type (Direct vs User Token) and that {company_id} is correct
-
-on 429 response (rate limit — 10 req/sec per build, shared across all consumers):
-  back off (exponential from 1s, max ~30s, add jitter); proactively cap at 8 req/sec (80% threshold)
-  no Retry-After header is guaranteed — track request rate client-side
+on 403 (data call):
+  do NOT refresh — access-type / companyID problem; verify Access Type (Direct vs User Token) + {company_id}
+on 429 (rate limit — 10 req/sec per build, shared across all consumers):
+  exponential backoff (from 1s, max ~30s, +jitter); proactively cap at 8 req/sec (80% threshold); no guaranteed Retry-After — track rate client-side
 ```
 
-> **Rate limit reminder:** the 10 req/sec ceiling is **per build (tenant)**, shared across every
-> API consumer on that build — not per token. Stagger polling and respect the 80% threshold.
-> [CONFIRMED — `01d`, forum + Laravel SDK config]
+> The 10 req/sec ceiling is per build (tenant), shared across every consumer — not per token. Stagger polling.
 
----
-
-## Quick-Reference URLs
+## Quick-reference URLs
 
 | Resource                       | URL                                                            |
 | ------------------------------ | -------------------------------------------------------------- |
@@ -382,13 +233,6 @@ on 429 response (rate limit — 10 req/sec per build, shared across all consumer
 | Base API URL                   | `https://{build}.simprosuite.com/api/v1.0/`                    |
 | Official PHP SDK               | https://github.com/simPRO-Software/simpro-restapi-php          |
 | Community Laravel SDK (active) | https://github.com/stitch-digital/laravel-simpro-api           |
-| Revocation URL                 | None documented — [UNKNOWN]                                    |
+| Revocation URL                 | none documented [UNKNOWN]                                      |
 
----
-
-_See `02-api-spec-investigation.md` for the full API reference, `03-connector-setup.md` for the
-Simpro-side setup walkthrough, `01d-event-and-error-handling.md` for the recovery playbook and
-rate-limit detail, and `01-llm-api-rules.md` (+ `01a`–`01d`) for the workspace-agent knowledge
-pack. Auth endpoints here are [VERIFIED 2026-05-19] against the official PHP SDK; the registry's
-`login.simprogroup.com` host is [UNKNOWN — unverified] and should be migrated to the per-build
-pattern._
+_See 02 (full API reference), 03 (Simpro-side setup), 01d (recovery playbook + rate-limit detail), 01 + 01a–01d (workspace-agent knowledge pack). Auth endpoints [VERIFIED 2026-05-19] vs official PHP SDK; the registry's `login.simprogroup.com` host is [UNKNOWN — unverified] and should migrate to the per-build pattern._
