@@ -83,8 +83,13 @@ import { QueuedSubmitBanner } from '../Components/Chat/QueuedSubmitBanner';
 import { ChatSuggestionPills } from '../Components/Chat/ChatSuggestionPills';
 import { useChatSuggestions } from '../hooks/useChatSuggestions';
 import { deleteWorkspaceChatUploads, uploadWorkspaceChatFileDirect } from '../Services/workspaceChatAgentService';
-import { ASK_NUMA_PRESELECT_TOKEN, CONVERSATION_AGENT_TYPE_KEY_PREFIX } from '../Components/AskNuma/AskNumaPopup';
+import {
+  ASK_NUMA_PRESELECT_TOKEN,
+  CONVERSATION_AGENT_TYPE_KEY_PREFIX,
+  hydrateAskNumaNewTabHandoff,
+} from '../Components/AskNuma/askNumaHandoff';
 import { SUPPORT_AGENT_TYPE, SUPPORT_KB_ID } from '../Components/Support/SupportNumaPopup';
+import { SUPPORT_EMAIL_INTEGRATION_SLUGS } from '../Components/Support/supportIntegrations';
 import {
   loadStagedItems,
   saveStagedItems,
@@ -176,6 +181,17 @@ const getConversationAgentType = (conversationId?: string | null): string | unde
 };
 
 const NumaWorkspaceChatAgents = () => {
+  // New-tab handoff (Support popup "open in new tab"): when this page is opened
+  // in a fresh tab via /chat?askNuma=<cid>, the originating tab's sessionStorage
+  // isn't available. Rehydrate the sessionStorage handoff from the URL +
+  // localStorage NOW — synchronously, before useConversationManager reads it in
+  // its state initialiser below. Guarded to run once. No-op for normal loads.
+  const newTabHandoffRef = useRef(false);
+  if (!newTabHandoffRef.current) {
+    newTabHandoffRef.current = true;
+    hydrateAskNumaNewTabHandoff();
+  }
+
   const { t } = useTranslation('chat');
   const { t: tCommon } = useTranslation('common');
   const { t: tSupport } = useTranslation('support');
@@ -1033,11 +1049,28 @@ const NumaWorkspaceChatAgents = () => {
     setCreateAgentEnabled(false);
     setMemoriesEnabled(false);
     setNumaOpsEnabled(false);
-    setEnabledConnections([]);
+    // Email-only integrations: enable ONLY the user's connected Gmail/Outlook
+    // so the support agent can send an escalation email on their behalf. Other
+    // integrations stay off, and nothing is enabled if email isn't connected
+    // (so the agent only offers to send when it actually can).
+    const connectedEmailSlugs = availableConnections
+      .filter((c) => c.isConnected && SUPPORT_EMAIL_INTEGRATION_SLUGS.has(c.id))
+      .map((c) => c.id);
+    setEnabledConnections(connectedEmailSlugs);
     setEnabledNativeConnectorIds([]);
     setSelectedAccountsByApp({});
     setEnabledKBIds([SUPPORT_KB_ID]);
-  }, []);
+  }, [availableConnections]);
+
+  // Connections load asynchronously, often after a Support conversation has
+  // already been pinned (e.g. a new tab opened by the Support popup). Re-apply
+  // the support config when they land so the user's connected email
+  // integration(s) become available to the agent on the next turn.
+  useEffect(() => {
+    if (!conversationId) return;
+    if (getConversationAgentType(conversationId) !== SUPPORT_AGENT_TYPE) return;
+    applySupportConfiguration();
+  }, [availableConnections, conversationId, applySupportConfiguration]);
 
   const resetAgentState = useCallback(() => {
     setCurrentAgent(null);
@@ -1488,12 +1521,19 @@ const NumaWorkspaceChatAgents = () => {
           setMessages((prev) => [...prev, { role: 'assistant', segments: [], status: 'processing' }]);
           resetStreamingState();
 
+          // Support conversations are scoped to email-only integrations, which
+          // are enabled per-turn from the user's connected accounts once they
+          // load (applySupportConfiguration). On this first auto-submitted turn
+          // those may not have landed yet, and enabledIntegrationsUnified can
+          // still hold the user's defaults from before the support pin — so send
+          // none here rather than leaking non-email integrations into support.
+          const isSupportDraft = draftAgentType === SUPPORT_AGENT_TYPE;
           await streamChat({
             prompt: message,
             conversationId: draftCid,
             enabledTools: ensureToolsForAgentType(enabledTools, draftAgentType),
-            enabledIntegrations: enabledIntegrationsUnified,
-            availableIntegrations: availableIntegrationsUnified,
+            enabledIntegrations: isSupportDraft ? [] : enabledIntegrationsUnified,
+            availableIntegrations: isSupportDraft ? [] : availableIntegrationsUnified,
             enabledKBIds,
             availableKBs,
             attachments,
@@ -2741,13 +2781,24 @@ const NumaWorkspaceChatAgents = () => {
       // conversations run on numa-chat-support). Undefined = default numa-chat.
       const conversationAgentType = getConversationAgentType(cid);
 
+      // Support conversations are email-only: never advertise or enable
+      // non-email integrations even if the user has others connected, so the
+      // agent only ever offers to send the escalation email (not, say, Slack).
+      const isSupport = conversationAgentType === SUPPORT_AGENT_TYPE;
+      const turnEnabledIntegrations = isSupport
+        ? enabledIntegrationsUnified.filter((it) => SUPPORT_EMAIL_INTEGRATION_SLUGS.has(it.slug))
+        : enabledIntegrationsUnified;
+      const turnAvailableIntegrations = isSupport
+        ? availableIntegrationsUnified.filter((it) => SUPPORT_EMAIL_INTEGRATION_SLUGS.has(it.slug))
+        : availableIntegrationsUnified;
+
       // Call workspace streaming hook
       await streamChat({
         prompt: userMsg,
         conversationId: cid,
         enabledTools: ensureToolsForAgentType(enabledTools, conversationAgentType),
-        enabledIntegrations: enabledIntegrationsUnified,
-        availableIntegrations: availableIntegrationsUnified,
+        enabledIntegrations: turnEnabledIntegrations,
+        availableIntegrations: turnAvailableIntegrations,
         enabledKBIds,
         availableKBs,
         attachments,
