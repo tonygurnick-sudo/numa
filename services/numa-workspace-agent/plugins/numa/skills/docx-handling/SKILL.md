@@ -617,7 +617,7 @@ numa docs convert /workdir/outputs/report.md --format docx -m "Converting markdo
 
 ## Document Conversion (PDF ↔ DOCX)
 
-Use the `numa docs convert` CLI for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
+Use the `numa docs convert` CLI for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion. The mode is **auto-detected from the file type** — pass `--format`, not `--mode`: Office/PDF inputs (`.docx`/`.pdf`/…) use direct LibreOffice conversion, text/markdown inputs (`.md`/`.txt`) go through Pandoc.
 
 > `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same call.
 

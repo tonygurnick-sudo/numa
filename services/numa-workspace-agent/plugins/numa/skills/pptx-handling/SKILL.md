@@ -196,7 +196,7 @@ numa docs convert /workdir/outputs/presentation.pptx --format pdf -m "Converting
 pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide
 ```
 
-> `convert_document` accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx` — same `mode="file"` call.
+> `numa docs convert` **auto-detects** the conversion mode from the file type — for any Office/PDF file just pass `--format pdf`, no `--mode` needed (binary formats are routed to direct LibreOffice conversion automatically). It accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx`.
 
 ### Content QA
 

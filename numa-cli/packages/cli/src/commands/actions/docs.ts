@@ -243,18 +243,25 @@ function createDocsTranscribeCommand(): Command {
 }
 
 /**
- * `numa docs convert <file> --format <pdf|docx>` — convert a document
- * between formats. Two modes:
+ * `numa docs convert <file> --format <pdf|docx>` — convert a document between
+ * formats. The mode is auto-detected from the input file type server-side, so you
+ * normally do NOT pass `--mode`:
  *
- *   - `markdown` (default): input is markdown/text → output via Pandoc
- *   - `file`: direct file conversion (e.g. DOCX↔PDF) via LibreOffice
+ *   - Office/PDF inputs (`.pptx`/`.docx`/`.xlsx`/`.pdf`/…) → direct LibreOffice
+ *     ('file') conversion.
+ *   - Text/markdown inputs (`.md`/`.txt`) → Pandoc ('markdown') conversion.
+ *
+ * Override with `--mode file|markdown` only for the rare ambiguous case.
  */
 function createDocsConvertCommand(): Command {
   return new Command('convert')
     .description('Convert a workspace document between formats (PDF/DOCX)')
     .argument('<file>', 'Workspace path or filename to convert')
     .requiredOption('-f, --format <format>', "Output format ('pdf' or 'docx')")
-    .option('--mode <mode>', "'markdown' (default, for text→doc) or 'file' (direct DOCX↔PDF)", 'markdown')
+    .option(
+      '--mode <mode>',
+      "conversion mode — auto-detected from the file type by default; override with 'file' (Office/PDF via LibreOffice) or 'markdown' (text via Pandoc)"
+    )
     .option('--title <title>', 'Document title (used by the renderer for headers + filename)')
     .option(
       '-m, --user-message <text>',
@@ -274,8 +281,12 @@ function createDocsConvertCommand(): Command {
         if (options.format !== 'pdf' && options.format !== 'docx') {
           fail(`--format must be 'pdf' or 'docx', got '${options.format}'`);
         }
-        const mode = options.mode ?? 'markdown';
-        if (mode !== 'markdown' && mode !== 'file') {
+        // Mode is auto-detected server-side from the file extension; only send it
+        // when the user explicitly overrides. (Binary Office/PDF inputs are forced
+        // to direct 'file' conversion regardless — markdown mode would utf-8-decode
+        // their bytes and fail with a cryptic error.)
+        const mode = options.mode;
+        if (mode !== undefined && mode !== 'markdown' && mode !== 'file') {
           fail(`--mode must be 'markdown' or 'file', got '${mode}'`);
         }
 
@@ -283,7 +294,7 @@ function createDocsConvertCommand(): Command {
         const params: ParamsForTool<'convert_document'> = {
           file_path: filePath,
           format: options.format,
-          mode,
+          ...(mode ? { mode } : {}),
           ...(options.title ? { title: options.title } : {}),
         };
 
@@ -293,7 +304,7 @@ function createDocsConvertCommand(): Command {
           params,
           options.userMessage
         );
-        if (process.env['NUMA_DEBUG']) info(`converting ${filePath} → ${options.format} (mode=${mode})`);
+        if (process.env['NUMA_DEBUG']) info(`converting ${filePath} → ${options.format} (mode=${mode ?? 'auto'})`);
 
         const res = await invokeTool(account, accessToken, request);
         if (res.status === 'error') fail(`docs convert failed: ${res.error ?? '<no message>'}`);

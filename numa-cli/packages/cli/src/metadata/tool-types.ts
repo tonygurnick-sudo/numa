@@ -438,9 +438,10 @@ export interface TranscribeResult {
 }
 
 /**
- * Two conversion modes — pick based on input:
- *   - `markdown`: input is markdown/text → output via Pandoc + LibreOffice
- *   - `file`: direct file conversion (e.g. DOCX↔PDF) via LibreOffice
+ * Two conversion modes, auto-detected from the input extension server-side:
+ *   - `file`: binary Office/PDF inputs (`.pptx`/`.docx`/`.xlsx`/`.pdf`/…) →
+ *     direct LibreOffice conversion. Forced for these formats regardless of input.
+ *   - `markdown`: text/markdown inputs (`.md`/`.txt`) → Pandoc + LibreOffice.
  *
  * Source: `workspace-chat-tools/tools/convert_document.py:handle_convert_document`.
  */
@@ -448,7 +449,7 @@ export interface ConvertDocumentParams extends HitlParams {
   /** Workspace path, e.g. `/workdir/outputs/draft.md` or `/workdir/uploads/x.docx`. */
   file_path: string;
   format: 'pdf' | 'docx';
-  /** Default `'markdown'`. */
+  /** Optional override — auto-detected from the input extension when omitted. */
   mode?: 'markdown' | 'file';
   /** Optional document title (affects rendering metadata + filename). */
   title?: string;
