@@ -12,10 +12,15 @@ const STORAGE_KEY = 'numa.showCostInfo';
 const CHANGE_EVENT = 'numa:showCostInfoChange';
 
 function readInitial(): boolean {
+  // Default ON when the user has never set a preference (key absent), but keep
+  // an explicit OFF sticky: once a dev turns it off it's stored as 'false' and
+  // stays off across reloads. The DEVELOPER_MODE gate above this hook means a
+  // default of `true` only ever surfaces for users who actually have dev mode.
   try {
-    return window.localStorage.getItem(STORAGE_KEY) === 'true';
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    return stored === null ? true : stored === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 
