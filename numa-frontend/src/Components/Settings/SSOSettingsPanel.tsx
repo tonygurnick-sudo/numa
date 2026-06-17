@@ -1068,7 +1068,7 @@ const SSOSettingsPanel = ({ numaGet, numaPut, numaPost, numaDelete }: SSOSetting
               <h5>{t('sso.wizard.step3.title')}</h5>
               <p className="text-muted">{t('sso.wizard.step3.description')}</p>
 
-              {(idpType === 'azure-ad' || idpType === 'other') && (
+              {providerProtocol === 'SAML' && (
                 <Card className="mb-3 bg-light">
                   <Card.Body className="py-2">
                     <Form.Label className="fw-bold small mb-2">{t('sso.wizard.step3.emailSourceLabel')}</Form.Label>
