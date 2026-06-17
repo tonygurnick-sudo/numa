@@ -670,8 +670,14 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             target_slug = params.get("app_slug")
         elif tool_name in ("pipedream_run_action", "pipedream_configure_props"):
             action_key = params.get("action_key", "")
-            if "-" in action_key:
-                target_slug = action_key.split("-", 1)[0]
+            # Custom tools are keyed "~/{slug}-{action}" (e.g.
+            # "~/pipedrive-add-file"). Strip the private-registry prefix before
+            # deriving the slug, otherwise it resolves to "~/pipedrive" and
+            # never matches the enabled-integration name ("pipedrive") in
+            # allowed_tools → the agent's call is falsely denied.
+            slug_source = action_key[2:] if action_key.startswith("~/") else action_key
+            if "-" in slug_source:
+                target_slug = slug_source.split("-", 1)[0]
 
         # Validate: the specific integration slug must be in allowed_tools.
         # For proxy_request (no slug extractable), allow if any integration

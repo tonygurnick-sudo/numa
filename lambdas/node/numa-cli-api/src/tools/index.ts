@@ -295,7 +295,10 @@ function deriveActionKey(body: ToolInvokeRequest): string {
   }
   // pipedream_run_action → "integration-<slug>"
   if (tool === 'pipedream_run_action') {
-    const actionKey = String(params.action_key ?? '');
+    // Custom tools are keyed "~/{slug}-{action}" — strip the private-registry
+    // prefix so the slug matches the public-action convention ("pipedrive",
+    // not "~/pipedrive") for approval cards + DDB row alignment.
+    const actionKey = String(params.action_key ?? '').replace(/^~\//, '');
     const slug = actionKey.split('-')[0] || 'unknown';
     return `integration-${slug}`;
   }
