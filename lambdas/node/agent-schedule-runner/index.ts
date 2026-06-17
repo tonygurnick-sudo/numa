@@ -2949,8 +2949,22 @@ const mergeIntegrationRows = (rows: IntegrationListItem[]): IntegrationListItem[
  * KB access: The new allowedKnowledgeBases field (null / [] / [...ids]) is authoritative
  * when present. The legacy queryDataSources boolean is only used as a fallback for
  * agents created before allowedKnowledgeBases existed.
+ *
+ * Auto-tools semantics MUST match interactive chat (see the frontend's
+ * `getEnabledTools` in `numa-frontend/src/utils/chatSystemPromptUtils.ts`).
+ * "Auto" means "let Numa use all its standard tools" — so the per-tool
+ * booleans (createAgentEnabled, webSearchEnabled) only gate the MANUAL path.
+ * In Auto mode web_search, memories_tool, and create_agent_tool are all on
+ * regardless of the individual toggles, exactly like the chat UI which
+ * renders those switches as ON+disabled whenever Auto is enabled.
+ *
+ * BUG-187: this used to gate create_agent_tool on `createAgentEnabled` even
+ * in Auto mode, so an agent with autoToolsEnabled=true but
+ * createAgentEnabled=false (the default) could create agents in interactive
+ * chat but got "Agent Creation tool isn't enabled" in scheduled/triggered
+ * runs. Aligning Auto mode below fixes that divergence.
  */
-const buildEnabledTools = ({
+export const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
   createAgentEnabled,
@@ -2992,9 +3006,11 @@ const buildEnabledTools = ({
   });
 
   if (auto) {
+    // Auto mode = all standard tools on, individual toggles ignored
+    // (mirrors the chat UI rendering these switches ON+disabled).
     if (hasKBs) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
-    if (createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
   } else {
     if (hasKBs) enabledTools.push('knowledge_base');
