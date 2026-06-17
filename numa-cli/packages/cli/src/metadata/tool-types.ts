@@ -490,6 +490,13 @@ export interface ViewImageParams extends HitlParams {
    * defaults server-side to a full description.
    */
   prompt?: string;
+  /**
+   * Optional base64-encoded image bytes. The CLI populates this for files it
+   * can read locally in the workspace container, so the server-side tool can
+   * describe agent-GENERATED images that haven't synced to S3 yet. When absent,
+   * the server reads the file from the conversation's workspace S3 prefix.
+   */
+  image_b64?: string;
 }
 
 export interface ViewImageResult {
