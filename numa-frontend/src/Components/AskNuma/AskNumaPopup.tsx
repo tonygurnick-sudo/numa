@@ -2,13 +2,19 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { OverlayTrigger, Tooltip, Spinner } from 'react-bootstrap';
-import { Paperclip, Send, X, Info } from 'lucide-react';
+import { Paperclip, Send, X, Info, Check } from 'lucide-react';
 import { useAuth } from '../../Providers/AuthProvider';
 import { usePageContext } from './usePageContext';
 import { PendingFilesBar } from '../Chat/PendingFilesBar';
 import { WorkspaceChatFileUpload } from '../WorkspaceChat/WorkspaceChatFileUpload';
 import { uploadWorkspaceChatFileDirect } from '../../Services/workspaceChatAgentService';
 import { saveStagedItems, flattenStagedItems, groupFilesIntoFolders } from '../../utils/workspaceChatStagedUploads';
+import {
+  ASK_NUMA_PRESELECT_TOKEN,
+  ASK_NUMA_NEW_TAB_PARAM,
+  CONVERSATION_AGENT_TYPE_KEY_PREFIX,
+  newTabDraftKey,
+} from './askNumaHandoff';
 import type {
   StagedItem,
   StagedFile,
@@ -18,15 +24,8 @@ import type {
 
 const PAGE_CONTEXT_KEY = 'numa_ask_numa_page_context';
 
-/** sessionStorage key prefix that pins a conversation to a workspace agent type. */
-export const CONVERSATION_AGENT_TYPE_KEY_PREFIX = 'numa_conversation_agent_type_';
-
-/**
- * Preselect-token value used by the popup draft handoff. It only suppresses
- * useConversationManager's init on the chat page — it is NOT an Agents-page
- * launch, and the chat page's preselect effect must ignore it.
- */
-export const ASK_NUMA_PRESELECT_TOKEN = 'ask-numa';
+/** Phases surfaced to the user while a message is being sent. */
+type SendPhase = 'idle' | 'preparing' | 'capturing' | 'opening' | 'opened';
 
 export interface AskNumaContextFile {
   filename: string;
@@ -68,6 +67,20 @@ interface AskNumaPopupProps {
    * toggle (used by the Support popup for the environment report).
    */
   buildExtraContextFiles?: () => Promise<AskNumaContextFile[]>;
+  /**
+   * Open the conversation in a NEW browser tab on send instead of navigating
+   * the current tab. Keeps the user on the page they were working on (used by
+   * the Support popup). Falls back to same-tab navigation if the browser
+   * blocks the popup.
+   */
+  openInNewTab?: boolean;
+  /**
+   * Keep the page-context text out of the visible user message. The page
+   * location line is folded into the attached page-context.html (or a small
+   * page-context.md) instead of being prepended to the message, so the chat
+   * shows only what the user typed while the agent still receives the context.
+   */
+  hidePageContextPrefix?: boolean;
 }
 
 /**
@@ -89,6 +102,8 @@ export function AskNumaPopup({
   agentType,
   agentTitle,
   buildExtraContextFiles,
+  openInNewTab,
+  hidePageContextPrefix,
 }: AskNumaPopupProps) {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
@@ -111,6 +126,7 @@ export function AskNumaPopup({
     }
   });
   const [isSending, setIsSending] = useState(false);
+  const [sendPhase, setSendPhase] = useState<SendPhase>('idle');
   const [conversationId, setConversationId] = useState<string | null>(null);
 
   // Auto-focus textarea on mount
@@ -134,6 +150,8 @@ export function AskNumaPopup({
   // Auto-resize textarea
   const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputMessage(e.target.value);
+    // Clear the "opened in a new tab" confirmation once they start a new question.
+    setSendPhase((prev) => (prev === 'opened' ? 'idle' : prev));
     const ta = e.target;
     ta.style.height = 'auto';
     ta.style.height = `${Math.min(ta.scrollHeight, 180)}px`;
@@ -266,6 +284,15 @@ export function AskNumaPopup({
     if (!numaChatDynamoUtils || !sub) return;
 
     setIsSending(true);
+    setSendPhase('preparing');
+
+    // New-tab flow: open a blank tab SYNCHRONOUSLY inside the click handler so
+    // the browser treats it as user-initiated and doesn't block it after the
+    // awaits below. We redirect it once the conversation is ready.
+    let newTab: Window | null = null;
+    if (openInNewTab) {
+      newTab = window.open('about:blank', '_blank');
+    }
 
     try {
       // Use existing pre-minted conversation or create a fresh one
@@ -291,10 +318,25 @@ export function AskNumaPopup({
 
       // Capture page context if enabled
       if (includePageContext) {
+        setSendPhase('capturing');
         const { textPrefix, screenshotBlob, htmlContent } = await captureContext();
 
-        // Prepend text context
-        if (textPrefix) {
+        let htmlForUpload = htmlContent;
+        if (hidePageContextPrefix) {
+          // Keep the user's message clean: fold the page-context line into the
+          // attached HTML snapshot (leading comment) so the agent still gets
+          // it, but the chat shows only what the user typed. When there's no
+          // HTML to carry it, attach a tiny page-context.md instead.
+          if (textPrefix) {
+            if (htmlForUpload) {
+              htmlForUpload = `<!-- ${textPrefix.trim()} -->\n${htmlForUpload}`;
+            } else {
+              const ctxBlob = new Blob([textPrefix.trim()], { type: 'text/markdown' });
+              const ctxFile = await uploadContextFile(ctxBlob, 'page-context.md', cid);
+              if (ctxFile) contextFiles.push(ctxFile);
+            }
+          }
+        } else if (textPrefix) {
           finalMessage = textPrefix + finalMessage;
         }
 
@@ -305,8 +347,8 @@ export function AskNumaPopup({
         }
 
         // Upload HTML as attachment
-        if (htmlContent) {
-          const htmlBlob = new Blob([htmlContent], { type: 'text/html' });
+        if (htmlForUpload) {
+          const htmlBlob = new Blob([htmlForUpload], { type: 'text/html' });
           const htmlFile = await uploadContextFile(htmlBlob, 'page-context.html', cid);
           if (htmlFile) contextFiles.push(htmlFile);
         }
@@ -315,14 +357,8 @@ export function AskNumaPopup({
       // Merge context files with user-staged files
       const allStagedFiles = [...flattenStagedItems(stagedItems), ...contextFiles];
       const allGrouped = groupFilesIntoFolders(allStagedFiles);
-      console.log('[AskNuma] Context capture results:', {
-        contextFilesCount: contextFiles.length,
-        totalStagedCount: allGrouped.length,
-        contextFileNames: contextFiles.map((f) => f.filename),
-      });
       if (allGrouped.length > 0) {
         saveStagedItems(cid, allGrouped);
-        console.log('[AskNuma] Saved staged items to localStorage for conversation:', cid);
       }
 
       // Write user message to DynamoDB
@@ -334,6 +370,29 @@ export function AskNumaPopup({
         content: finalMessage,
       });
 
+      const draftPayload = JSON.stringify({ message: finalMessage, conversationId: cid, agentType });
+
+      // --- New-tab handoff -------------------------------------------------
+      // sessionStorage can't cross tabs, so stash the draft in localStorage
+      // (keyed by cid) and pass the cid via the URL. The new tab rehydrates
+      // via hydrateAskNumaNewTabHandoff() before it initialises.
+      if (openInNewTab && newTab) {
+        setSendPhase('opening');
+        localStorage.setItem(newTabDraftKey(cid), draftPayload);
+        localStorage.setItem('numa_chat_lastInteraction-v2', String(Date.now()));
+        newTab.location.href = `/chat?${ASK_NUMA_NEW_TAB_PARAM}=${encodeURIComponent(cid)}`;
+
+        // Leave the user where they were; reset so they can ask again.
+        setInputMessage('');
+        setStagedItems([]);
+        setConversationId(null);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        setIsSending(false);
+        setSendPhase('opened');
+        return;
+      }
+
+      // --- Same-tab handoff (default, or popup-blocked fallback) -----------
       // Set sessionStorage for the chat page to pick up this NEW conversation.
       // We also set numa_preselected_agent_token to prevent useConversationManager's
       // init from running the DynamoDB query (which can fail due to eventual consistency
@@ -351,10 +410,7 @@ export function AskNumaPopup({
       if (agentType) {
         sessionStorage.setItem(`${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${cid}`, agentType);
       }
-      sessionStorage.setItem(
-        'numa_ask_numa_draft',
-        JSON.stringify({ message: finalMessage, conversationId: cid, agentType })
-      );
+      sessionStorage.setItem('numa_ask_numa_draft', draftPayload);
 
       // Navigate to chat. The chat page consumes the draft on mount, so when
       // we are already on /chat (e.g. Support popup opened from the chat page)
@@ -366,6 +422,8 @@ export function AskNumaPopup({
       }
     } catch (err) {
       console.error('[AskNuma] Failed to send:', err);
+      if (newTab) newTab.close();
+      setSendPhase('idle');
       setIsSending(false);
     }
   }, [
@@ -381,6 +439,8 @@ export function AskNumaPopup({
     navigate,
     agentType,
     buildExtraContextFiles,
+    openInNewTab,
+    hidePageContextPrefix,
   ]);
 
   // Handle Enter key (send) and Shift+Enter (newline)
@@ -398,6 +458,16 @@ export function AskNumaPopup({
 
   const isBusy = isSending || isCapturing;
   const canSend = (inputMessage.trim().length > 0 || stagedItems.length > 0) && !isBusy;
+
+  // What's happening right now, so the user isn't left guessing on send.
+  const busyStatusText =
+    sendPhase === 'capturing'
+      ? t('askNuma.capturingContext')
+      : sendPhase === 'opening'
+        ? t('askNuma.openingNewTab')
+        : sendPhase === 'preparing'
+          ? t('askNuma.preparing')
+          : t('askNuma.sending');
 
   return (
     <>
@@ -430,6 +500,18 @@ export function AskNumaPopup({
             disabled={isBusy}
             rows={3}
           />
+          {isBusy && (
+            <div className="ask-numa-status d-flex align-items-center gap-2 small text-muted mt-2" role="status">
+              <Spinner size="sm" animation="border" />
+              <span>{busyStatusText}</span>
+            </div>
+          )}
+          {!isBusy && sendPhase === 'opened' && (
+            <div className="ask-numa-status d-flex align-items-center gap-2 small text-success mt-2" role="status">
+              <Check size={14} />
+              <span>{t('askNuma.openedNewTab')}</span>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -468,11 +550,6 @@ export function AskNumaPopup({
           </div>
 
           <div className="ask-numa-footer-right">
-            {isBusy && (
-              <span className="text-muted" style={{ fontSize: '12px' }}>
-                {isCapturing ? t('askNuma.capturingContext') : t('askNuma.sending')}
-              </span>
-            )}
             <button
               className="ask-numa-send-btn"
               onClick={handleSend}

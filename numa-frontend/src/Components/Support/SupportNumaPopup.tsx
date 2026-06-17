@@ -40,6 +40,11 @@ export function SupportNumaPopup({ onClose, sidebarCollapsed }: SupportNumaPopup
       agentType={SUPPORT_AGENT_TYPE}
       agentTitle={t('popup.title')}
       buildExtraContextFiles={buildEnvironmentContext}
+      // Open the support conversation in a new tab so the user keeps the page
+      // they were working on, and keep the page-context capture out of their
+      // visible message (it still travels to the agent via the attached files).
+      openInNewTab
+      hidePageContextPrefix
     />
   );
 }

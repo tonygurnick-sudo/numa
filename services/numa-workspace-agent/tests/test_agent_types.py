@@ -231,13 +231,21 @@ class TestNumaSupportType:
         assert "customersuccess@arcanum.ai" in prompt
         assert "numa-environment.md" in prompt
 
-    def test_only_numa_mcp_enabled(self):
+    def test_numa_and_email_integrations_mcp_enabled(self):
         config = get_agent_type_config("numa-chat-support")
         assert config.enable_numa_mcp is True
+        # Email-only integrations (Gmail/Outlook) are enabled so the agent can
+        # send an escalation email on the user's behalf (FEAT-204 follow-up).
+        assert config.enable_integrations_mcp is True
         assert config.enable_scripts_mcp is False
-        assert config.enable_integrations_mcp is False
         assert config.enable_connect_mcp is False
         assert config.enable_vault_mcp is False
+
+    def test_email_integration_tools_allowed(self):
+        config = get_agent_type_config("numa-chat-support")
+        assert "mcp__integrations__run_action" in config.allowed_tools
+        assert "mcp__integrations__configure_props" in config.allowed_tools
+        assert "mcp__integrations__proxy_request" in config.allowed_tools
 
     def test_numa_operations_scoped_to_support(self):
         config = get_agent_type_config("numa-chat-support")
@@ -259,9 +267,20 @@ class TestNumaSupportType:
         assert config.restrict_kbs is True
         assert config.default_kbs == [{"id": "numa-support", "name": "Numa Support"}]
 
-    def test_no_integrations(self):
+    def test_integrations_not_restricted(self):
+        # Not restricted to a fixed default set: the frontend passes through
+        # only the user's connected email integration(s), so email sending is
+        # advertised only when the user actually has it connected.
         config = get_agent_type_config("numa-chat-support")
-        assert config.restrict_integrations is True
+        assert config.restrict_integrations is False
+        assert not config.default_integrations
+
+    def test_escalation_prompt_offers_to_send_email(self):
+        config = get_agent_type_config("numa-chat-support")
+        prompt = config.system_prompt_builder(
+            identity_override=config.identity_override
+        )
+        assert "Offer to send it for them" in prompt
 
     def test_tool_docs_resolve_in_tool_file_map(self):
         config = get_agent_type_config("numa-chat-support")
