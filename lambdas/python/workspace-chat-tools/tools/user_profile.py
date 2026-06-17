@@ -127,6 +127,7 @@ _NATIVE_CONNECTOR_SLUGS = {
     "cin7-core",
     "gohighlevel",
     "rentman",
+    "gitlab",
     "proworkflow",
     "betterimpact",
     "greentree",
