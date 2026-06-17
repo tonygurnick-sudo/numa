@@ -8,6 +8,7 @@ derived server-side from the validated caller ACCOUNT — never taken from the r
 so a tenant can only ever write back its OWN config record.
 """
 
+import hashlib
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -27,6 +28,31 @@ logger = structlog.get_logger()
 # NumaLambda names this role `{clientName}_voice-admin` (awsNameWithHashedPrefix);
 # accept the underscore/dash spelling variants for safety.
 ALLOWED_ROLE_REGEX = re.compile(r"^[a-zA-Z0-9-]+_voice[_-]admin$")
+
+# IAM role names cap at 64 chars — must match NumaLambda's maxLength argument.
+ROLE_NAME_MAX_LENGTH = 64
+# `_voice-admin` is what NumaLambda derives today ('_' + construct name); accept
+# the underscore spelling variant for the same safety margin as ALLOWED_ROLE_REGEX.
+VOICE_ADMIN_ROLE_SUFFIXES = ("_voice-admin", "_voice_admin")
+
+
+def aws_name_with_hashed_prefix(prefix: str, suffix: str, max_length: int) -> str:
+    """Python port of infra/constructs/aws-name-utils.ts:awsNameWithHashedPrefix.
+
+    Must stay byte-for-byte equivalent: when `prefix + suffix` exceeds
+    `max_length`, the prefix is truncated and a short sha256 chunk of the FULL
+    prefix is inserted, exactly as the TypeScript does at deploy time.
+    """
+    if len(suffix) > max_length:
+        raise ValueError(f"Suffix length {len(suffix)} exceeds maxLength {max_length}")
+    if len(prefix) + len(suffix) <= max_length:
+        return prefix + suffix
+    full_prefix_hash = hashlib.sha256(prefix.encode("utf-8")).hexdigest()
+    hash_chunk = f"-{full_prefix_hash[:8]}"
+    available_prefix = max_length - len(suffix) - len(hash_chunk)
+    if available_prefix > 0:
+        return prefix[:available_prefix] + hash_chunk + suffix
+    return full_prefix_hash[: max_length - len(suffix)] + suffix
 
 
 class SecurityValidationError(Exception):
@@ -79,6 +105,32 @@ class VoiceConfigSecurityValidator:
             logger.error("Security validation failed", error=str(e), exc_info=True)
             raise SecurityValidationError(f"Access denied: {str(e)}") from e
 
+    def authorize_role_for_client(self, client_name: str, role_name: str) -> None:
+        """
+        Bind the claimed ``client_name`` to the STS-proven caller ROLE.
+
+        The voice-admin role is named `awsNameWithHashedPrefix(clientName,
+        '_voice-admin', 64)` at deploy time, so the expected role name for a
+        given client is fully recomputable here. Requiring an exact match makes
+        client_name attested by the STS proof — equivalent to resolving it
+        server-side — and closes the shared-dev-account hole where any
+        `{other}_voice-admin` role in the same account could write a sibling
+        client's record (account ownership alone cannot distinguish them).
+        """
+        if not isinstance(client_name, str) or not client_name.strip():
+            raise SecurityValidationError("client_name is required")
+        expected_role_names = {
+            aws_name_with_hashed_prefix(client_name, suffix, ROLE_NAME_MAX_LENGTH)
+            for suffix in VOICE_ADMIN_ROLE_SUFFIXES
+        }
+        if role_name not in expected_role_names:
+            logger.warning(
+                "Caller role is not the voice-admin role for this client",
+                client_name=client_name,
+                role_name=role_name,
+            )
+            raise SecurityValidationError("Role not authorized for this client")
+
     def authorize_client_write(self, client_name: str, caller_account_id: str) -> None:
         """
         Authorize a write to ``client_name``'s config by ``caller_account_id``.
@@ -86,9 +138,9 @@ class VoiceConfigSecurityValidator:
         The caller may write a client record ONLY IF that record's
         config.clientAccountId equals the validated caller account. In production
         each client has its own isolated account (1:1). In dev/demo, several
-        clients share one account (N:1) — they are already in the same security
-        domain, so allowing each to write a sibling record in the SAME account is
-        acceptable; writing across accounts is not. Raises on any mismatch.
+        clients share one account (N:1) — ``authorize_role_for_client`` is what
+        distinguishes siblings there; this account check is the cross-account
+        backstop. Raises on any mismatch.
         """
         if not isinstance(client_name, str) or not client_name.strip():
             raise SecurityValidationError("client_name is required")

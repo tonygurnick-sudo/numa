@@ -249,11 +249,11 @@ Aim for roughly 30-80 rows covering the full document, NOT one row per page.
 1. **First**, determine the total pages and divide into chunks of ~200-300 pages each
 2. **Do NOT extensively read the document yourself before launching subagents.** Only read enough to determine size, structure (first few pages/ToC), and plan your subagent strategy. The subagents will do the deep reading.
 3. **Call ALL Agent tools in a SINGLE response message** — this is what makes them run in parallel. Multiple Agent calls in one response = parallel. Separate responses = sequential.
-4. **After subagents complete, trust their results.** Do NOT re-read the document yourself to verify or supplement. Use execute_script to merge their JSON outputs into the final files directly.
+4. **After subagents complete, trust their results.** Do NOT re-read the document yourself to verify or supplement. Use a Python script (Write it to /workdir/tmp/, run it with Bash) to merge their JSON outputs into the final files directly.
 
 ### CRITICAL: Context Management
 - **Minimize your own document reads.** Every page you read stays in your context window. Let subagents do the reading — they have their own context.
-- **After subagents return, use execute_script to write output files.** Do NOT try to hold all findings in your context. Write them to disk immediately via Python scripts.
+- **After subagents return, Write a Python script to /workdir/tmp/ and run it with Bash to write output files.** Do NOT try to hold all findings in your context. Write them to disk immediately via Python scripts.
 - **Keep synthesis scripts short.** If you need to merge subagent results, have each subagent write to a temp file and merge from disk, not from your context.
 
 ### Subagent Strategy

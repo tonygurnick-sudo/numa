@@ -28,8 +28,8 @@ Use Numa Files to find:
 - Minimum order quantities
 - Lead times and availability
 
-```
-Use numa_tool with name="numa_files" and operation="query" to search the user's folders for product and pricing data.
+```bash
+numa files search "product pricing" --json -m "Searching for product and pricing data"
 ```
 
 ### 3. Check Templates
@@ -65,6 +65,8 @@ subtotal = items["total"].sum()
 gst = subtotal * 0.15  # NZ GST
 grand_total = subtotal + gst
 ```
+
+**Deposit / progress-payment splits apply to the GST-INCLUSIVE total.** If the user wants a 50/50 deposit (or any percentage split), split the **grand total including GST**, not the subtotal — otherwise the deposit + balance never collect the GST and the customer is undercharged (a real customer-facing money error one bench shipped). e.g. `deposit = round(grand_total * 0.5, 2)`, `balance = grand_total - deposit`; state both amounts explicitly. The `helpers/quote_math.py` script handles GST-inclusive splits, discount tiers, and rounding — see Helper Scripts.
 
 ### 5. Generate Quote Document
 
@@ -135,3 +137,13 @@ ask you to send it. Use `run_action` to send the quote as an email attachment.
 - If pricing data is missing, clearly note assumptions
 - Include a validity period on every quote
 - Number quotes sequentially if possible (check workspace for last used number)
+- **Harvest the customer's contact details** (name, company, address, email, phone) from the RFQ/email into the quote header — don't leave "Prepared For" generic when the details are right there in the request.
+- **Never invent a signatory, contact, or missing field.** If the salesperson's name, a signatory, or any required value isn't in the source, use a bracketed placeholder (`[Sales contact]`, `[ATTENTION]`) and flag it — do NOT fabricate a plausible name like "Alex Chen, Sales Manager" on a customer-facing quote. If a real value arrives later, update **every** artifact that carried the placeholder (the quote AND any cover letter), not just one.
+
+## Helper Scripts
+
+- **`quote_math.py`** — correct quote arithmetic: GST, order/line discounts, and deposit/progress splits computed on the **GST-inclusive** total (the split that otherwise undercharges the customer). Use as a library (`from quote_math import quote`) or CLI. Read-only at `/app/plugins/numa/skills/quoting/helpers/`.
+  ```bash
+  python3 /app/plugins/numa/skills/quoting/helpers/quote_math.py \
+    --items '[{"qty":50,"unit_price":12.5}]' --gst 0.15 --deposit 0.5
+  ```

@@ -21,17 +21,17 @@ Create, read, manipulate, and convert PDF files.
 
 ## Decision Matrix
 
-| Need                               | Best Tool                                    | Why                                 |
-| ---------------------------------- | -------------------------------------------- | ----------------------------------- |
-| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF)                    | Write HTML+CSS, professional output |
-| Precise layout control, subscripts | **reportlab**                                | Pixel-perfect positioning           |
-| Quick data tables, simple PDFs     | **fpdf2**                                    | Lightweight, fast                   |
-| Read text/tables from PDFs         | **pdfplumber**                               | Best layout-aware text extraction   |
-| Merge, split, rotate PDFs          | **PyPDF2**                                   | Best for manipulation operations    |
-| Extract images from PDFs           | **PyMuPDF (fitz)**                           | Access embedded images directly     |
-| Render pages as images             | **pdf2image** or **PyMuPDF**                 | Page-to-image conversion            |
-| Scanned/complex documents          | `extract_content` tool (via `numa_tool` MCP) | Vision AI — better than local OCR   |
-| Convert DOCX/PPTX → PDF            | `convert_document` tool (mode="file")        | Lambda-based LibreOffice conversion |
+| Need                               | Best Tool                    | Why                                 |
+| ---------------------------------- | ---------------------------- | ----------------------------------- |
+| Styled reports, letters, documents | **WeasyPrint** (HTML→PDF)    | Write HTML+CSS, professional output |
+| Precise layout control, subscripts | **reportlab**                | Pixel-perfect positioning           |
+| Quick data tables, simple PDFs     | **fpdf2**                    | Lightweight, fast                   |
+| Read text/tables from PDFs         | **pdfplumber**               | Best layout-aware text extraction   |
+| Merge, split, rotate PDFs          | **PyPDF2**                   | Best for manipulation operations    |
+| Extract images from PDFs           | **PyMuPDF (fitz)**           | Access embedded images directly     |
+| Render pages as images             | **pdf2image** or **PyMuPDF** | Page-to-image conversion            |
+| Scanned/complex documents          | `numa docs extract` CLI      | Vision AI — better than local OCR   |
+| Convert DOCX/PPTX → PDF            | `numa docs convert` CLI      | Lambda-based LibreOffice conversion |
 
 ---
 
@@ -256,9 +256,24 @@ pdftoppm -jpeg -r 120 /workdir/uploads/document.pdf /workdir/outputs/page
 
 ## Creating PDFs
 
+> **For a branded report, load the `visual-design` skill first** — build the HTML with its `tokens.css` (or a user's own brand, which it resolves) and render via WeasyPrint below. It owns colours / fonts / the report recipe; this skill owns the PDF mechanics. Note its "fonts per medium" rule: brand web-fonts may not be installed for WeasyPrint — use an installed fallback (Calibri / DejaVu Sans) or verify they rendered.
+
 ### Primary: WeasyPrint (HTML-to-PDF)
 
 WeasyPrint converts HTML+CSS to PDF with excellent results. Best for styled reports, letters, and documents.
+
+> **⚠️ WeasyPrint does NOT execute JavaScript.** Charts drawn by Chart.js, D3, or a `<canvas>` script render as **blank space** in the PDF — a common silent failure (whole reports have shipped with zero charts). Pre-render every chart to a static image first (matplotlib → PNG, see the `make_chart.py` helper; or `sharp` for SVG→PNG) and embed it as an `<img>`. Only a headless-browser PDF path executes JS — WeasyPrint never will.
+
+> **Non-ASCII text needs a Unicode font.** `fonts-dejavu-core` is installed, so in WeasyPrint just set `font-family: 'DejaVu Sans', Arial, sans-serif` and macrons (ā ē ī ō ū) and accents render correctly. **reportlab and fpdf2 default to Latin-1 core fonts that silently drop these glyphs** — register DejaVu before using them:
+>
+> ```python
+> from reportlab.pdfbase import pdfmetrics
+> from reportlab.pdfbase.ttfonts import TTFont
+> pdfmetrics.registerFont(TTFont('DejaVuSans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'))
+> # then set fontName='DejaVuSans' in your styles
+> ```
+>
+> The `helpers/build_styled_pdf.py` script bakes this in for you (see Helper Scripts).
 
 ```python
 from weasyprint import HTML
@@ -570,10 +585,10 @@ pandoc /workdir/uploads/document.docx --pdf-engine=weasyprint --extract-media=/w
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 ```
 
-### MCP Tool Fallback
+### CLI Fallback
 
-```
-mcp__numa__numa_tool(name="convert_document", description="Converting markdown report to PDF", params={"file_path": "/workdir/outputs/report.md", "format": "pdf", "mode": "markdown"})
+```bash
+numa docs convert /workdir/outputs/report.md --format pdf -m "Converting markdown report to PDF"
 ```
 
 ---
@@ -608,6 +623,21 @@ After rendering, read the page images and check for:
 - Elements cut off at page boundaries
 - Tables splitting awkwardly (header on one page, rows on next)
 - Text overflow outside containers
+
+### Verify claimed properties programmatically
+
+Visual inspection misses things the model already "believes" it did. Before claiming a PDF has charts, brand colours, or specific content, confirm it cheaply:
+
+```python
+import fitz
+doc = fitz.open("/workdir/outputs/report.pdf")
+n_images = sum(len(p.get_images()) for p in doc)      # 0 → your "embedded chart" never embedded
+text = "".join(p.get_text() for p in doc)
+print("images:", n_images, "| has macron:", "ū" in text, "| has heading:", "Quarterly" in text)
+doc.close()
+```
+
+If you claimed "the report has the revenue chart" or "applied the navy brand colour" and the embedded-image count is 0 (or `pdfimages -list report.pdf` lists none), the claim is false — fix it before delivering. The `helpers/verify_artifact.py` script wraps these checks (image XObjects, RGB colour ops, text presence) for PDF/DOCX/PPTX — see Helper Scripts.
 
 ### Fix-and-Verify Loop
 
@@ -744,14 +774,14 @@ with open("/workdir/outputs/filled.pdf", "wb") as f:
 
 ## Document Conversion to PDF
 
-Convert DOCX, PPTX, XLSX, and other Office formats to PDF using the `convert_document` tool:
+Convert DOCX, PPTX, XLSX, and other Office formats to PDF using the `numa docs convert` CLI:
 
-```
+```bash
 # DOCX → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/document.docx --format pdf -m "Converting DOCX to PDF"
 
 # PPTX → PDF (useful for visual QA of presentations)
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/presentation.pptx --format pdf -m "Converting PPTX to PDF for visual QA"
 ```
 
 Supported input formats: `.doc`, `.docx`, `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.odp`, `.ods`, `.odt`, `.rtf`, `.key`, `.numbers`, `.pages`
@@ -760,25 +790,27 @@ Supported input formats: `.doc`, `.docx`, `.pptx`, `.ppt`, `.xlsx`, `.xls`, `.od
 
 ## When to Use the extract_content Tool vs Local Tools
 
-| Scenario                      | Recommended Tool                                              |
-| ----------------------------- | ------------------------------------------------------------- |
-| Text-based PDFs, simple text  | **pdfplumber** (local, fast, layout-aware)                    |
-| Tables in PDFs                | **pdfplumber** (local, `extract_tables()`)                    |
-| Scanned PDFs, images of text  | `extract_content` tool via `numa_tool` MCP (uses vision AI)   |
-| Handwritten text, forms       | `extract_content` tool via `numa_tool` MCP                    |
-| Complex layouts, multi-column | Try pdfplumber first, fall back to `extract_content` tool     |
-| Large documents (>50 pages)   | `extract_content` tool via `numa_tool` MCP (handles chunking) |
-| Extract embedded images       | **PyMuPDF (fitz)**                                            |
-| Render pages as images        | **pdf2image** or **PyMuPDF**                                  |
-| Merge/split/rotate            | **PyPDF2**                                                    |
-| Create from HTML+CSS          | **WeasyPrint**                                                |
-| Create with precise layout    | **reportlab**                                                 |
-| Quick simple PDFs             | **fpdf2**                                                     |
+**Default to local, fast extraction; escalate to `numa docs extract` for fidelity.** pdfplumber / PyMuPDF are the quick default for text and simple tables. When table structure, multi-column layout, or page context matters — or when local extraction comes back garbled — use `numa docs extract`: it transcribes the page via vision AI to markdown and preserves layout and reading order far better than text scraping.
+
+| Scenario                      | Recommended Tool                                       |
+| ----------------------------- | ------------------------------------------------------ |
+| Text-based PDFs, simple text  | **pdfplumber** (local, fast, layout-aware)             |
+| Tables in PDFs                | **pdfplumber** (local, `extract_tables()`)             |
+| Scanned PDFs, images of text  | `numa docs extract` CLI (uses vision AI)               |
+| Handwritten text, forms       | `numa docs extract` CLI                                |
+| Complex layouts, multi-column | Try pdfplumber first, fall back to `numa docs extract` |
+| Large documents (>50 pages)   | `numa docs extract` CLI (handles chunking)             |
+| Extract embedded images       | **PyMuPDF (fitz)**                                     |
+| Render pages as images        | **pdf2image** or **PyMuPDF**                           |
+| Merge/split/rotate            | **PyPDF2**                                             |
+| Create from HTML+CSS          | **WeasyPrint**                                         |
+| Create with precise layout    | **reportlab**                                          |
+| Quick simple PDFs             | **fpdf2**                                              |
 
 **Example — Extract from scanned PDF:**
 
-```
-mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned invoice", params={"file_path": "/workdir/uploads/scanned_invoice.pdf"})
+```bash
+numa docs extract /workdir/uploads/scanned_invoice.pdf -m "Extracting content from scanned invoice"
 ```
 
 **When pdfplumber or PyPDF2 return empty or garbled text**, it's usually because:
@@ -787,20 +819,20 @@ mcp__numa__numa_tool(name="extract_content", description="Extracting content fro
 - The PDF uses custom fonts without proper encoding
 - The text is embedded in graphics
 
-In these cases, switch to the `extract_content` tool (via `numa_tool` MCP) which uses vision AI to "read" the document visually.
+In these cases, switch to the `numa docs extract` CLI which uses vision AI to "read" the document visually.
 
 ---
 
 ## Document Conversion (PDF ↔ DOCX)
 
-Use the `convert_document` tool for all document format conversions:
+Use the `numa docs convert` CLI for all document format conversions:
 
-```
+```bash
 # DOCX → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/document.docx --format pdf -m "Converting DOCX to PDF"
 
 # PDF → DOCX
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
+numa docs convert /workdir/uploads/document.pdf --format docx -m "Converting PDF to DOCX"
 ```
 
 ---
@@ -818,7 +850,7 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/docume
 
 | Issue                             | Solution                                                                          |
 | --------------------------------- | --------------------------------------------------------------------------------- |
-| Empty text extraction             | PDF may be scanned — use the `extract_content` tool (via `numa_tool` MCP) instead |
+| Empty text extraction             | PDF may be scanned — use `numa docs extract` CLI instead                          |
 | Font not found (fpdf2)            | Use built-in fonts: Helvetica, Times, Courier                                     |
 | Large file size                   | Compress images before embedding; use JPEG over PNG                               |
 | WeasyPrint missing fonts          | System fonts are available; use common font families                              |
@@ -834,3 +866,19 @@ numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/docume
 - **Input files**: `/workdir/uploads/`
 - **Output files**: `/workdir/outputs/`
 - **Working files**: `/workdir/outputs/`
+
+---
+
+## Helper Scripts
+
+Read-only at `/app/plugins/numa/skills/pdf-handling/helpers/`. Generic starting points — adapt via `/workdir/chat-workflows/` for recurring jobs.
+
+- **`build_styled_pdf.py`** — branded, Unicode-safe PDF from a JSON spec (DejaVu fonts so macrons render; static `<img>` embedding; no JS). Charts must be pre-rendered PNGs.
+  ```bash
+  python3 /app/plugins/numa/skills/pdf-handling/helpers/build_styled_pdf.py --spec @/workdir/tmp/report.json
+  ```
+- **`verify_artifact.py`** _(optional check)_ — confirm a produced PDF/DOCX/PPTX actually contains what you claimed: embedded-image count, colour use, expected text. Exits non-zero if an assertion fails. Not every file needs this — reach for it when you've claimed a chart/colour/content you can't natively see.
+  ```bash
+  python3 /app/plugins/numa/skills/pdf-handling/helpers/verify_artifact.py /workdir/outputs/report.pdf --expect-images 1 --expect-text "Quarterly"
+  ```
+- Charts: render with **`make_chart.py`** (in the data-analysis skill — `/app/plugins/numa/skills/data-analysis/helpers/make_chart.py`), then embed the PNG.

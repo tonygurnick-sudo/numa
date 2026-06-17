@@ -35,12 +35,23 @@ export interface WorkspaceChatAgentProxyProps {
   outputsBucketArn?: string;
   /** Schedule runner secret for authenticating server-to-server calls from the agent-schedule-runner Lambda */
   scheduleRunnerSecret?: string;
+  /**
+   * HMAC secret for minting short-lived "service identity" tokens for
+   * non-interactive runs (scheduled / V2 / Nolia) that have no user Cognito
+   * token. numa-cli-api verifies these with the same secret. Never injected
+   * into the workspace agent container, so the LLM can't reach it.
+   */
+  cliIdentitySecret?: string;
   /** Workspace chat tools Lambda ARN (for document conversion preview) */
   workspaceToolsLambdaArn?: string;
   /** Workspace chat tools Lambda name (for invoking from proxy) */
   workspaceToolsLambdaName?: string;
   /** Region where AgentCore resources are deployed (defaults to props.region) */
   agentCoreRegion?: string;
+  /** Active-runs mirror table name (for serving /runs/{id}/status without AgentCore, BUG-140) */
+  activeRunsTableName?: string;
+  /** Active-runs mirror table ARN (for IAM read permission) */
+  activeRunsTableArn?: string;
 }
 
 /**
@@ -110,9 +121,19 @@ export class WorkspaceChatAgentProxy extends Construct {
         ...(props.scheduleRunnerSecret && {
           SCHEDULE_RUNNER_SECRET: props.scheduleRunnerSecret,
         }),
+        // HMAC secret to sign service-identity tokens for non-interactive runs
+        // (scheduled / V2 / Nolia). Verified by numa-cli-api with the same secret.
+        ...(props.cliIdentitySecret && {
+          NUMA_CLI_IDENTITY_SECRET: props.cliIdentitySecret,
+        }),
         // Workspace chat tools Lambda for document conversion preview
         ...(props.workspaceToolsLambdaName && {
           WORKSPACE_TOOLS_LAMBDA_NAME: props.workspaceToolsLambdaName,
+        }),
+        // Active-runs mirror table (BUG-140) — /runs/{id}/status reads it
+        // instead of invoking AgentCore (which queues behind the running chat)
+        ...(props.activeRunsTableName && {
+          ACTIVE_RUNS_TABLE_NAME: props.activeRunsTableName,
         }),
         // AgentCore region (may differ from Lambda's own region for cross-region deployments)
         ...(props.agentCoreRegion &&
@@ -159,13 +180,27 @@ export class WorkspaceChatAgentProxy extends Construct {
               },
             ]
           : []),
-        // S3 GetObject for file redirect (serving presigned URLs for integration uploads)
+        // DynamoDB read on the active-runs mirror (BUG-140) — lets
+        // /runs/{id}/status report in-flight runs without invoking AgentCore
+        ...(props.activeRunsTableArn
+          ? [
+              {
+                effect: 'Allow' as const,
+                actions: ['dynamodb:GetItem'],
+                resources: [props.activeRunsTableArn],
+              },
+            ]
+          : []),
+        // S3 GetObject for file redirect (serving presigned URLs for integration
+        // uploads) and for reading workspace trace/result/progress files directly.
+        // v2-apps/* holds _result.json/_progress.json for V2 app + Nolia runs,
+        // read by the proxy-served /runs/{id}/status endpoint.
         ...(props.outputsBucketArn
           ? [
               {
                 effect: 'Allow' as const,
                 actions: ['s3:GetObject'],
-                resources: [`${props.outputsBucketArn}/numa-chat/workspace/*`],
+                resources: [`${props.outputsBucketArn}/numa-chat/workspace/*`, `${props.outputsBucketArn}/v2-apps/*`],
               },
               // ListBucket scoped to the workspace prefix — used by the
               // /artifacts endpoint to aggregate generated files across a

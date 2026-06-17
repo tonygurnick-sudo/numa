@@ -9,40 +9,21 @@ Create, list, update, and duplicate Numa agents from the workspace. Supports att
 
 ## Quick Reference
 
-```python
+```
 # List your agents
-mcp__numa__numa_tool(name="agents", description="List my agents", params={
-    "operation": "list", "scope": "owned"
-})
+Bash("numa agents list --scope owned --json -m 'List my agents'")
 
 # Get agent details
-mcp__numa__numa_tool(name="agents", description="Get agent details", params={
-    "operation": "get", "agent_id": "agt_abc123"
-})
+Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
 
 # Create a new agent
-mcp__numa__numa_tool(name="agents", description="Create customer support agent", params={
-    "operation": "create",
-    "title": "Customer Support Agent",
-    "systemPrompt": "You are a helpful customer support assistant...",
-    "visibility": "personal"
-})
+Bash("numa agents create --title 'Customer Support Agent' --prompt 'You are a helpful customer support assistant...' --visibility personal --json -m 'Create customer support agent'")
 
 # Create an agent with file attachments
-mcp__numa__numa_tool(name="agents", description="Create policy expert agent", params={
-    "operation": "create",
-    "title": "Policy Expert",
-    "systemPrompt": "You help answer questions about company policies.",
-    "attach_files": ["/workdir/uploads/handbook.pdf", "/workdir/uploads/policies.docx"]
-})
+Bash("numa agents create --title 'Policy Expert' --prompt 'You help answer questions about company policies.' --attach-files '/workdir/uploads/handbook.pdf,/workdir/uploads/policies.docx' --json -m 'Create policy expert agent'")
 
 # Patch a phrase in an existing agent's system prompt (cheap — only the diff travels)
-mcp__numa__numa_tool(name="agents", description="Rename a phrase in agent prompt", params={
-    "operation": "patch_prompt",
-    "agent_id": "agt_abc123",
-    "old_text": "Client Content",
-    "new_text": "Receive Content"
-})
+Bash("numa agents patch-prompt agt_abc123 --old-text 'Client Content' --new-text 'Receive Content' -m 'Rename a phrase in agent prompt'")
 ```
 
 ## Operations
@@ -53,7 +34,7 @@ mcp__numa__numa_tool(name="agents", description="Rename a phrase in agent prompt
 | `get`          | Get details of a specific agent                                                 |
 | `create`       | Create a new agent                                                              |
 | `update`       | Replace any fields on an existing agent (full-value writes)                     |
-| `patch_prompt` | Edit the system prompt in place via find/replace — cheap for small text changes |
+| `patch-prompt` | Edit the system prompt in place via find/replace — cheap for small text changes |
 | `duplicate`    | Copy an agent to your personal library                                          |
 
 ---
@@ -64,53 +45,38 @@ List agents with scope filtering, title/search filtering, and optional paginatio
 
 ### Parameters
 
-| Parameter    | Required | Default   | Description                                       |
-| ------------ | -------- | --------- | ------------------------------------------------- |
-| `operation`  | Yes      | -         | `"list"`                                          |
-| `scope`      | No       | `"owned"` | `owned`, `public`, or `all`                       |
-| `agent_type` | No       | -         | Filter by agent type                              |
-| `title`      | No       | -         | Filter by title (case-insensitive contains match) |
-| `search`     | No       | -         | Search across title, description, and tags        |
-| `limit`      | No       | -         | Max results to return (1-200). Enables pagination |
-| `offset`     | No       | `0`       | Number of results to skip (use with `limit`)      |
+| Parameter      | Required | Default   | Description                                       |
+| -------------- | -------- | --------- | ------------------------------------------------- |
+| `--scope`      | No       | `"owned"` | `owned`, `public`, or `all`                       |
+| `--agent-type` | No       | -         | Filter by agent type                              |
+| `--title`      | No       | -         | Filter by title (case-insensitive contains match) |
+| `--search`     | No       | -         | Search across title, description, and tags        |
+| `--limit`      | No       | -         | Max results to return (1-200). Enables pagination |
+| `--offset`     | No       | `0`       | Number of results to skip (use with `--limit`)    |
 
 ### Examples
 
-```python
+```
 # List your personal agents and agents you created
-mcp__numa__numa_tool(name="agents", description="List my agents", params={
-    "operation": "list", "scope": "owned"
-})
+Bash("numa agents list --scope owned --json -m 'List my agents'")
 
 # List all public/company agents
-mcp__numa__numa_tool(name="agents", description="List public agents", params={
-    "operation": "list", "scope": "public"
-})
+Bash("numa agents list --scope public --json -m 'List public agents'")
 
 # List all agents you can access
-mcp__numa__numa_tool(name="agents", description="List all agents", params={
-    "operation": "list", "scope": "all"
-})
+Bash("numa agents list --scope all --json -m 'List all agents'")
 
 # Filter by agent type
-mcp__numa__numa_tool(name="agents", description="List task agents", params={
-    "operation": "list", "scope": "owned", "agent_type": "task"
-})
+Bash("numa agents list --scope owned --agent-type task --json -m 'List task agents'")
 
 # Find an agent by name
-mcp__numa__numa_tool(name="agents", description="Find sales agent", params={
-    "operation": "list", "search": "sales"
-})
+Bash("numa agents list --search sales --json -m 'Find sales agent'")
 
 # Search with pagination (first page of 10 results)
-mcp__numa__numa_tool(name="agents", description="List agents page 1", params={
-    "operation": "list", "scope": "all", "limit": 10
-})
+Bash("numa agents list --scope all --limit 10 --json -m 'List agents page 1'")
 
 # Get next page
-mcp__numa__numa_tool(name="agents", description="List agents page 2", params={
-    "operation": "list", "scope": "all", "limit": 10, "offset": 10
-})
+Bash("numa agents list --scope all --limit 10 --offset 10 --json -m 'List agents page 2'")
 ```
 
 ### Output Format
@@ -128,7 +94,7 @@ JSON response with:
   - `agentType` - Agent type (e.g., "task")
   - `createdBy` - Creator info
   - `updatedAt` - Last update timestamp
-- `pagination` - Present when `limit` is used:
+- `pagination` - Present when `--limit` is used:
   - `total` - Total number of matching agents
   - `limit` - Page size used
   - `offset` - Current offset
@@ -144,17 +110,14 @@ Get detailed information about a specific agent.
 
 ### Parameters
 
-| Parameter   | Required | Description          |
-| ----------- | -------- | -------------------- |
-| `operation` | Yes      | `"get"`              |
-| `agent_id`  | Yes      | Agent ID to retrieve |
+| Parameter  | Required | Description          |
+| ---------- | -------- | -------------------- |
+| `agent_id` | Yes      | Agent ID to retrieve |
 
 ### Examples
 
-```python
-mcp__numa__numa_tool(name="agents", description="Get agent details", params={
-    "operation": "get", "agent_id": "agt_abc123"
-})
+```
+Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
 ```
 
 ### Output Format
@@ -175,65 +138,32 @@ Create a new agent with custom instructions.
 
 ### Parameters
 
-| Parameter                   | Required | Default      | Description                                     |
-| --------------------------- | -------- | ------------ | ----------------------------------------------- |
-| `operation`                 | Yes      | -            | `"create"`                                      |
-| `title`                     | Yes      | -            | Agent display name                              |
-| `systemPrompt`              | Yes      | -            | Core instructions for the agent                 |
-| `visibility`                | No       | `"personal"` | `personal` or `public`                          |
-| `description`               | No       | -            | One-line description                            |
-| `agentType`                 | No       | `"task"`     | Agent type label                                |
-| `userWelcomeMessage`        | No       | -            | Greeting shown when agent starts                |
-| `estimatedTimeSavedMinutes` | No       | -            | Estimated time saved in minutes                 |
-| `toolsConfig`               | No       | -            | Tools configuration object                      |
-| `attach_files`              | No       | -            | Array of workspace file paths to attach (max 5) |
+| Parameter                | Required | Default      | Description                                  |
+| ------------------------ | -------- | ------------ | -------------------------------------------- |
+| `--title`                | Yes      | -            | Agent display name                           |
+| `--prompt`               | Yes      | -            | Core instructions for the agent              |
+| `--visibility`           | No       | `"personal"` | `personal` or `public`                       |
+| `--description`          | No       | -            | One-line description                         |
+| `--agent-type`           | No       | `"task"`     | Agent type label                             |
+| `--welcome-message`      | No       | -            | Greeting shown when agent starts             |
+| `--estimated-time-saved` | No       | -            | Estimated time saved in minutes              |
+| `--tools-config`         | No       | -            | Tools configuration JSON object              |
+| `--attach-files`         | No       | -            | Comma-separated workspace file paths (max 5) |
 
 ### Examples
 
-```python
+```
 # Create a personal agent
-mcp__numa__numa_tool(name="agents", description="Create sales report agent", params={
-    "operation": "create",
-    "title": "Sales Report Generator",
-    "systemPrompt": "You help create weekly sales reports from CRM data. Always include YoY comparisons and highlight significant changes.",
-    "description": "Generates weekly sales reports with insights"
-})
+Bash("numa agents create --title 'Sales Report Generator' --prompt 'You help create weekly sales reports from CRM data. Always include YoY comparisons and highlight significant changes.' --description 'Generates weekly sales reports with insights' --json -m 'Create sales report agent'")
 
 # Create a public/company agent
-mcp__numa__numa_tool(name="agents", description="Create onboarding assistant", params={
-    "operation": "create",
-    "title": "Onboarding Assistant",
-    "systemPrompt": "You help new employees navigate company resources and policies.",
-    "visibility": "public",
-    "description": "Helps new hires get started"
-})
+Bash("numa agents create --title 'Onboarding Assistant' --prompt 'You help new employees navigate company resources and policies.' --visibility public --description 'Helps new hires get started' --json -m 'Create onboarding assistant'")
 
 # Create with file attachments
-mcp__numa__numa_tool(name="agents", description="Create policy expert agent", params={
-    "operation": "create",
-    "title": "Policy Expert",
-    "systemPrompt": "You help answer questions about company policies using the attached documents.",
-    "attach_files": ["/workdir/uploads/employee_handbook.pdf", "/workdir/uploads/benefits_guide.docx"]
-})
+Bash("numa agents create --title 'Policy Expert' --prompt 'You help answer questions about company policies using the attached documents.' --attach-files '/workdir/uploads/employee_handbook.pdf,/workdir/uploads/benefits_guide.docx' --json -m 'Create policy expert agent'")
 
 # Create with tools configuration
-mcp__numa__numa_tool(name="agents", description="Create research agent", params={
-    "operation": "create",
-    "title": "Research Agent",
-    "systemPrompt": "You help with research tasks using web search and Company Files.",
-    "toolsConfig": {
-        "webSearchEnabled": true,
-        "allowedKnowledgeBases": ["company"],
-        "enabledConnections": [],
-        "approvalModes": {
-            "integrations": "non_destructive",
-            "agents": "never",
-            "memories": "never",
-            "knowledgeBases": "never",
-            "ops": "never"
-        }
-    }
-})
+Bash("numa agents create --title 'Research Agent' --prompt 'You help with research tasks using web search and Company Files.' --tools-config '{\"webSearchEnabled\":true,\"allowedKnowledgeBases\":[\"company\"],\"enabledConnections\":[],\"approvalModes\":{\"integrations\":\"non_destructive\",\"agents\":\"never\",\"memories\":\"never\",\"knowledgeBases\":\"never\",\"ops\":\"never\"}}' --json -m 'Create research agent'")
 ```
 
 ### Tools Configuration Options
@@ -284,51 +214,33 @@ Update an existing agent you own or have permission to edit.
 
 ### Parameters
 
-| Parameter                   | Required | Description                                |
-| --------------------------- | -------- | ------------------------------------------ |
-| `operation`                 | Yes      | `"update"`                                 |
-| `agent_id`                  | Yes      | Agent ID to update                         |
-| `title`                     | No       | New title                                  |
-| `systemPrompt`              | No       | New instructions                           |
-| `visibility`                | No       | Change visibility (`personal` or `public`) |
-| `description`               | No       | New description                            |
-| `agentType`                 | No       | New agent type                             |
-| `userWelcomeMessage`        | No       | New welcome message                        |
-| `estimatedTimeSavedMinutes` | No       | New time saved estimate                    |
-| `toolsConfig`               | No       | New tools configuration object             |
-| `attach_files`              | No       | Workspace files to attach (max 5 total)    |
+| Parameter                | Required | Description                                |
+| ------------------------ | -------- | ------------------------------------------ |
+| `agent_id`               | Yes      | Agent ID to update                         |
+| `--title`                | No       | New title                                  |
+| `--prompt`               | No       | New instructions                           |
+| `--visibility`           | No       | Change visibility (`personal` or `public`) |
+| `--description`          | No       | New description                            |
+| `--agent-type`           | No       | New agent type                             |
+| `--welcome-message`      | No       | New welcome message                        |
+| `--estimated-time-saved` | No       | New time saved estimate                    |
+| `--tools-config`         | No       | New tools configuration JSON object        |
+| `--attach-files`         | No       | Workspace files to attach (max 5 total)    |
 
 ### Examples
 
-```python
+```
 # Update agent title and description
-mcp__numa__numa_tool(name="agents", description="Update agent title", params={
-    "operation": "update",
-    "agent_id": "agt_abc123",
-    "title": "Sales Report Generator v2",
-    "description": "Updated with quarterly projections"
-})
+Bash("numa agents update agt_abc123 --title 'Sales Report Generator v2' --description 'Updated with quarterly projections' -m 'Update agent title'")
 
 # Update system prompt
-mcp__numa__numa_tool(name="agents", description="Update agent prompt", params={
-    "operation": "update",
-    "agent_id": "agt_abc123",
-    "systemPrompt": "Improved instructions..."
-})
+Bash("numa agents update agt_abc123 --prompt 'Improved instructions...' -m 'Update agent prompt'")
 
 # Add file attachments to an existing agent
-mcp__numa__numa_tool(name="agents", description="Attach file to agent", params={
-    "operation": "update",
-    "agent_id": "agt_abc123",
-    "attach_files": ["/workdir/uploads/new_policy.pdf"]
-})
+Bash("numa agents update agt_abc123 --attach-files '/workdir/uploads/new_policy.pdf' -m 'Attach file to agent'")
 
 # Enable web search for an agent
-mcp__numa__numa_tool(name="agents", description="Enable web search for agent", params={
-    "operation": "update",
-    "agent_id": "agt_abc123",
-    "toolsConfig": {"webSearchEnabled": true}
-})
+Bash("numa agents update agt_abc123 --tools-config '{\"webSearchEnabled\":true}' -m 'Enable web search for agent'")
 ```
 
 ### Permissions
@@ -343,62 +255,42 @@ mcp__numa__numa_tool(name="agents", description="Enable web search for agent", p
 
 Edit an agent's `systemPrompt` in place via find/replace. The DynamoDB record is the source of truth — you send only the substring to find and its replacement, not the full prompt.
 
-**Prefer `patch_prompt` over `update` when changing part of a system prompt.** The `update` operation requires sending the entire new `systemPrompt` as output tokens — for a prompt of any meaningful size (more than a few hundred chars), this is dramatically more expensive than `patch_prompt`, which only ships the diff. Reserve `update` for full rewrites or for changing non-prompt fields.
+**Prefer `patch-prompt` over `update` when changing part of a system prompt.** The `update` operation requires sending the entire new `systemPrompt` as output tokens — for a prompt of any meaningful size (more than a few hundred chars), this is dramatically more expensive than `patch-prompt`, which only ships the diff. Reserve `update` for full rewrites or for changing non-prompt fields.
 
 If you don't already know the current prompt body, call `get` first to read it.
 
 ### Parameters
 
-| Parameter     | Required | Default | Description                                                                      |
-| ------------- | -------- | ------- | -------------------------------------------------------------------------------- |
-| `operation`   | Yes      | -       | `"patch_prompt"`                                                                 |
-| `agent_id`    | Yes      | -       | Agent ID to patch                                                                |
-| `old_text`    | Yes      | -       | Exact substring to find in the current `systemPrompt`. Must match exactly.       |
-| `new_text`    | Yes      | -       | Replacement text. Use `""` to delete the matched text.                           |
-| `replace_all` | No       | `false` | If `false`, requires `old_text` to appear exactly once. If `true`, replaces all. |
+| Parameter       | Required | Default | Description                                                                      |
+| --------------- | -------- | ------- | -------------------------------------------------------------------------------- |
+| `agent_id`      | Yes      | -       | Agent ID to patch                                                                |
+| `--old-text`    | Yes      | -       | Exact substring to find in the current `systemPrompt`. Must match exactly.       |
+| `--new-text`    | Yes      | -       | Replacement text. Use `""` to delete the matched text.                           |
+| `--replace-all` | No       | `false` | If `false`, requires `old_text` to appear exactly once. If `true`, replaces all. |
 
 ### Match rules
 
 - Match is **exact** — whitespace, punctuation, and casing all matter.
 - Default behaviour requires `old_text` to appear **exactly once** in the prompt. If it appears zero times you get an error; if it appears multiple times you get an error reporting the count.
-- To resolve a multi-match error: either extend `old_text` with 1-2 lines of surrounding context until it's unique, or set `replace_all: true` to replace every occurrence.
+- To resolve a multi-match error: either extend `old_text` with 1-2 lines of surrounding context until it's unique, or set `--replace-all` to replace every occurrence.
 
 ### Examples
 
-```python
+```
 # Rename a phrase that appears once in the prompt
-mcp__numa__numa_tool(name="agents", description="Rename phrase in agent prompt", params={
-    "operation": "patch_prompt",
-    "agent_id": "agt_abc123",
-    "old_text": "Client Content",
-    "new_text": "Receive Content"
-})
+Bash("numa agents patch-prompt agt_abc123 --old-text 'Client Content' --new-text 'Receive Content' -m 'Rename phrase in agent prompt'")
 
 # Fix a regex literal bug (raw \d that should be a real escape)
-mcp__numa__numa_tool(name="agents", description="Fix regex literal in agent prompt", params={
-    "operation": "patch_prompt",
-    "agent_id": "agt_abc123",
-    "old_text": "pattern = r'invoice-\\d'",
-    "new_text": "pattern = r'invoice-\\d+'"
-})
+Bash("numa agents patch-prompt agt_abc123 --old-text 'pattern = r'\\''invoice-\\d'\\''' --new-text 'pattern = r'\\''invoice-\\d+'\\''' -m 'Fix regex literal in agent prompt'")
 
 # Replace every occurrence of a term (e.g. branding rename)
-mcp__numa__numa_tool(name="agents", description="Brand rename across prompt", params={
-    "operation": "patch_prompt",
-    "agent_id": "agt_abc123",
-    "old_text": "AcmeCorp",
-    "new_text": "ArcanumCorp",
-    "replace_all": True
-})
+Bash("numa agents patch-prompt agt_abc123 --old-text 'AcmeCorp' --new-text 'ArcanumCorp' --replace-all -m 'Brand rename across prompt'")
 
 # Delete a sentence from the prompt
-mcp__numa__numa_tool(name="agents", description="Remove outdated instruction", params={
-    "operation": "patch_prompt",
-    "agent_id": "agt_abc123",
-    "old_text": "\n\nAlways CC legal@example.com on outbound emails.",
-    "new_text": ""
-})
+Bash("numa agents patch-prompt agt_abc123 --old-text '\n\nAlways CC legal@example.com on outbound emails.' --new-text '' -m 'Remove outdated instruction'")
 ```
+
+> **Renumber when you edit a numbered list.** If you insert or delete a step in a numbered sequence in the prompt (`1.`, `2.`, `3.` …), patch the surrounding numbers too so the list stays consecutive — don't leave a duplicate "step 3" or a gap. A second patch covering the affected numbers is fine.
 
 ### Permissions
 
@@ -421,9 +313,9 @@ Files can be attached from these workspace locations:
 ### How It Works
 
 1. **Upload/Create files first** - Files must exist in the workspace before attaching
-2. **Use `attach_files`** - Provide an array of full workspace paths
+2. **Use `--attach-files`** - Provide a comma-separated list of full workspace paths
 3. **Files are copied** - Files are copied to permanent agent storage (original files remain)
-4. **Extracted content included** - If the file has been processed with the `extract_content` tool (via `numa_tool` MCP), the extracted text is also attached
+4. **Extracted content included** - If the file has been processed with `numa docs extract`, the extracted text is also attached
 
 ### Limits
 
@@ -432,22 +324,15 @@ Files can be attached from these workspace locations:
 
 ### Example Workflow
 
-```python
+```
 # 1. User uploads files to workspace (via UI or prior steps)
 # Files are now at /workdir/uploads/handbook.pdf, /workdir/uploads/policies.docx
 
 # 2. Optionally extract content for better search
-mcp__numa__numa_tool(name="extract_content", description="Extract content from handbook", params={
-    "file_path": "/workdir/uploads/handbook.pdf"
-})
+Bash("numa docs extract /workdir/uploads/handbook.pdf -m 'Extract content from handbook'")
 
 # 3. Create agent with file attachments
-mcp__numa__numa_tool(name="agents", description="Create HR assistant agent", params={
-    "operation": "create",
-    "title": "HR Assistant",
-    "systemPrompt": "You help employees with HR questions using the attached handbook and policies.",
-    "attach_files": ["/workdir/uploads/handbook.pdf", "/workdir/uploads/policies.docx"]
-})
+Bash("numa agents create --title 'HR Assistant' --prompt 'You help employees with HR questions using the attached handbook and policies.' --attach-files '/workdir/uploads/handbook.pdf,/workdir/uploads/policies.docx' --json -m 'Create HR assistant agent'")
 ```
 
 ---
@@ -458,23 +343,18 @@ Create a personal copy of any agent you can access.
 
 ### Parameters
 
-| Parameter   | Required | Description           |
-| ----------- | -------- | --------------------- |
-| `operation` | Yes      | `"duplicate"`         |
-| `agent_id`  | Yes      | Agent ID to duplicate |
+| Parameter  | Required | Description           |
+| ---------- | -------- | --------------------- |
+| `agent_id` | Yes      | Agent ID to duplicate |
 
 ### Examples
 
-```python
+```
 # Duplicate a company agent to your personal library
-mcp__numa__numa_tool(name="agents", description="Duplicate company agent", params={
-    "operation": "duplicate", "agent_id": "agt_company123"
-})
+Bash("numa agents duplicate agt_company123 --json -m 'Duplicate company agent'")
 
 # Duplicate your own agent to make a variant
-mcp__numa__numa_tool(name="agents", description="Duplicate my agent", params={
-    "operation": "duplicate", "agent_id": "agt_personal456"
-})
+Bash("numa agents duplicate agt_personal456 --json -m 'Duplicate my agent'")
 ```
 
 The duplicate is always created as a **personal** agent with "(Copy)" appended to the title. If a copy already exists, it becomes "(Copy 2)", "(Copy 3)", etc.
@@ -520,6 +400,13 @@ When in doubt, default to Context-Aware — users asking mid-chat almost always 
 - User is chatting WITH an agent (the agent is already loaded)
 - User is asking ABOUT agents conceptually (general questions)
 - User wants to DELETE an agent (deletion must be done via the web UI)
+- User wants to SCHEDULE an agent to run automatically (see capability boundaries below)
+
+### Capability boundaries — don't hallucinate these
+
+- **You cannot schedule an agent to run itself.** Recurring/automated runs are configured by the user in the web UI only (the agent schedule modal). There is no chat command, `/loop`, or cron you can invoke to put an agent on a schedule — never claim a schedule is "live", and never invent a mechanism. If the user wants a scheduled agent, tell them to set the schedule from the agent's settings in the UI.
+- **Warn about unattended approvals when scheduling comes up.** A scheduled agent runs unattended, so any integration _write_ it performs under a "writes need approval" mode silently stalls on the approval gate (~180s timeout, then fails). When a user sets up or asks about a scheduled agent that uses integrations, proactively flag this and recommend they set the agent's integration approval to **auto-approve all** for unattended runs.
+- **Re-query before confirming existence.** When asked to confirm an agent (or its files/config) exists or was created, re-read it — don't confirm from memory of having just done it.
 
 ---
 
@@ -538,7 +425,7 @@ Before asking anything, read the transcript and extract:
 - **Inputs.** What kind of input does the task take (a CSV, a CV, a meeting transcript, a free-text brief)? How should the agent ask for it if the user doesn't provide it?
 - **Outputs / artifacts.** What did Numa deliver? Files, inline tables, a summary? The agent should reproduce this.
 - **Tools used.** Which tools did Numa actually use in the conversation (web search, a specific KB, a specific integration, code execution)? These become the agent's `toolsConfig`.
-- **Reference files.** Anything under `/workdir/uploads/`, `/workdir/outputs/`, or `/workdir/chat-workflows/` that the task depends on is a candidate for `attach_files`. Prefer source material (templates, policies, guidelines) over one-off outputs.
+- **Reference files.** Anything under `/workdir/uploads/`, `/workdir/outputs/`, or `/workdir/chat-workflows/` that the task depends on is a candidate for `--attach-files`. Prefer source material (templates, policies, guidelines) over one-off outputs.
 
 #### Step 2: Draft everything you can infer
 
@@ -751,27 +638,8 @@ Before creating anything, present a complete draft for review:
 
 Once confirmed, execute the create call:
 
-```python
-mcp__numa__numa_tool(name="agents", description="Create agent", params={
-    "operation": "create",
-    "title": "Agent Title",
-    "systemPrompt": "The complete system prompt...",
-    "description": "One-line description",
-    "visibility": "personal",
-    "estimatedTimeSavedMinutes": 15,
-    "toolsConfig": {
-        "webSearchEnabled": true,
-        "allowedKnowledgeBases": null,
-        "enabledConnections": ["google_drive"],
-        "approvalModes": {
-            "integrations": "non_destructive",
-            "agents": "never",
-            "memories": "never",
-            "knowledgeBases": "never",
-            "ops": "never"
-        }
-    }
-})
+```
+Bash("numa agents create --title 'Agent Title' --prompt 'The complete system prompt...' --description 'One-line description' --visibility personal --estimated-time-saved 15 --tools-config '{\"webSearchEnabled\":true,\"allowedKnowledgeBases\":null,\"enabledConnections\":[\"google_drive\"],\"approvalModes\":{\"integrations\":\"non_destructive\",\"agents\":\"never\",\"memories\":\"never\",\"knowledgeBases\":\"never\",\"ops\":\"never\"}}' --json -m 'Create agent'")
 ```
 
 ---
@@ -900,16 +768,12 @@ When user asks about available agents:
 2. Get details of specific agent if needed
 3. The user can select the agent via the UI
 
-```python
+```
 # Show available agents
-mcp__numa__numa_tool(name="agents", description="List all agents", params={
-    "operation": "list", "scope": "all"
-})
+Bash("numa agents list --scope all --json -m 'List all agents'")
 
 # Get details about a specific one
-mcp__numa__numa_tool(name="agents", description="Get agent details", params={
-    "operation": "get", "agent_id": "agt_abc123"
-})
+Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
 ```
 
 ### Improve an existing agent
@@ -920,16 +784,10 @@ When user wants to enhance an agent:
 2. Discuss improvements with user
 3. Update with new instructions
 
-```python
+```
 # Get current state
-mcp__numa__numa_tool(name="agents", description="Get agent details", params={
-    "operation": "get", "agent_id": "agt_abc123"
-})
+Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
 
 # Update with improvements
-mcp__numa__numa_tool(name="agents", description="Update agent instructions", params={
-    "operation": "update",
-    "agent_id": "agt_abc123",
-    "systemPrompt": "Improved instructions..."
-})
+Bash("numa agents update agt_abc123 --prompt 'Improved instructions...' -m 'Update agent instructions'")
 ```

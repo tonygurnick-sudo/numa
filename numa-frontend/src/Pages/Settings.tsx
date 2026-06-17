@@ -25,6 +25,7 @@ import {
 } from '../Components/Integrations/integrationCatalogHelpers';
 import { MethodBadge } from '../Components/Integrations/MethodBadge';
 import { NativeConfigurationModal } from '../Components/Integrations/NativeConfigurationModal';
+import { GmailTriggerSetupWizard } from '../Components/DataConnectors/wizards/GmailTriggerSetupWizard';
 import { VaultUserSecretsPanel } from '../Components/Vault/VaultUserSecretsPanel';
 import { VaultCompanySecretsPanel } from '../Components/Vault/VaultCompanySecretsPanel';
 import { ManageMethodCard } from '../Components/Integrations/ManageMethodCard';
@@ -800,10 +801,47 @@ export default function SettingsPage() {
   // refreshes and the modal reactively reflects the new "Active" / configured
   // state without the admin having to reopen it.
   const [manageForSlug, setManageForSlug] = useState<string | null>(null);
+  // Gmail event-trigger setup wizard (native Gmail only, gated on automations).
+  const [showGmailTriggers, setShowGmailTriggers] = useState(false);
+  const [gmailTriggerStatus, setGmailTriggerStatus] = useState<{
+    configured: boolean;
+    pubsubTopic: string | null;
+  } | null>(null);
   const manageFor = useMemo(
     () => (manageForSlug ? (integrationsCatalog.find((e) => e.slug === manageForSlug) ?? null) : null),
     [manageForSlug, integrationsCatalog]
   );
+
+  // Whether the Gmail-triggers card/wizard is relevant for the open Manage modal:
+  // native Gmail + automations (SCHEDULING) + event triggers enabled.
+  const gmailTriggersEligible =
+    !!manageFor &&
+    manageFor.connectorSlug === 'gmail' &&
+    isNativeAvailable(manageFor.connectorSlug, manageFor.connectorEnabled) &&
+    schedulingEnabled &&
+    getFlag('EVENT_TRIGGERS');
+
+  // Read the current trigger config (from the connector-settings row) so the card
+  // can reflect "already set up" instead of always offering a fresh "Set up".
+  const loadGmailTriggerStatus = useCallback(async () => {
+    try {
+      const res = (await numaGet('/api/admin/google-cloud/trigger-info')) as {
+        configured: boolean;
+        pubsubTopic: string | null;
+      };
+      setGmailTriggerStatus(res);
+    } catch {
+      setGmailTriggerStatus(null);
+    }
+  }, [numaGet]);
+
+  useEffect(() => {
+    if (!gmailTriggersEligible) {
+      setGmailTriggerStatus(null);
+      return;
+    }
+    void loadGmailTriggerStatus();
+  }, [gmailTriggersEligible, loadGmailTriggerStatus]);
   const [toolsLoading, setToolsLoading] = useState<boolean>(false);
   const [toolsError, setToolsError] = useState<string | null>(null);
   const [toolList, setToolList] = useState<{ name: string; description?: string }[]>([]);
@@ -2619,6 +2657,15 @@ export default function SettingsPage() {
         onSaved={() => void handleConfiguredNative()}
       />
 
+      <GmailTriggerSetupWizard
+        show={showGmailTriggers}
+        onHide={() => setShowGmailTriggers(false)}
+        onComplete={() => {
+          setShowGmailTriggers(false);
+          void loadGmailTriggerStatus();
+        }}
+      />
+
       {isAdmin && (
         <Modal show={!!manageFor} onHide={closeManage} centered size="lg">
           {manageFor &&
@@ -2763,6 +2810,61 @@ export default function SettingsPage() {
                         )}
                       </div>
                     </div>
+
+                    {/* Gmail event-trigger setup — native Gmail only, gated on
+                      automations + event triggers. Reflects whether Pub/Sub is
+                      already wired (read from the connector-settings row). */}
+                    {gmailTriggersEligible && (
+                      <div className="mb-4">
+                        <h6 className="text-uppercase small text-muted fw-semibold mb-2">
+                          {t('manage.triggersHeading', { defaultValue: 'Email triggers' })}
+                        </h6>
+                        <div
+                          className="d-flex align-items-start justify-content-between p-3 rounded"
+                          style={{ background: '#f8f9fa', border: '1px solid #dee2e6' }}
+                        >
+                          <div className="me-3">
+                            <div className="fw-semibold small mb-1 d-flex align-items-center gap-2">
+                              {t('manage.triggersLabel', {
+                                defaultValue: 'Trigger automations from incoming email',
+                              })}
+                              {gmailTriggerStatus?.configured && (
+                                <span className="badge bg-success">
+                                  <i className="bi bi-check-circle-fill me-1" />
+                                  {t('manage.triggersConfigured', { defaultValue: 'Configured' })}
+                                </span>
+                              )}
+                            </div>
+                            <div className="small text-muted">
+                              {gmailTriggerStatus?.configured
+                                ? t('manage.triggersConfiguredHelp', {
+                                    defaultValue: 'Incoming-email triggers are active for this workspace.',
+                                  })
+                                : t('manage.triggersHelp', {
+                                    defaultValue:
+                                      'Lets users build automations that fire when an email arrives. Requires a one-time Google Cloud Pub/Sub setup in your own project.',
+                                  })}
+                            </div>
+                            {gmailTriggerStatus?.configured && gmailTriggerStatus.pubsubTopic && (
+                              <div className="small text-muted mt-1 font-monospace text-break">
+                                {gmailTriggerStatus.pubsubTopic}
+                              </div>
+                            )}
+                          </div>
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            className="flex-shrink-0"
+                            onClick={() => setShowGmailTriggers(true)}
+                          >
+                            <i className="bi bi-broadcast me-1" />
+                            {gmailTriggerStatus?.configured
+                              ? t('manage.triggersReconfigure', { defaultValue: 'Reconfigure' })
+                              : t('manage.triggersSetUp', { defaultValue: 'Set up' })}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Multiple accounts section — visible whenever Pipedream
                       is enabled for this integration. Renders in user-choice

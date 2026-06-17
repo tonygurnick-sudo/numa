@@ -42,6 +42,7 @@
     /* Paths / aliases */
     "baseUrl": ".",
     "paths": {
+      "@numa/cli/metadata": ["../numa-cli/packages/cli/src/metadata/index.ts"],
       "@/*": ["./src/*"],
       "@/components/*": ["./src/Components/*"],
       "@/pages/*": ["./src/Pages/*"],

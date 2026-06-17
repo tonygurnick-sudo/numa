@@ -1,43 +1,32 @@
 ---
 name: memories
-description: Manage user memories - list, add, and update persistent memories that help personalise AI responses across conversations. Use for listing existing memories, updating them, or detailed memory management. For quick adds, use the tool directly without loading this skill.
+description: Manage user memories - list, add, update, and delete persistent memories that help personalise AI responses across conversations. Use for listing existing memories, updating or deleting them, or detailed memory management. For quick adds, use the tool directly without loading this skill.
 ---
 
 # Memory Management Skill
 
-List, add, and update the user's persistent memories. Memories are facts, preferences, and operational details that persist across conversations and help personalise responses.
+List, add, update, and delete the user's persistent memories. Memories are facts, preferences, and operational details that persist across conversations and help personalise responses.
 
 ## Quick Reference
 
-```python
+```
 # List all memories
-mcp__numa__numa_tool(name="memories", description="List all memories", params={
-    "operation": "list"
-})
+Bash("numa memory list --json -m 'List all memories'")
 
 # List memories filtered by scope
-mcp__numa__numa_tool(name="memories", description="List general memories", params={
-    "operation": "list", "scope": "general"
-})
+Bash("numa memory list --scope general --json -m 'List general memories'")
 
 # Add a general memory
-mcp__numa__numa_tool(name="memories", description="Save user preference", params={
-    "operation": "add", "content": "Prefers concise responses"
-})
+Bash("numa memory add 'Prefers concise responses' -m 'Save user preference'")
 
 # Add an integration-scoped memory
-mcp__numa__numa_tool(name="memories", description="Save Jira config", params={
-    "operation": "add",
-    "content": "Jira Cloud ID: abc123-def456",
-    "scope": "integration:jira"
-})
+Bash("numa memory add 'Jira Cloud ID: abc123-def456' --scope 'integration:jira' -m 'Save Jira config'")
 
 # Update a memory
-mcp__numa__numa_tool(name="memories", description="Update preference", params={
-    "operation": "update",
-    "memory_id": "mem_abc123",
-    "content": "Prefers concise bullet-point responses"
-})
+Bash("numa memory update mem_abc123 'Prefers concise bullet-point responses' -m 'Update preference'")
+
+# Delete a memory (list first to get the id)
+Bash("numa memory delete mem_abc123 -m 'Delete memory'")
 ```
 
 ## Operations
@@ -47,6 +36,7 @@ mcp__numa__numa_tool(name="memories", description="Update preference", params={
 | `list`    | List memories (optionally filtered by scope) |
 | `add`     | Add a new memory                             |
 | `update`  | Update an existing memory's content          |
+| `delete`  | Delete a memory by id                        |
 
 ---
 
@@ -56,33 +46,24 @@ List the user's memories, optionally filtered by scope.
 
 ### Parameters
 
-| Parameter   | Required | Default | Description                                                   |
-| ----------- | -------- | ------- | ------------------------------------------------------------- |
-| `operation` | Yes      | -       | `"list"`                                                      |
-| `scope`     | No       | all     | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
+| Parameter | Required | Default | Description                                                   |
+| --------- | -------- | ------- | ------------------------------------------------------------- |
+| `--scope` | No       | all     | Filter: `general`, `integration:{slug}`, or `agent:{agentId}` |
 
 ### Examples
 
-```python
+```
 # List all memories
-mcp__numa__numa_tool(name="memories", description="List all memories", params={
-    "operation": "list"
-})
+Bash("numa memory list --json -m 'List all memories'")
 
 # List only general memories
-mcp__numa__numa_tool(name="memories", description="List general memories", params={
-    "operation": "list", "scope": "general"
-})
+Bash("numa memory list --scope general --json -m 'List general memories'")
 
 # List Jira integration memories
-mcp__numa__numa_tool(name="memories", description="List Jira memories", params={
-    "operation": "list", "scope": "integration:jira"
-})
+Bash("numa memory list --scope 'integration:jira' --json -m 'List Jira memories'")
 
 # List memories for a specific agent
-mcp__numa__numa_tool(name="memories", description="List agent memories", params={
-    "operation": "list", "scope": "agent:agt_abc123"
-})
+Bash("numa memory list --scope 'agent:agt_abc123' --json -m 'List agent memories'")
 ```
 
 ### Output Format
@@ -104,40 +85,25 @@ Add a new memory for the user.
 
 ### Parameters
 
-| Parameter   | Required | Default     | Description                                           |
-| ----------- | -------- | ----------- | ----------------------------------------------------- |
-| `operation` | Yes      | -           | `"add"`                                               |
-| `content`   | Yes      | -           | Memory content (max 300 characters)                   |
-| `scope`     | No       | `"general"` | `general`, `integration:{slug}`, or `agent:{agentId}` |
+| Parameter | Required | Default     | Description                                           |
+| --------- | -------- | ----------- | ----------------------------------------------------- |
+| `content` | Yes      | -           | Memory content (max 300 characters)                   |
+| `--scope` | No       | `"general"` | `general`, `integration:{slug}`, or `agent:{agentId}` |
 
 ### Examples
 
-```python
+```
 # Add a general preference
-mcp__numa__numa_tool(name="memories", description="Save dark mode preference", params={
-    "operation": "add", "content": "Prefers dark mode"
-})
+Bash("numa memory add 'Prefers dark mode' -m 'Save dark mode preference'")
 
 # Add an integration memory
-mcp__numa__numa_tool(name="memories", description="Save Slack config", params={
-    "operation": "add",
-    "content": "Slack workspace: acme-corp, main channel: #general",
-    "scope": "integration:slack"
-})
+Bash("numa memory add 'Slack workspace: acme-corp, main channel: #general' --scope 'integration:slack' -m 'Save Slack config'")
 
 # Add a Jira memory
-mcp__numa__numa_tool(name="memories", description="Save Jira config", params={
-    "operation": "add",
-    "content": "Jira Cloud ID: abc123-def456, default project: ENG",
-    "scope": "integration:jira"
-})
+Bash("numa memory add 'Jira Cloud ID: abc123-def456, default project: ENG' --scope 'integration:jira' -m 'Save Jira config'")
 
 # Add an agent-specific memory
-mcp__numa__numa_tool(name="memories", description="Save agent preference", params={
-    "operation": "add",
-    "content": "User wants weekly summaries from this agent",
-    "scope": "agent:agt_abc123"
-})
+Bash("numa memory add 'User wants weekly summaries from this agent' --scope 'agent:agt_abc123' -m 'Save agent preference'")
 ```
 
 ### Limits
@@ -156,19 +122,14 @@ Update the content of an existing memory. The scope and creation date are preser
 
 | Parameter   | Required | Description                             |
 | ----------- | -------- | --------------------------------------- |
-| `operation` | Yes      | `"update"`                              |
 | `memory_id` | Yes      | Memory ID to update                     |
 | `content`   | Yes      | New memory content (max 300 characters) |
 
 ### Examples
 
-```python
+```
 # Update a memory's content
-mcp__numa__numa_tool(name="memories", description="Update preference", params={
-    "operation": "update",
-    "memory_id": "mem_abc123def456",
-    "content": "Prefers concise bullet-point responses with code examples"
-})
+Bash("numa memory update mem_abc123def456 'Prefers concise bullet-point responses with code examples' -m 'Update preference'")
 ```
 
 ### Notes
@@ -176,6 +137,32 @@ mcp__numa__numa_tool(name="memories", description="Update preference", params={
 - You can only update the content; scope and createdAt are preserved
 - Updated memories are tagged with `source: "ai"`
 - To find a memory's ID, use `list` first
+
+---
+
+## Delete Operation
+
+Delete an existing memory by its ID. Use this when the user clearly wants you to forget something you're storing — **don't deflect to the Profile page; you can do this.**
+
+### Parameters
+
+| Parameter   | Required | Description                                    |
+| ----------- | -------- | ---------------------------------------------- |
+| `memory_id` | Yes      | Memory ID to delete — get it from `list` first |
+
+### Examples
+
+```
+# Find the memory's ID, then delete it
+Bash("numa memory list --json -m 'List memories to find the one to remove'")
+Bash("numa memory delete mem_abc123def456 -m 'Forget the old reporting cadence'")
+```
+
+### Notes
+
+- Delete by **ID only** — there is no delete-by-content, so always `list` first to resolve the ID
+- Destructive and irreversible: the command confirms before removing. If there's any ambiguity about which memory, confirm with the user in chat first
+- Returns the remaining memory count on success
 
 ---
 
@@ -192,6 +179,10 @@ Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `s
 ---
 
 ## Behavioral Rules
+
+### Retrieve before you produce
+
+Before generating a user-facing deliverable (email, doc, message, summary), list the relevant memories first — preferences, sign-off, tone, names, operational details — and apply them. This matters most when the **output format changes mid-conversation**: if you saved that the user signs off as "Priya — PMM", carry that into the Slack message too, not just the email you first saved it from. A saved preference you don't retrieve is a preference you've effectively forgotten.
 
 ### Always Confirm First
 
@@ -224,10 +215,11 @@ Only run the add/update command **after the user confirms**.
 
 - If a memory on the same topic already exists, **update** it rather than adding a duplicate
 - List memories first to check for existing ones on the same topic
+- **Merged vs separate is a judgment call.** Closely-related facts can live in one memory (retrieved together) or as separate memories (finer update granularity) — both pass hygiene. Prefer separate when the facts will change independently, merged when they're always used together.
 
 ### Deleting Memories
 
-You cannot delete memories. If the user wants to delete a memory, direct them to manage it from their **Profile page in Settings**.
+You **can** delete memories — use the **Delete Operation** above (`numa memory delete <id>`; `list` first to get the ID, and the command confirms before removing). Don't tell the user to use the Profile page for this.
 
 ---
 
@@ -237,40 +229,31 @@ You cannot delete memories. If the user wants to delete a memory, direct them to
 
 When the user says "remember this" or similar:
 
-```python
+```
 # Just add it directly - no need to load the skill for quick adds
-mcp__numa__numa_tool(name="memories", description="Save preference", params={
-    "operation": "add", "content": "Prefers responses in British English"
-})
+Bash("numa memory add 'Prefers responses in British English' -m 'Save preference'")
 ```
 
 ### Review and Manage Memories
 
 When the user wants to see or manage their memories:
 
-```python
+```
 # 1. List all memories
-mcp__numa__numa_tool(name="memories", description="List all memories", params={
-    "operation": "list"
-})
+Bash("numa memory list --json -m 'List all memories'")
 
 # 2. If updating, find the memory ID from the list, then:
-mcp__numa__numa_tool(name="memories", description="Update preference", params={
-    "operation": "update",
-    "memory_id": "mem_abc123",
-    "content": "Updated preference text"
-})
+Bash("numa memory update mem_abc123 'Updated preference text' -m 'Update preference'")
+
+# 3. If deleting, find the memory ID from the list, then:
+Bash("numa memory delete mem_abc123 -m 'Delete memory'")
 ```
 
 ### Save Integration Details
 
 When working with an integration and discovering useful details:
 
-```python
+```
 # After discovering the user's Jira Cloud ID during an integration task
-mcp__numa__numa_tool(name="memories", description="Save Jira config", params={
-    "operation": "add",
-    "content": "Jira Cloud ID: abc123-def456, preferred project: ENG-board",
-    "scope": "integration:jira"
-})
+Bash("numa memory add 'Jira Cloud ID: abc123-def456, preferred project: ENG-board' --scope 'integration:jira' -m 'Save Jira config'")
 ```

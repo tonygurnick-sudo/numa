@@ -29,6 +29,7 @@ import { getConnectorById, surfacesInFiles } from '../Components/DataConnectors/
 import { getModelId, MODEL_TYPES, isInFallbackMode } from '../utils/bedrockModelConfig';
 // Note: streamingProcessors imports moved to useWorkspaceStreaming hook
 import { loadConversation } from '../utils/conversationLoader';
+import { withTimeout } from '../utils/promiseUtils';
 import { useConversationManager } from '../hooks/useConversationManager';
 import { useStreamingHandler } from '../hooks/useStreamingHandler';
 import { useDocumentProcessor } from '../hooks/useDocumentProcessor';
@@ -109,9 +110,22 @@ import type {
   WorkspaceChatModelId,
   WorkspaceChatMessage,
 } from '../types/workspaceChatTypes';
-import { DEFAULT_WORKSPACE_MODEL } from '../types/workspaceChatTypes';
+import {
+  STANDARD_WORKSPACE_MODEL,
+  PREMIUM_WORKSPACE_MODEL,
+  DEFAULT_WORKSPACE_MODEL,
+  WORKSPACE_MODEL_OPTIONS,
+  WORKSPACE_MODEL_OPTIONS_CURATED,
+} from '../types/workspaceChatTypes';
 import { expandMyFilesSentinel } from '../constants/knowledgeBase';
 import { downloadFileFromS3 } from '../utils/s3Utils';
+
+/** Every model id the selector can legitimately persist — used to reject a
+ *  stale/garbage `chatConfig.modelId` when restoring a conversation. */
+const KNOWN_WORKSPACE_MODEL_IDS = new Set<WorkspaceChatModelId>([
+  ...WORKSPACE_MODEL_OPTIONS.map((m) => m.id),
+  ...WORKSPACE_MODEL_OPTIONS_CURATED.map((m) => m.id),
+]);
 
 type ConversationChatConfig = {
   autoToolsEnabled?: boolean;
@@ -128,6 +142,9 @@ type ConversationChatConfig = {
   /** Per-chat enable list for native connectors (mirror of
    *  enabledConnectionIds for Pipedream). */
   enabledNativeConnectorIds?: string[];
+  /** The model the conversation started with. Persisted so a reloaded
+   *  conversation shows (and stays locked to) its original model. */
+  modelId?: WorkspaceChatModelId;
 };
 
 // Hoisted so the prop is referentially stable (BUG-194: an inline `{{}}` defeated
@@ -300,10 +317,20 @@ const NumaWorkspaceChatAgents = () => {
   const [isInitializing, setIsInitializing] = useState(false);
   /** True from when user sends first message in new conversation until first assistant content arrives */
   const [isFirstMessagePending, setIsFirstMessagePending] = useState(false);
-  /** Selected model for workspace chat (global cross-region inference profile) */
-  const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(DEFAULT_WORKSPACE_MODEL);
+  /** Selected model for workspace chat. When the curated selector is on
+   *  (WORKSPACE_CHAT_MODEL_SELECTION), Standard (Numa Standard Model) is the
+   *  default tier — the cheap everyday choice. When the selector is off, we
+   *  fall back to Sonnet (DEFAULT_WORKSPACE_MODEL) so flag-off clients are
+   *  unchanged and never send the standard id. A persisted per-conversation
+   *  chatConfig.modelId overrides this on load (see applyConversationChatConfig). */
+  const [selectedModelId, setSelectedModelId] = useState<WorkspaceChatModelId>(() =>
+    getFlag('WORKSPACE_CHAT_MODEL_SELECTION') ? STANDARD_WORKSPACE_MODEL : DEFAULT_WORKSPACE_MODEL
+  );
   /** Whether model selection is enabled for workspace chat (from runtime config) */
   const [workspaceModelSelectionEnabled] = useState(() => getFlag('WORKSPACE_CHAT_MODEL_SELECTION'));
+  /** Lock the model once the conversation has started — no mid-conversation
+   *  switching. The conversation runs end-to-end on the model it began with. */
+  const modelLocked = messages.length > 0;
   /** In-session dismissal of the red chat-health banner. Resets on conversation
    *  change so users see the warning again when they re-open the conversation. */
   const [chatHealthBannerDismissed, setChatHealthBannerDismissed] = useState(false);
@@ -661,6 +688,11 @@ const NumaWorkspaceChatAgents = () => {
     selectedAccountsByApp,
   ]);
 
+  // Tracks the conversation config whose model we've already applied, so a re-run of
+  // applyConversationChatConfig (which re-fires to re-filter KBs/connections once they load) doesn't
+  // re-apply the model and clobber a model the user picked after the conversation loaded.
+  const appliedModelForConfigRef = useRef<unknown>(null);
+
   const applyConversationChatConfig = useCallback(
     (config: unknown) => {
       if (!config || typeof config !== 'object') return;
@@ -708,6 +740,23 @@ const NumaWorkspaceChatAgents = () => {
         setEnabledNativeConnectorIds(parsed.enabledNativeConnectorIds.filter((id) => connectedNativeSet.has(id)));
       }
 
+      // Set the model for this conversation — ONCE per conversation config (reference-compared). The
+      // callback re-runs whenever its deps (availableKBs/connections, loaded async) change to
+      // re-filter the enable-lists above; that re-run must NOT re-set the model or it clobbers a
+      // model the user picked after load. On a genuinely NEW conversation (switch OR reload) we
+      // ALWAYS set the model: the conversation's saved one, or — for a legacy/unconfigured chat with
+      // no saved modelId — the DEFAULT, exactly as a fresh page load would. Never inherit the
+      // previously-viewed conversation's model (the bug: switching to a no-modelId conversation kept
+      // the prior chat's model, e.g. stuck on Premium, while a refresh correctly showed the default).
+      if (appliedModelForConfigRef.current !== config) {
+        const defaultModel = getFlag('WORKSPACE_CHAT_MODEL_SELECTION')
+          ? STANDARD_WORKSPACE_MODEL
+          : DEFAULT_WORKSPACE_MODEL;
+        const hasSavedModel = typeof parsed.modelId === 'string' && KNOWN_WORKSPACE_MODEL_IDS.has(parsed.modelId);
+        setSelectedModelId(hasSavedModel ? parsed.modelId : defaultModel);
+      }
+      appliedModelForConfigRef.current = config;
+
       window.setTimeout(() => {
         isApplyingConversationChatConfigRef.current = false;
       }, 0);
@@ -716,14 +765,50 @@ const NumaWorkspaceChatAgents = () => {
   );
 
   useEffect(() => {
-    if (!pendingConversationChatConfig) return;
-    applyConversationChatConfig(pendingConversationChatConfig);
+    if (pendingConversationChatConfig) {
+      applyConversationChatConfig(pendingConversationChatConfig);
+      return;
+    }
+    // No saved chatConfig for this conversation (legacy / never-configured) — reset the model to the
+    // default instead of inheriting the previously-viewed conversation's. (applyConversationChatConfig
+    // handles the with-config case and its own saved-or-default fallback.) Guarded by the ref so this
+    // runs once per transition, not on every re-render.
+    if (appliedModelForConfigRef.current !== null) {
+      appliedModelForConfigRef.current = null;
+      setSelectedModelId(
+        getFlag('WORKSPACE_CHAT_MODEL_SELECTION') ? STANDARD_WORKSPACE_MODEL : DEFAULT_WORKSPACE_MODEL
+      );
+    }
   }, [applyConversationChatConfig, pendingConversationChatConfig]);
+
+  // New chat (conversationId cleared) — reset the model to the default rather than keeping the
+  // previous conversation's. handleNewChat() only clears conversationId; it doesn't touch the model
+  // or the chatConfig, so without this a new chat stays on whatever the last conversation used.
+  useEffect(() => {
+    if (conversationId === null) {
+      setSelectedModelId(
+        getFlag('WORKSPACE_CHAT_MODEL_SELECTION') ? STANDARD_WORKSPACE_MODEL : DEFAULT_WORKSPACE_MODEL
+      );
+    }
+  }, [conversationId]);
 
   const handleUserSetWebSearchEnabled = useCallback(
     (value: SetStateAction<boolean>) => {
       markUserSettingsModified();
       setWebSearchEnabled(value);
+    },
+    [markUserSettingsModified]
+  );
+
+  // The model chip changes ONLY the model — without marking settings modified,
+  // the per-conversation chatConfig save effect (gated on `userSettingsModified`)
+  // never fires, so `modelId` is never persisted and a reload snaps the chat back
+  // to the default model (e.g. a Standard/DeepSeek chat reopens as Premium/Sonnet).
+  // Mirror the other user-side setters so a model change is saved and restored.
+  const handleUserSetSelectedModelId = useCallback(
+    (value: SetStateAction<WorkspaceChatModelId>) => {
+      markUserSettingsModified();
+      setSelectedModelId(value);
     },
     [markUserSettingsModified]
   );
@@ -813,6 +898,7 @@ const NumaWorkspaceChatAgents = () => {
         enabledKBIds,
         enabledConnectionIds: enabledConnections,
         enabledNativeConnectorIds,
+        modelId: selectedModelId,
       };
 
       numaChatDynamoUtils
@@ -842,6 +928,7 @@ const NumaWorkspaceChatAgents = () => {
     sub,
     userSettingsModified,
     webSearchEnabled,
+    selectedModelId,
   ]);
 
   const defaultKBIdsFromSettings = useMemo(() => {
@@ -1338,6 +1425,16 @@ const NumaWorkspaceChatAgents = () => {
     applyAgentConfiguration(agent);
     setCurrentAgent(agent);
     setPendingAgent(agent);
+    // Seed the model for this new agent conversation from the agent's configured model (Premium for
+    // legacy agents with none) and mark settings modified so it persists to the conversation's
+    // chatConfig and survives reload. Set before the welcome message locks the selector; the existing
+    // per-conversation lock then applies as usual. Gated by the same flag as the chat model picker.
+    if (getFlag('WORKSPACE_CHAT_MODEL_SELECTION')) {
+      const agentModelId =
+        agent.modelId && KNOWN_WORKSPACE_MODEL_IDS.has(agent.modelId) ? agent.modelId : PREMIUM_WORKSPACE_MODEL;
+      setSelectedModelId(agentModelId);
+      markUserSettingsModified();
+    }
     setMessages([{ role: 'assistant', content: createAgentWelcomeMessage(agent) }]);
     setUploadedFiles([]);
     setIsManuallyLoading(false);
@@ -2920,157 +3017,180 @@ const NumaWorkspaceChatAgents = () => {
     // Clear output panel files immediately so stale files from previous conversation aren't visible during trace load
     settingsPanel.clearFiles();
 
+    // The "running in background" banner. Shown (at the end of the message
+    // list) whenever the agent is still processing this conversation.
+    const runningBanner = () =>
+      ({ role: 'system', content: t('systemMessages.agentFinishing'), status: 'agentFinishing' }) as const;
+
+    // Ask the backend whether the agent is still actively running for this
+    // conversation (user navigated away / refreshed mid-stream), and if so
+    // start polling to completion (then reload the full trace). Returns true
+    // when a running agent was detected; the CALLER renders the banner.
+    //
+    // Status-first by design (BUG-140): /status is fast (S3 + active-runs
+    // mirror, no AgentCore round-trip) and authoritative, whereas the trace
+    // fetch can hang ~30s in Safari while the stream holds the connection.
+    // Checking status BEFORE the trace means a running chat is detected in
+    // ~1s and the banner never depends on the trace succeeding.
+    const checkRunningAndStartPolling = async (): Promise<boolean> => {
+      let statusData: Awaited<ReturnType<typeof checkConversationStatus>>;
+      try {
+        statusData = await checkConversationStatus(selectedConversationId, getIdToken);
+      } catch (statusErr) {
+        console.warn('[WorkspaceChat] Status check failed:', statusErr);
+        return false;
+      }
+      if (isCancelled()) return false;
+      if (!(statusData.status === 'running' && statusData.active)) return false;
+
+      // Agent is still processing -- block input (loading disables send button)
+      isProcessingRef.current = true;
+      setButtonStatus('loading');
+
+      // Poll in the background until the agent finishes, then reload the trace
+      pollConversationUntilComplete(selectedConversationId, { intervalMs: 3000, timeoutMs: 3_600_000 }, getIdToken)
+        .then(async () => {
+          if (isCancelled()) return;
+          try {
+            const updatedTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
+            if (isCancelled()) return;
+            setMessages(parseRawTraceToMessages(updatedTrace));
+            refreshSidebar();
+            notifyCompletion();
+          } catch (reloadErr) {
+            console.error('[WorkspaceChat] Failed to reload trace after agent completed:', reloadErr);
+          }
+        })
+        .catch((err) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          console.error('[WorkspaceChat] Status polling error:', err);
+        })
+        .finally(() => {
+          if (!isCancelled()) {
+            isProcessingRef.current = false;
+            setButtonStatus('idle');
+          }
+        });
+
+      return true;
+    };
+
     try {
       // V2 workspace conversations: load from trace file
       if (isWorkspaceConversation) {
+        // 1. Detect a background run FIRST (fast + authoritative), so the
+        //    banner shows in ~1s and never blocks on the trace fetch.
+        const running = await checkRunningAndStartPolling();
+        if (isCancelled()) return;
+
+        setConversationId(selectedConversationId);
+        sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
+        sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Mark as V2 for auto-load
+        autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
+        setNeedsV1Migration(false); // This is a V2 conversation, clear any migration flag
+
+        // 2. Load whatever trace exists (prior turns). When the run is active
+        //    a trace failure is NON-FATAL — the banner is already up and the
+        //    poll will reload the full trace once the run finishes. Only show
+        //    the load error when nothing is running (BUG-140).
         try {
           const rawTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
           if (isCancelled()) return;
-          // Parse raw trace using same logic as live streaming
           const chatMessages = parseRawTraceToMessages(rawTrace);
-
-          setMessages(chatMessages);
-          setConversationId(selectedConversationId);
-          sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
-          sessionStorage.setItem('isWorkspaceConversation-v2', 'true'); // Mark as V2 for auto-load
-          autoNamingAttemptedRef.current.set(selectedConversationId, Infinity);
-          // This is a V2 conversation, clear any migration flag
-          setNeedsV1Migration(false);
-
-          // Check if the agent is still actively running for this conversation.
-          // This handles the case where the user refreshed or navigated away mid-stream.
-          try {
-            const statusData = await checkConversationStatus(selectedConversationId, getIdToken);
-            if (isCancelled()) return;
-
-            if (statusData.status === 'running' && statusData.active) {
-              // Agent is still processing -- block input (loading disables send button)
-              isProcessingRef.current = true;
-              setButtonStatus('loading');
-              setMessages((prev) => [
-                ...prev,
-                {
-                  role: 'system',
-                  content: t('systemMessages.agentFinishing'),
-                  status: 'agentFinishing',
-                },
-              ]);
-
-              // Poll in the background until the agent finishes
-              pollConversationUntilComplete(
-                selectedConversationId,
-                {
-                  intervalMs: 3000,
-                  timeoutMs: 3_600_000,
-                },
-                getIdToken
-              )
-                .then(async () => {
-                  if (isCancelled()) return;
-                  // Agent finished -- reload the full trace
-                  try {
-                    const updatedTrace = await getWorkspaceChatRawTrace(selectedConversationId, getIdToken);
-                    if (isCancelled()) return;
-                    const updatedMessages = parseRawTraceToMessages(updatedTrace);
-                    setMessages(updatedMessages);
-                    refreshSidebar();
-                    notifyCompletion();
-                  } catch (reloadErr) {
-                    console.error('[WorkspaceChat] Failed to reload trace after agent completed:', reloadErr);
-                  }
-                })
-                .catch((err) => {
-                  if (err instanceof DOMException && err.name === 'AbortError') return;
-                  console.error('[WorkspaceChat] Status polling error:', err);
-                })
-                .finally(() => {
-                  if (!isCancelled()) {
-                    isProcessingRef.current = false;
-                    setButtonStatus('idle');
-                  }
-                });
-            }
-          } catch (statusErr) {
-            // Non-critical: status check failure shouldn't block conversation loading
-            console.warn('[WorkspaceChat] Status check failed, proceeding normally:', statusErr);
+          setMessages(running ? [...chatMessages, runningBanner()] : chatMessages);
+        } catch (traceErr) {
+          if (isCancelled()) return;
+          console.error('Error loading V2 workspace conversation trace:', traceErr);
+          if (running) {
+            // Run is active — keep the banner, no error. Poll will fill in the trace.
+            setMessages([runningBanner()]);
+          } else {
+            // Genuinely couldn't load and nothing is running — show the error.
+            // Distinguish a connectivity failure from missing history; the old
+            // catch-all ("may happen after stopping a response") misled BUG-140.
+            const isConnectivityError =
+              traceErr instanceof Error && (traceErr.name === 'NetworkError' || traceErr.name === 'TimeoutError');
+            setMessages([
+              {
+                role: 'system',
+                content: isConnectivityError
+                  ? t('systemMessages.loadTraceNetworkFailed')
+                  : t('systemMessages.loadTraceFailed'),
+              },
+            ]);
           }
+        }
 
-          // Fetch conversation metadata from DynamoDB to restore agent state
-          try {
-            const conversationHistory = await numaChatDynamoUtils.queryConversations(
+        // 3. Fetch conversation metadata from DynamoDB to restore agent state.
+        //    Runs regardless of trace outcome (it's independent of the trace).
+        //    withTimeout: a stalled SDK call here must not hold the loading
+        //    spinner forever (BUG-140).
+        try {
+          type ConversationMetaItem = {
+            message_type?: string;
+            workspaceAgentType?: string;
+            isAgentConversation?: boolean;
+            agentId?: string;
+            chatConfig?: unknown;
+          };
+          const conversationHistory = await withTimeout<ConversationMetaItem[]>(
+            numaChatDynamoUtils.queryConversations(
               selectedConversationId,
               1000, // Must be large enough to include the meta record (oldest item, query is newest-first)
               sub
-            );
-            if (isCancelled()) return;
-            const metaItem = conversationHistory.find(
-              (item: { message_type?: string }) => item.message_type === 'meta'
-            );
-
-            // Restore the workspace agent type pin (e.g. Support conversations
-            // run on numa-chat-support) so subsequent turns keep using the
-            // right backend agent type even in a fresh session where the
-            // sessionStorage pin from the popup no longer exists.
-            if (metaItem?.workspaceAgentType && typeof metaItem.workspaceAgentType === 'string') {
-              sessionStorage.setItem(
-                `${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${selectedConversationId}`,
-                metaItem.workspaceAgentType
-              );
-            }
-
-            if (metaItem?.isAgentConversation && metaItem?.agentId) {
-              try {
-                const agent = await getAgent(numaGet, metaItem.agentId);
-                if (isCancelled()) return;
-                setCurrentAgent(agent);
-                setPendingAgent(null);
-                applyAgentConfiguration(agent);
-              } catch (agentErr) {
-                console.error('Failed to hydrate agent for V2 conversation', agentErr);
-                if (!isCancelled()) resetAgentState();
-              }
-            } else {
-              // Clear agent state without applying defaults — let chatConfig handle it
-              setCurrentAgent(null);
-              setPendingAgent(null);
-              setAgentError(null);
-            }
-
-            // Restore per-conversation chat settings (integrations, KBs, tools).
-            // Support conversations are settings-pinned by their agent type —
-            // ignore any saved chatConfig and apply the support configuration
-            // (the backend enforces it regardless of what the panel says).
-            const isSupportConversationMeta = metaItem?.workspaceAgentType === SUPPORT_AGENT_TYPE;
-            const v2ChatConfig = isSupportConversationMeta ? null : (metaItem?.chatConfig ?? null);
-            setPendingConversationChatConfig((v2ChatConfig as ConversationChatConfig) || null);
-
-            if (isSupportConversationMeta) {
-              applySupportConfiguration();
-            } else if (!v2ChatConfig && !(metaItem?.isAgentConversation && metaItem?.agentId)) {
-              // If no saved chatConfig and no agent, apply user defaults
-              applyAgentConfiguration(null);
-            }
-          } catch (metaErr) {
-            console.error('Failed to fetch V2 conversation metadata:', metaErr);
-            if (!isCancelled()) resetAgentState();
-          }
-        } catch (wsError) {
+            ),
+            10000,
+            'queryConversations'
+          );
           if (isCancelled()) return;
-          console.error('Error loading V2 workspace conversation trace:', wsError);
-          // This is a known V2 workspace conversation — do NOT fall back to V1.
-          // Network errors (e.g. interrupted requests, HTTP/2 errors after stop+refresh)
-          // should not reclassify a workspace conversation as V1.
-          setConversationId(selectedConversationId);
-          sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
-          sessionStorage.setItem('isWorkspaceConversation-v2', 'true');
-          setNeedsV1Migration(false);
-          setMessages([
-            {
-              role: 'system',
-              content: t('systemMessages.loadTraceFailed'),
-            },
-          ]);
-          resetAgentState();
+          const metaItem = conversationHistory.find((item: { message_type?: string }) => item.message_type === 'meta');
+
+          // Restore the workspace agent type pin (e.g. Support conversations
+          // run on numa-chat-support) so subsequent turns keep using the
+          // right backend agent type even in a fresh session where the
+          // sessionStorage pin from the popup no longer exists.
+          if (metaItem?.workspaceAgentType && typeof metaItem.workspaceAgentType === 'string') {
+            sessionStorage.setItem(
+              `${CONVERSATION_AGENT_TYPE_KEY_PREFIX}${selectedConversationId}`,
+              metaItem.workspaceAgentType
+            );
+          }
+
+          if (metaItem?.isAgentConversation && metaItem?.agentId) {
+            try {
+              const agent = await withTimeout(getAgent(numaGet, metaItem.agentId), 10000, 'getAgent');
+              if (isCancelled()) return;
+              setCurrentAgent(agent);
+              setPendingAgent(null);
+              applyAgentConfiguration(agent);
+            } catch (agentErr) {
+              console.error('Failed to hydrate agent for V2 conversation', agentErr);
+              if (!isCancelled()) resetAgentState();
+            }
+          } else {
+            // Clear agent state without applying defaults — let chatConfig handle it
+            setCurrentAgent(null);
+            setPendingAgent(null);
+            setAgentError(null);
+          }
+
+          // Restore per-conversation chat settings (integrations, KBs, tools).
+          // Support conversations are settings-pinned by their agent type —
+          // ignore any saved chatConfig and apply the support configuration
+          // (the backend enforces it regardless of what the panel says).
+          const isSupportConversationMeta = metaItem?.workspaceAgentType === SUPPORT_AGENT_TYPE;
+          const v2ChatConfig = isSupportConversationMeta ? null : (metaItem?.chatConfig ?? null);
+          setPendingConversationChatConfig((v2ChatConfig as ConversationChatConfig) || null);
+
+          if (isSupportConversationMeta) {
+            applySupportConfiguration();
+          } else if (!v2ChatConfig && !(metaItem?.isAgentConversation && metaItem?.agentId)) {
+            // If no saved chatConfig and no agent, apply user defaults
+            applyAgentConfiguration(null);
+          }
+        } catch (metaErr) {
+          console.error('Failed to fetch V2 conversation metadata:', metaErr);
+          if (!isCancelled()) resetAgentState();
         }
       } else {
         // V1 conversation: load directly from DynamoDB (skip trace fetch entirely)
@@ -3101,11 +3221,17 @@ const NumaWorkspaceChatAgents = () => {
 
   // Helper function to load V1 conversations from DynamoDB
   const loadV1Conversation = async (selectedConversationId: string) => {
+    // withTimeout: a stalled DDB-SDK call must not hold the loading spinner
+    // forever (BUG-140) — on timeout the outer catch shows the load error.
     const {
       messages: chatMessages,
       agentMeta,
       chatConfig,
-    } = await loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken);
+    } = await withTimeout(
+      loadConversation(selectedConversationId, numaChatDynamoUtils, sub, getAccessToken),
+      15000,
+      'loadConversation'
+    );
     setMessages(chatMessages);
     setConversationId(selectedConversationId);
     sessionStorage.setItem('currentConversationId-v2', selectedConversationId);
@@ -3608,8 +3734,9 @@ const NumaWorkspaceChatAgents = () => {
                           isStopping={isStopping}
                           variant="v2"
                           selectedModelId={selectedModelId}
-                          setSelectedModelId={setSelectedModelId}
-                          showModelSelector={false}
+                          setSelectedModelId={handleUserSetSelectedModelId}
+                          showModelSelector={workspaceModelSelectionEnabled}
+                          modelLocked={modelLocked}
                           onQuickAction={handleQuickAction}
                           connectedIntegrations={connectedSet}
                           onOpenHistory={() => {
@@ -3776,8 +3903,9 @@ const NumaWorkspaceChatAgents = () => {
                           enabledKBIds={enabledKBIds}
                           setEnabledKBIds={handleUserSetEnabledKBIds}
                           selectedModelId={selectedModelId}
-                          setSelectedModelId={setSelectedModelId}
-                          showModelSelector={false}
+                          setSelectedModelId={handleUserSetSelectedModelId}
+                          showModelSelector={workspaceModelSelectionEnabled}
+                          modelLocked={modelLocked}
                           onStop={stopStream}
                           isStopping={isStopping}
                           variant="v2"
@@ -3917,9 +4045,6 @@ const NumaWorkspaceChatAgents = () => {
             selectedAccountsByApp={selectedAccountsByApp}
             setSelectedAccountsByApp={setSelectedAccountsByApp}
             isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
-            showModelSelector={workspaceModelSelectionEnabled}
-            selectedModelId={selectedModelId}
-            setSelectedModelId={setSelectedModelId}
           />
         </aside>
       )}

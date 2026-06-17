@@ -1,0 +1,30 @@
+{
+  "name": "@numa/cli-dev",
+  "version": "0.1.0",
+  "description": "Numa CLI — dev addon. Adds the `numa-dev` binary with bypass flags (--d-hum, --yes), per-category self-tests, dev context manipulation, and the HTML reference launcher. NEVER install in a workspace MicroVM — Numa-the-LLM should only see @numa/cli.",
+  "type": "module",
+  "bin": {
+    "numa-dev": "./dist/cli/numa-dev.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@numa/cli": "workspace:^",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

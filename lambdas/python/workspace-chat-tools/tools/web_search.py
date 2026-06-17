@@ -599,6 +599,12 @@ def _handle_fetch_url(params: Dict[str, Any]) -> Dict[str, Any]:
             download_url = result.get("download_url")
             if download_url:
                 binary_result["download_url"] = download_url
+            # Forward the sha256 browser-lambda computed over the exact
+            # streamed bytes — the consumer verifies it end-to-end after
+            # downloading. Dropping it here silently disables verification.
+            download_sha256 = result.get("download_sha256")
+            if download_sha256:
+                binary_result["download_sha256"] = download_sha256
             return binary_result
 
         return {

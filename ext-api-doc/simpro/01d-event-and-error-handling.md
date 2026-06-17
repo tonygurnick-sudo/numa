@@ -1,358 +1,127 @@
 ---
-api_name: 'simPRO'
-api_slug: 'simpro'
-generated_from: '00-api-investigation'
-generated_date: '2026-03-30'
-source_phases: ['Phase 7: Real-Time & Event-Driven', 'Phase 8: Operational Concerns']
+api_name: simPRO
+api_slug: simpro
+doc: events + error handling (companion to 01-llm-api-rules.md) — webhooks, polling, errors, recovery
+base_url: https://{build}.simprosuite.com/api/v1.0/ (/api/v1.0 is a real path segment)
+headers: Host {build}.simprosuite.com, Authorization: Bearer {access_token}
+confidence: confirmed (forum payloads / SDK / Laravel pkg) unless tagged [DOCUMENTED]/[UNKNOWN]/[INFERRED]/[CONFIRMED]
 ---
 
-# simPRO -- Event & Error Handling Reference
+# simPRO — Event & Error Handling
 
-> Companion to `01-llm-api-rules.md`. Contains event-driven capabilities (webhooks,
-> polling), error handling patterns, and recovery playbooks.
+## Event mechanisms
 
----
-
-## Event-Driven Capabilities
-
-| Mechanism                | Supported | Notes                                                    |
-| ------------------------ | --------- | -------------------------------------------------------- |
-| Webhooks                 | Yes       | 22 event types; registration via API and UI [DOCUMENTED] |
-| WebSocket                | No        | Not offered [CONFIRMED]                                  |
-| Server-Sent Events (SSE) | No        | Not offered [CONFIRMED]                                  |
-| Long polling             | No        | Not offered [CONFIRMED]                                  |
-| Change feeds / streams   | No        | Use If-Modified-Since for change detection [DOCUMENTED]  |
-
----
+| Mechanism            | Supported | Notes                                        |
+| -------------------- | --------- | -------------------------------------------- |
+| Webhooks             | yes       | 22 event types; register via API + UI        |
+| WebSocket            | NO        | —                                            |
+| SSE                  | NO        | —                                            |
+| Long polling         | NO        | —                                            |
+| Change feeds/streams | NO        | use `If-Modified-Since` for change detection |
 
 ## Webhooks
 
-### Setup
+Register: `POST /webhooks/` (or UI: System > Setup > API > Webhook Subscriptions). URL must be HTTPS and return 200 on delivery.
+`POST /webhooks/` body `{"url":"https://your-endpoint.com/webhook","events":["job.created","job.updated","job.stage.complete"]}`
 
-- **Registration method:** API and UI (System > Setup > API > Webhook Subscriptions) [DOCUMENTED]
-- **Registration endpoint:** `POST /api/v1.0/webhooks/` [DOCUMENTED]
-- **URL requirements:** HTTPS URL that returns HTTP 200 on delivery [DOCUMENTED -- Rollout guide]
+### 22 events
 
-**Register a webhook:**
+| Event                                                         | Trigger                                   |
+| ------------------------------------------------------------- | ----------------------------------------- |
+| contact.created / contact.updated                             | contact created / modified                |
+| company.customer.created / company.customer.updated           | company customer created / modified       |
+| individual.customer.updated                                   | individual customer modified              |
+| job.created / job.updated                                     | job created / modified                    |
+| job.status                                                    | job status code changed                   |
+| job.stage.pending / progress / complete / invoiced / archived | job enters that stage                     |
+| lead.created / lead.updated / lead.status                     | lead created / modified / status changed  |
+| quote.created / quote.updated / quote.status                  | quote created / modified / status changed |
+| job.schedule.created / job.schedule.updated                   | job schedule created / modified           |
+| quote.schedule.created / quote.schedule.updated               | quote schedule created / modified         |
 
-```http
-POST /api/v1.0/webhooks/
-Host: {build}.simprosuite.com
-Authorization: Bearer {access_token}
-Content-Type: application/json
+### Payloads [confirmed — actual received payloads]
 
-{
-  "url": "https://your-endpoint.com/webhook",
-  "events": ["job.created", "job.updated", "job.stage.complete"]
-}
-```
+job.status: `{"ID":"job.status","build":"{build_name}","name":"Job","action":"status","reference":{"companyID":0,"jobID":300555,"statusID":10},"date_triggered":"2023-01-31T09:05:27+00:00","description":"Status of Job #300555 set to \"Job : In Progress\""}`
+job.schedule.created: `{"ID":"job.schedule.created","build":"{build_name}","name":"Job schedule","action":"created","reference":{"companyID":0,"scheduleID":123,"jobID":456,"sectionID":1,"costCenterID":1},"date_triggered":"2023-01-31T09:05:27+00:00","description":"Schedule created for Job #456"}`
+job.attachment.created: `{"ID":"job.attachment.created","build":"{build_name}","name":"Job attachment","action":"created","reference":{"companyID":0,"ID":789,"folderID":1,"attachmentID":"abc-123","attachmentName":"photo.jpg"},"date_triggered":"2023-01-31T09:05:27+00:00","description":"..."}`
 
-[DOCUMENTED -- Rollout guide]
+Standard fields (all always present): `ID` (string, event type e.g. "job.status") · `build` (string) · `name` (string, human entity name e.g. "Job") · `action` (string, e.g. "status"/"created"/"updated") · `reference` (object, entity-specific IDs) · `date_triggered` (string, ISO 8601 with tz offset) · `description` (string).
 
-### Event Catalog (22 events)
+Reference fields by event:
+| Event type | reference fields |
+| --- | --- |
+| job._ | companyID, jobID, (statusID for job.status) |
+| job.schedule._ | companyID, scheduleID, jobID, sectionID, costCenterID |
+| job.attachment._ | companyID, ID, folderID, attachmentID, attachmentName |
+| quote._ | companyID, quoteID (expected) |
+| lead._ | companyID, leadID (expected) |
+| contact._ | companyID, contactID (expected) |
+| _.customer._ | companyID, customerID (expected) |
 
-| Event Name                  | Trigger                      | Notes                 |
-| --------------------------- | ---------------------------- | --------------------- |
-| contact.created             | New contact created          | [DOCUMENTED -- forum] |
-| contact.updated             | Contact modified             | [DOCUMENTED -- forum] |
-| company.customer.created    | New company customer created | [DOCUMENTED -- forum] |
-| company.customer.updated    | Company customer modified    | [DOCUMENTED -- forum] |
-| individual.customer.updated | Individual customer modified | [DOCUMENTED -- forum] |
-| job.created                 | New job created              | [DOCUMENTED -- forum] |
-| job.updated                 | Job modified                 | [DOCUMENTED -- forum] |
-| job.status                  | Job status code changed      | [DOCUMENTED -- forum] |
-| job.stage.pending           | Job enters Pending stage     | [DOCUMENTED -- forum] |
-| job.stage.progress          | Job enters Progress stage    | [DOCUMENTED -- forum] |
-| job.stage.complete          | Job enters Complete stage    | [DOCUMENTED -- forum] |
-| job.stage.invoiced          | Job enters Invoiced stage    | [DOCUMENTED -- forum] |
-| job.stage.archived          | Job enters Archived stage    | [DOCUMENTED -- forum] |
-| lead.created                | New lead created             | [DOCUMENTED -- forum] |
-| lead.updated                | Lead modified                | [DOCUMENTED -- forum] |
-| lead.status                 | Lead status changed          | [DOCUMENTED -- forum] |
-| quote.created               | New quote created            | [DOCUMENTED -- forum] |
-| quote.updated               | Quote modified               | [DOCUMENTED -- forum] |
-| quote.status                | Quote status changed         | [DOCUMENTED -- forum] |
-| job.schedule.created        | Job schedule created         | [DOCUMENTED -- forum] |
-| job.schedule.updated        | Job schedule modified        | [DOCUMENTED -- forum] |
-| quote.schedule.created      | Quote schedule created       | [DOCUMENTED -- forum] |
-| quote.schedule.updated      | Quote schedule modified      | [DOCUMENTED -- forum] |
+### Security / reliability
 
-### Payload Format [CONFIRMED -- forum posts with actual received payloads]
+- Signature header: NONE — receivers cannot cryptographically verify origin. Validate by cross-referencing against the API (GET the referenced job, confirm status matches). IP allowlist: [UNKNOWN].
+- Retry policy / max retries / dead-letter / event ordering: [UNKNOWN].
+- Duplicate delivery: assume yes. Dedup key = `date_triggered` + event `ID` + `reference` IDs.
+- Silently-rejected quote-status PATCH still fires a webhook event despite no change.
 
-**Job status webhook payload:**
+## Polling fallback
 
-```json
-{
-  "ID": "job.status",
-  "build": "{build_name}",
-  "description": "Status of Job #300555 set to \"Job : In Progress\"",
-  "name": "Job",
-  "action": "status",
-  "reference": {
-    "companyID": 0,
-    "jobID": 300555,
-    "statusID": 10
-  },
-  "date_triggered": "2023-01-31T09:05:27+00:00"
-}
-```
+`GET /companies/{cid}/{resource}/?pageSize=250` + header `If-Modified-Since: {last_poll}` (format `YYYY-MM-ddTHH:mm:ss`). Interval ≥60s (respect 10 req/sec). Loop: store last_poll → wait → GET with If-Modified-Since → paginate all pages → update last_poll → repeat.
+Tips: select minimal columns (`?columns=ID,DateModified,Status`); avoid `orderby`+`If-Modified-Since`+`AssignedTo` (→500); stagger resource polling within the 10 req/sec shared budget.
 
-**Job schedule created webhook payload:**
+## Errors
 
-```json
-{
-  "ID": "job.schedule.created",
-  "build": "{build_name}",
-  "name": "Job schedule",
-  "action": "created",
-  "reference": {
-    "companyID": 0,
-    "scheduleID": 123,
-    "jobID": 456,
-    "sectionID": 1,
-    "costCenterID": 1
-  },
-  "date_triggered": "2023-01-31T09:05:27+00:00",
-  "description": "Schedule created for Job #456"
-}
-```
+Format: `{"status":"error","url":"https://xxxxx.simprosuite.com/api/v1.0/...","header":{},"data":{"errors":[{"path":null,"message":"Invalid route.","value":null}]}}`
+Fields (all always present): `status` (always "error") · `url` (request URL) · `header` (echoes YOUR request headers — not error metadata) · `data.errors[]` array of `{path (field name | null for general), message (human), value (problematic value | null)}`. Multiple validation errors can return in one `data.errors` array, e.g.:
+`{"status":"error","url":"https://build.simprosuite.com/api/v1.0/companies/0/jobs/","header":{},"data":{"errors":[{"path":"SiteID","message":"Site not found.","value":999},{"path":"Type","message":"Invalid job type.","value":"InvalidType"}]}}`
 
-**Job attachment webhook payload:**
+### Recovery playbook
 
-```json
-{
-  "ID": "job.attachment.created",
-  "build": "{build_name}",
-  "name": "Job attachment",
-  "action": "created",
-  "reference": {
-    "companyID": 0,
-    "ID": 789,
-    "folderID": 1,
-    "attachmentID": "abc-123",
-    "attachmentName": "photo.jpg"
-  },
-  "date_triggered": "2023-01-31T09:05:27+00:00",
-  "description": "..."
-}
-```
+| HTTP | Meaning                    | Retryable | Action                                                                                        | Max retries |
+| ---- | -------------------------- | --------- | --------------------------------------------------------------------------------------------- | ----------- |
+| 200  | Success (GET/POST)         | -         | -                                                                                             | -           |
+| 204  | No Content (PATCH success) | -         | verify with GET — may be silent rejection                                                     | -           |
+| 400  | Bad request                | no        | fix per `data.errors[].message`                                                               | 0           |
+| 401  | Unauthorized               | yes       | refresh OAuth token (`POST {build}.simprosuite.com/oauth2/token`, refresh_token grant), retry | 1           |
+| 403  | Forbidden                  | no        | check Access Type (Direct vs User Token); do NOT loop refresh                                 | 0           |
+| 404  | Not found                  | no        | verify resource ID; check companyID (0 for single-company)                                    | 0           |
+| 405  | Method not allowed         | no        | verify HTTP method supported for endpoint                                                     | 0           |
+| 409  | Conflict                   | maybe     | concurrent modification — re-fetch and retry                                                  | 1           |
+| 422  | Validation failed          | no        | fix fields per `data.errors`                                                                  | 0           |
+| 429  | Rate limited               | yes       | wait ≥1s; exponential backoff                                                                 | 3           |
+| 500  | Internal error             | yes       | backoff; check column/filter conflicts                                                        | 3           |
+| 502  | Bad gateway                | yes       | retry after 5s                                                                                | 3           |
+| 503  | Service unavailable        | yes       | check status.simprogroup.com; backoff                                                         | 3           |
 
-**Standard payload fields:**
+### Rate limit
 
-| Field          | Type   | Always Present | Description                                                    |
-| -------------- | ------ | -------------- | -------------------------------------------------------------- |
-| ID             | string | Yes            | Event type identifier (e.g., "job.status") [CONFIRMED]         |
-| build          | string | Yes            | Build name that triggered the event [CONFIRMED]                |
-| name           | string | Yes            | Human-readable entity name (e.g., "Job") [CONFIRMED]           |
-| action         | string | Yes            | Action type (e.g., "status", "created", "updated") [CONFIRMED] |
-| reference      | object | Yes            | Entity-specific IDs (varies by event type) [CONFIRMED]         |
-| date_triggered | string | Yes            | ISO 8601 timestamp with timezone offset [CONFIRMED]            |
-| description    | string | Yes            | Human-readable description of the event [CONFIRMED]            |
+| Scope                     | Limit       | Window   | Notes                                    |
+| ------------------------- | ----------- | -------- | ---------------------------------------- |
+| Per-build (ALL consumers) | 10 requests | 1 second | strictly enforced since Aug 2022         |
+| Per-build (daily)         | [UNKNOWN]   | 24h      | exists but number unpublished [INFERRED] |
 
-**Reference object fields by event type:**
+Per-build (tenant), shared across ALL consumers/threads/integrations — NOT per-key. No rate-limit headers (no `X-RateLimit-*`); track rate client-side. Exceeded → HTTP 429.
+Backoff: honor `Retry-After` if present ([UNKNOWN if returned]); else exponential from 1s, max 30s, +0–500ms jitter; cap proactively at 8 req/sec (80% threshold, per Laravel pkg config).
 
-| Event type        | Reference fields                                      |
-| ----------------- | ----------------------------------------------------- |
-| job.\*            | companyID, jobID, (statusID for job.status)           |
-| job.schedule.\*   | companyID, scheduleID, jobID, sectionID, costCenterID |
-| job.attachment.\* | companyID, ID, folderID, attachmentID, attachmentName |
-| quote.\*          | companyID, quoteID (expected, similar pattern)        |
-| lead.\*           | companyID, leadID (expected, similar pattern)         |
-| contact.\*        | companyID, contactID (expected, similar pattern)      |
-| _.customer._      | companyID, customerID (expected, similar pattern)     |
+## Counter-exceptions (differ from standard REST)
 
-### Verification / Security
+1. Pagination metadata in HEADERS, not body. Body = bare JSON array (not `{"data":[...],"pagination":{...}}`).
+2. Rate limit per-build, not per-key — integrations compete for the same budget.
+3. PATCH 204 ≠ guaranteed success — priority-violating status updates return 204 but do nothing; rejected quote-status PATCH still fires a webhook.
+4. No rate-limit response headers — track client-side.
+5. Error response echoes your request headers in the `header` field.
 
-- **Signature header:** None [CONFIRMED -- forum discussion found no signature mechanism]
-- **Signature algorithm:** N/A
-- **IP allowlist available:** [UNKNOWN]
+## Output formatting (for user display)
 
-> **Risk:** Without signature verification, webhook receivers cannot cryptographically verify payloads came from simPRO. Recommend validating webhook source by cross-referencing received data against the API (e.g., GET the referenced job to confirm the status matches).
-
-### Reliability
-
-- **Retry policy:** [UNKNOWN -- not documented]
-- **Max retries:** [UNKNOWN]
-- **Dead letter / failure notification:** [UNKNOWN]
-- **Event ordering guarantee:** [UNKNOWN]
-- **Duplicate delivery possible:** Assume yes [CONFIRMED -- safe default]
-- **Status update webhooks may fire for silent rejections:** Quote status updates where PATCH silently fails still trigger webhook events [CONFIRMED -- forum]
-- **Deduplication strategy:** Use `date_triggered` + event `ID` + `reference` IDs as dedup key
-
----
-
-## Polling Fallback
-
-> Use this when webhooks are insufficient or as a backup strategy.
-
-### Recommended Approach
-
-- **Endpoint:** `GET /api/v1.0/companies/{companyID}/{resource}/?pageSize=250` with `If-Modified-Since` header
-- **Change detection field:** `If-Modified-Since` header (datetime format: YYYY-MM-ddTHH:mm:ss) [DOCUMENTED]
-- **Recommended interval:** 60 seconds minimum [CONFIRMED -- must respect 10 req/sec limit]
-- **Rate limit budget:** 10 req/sec shared with all other API activity [DOCUMENTED]
-
-### Polling Pattern
-
-```
-1. Store last_poll_timestamp = current time
-2. Wait 60 seconds (or longer)
-3. GET /api/v1.0/companies/0/{resource}/?pageSize=250
-   If-Modified-Since: {last_poll_timestamp}
-4. Process returned records (paginate through all pages)
-5. Update last_poll_timestamp = current time
-6. Goto 2
-```
-
-### Efficient Polling Tips
-
-- **Use If-Modified-Since:** Only fetch records changed since last poll [DOCUMENTED]
-- **Set pageSize=250:** Minimize the number of requests per poll cycle [DOCUMENTED]
-- **Select minimal columns:** Use `?columns=ID,DateModified,Status` to reduce response size [DOCUMENTED]
-- **Avoid orderby+If-Modified-Since+AssignedTo:** This combination causes 500 errors [DOCUMENTED -- forum]
-- **Budget requests:** At 10 req/sec shared limit, stagger resource polling
-
----
-
-## Error Handling
-
-### Standard Error Response Format [CONFIRMED -- forum post with actual response]
-
-```json
-{
-  "status": "error",
-  "url": "https://xxxxx.simprosuite.com/api/v1.0/...",
-  "header": {},
-  "data": {
-    "errors": [
-      {
-        "path": null,
-        "message": "Invalid route.",
-        "value": null
-      }
-    ]
-  }
-}
-```
-
-**Error response fields:**
-
-| Field                 | Type        | Always Present | Description                                                            |
-| --------------------- | ----------- | -------------- | ---------------------------------------------------------------------- |
-| status                | string      | Yes            | Always "error" for error responses                                     |
-| url                   | string      | Yes            | The request URL that caused the error                                  |
-| header                | object      | Yes            | Request headers (echoed back)                                          |
-| data.errors           | array       | Yes            | Array of error objects                                                 |
-| data.errors[].path    | string/null | Yes            | Field path (null for general errors, field name for validation errors) |
-| data.errors[].message | string      | Yes            | Human-readable error message                                           |
-| data.errors[].value   | any/null    | Yes            | The problematic value (null for general errors)                        |
-
-### Validation Error Example
-
-```json
-{
-  "status": "error",
-  "url": "https://build.simprosuite.com/api/v1.0/companies/0/jobs/",
-  "header": {},
-  "data": {
-    "errors": [
-      {
-        "path": "SiteID",
-        "message": "Site not found.",
-        "value": 999
-      },
-      {
-        "path": "Type",
-        "message": "Invalid job type.",
-        "value": "InvalidType"
-      }
-    ]
-  }
-}
-```
-
-> Multiple validation errors can be returned in a single response within the `data.errors` array. [CONFIRMED]
-
-### Recovery Playbook
-
-| HTTP Status | Meaning                    | Retryable? | Recovery Action                                                                                           | Max Retries |
-| ----------- | -------------------------- | ---------- | --------------------------------------------------------------------------------------------------------- | ----------- |
-| 200         | Success (GET, POST)        | -          | -                                                                                                         | -           |
-| 204         | No Content (PATCH success) | -          | Verify with GET (may be silent rejection)                                                                 | -           |
-| 400         | Bad request                | No         | Fix request per `data.errors[].message`                                                                   | 0           |
-| 401         | Unauthorized               | Yes        | Refresh OAuth token (POST to `{build}.simprosuite.com/oauth2/token` with refresh_token grant), then retry | 1           |
-| 403         | Forbidden                  | No         | Check API application permissions (Direct Access vs User Token); verify access type                       | 0           |
-| 404         | Not found                  | No         | Verify resource ID exists; check companyID is correct (0 for single-company)                              | 0           |
-| 405         | Method not allowed         | No         | Verify HTTP method is supported for this endpoint                                                         | 0           |
-| 409         | Conflict                   | Maybe      | Resource may have been modified concurrently; re-fetch and retry                                          | 1           |
-| 422         | Validation failed          | No         | Fix fields per `data.errors` array                                                                        | 0           |
-| 429         | Rate limited               | Yes        | Wait at least 1 second; implement exponential backoff                                                     | 3           |
-| 500         | Internal error             | Yes        | Retry with exponential backoff; check for known column/filter conflicts                                   | 3           |
-| 502         | Bad gateway                | Yes        | Retry after 5 seconds                                                                                     | 3           |
-| 503         | Service unavailable        | Yes        | Check status.simprogroup.com; retry with backoff                                                          | 3           |
-
-### Rate Limit Details
-
-| Scope                     | Limit       | Window   | Notes                                                  |
-| ------------------------- | ----------- | -------- | ------------------------------------------------------ |
-| Per-build (all consumers) | 10 requests | 1 second | Strictly enforced since Aug 2022 [DOCUMENTED -- forum] |
-| Per-build (daily)         | [UNKNOWN]   | 24 hours | Exists but number not published [DOCUMENTED]           |
-
-**Rate limit headers:** No standard rate limit headers (X-RateLimit-\*) are returned. [CONFIRMED -- no evidence of rate limit headers in any source]
-
-**Rate limit exceeded response:** HTTP 429 Too Many Requests [DOCUMENTED -- forum]
-
-**Backoff strategy:**
-
-1. Check for `Retry-After` header first (if present, honor it) [UNKNOWN -- not confirmed to exist]
-2. Otherwise: exponential backoff starting at 1 second
-3. Max delay: 30 seconds
-4. Add jitter: random 0-500ms to avoid thundering herd
-5. Use 80% threshold: pause proactively at 8 req/sec [DOCUMENTED -- Laravel package config]
-
-**Scope clarification:** The rate limit is per-build (tenant), shared across ALL API consumers on that build. Multi-threaded requests from one integration count toward the same limit as requests from other integrations. [CONFIRMED -- forum]
-
----
-
-## Counter-Exceptions
-
-> Behaviors that differ from standard HTTP/REST conventions.
-
-1. **Pagination in headers, not body.** simPRO puts all pagination metadata in response headers. The body is a bare JSON array, not wrapped in `{ "data": [...], "pagination": {...} }`. [DOCUMENTED]
-
-2. **Per-build rate limits, not per-key.** The 10 req/sec limit applies to the entire build, not individual API keys. Multiple integrations compete for the same budget. [DOCUMENTED -- forum]
-
-3. **PATCH 204 does not guarantee success.** Status updates that violate priority hierarchy return 204 No Content but silently do nothing. Even worse, quote status PATCH that is silently rejected still triggers a webhook event. [CONFIRMED -- forum]
-
-4. **No rate limit response headers.** Unlike most APIs, simPRO does not include X-RateLimit-Remaining or similar headers. You must track request rate client-side. [CONFIRMED]
-
-5. **Error response includes echoed request headers.** The `header` field in error responses contains the headers from your request, not standard error metadata. [CONFIRMED -- forum]
-
----
-
-## Output Formatting Guide
-
-> How to present simPRO API responses to the user in the workspace agent.
-
-### Recommended Display Formats
-
-| Data Type  | Format            | Example                                                                                  |
+| Data       | Format            | Example                                                                                  |
 | ---------- | ----------------- | ---------------------------------------------------------------------------------------- |
-| Single job | Key-value summary | "Job #123: Service at Main Office for Acme Corp. Status: Progress. Issued: Jan 15, 2026" |
-| Job list   | Markdown table    | Table with ID, Type, Customer, Status, DateIssued columns                                |
-| Schedule   | Calendar-style    | "Mar 15, 2026: 8:00 AM - 5:00 PM (John Smith at Job #123)"                               |
-| Invoice    | Financial summary | "Invoice #456: $1,500.00 for Acme Corp. Status: Paid"                                    |
-| Dates      | Human-readable    | "January 15, 2026" (not "2026-01-15")                                                    |
-| Currency   | Localized         | "$1,234.56" (use customer's locale if known)                                             |
-| Errors     | Clear message     | "Could not find job #123. Verify the ID and try again."                                  |
+| Single job | key-value summary | "Job #123: Service at Main Office for Acme Corp. Status: Progress. Issued: Jan 15, 2026" |
+| Job list   | markdown table    | ID, Type, Customer, Status, DateIssued columns                                           |
+| Schedule   | calendar-style    | "Mar 15, 2026: 8:00 AM – 5:00 PM (John Smith at Job #123)"                               |
+| Invoice    | financial summary | "Invoice #456: $1,500.00 for Acme Corp. Status: Paid"                                    |
+| Dates      | human-readable    | "January 15, 2026" (not "2026-01-15")                                                    |
+| Currency   | localized         | "$1,234.56" (customer locale if known)                                                   |
+| Errors     | clear message     | "Could not find job #123. Verify the ID and try again."                                  |
 
-### Truncation Rules
-
-- Lists: Show first 10 records, note total count from `Result-Total` header
-- Long fields: Truncate at 200 characters with "..."
-- Nested records: Show 2 levels deep (job > section; not full cost center hierarchy)
-- Custom fields: Show only if user specifically requests them
-
----
-
-_Generated from the investigation questionnaire, Phases 7-8._
+Truncation: lists → first 10 records + note `Result-Total`; long fields → 200 chars + "..."; nested → 2 levels (job > section, not full cost-center tree); custom fields → only on request.

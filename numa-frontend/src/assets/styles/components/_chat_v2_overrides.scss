@@ -693,7 +693,10 @@
   max-height: min(56vh, 460px);
   font-size: 0.875rem !important;
   line-height: 1.25rem !important;
-  padding: 14px 44px 14px 16px !important;
+  // Right padding reserves room for the inline-tools cluster (paperclip + optional
+  // model-tier chip + chat-health slot). The width is computed in ChatInput and
+  // published as `--v2-textarea-pad-right`; the fallback covers the paperclip alone.
+  padding: 14px var(--v2-textarea-pad-right, 44px) 14px 16px !important;
   overflow-y: hidden;
   box-sizing: border-box;
   vertical-align: middle;
@@ -713,7 +716,11 @@
   top: auto;
   bottom: 0.5rem;
   transform: none;
-  z-index: 2;
+  // Intentionally no z-index: as a positioned element it already paints above the
+  // (static) textarea. A positive z-index here would establish a stacking context
+  // that traps the model-selector dropdown menu — even at z-index:9999 it could not
+  // escape to sit above the settings/history drawer (z-index:1035). Leaving z-index
+  // auto lets the fixed-positioned menu resolve at the root stacking context.
   display: flex;
   align-items: center;
   gap: 2px;
@@ -751,6 +758,107 @@
 .workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .attachment-icon.v2-inline:hover:not(:disabled) {
   background: #f3f4f6;
   color: #71717a;
+}
+
+// Compact inline model-tier chip in the v2 composer (Claude-style `Premium ⌄`).
+// Sits in the inline-tools cluster to the left of the paperclip. Mirrors the v1
+// `model-selector-dropdown` menu (it reuses `.model-item`/`.model-name`/
+// `.model-description` from _chat_components.scss) but the toggle is a bespoke
+// text-and-chevron chip rather than the icon+indicator button.
+.workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-dropdown-v2 {
+  position: static !important;
+  display: inline-flex;
+  align-items: center;
+}
+
+.workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-toggle-v2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  height: 32px;
+  padding: 0 0.4rem;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: #a1a1aa;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+
+  // Suppress the base `.model-selector-dropdown .dropdown-toggle::after`
+  // caret — the v2 toggle renders an explicit lucide chevron instead.
+  &::after {
+    display: none;
+  }
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: #f3f4f6;
+    color: #71717a;
+  }
+
+  &:focus {
+    box-shadow: none;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-toggle-v2-label {
+  max-width: 9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-toggle-v2-caret {
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+// Cheap-model savings hint beside the model chip (Standard = 1/4 the credits of Premium). Subtle
+// green pill; only rendered when SHOW_CREDITS is on. Hidden on mobile (see the narrow media query).
+.workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-credit-note {
+  flex: 0 0 auto;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+// Per-option credit-rate note inside the model dropdown (Standard ¼ / Premium baseline / Expert 3x).
+.model-item .model-name .model-credit-note {
+  margin-left: 0.4rem;
+  padding: 0.02rem 0.38rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+// Credit-note tone (chip + dropdown): green = cheaper, grey = baseline, amber = pricier.
+.model-credit-note-save {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.12);
+}
+.model-credit-note-neutral {
+  color: #6b7280;
+  background: rgba(107, 114, 128, 0.12);
+}
+.model-credit-note-premium {
+  color: #b45309;
+  background: rgba(180, 83, 9, 0.12);
 }
 
 .workspace-chat-v2 .chat-input-helper-text {
@@ -2673,6 +2781,21 @@
   .workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .chat-input-inline-tools {
     right: 0.42rem;
     bottom: 0.34rem;
+  }
+
+  .workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-toggle-v2 {
+    height: 30px;
+    padding: 0 0.32rem;
+    font-size: 0.72rem;
+  }
+
+  .workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-toggle-v2-label {
+    max-width: 6.5rem;
+  }
+
+  // Inline-tools row is tight on mobile — drop the savings hint here (still visible on desktop).
+  .workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .model-selector-credit-note {
+    display: none;
   }
 
   .workspace-chat-v2 .chat-input-container .chat-input-textarea-wrap .attachment-icon-anchor-v2-inline {

@@ -64,10 +64,18 @@ KB access enabled when ANY of:
   - Legacy fallback: allowedKnowledgeBases field not set AND queryDataSources === true
 
 If autoToolsEnabled (default true):
-  -> knowledge_base (if hasKBs), web_search, memories_tool, create_agent_tool (if enabled)
+  -> knowledge_base (if hasKBs), web_search, create_agent_tool, memories_tool
+     (Auto mode = all standard tools on; the per-tool toggles are ignored,
+      matching the chat UI which renders those switches ON+disabled. See BUG-187.)
 Else:
-  -> knowledge_base (if hasKBs), web_search (if webSearchEnabled), memories_tool, create_agent_tool (if enabled)
+  -> knowledge_base (if hasKBs), web_search (if webSearchEnabled), memories_tool, create_agent_tool (if createAgentEnabled)
 ```
+
+> **BUG-187:** Auto mode previously gated `create_agent_tool` on `createAgentEnabled`,
+> so an agent with `autoToolsEnabled=true` + `createAgentEnabled=false` (the default)
+> could create agents in interactive chat but was told "Agent Creation tool isn't
+> enabled" in scheduled/triggered runs. Auto mode now enables it unconditionally to
+> match the frontend's `getEnabledTools` (`chatSystemPromptUtils.ts`).
 
 **KB ID resolution for "All knowledge bases":**
 When `allKBsAllowed` is true but no specific IDs exist, `fetchAccessibleKBIds()` queries the `numa-{client}-knowledge-bases` table to resolve actual KB IDs the user can access (same logic as the frontend's KnowledgeBaseProvider). Checks: system KBs (company, numa-support), viewer/editor lists, creator.

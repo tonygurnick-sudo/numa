@@ -25,7 +25,11 @@ import structlog
 
 from prm import client as prm_client
 
-from .approval import APPROVAL_POLL_INTERVAL_SECONDS, APPROVAL_TIMEOUT_SECONDS
+from .approval import (
+    APPROVAL_POLL_INTERVAL_SECONDS,
+    APPROVAL_TIMEOUT_SECONDS,
+    approval_is_unattended,
+)
 
 # Import consolidated vault functions from same Lambda
 try:
@@ -146,8 +150,14 @@ def _create_approval_request(
         return ""
 
 
-def _poll_approval_status(approval_id: str) -> Optional[str]:
-    """Poll for approval status. Returns 'approved', 'denied', or None if still pending."""
+def _poll_approval_status(
+    approval_id: str, poll_started_at: Optional[float] = None
+) -> Optional[str]:
+    """Poll for approval status.
+
+    Returns 'approved', 'denied', 'unattended' (only when ``poll_started_at``
+    is supplied), or None if still pending.
+    """
     if not INTEGRATIONS_APPROVAL_TABLE or not approval_id:
         return None
 
@@ -161,8 +171,15 @@ def _poll_approval_status(approval_id: str) -> Optional[str]:
         if "Item" not in response:
             return None
 
-        status = response["Item"].get("status", {}).get("S", "pending")
-        return status if status in ("approved", "denied") else None
+        item = response["Item"]
+        status = item.get("status", {}).get("S", "pending")
+        if status in ("approved", "denied"):
+            return status
+        if poll_started_at is not None and approval_is_unattended(
+            item, poll_started_at
+        ):
+            return "unattended"
+        return None
     except Exception as e:
         logger.error(
             "Failed to poll approval status", approval_id=approval_id, error=str(e)
@@ -201,14 +218,23 @@ def _wait_for_approval(approval_id: str) -> bool:
                 error=str(e),
             )
 
+    poll_started_at = time.time()
+
     while time.time() < deadline:
-        status = _poll_approval_status(approval_id)
+        status = _poll_approval_status(approval_id, poll_started_at)
 
         if status == "approved":
             logger.info("Approval granted", approval_id=approval_id)
             return True
         elif status == "denied":
             logger.info("Approval denied", approval_id=approval_id)
+            return False
+        elif status == "unattended":
+            logger.warning(
+                "Approval unattended — card never acknowledged",
+                _name="APPROVAL_UNATTENDED",
+                approval_id=approval_id,
+            )
             return False
 
         time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)

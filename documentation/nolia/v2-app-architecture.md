@@ -115,7 +115,7 @@ async def _run_step(step_type_id, prompt, conversation_id, step_suffix, **kwargs
     step_config = get_agent_type(step_type_id)
     step_conversation_id = f"{conversation_id}-step-{step_suffix}"
 
-    # Setup MCP tools for this step
+    # Set up the numa CLI tool docs available to this step
     tools = await setup_agent_tools(step_config, ...)
 
     # Run Claude Agent SDK

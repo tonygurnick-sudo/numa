@@ -15,7 +15,7 @@
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { withPRM } from '../utils/prmUtils';
-import type { CallOutcome, Prospect, TodayCalls, SdrPlaybook, WrapUpOutcome } from '../types/voice';
+import type { CallOutcome, Prospect, TodayCalls, SdrPlaybook, WrapUpOutcome, CallOutcomeStub } from '../types/voice';
 
 /** S3 key prefix for Voice data files inside the DATA bucket. The company KB
  *  maps to `documents/company/`; the agents write today_calls.json /
@@ -286,6 +286,43 @@ export async function loadPlaybook(credentials: AwsCredentialIdentity): Promise<
   }
 }
 
+/** Spreadsheet extensions the intake pipeline accepts (mirrors the intake
+ *  lambda's INTAKE_EXTENSIONS — anything else is silently skipped server-side,
+ *  so reject it client-side with a clear message instead). */
+export const INTAKE_EXTENSIONS = ['.xlsx', '.xls'] as const;
+
+export function isIntakeSpreadsheet(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return INTAKE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+/**
+ * FEAT-167: upload a prospect spreadsheet to the per-tenant intake bucket
+ * (VOICE_INTAKE_BUCKET, client region). The bucket's S3 notification fires the
+ * intake lambda, which copies the file into the company KB and triggers the
+ * Prospect Ingest agent — no further FE action needed after the upload lands.
+ * The timestamped key keeps repeat uploads of a same-named file distinct in the
+ * intake bucket (dedup downstream is by file+ETag).
+ */
+export async function uploadProspectSpreadsheet(credentials: AwsCredentialIdentity, file: File): Promise<void> {
+  if (!isIntakeSpreadsheet(file.name)) {
+    throw new Error(`Voice: "${file.name}" is not a spreadsheet (${INTAKE_EXTENSIONS.join(' / ')})`);
+  }
+  const region = getRegion();
+  const bucket = requireSession('VOICE_INTAKE_BUCKET');
+  const client = makeClient(credentials, region);
+  const safeName = file.name.replace(/[^\w.\- ]+/g, '_');
+  const key = `uploads/${new Date().toISOString().replace(/[:.]/g, '-')}_${safeName}`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: new Uint8Array(await file.arrayBuffer()),
+      ContentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+  );
+}
+
 /**
  * Persist an SDR wrap-up outcome to the OUTPUTS bucket. The post-call processor
  * reads it back by contactId at voice/outcomes/{contactId}.json.
@@ -300,6 +337,27 @@ export async function saveCallOutcome(credentials: AwsCredentialIdentity, outcom
       Bucket: bucket,
       Key: key,
       Body: JSON.stringify(outcome),
+      ContentType: 'application/json',
+    })
+  );
+}
+
+/**
+ * Persist a pre-wrap-up STUB the moment a call ends, capturing the dialled number,
+ * prospect company, and SDR identity even if the SDR never completes the wrap-up.
+ * Writes the SAME key as {@link saveCallOutcome}; a later full save overwrites it.
+ * Best-effort by contract — callers should swallow errors so it never blocks the UI.
+ */
+export async function saveCallOutcomeStub(credentials: AwsCredentialIdentity, stub: CallOutcomeStub): Promise<void> {
+  const region = getRegion();
+  const bucket = getOutputsBucket();
+  const client = makeClient(credentials, region);
+  const key = `${VOICE_OUTCOMES_PREFIX}/${stub.contactId}.json`;
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: JSON.stringify(stub),
       ContentType: 'application/json',
     })
   );

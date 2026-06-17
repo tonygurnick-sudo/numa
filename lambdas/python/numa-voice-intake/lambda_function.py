@@ -145,7 +145,7 @@ def _emit_prospect_event(filename: str, timestamp: str, etag: str) -> None:
     # spreadsheet copied to the KB but the Prospect Ingest agent never fired,
     # with no retry — a silent failure. Re-processing is safe: the emit is
     # deduped (dedup_key) and the KB copy is an idempotent overwrite.
-    events_client.put_events(
+    response = events_client.put_events(
         Entries=[
             {
                 "Source": "numa.connector.connect",
@@ -155,6 +155,16 @@ def _emit_prospect_event(filename: str, timestamp: str, etag: str) -> None:
             }
         ]
     )
+    # PutEvents returns HTTP 200 even when an individual entry fails (throttle /
+    # bus policy / internal error) — boto3 raises nothing. Without this check the
+    # "propagates so S3 retries" guarantee above is false for the common partial-
+    # failure case. Mirror numa-voice-processor: raise so the async retry fires.
+    if response.get("FailedEntryCount", 0) > 0:
+        entry = (response.get("Entries") or [{}])[0]
+        raise RuntimeError(
+            "PutEvents entry failed: "
+            f"{entry.get('ErrorCode', 'Unknown')} — {entry.get('ErrorMessage', '')}"
+        )
     logger.info(
         "Prospect ingest event emitted",
         _name="VOICE_INTAKE_DISPATCHED",

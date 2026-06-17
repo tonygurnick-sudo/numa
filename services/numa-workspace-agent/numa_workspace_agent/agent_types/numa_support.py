@@ -152,13 +152,17 @@ NUMA_SUPPORT = AgentTypeConfig(
     system_prompt_builder=build_support_prompt,
     identity_override=SUPPORT_IDENTITY,
     # Read-only file tools (context files, screenshots) + Write for drafting
-    # escalation emails. No Bash / code execution — support never needs it.
+    # escalation emails. Bash is present ONLY as the numa-CLI transport: the
+    # allowed_tools allowlist admits `Bash(numa:*)` and nothing else, and
+    # `allowed_cli_commands` below forces acceptEdits (no bypassPermissions),
+    # so arbitrary code execution stays off — support never needs it.
     tools=[
         "Read",
         "Glob",
         "Grep",
         "Write",
         "TodoWrite",
+        "Bash",
     ],
     allowed_tools=[
         "Read",
@@ -166,29 +170,31 @@ NUMA_SUPPORT = AgentTypeConfig(
         "Grep",
         "Write",
         "TodoWrite",
-        # Numa platform tool — restricted to KB search + web search below
-        "mcp__numa__numa_tool",
-        # Email-only integrations: lets the support agent send an escalation
-        # email to customer success on the user's behalf when a Gmail/Outlook
-        # integration is connected. Scoped to email by the frontend, which is
-        # the only thing that enables integrations on support conversations.
-        "mcp__integrations__run_action",
-        "mcp__integrations__configure_props",
-        "mcp__integrations__proxy_request",
+        # Numa platform access via the CLI — KB search (numa files), web
+        # search (numa web), and email-only integrations (numa integrations)
+        # for sending escalation emails to customer success on the user's
+        # behalf. Categories enforced server-side by the Phase-5 allow-list
+        # below; integration scope (Gmail/Outlook only) is enforced by the
+        # support frontend, which is the only thing that enables integrations
+        # on support conversations.
+        "Bash(numa:*)",
     ],
-    # Layer 2: the unified Numa MCP tool (scoped to support needs) plus the
-    # Pipedream integrations MCP for email sending. Connect/vault MCP stay off.
+    # MCP layer is gone on this branch — the numa CLI replaced it. Email
+    # escalation now runs through `numa integrations` (was the Pipedream
+    # integrations MCP), gated by the in-chat approval prompt.
     enable_scripts_mcp=False,
-    enable_integrations_mcp=True,
-    enable_numa_mcp=True,
+    enable_integrations_mcp=False,
+    enable_numa_mcp=False,
     enable_connect_mcp=False,
     enable_vault_mcp=False,
-    allowed_numa_operations=[
-        "numa_files",
-        "knowledge_base",  # legacy alias, retained for chat history replay
-        "web_search",
-    ],
-    # Layer 3: reference docs for KB search + web search
+    # Phase-5 server-side CLI allow-list: KB search (files), web search (web),
+    # and email escalation (integrations — scoped to the user's connected
+    # Gmail/Outlook by the frontend passthrough). Setting this also forces
+    # acceptEdits permission mode (see sdk_config._allow_bypass), keeping the
+    # no-code-execution intent — the integration send still surfaces the
+    # in-chat approval prompt before anything leaves the user's mailbox.
+    allowed_cli_commands=["files", "web", "integrations"],
+    # Reference docs for KB search + web search
     enabled_numa_tools=["knowledge_search", "web_search"],
     tools_source_dirs=["numa"],
     plugins_path="/app/plugins/numa",

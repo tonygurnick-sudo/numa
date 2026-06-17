@@ -497,6 +497,53 @@ def search_jobs(
     }
 
 
+def search_all_jobs(
+    server: str,
+    token: str,
+    name: str = "",
+    page_size: int = 100,
+    max_pages: int = 50,
+) -> Dict[str, Any]:
+    """Fetch ALL matching jobs across pages.
+
+    ``search_jobs`` returns a single page; the chat agent has no "load more"
+    affordance, so an account with more jobs than one page was silently
+    truncated (``handle_connect_synergy_list`` requested page 1 only). We walk
+    every page up to a safety cap and return the complete set — mirroring
+    ``get_folder_items``. Stops on a short/empty page (the universal last-page
+    signal) so it works even when the API omits ``TotalPages``.
+    """
+    page_size = max(int(page_size or 100), 1)
+    jobs: List[Dict[str, Any]] = []
+    total_rows = 0
+    truncated = False
+    page = 1
+    while True:
+        data = search_jobs(server, token, name=name, page=page, page_size=page_size)
+        page_items = data.get("items") or []
+        jobs.extend(page_items)
+        total_rows = data.get("total_rows") or total_rows
+        total_pages = data.get("total_pages")
+        # Stop on a short/empty page, an explicit last page, or once we've
+        # gathered the reported total.
+        if not page_items or len(page_items) < page_size:
+            break
+        if total_pages and page >= total_pages:
+            break
+        if total_rows and len(jobs) >= total_rows:
+            break
+        if page >= max_pages:
+            truncated = bool(total_rows) and len(jobs) < total_rows
+            break
+        page += 1
+    return {
+        "items": jobs,
+        "total_rows": total_rows or len(jobs),
+        "pages_fetched": page,
+        "truncated": truncated,
+    }
+
+
 def list_job_folders(server: str, token: str, job_id: str) -> List[Dict[str, Any]]:
     """Return top-level folders for a job."""
     base_url = _build_base_url(server)
@@ -582,6 +629,92 @@ def get_folder_items(server: str, token: str, folder_id: str) -> Dict[str, Any]:
     }
 
 
+def _build_limit_id(id_string: str) -> Dict[str, Any]:
+    """Build a 12d ``LimitID`` object from an ``N_N`` IDString.
+
+    12d's ``/files/search`` needs the *server* id as well as the entity id:
+    ``"8_1"`` -> ``{"_id": 8, "_server_id": 1, "IDString": "8_1"}``. Sending
+    only ``IDString`` returns HTTP 500 ("Object reference not set to an
+    instance of an object") — that malformed payload was why early file-search
+    attempts failed and were mistaken for an indexing problem.
+    """
+    obj: Dict[str, Any] = {"IDString": id_string}
+    parts = (id_string or "").split("_")
+    if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+        obj["_id"] = int(parts[0])
+        obj["_server_id"] = int(parts[1])
+    return obj
+
+
+def search_files(
+    server: str,
+    token: str,
+    query: str,
+    job_id: str,
+    page_size: int = 25,
+    show_deleted: bool = False,
+) -> Dict[str, Any]:
+    """Search files within a job by name AND contents, merged.
+
+    12d file search is **job-scoped** — it requires ``LimitSearchTo=2`` (the job
+    and its sub-jobs) plus the job's full ``LimitID``. There is no working
+    global file search; the 12d web client itself always scopes to a job. We run
+    the filename and full-text *content* searches separately and merge the
+    results (deduped by file_id) so one query matches both file names and
+    document contents. Full-text content search works — verified live against
+    the cuttriss instance.
+    """
+    base_url = _build_base_url(server)
+    headers = {
+        "Authorization": _normalize_token(token),
+        "Content-Type": "application/json",
+    }
+    base_body: Dict[str, Any] = {
+        "Page": 1,
+        "PageSize": page_size,
+        "Attributes": [],
+        "ShowDeletedFiles": show_deleted,
+        "LimitSearchTo": 2,  # job + sub-jobs (verified against the web client)
+        "LimitID": _build_limit_id(job_id),
+    }
+
+    merged: Dict[str, Dict[str, Any]] = {}
+    for field in ("FileName", "Contents"):
+        body = {**base_body, field: query}
+        try:
+            response = httpx.post(
+                f"{base_url}/api/v1/files/search",
+                json=body,
+                headers=headers,
+                timeout=90,
+            )
+            _check_response(response)
+        except SynergyAuthError:
+            raise
+        except httpx.HTTPError as exc:
+            # One field failing must not sink the whole search — keep whatever
+            # the other field returned.
+            logger.warning(
+                "Synergy file search field failed",
+                field=field,
+                job_id=job_id,
+                error=str(exc),
+            )
+            continue
+        data = response.json()
+        items = data.get("Result") or data.get("Items") or data.get("items") or []
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            normalized = _normalize_file(raw)
+            fid = normalized.get("file_id")
+            if fid and fid not in merged:
+                merged[fid] = normalized
+
+    files = list(merged.values())
+    return {"job_id": job_id, "files": files, "files_total": len(files)}
+
+
 def download_file(server: str, token: str, file_id: str) -> tuple[bytes, str]:
     """Download a file from Synergy. Returns (content_bytes, filename).
 
@@ -657,6 +790,7 @@ def _normalize_file(file: Dict[str, Any]) -> Dict[str, Any]:
         "size": file.get("FileSize") or file.get("Size"),
         "content_type": file.get("ContentType") or file.get("MimeType"),
         "modified_at": file.get("ModifiedDate") or file.get("LastModified"),
+        "path": file.get("Path") or file.get("FolderPath") or "",
     }
 
 

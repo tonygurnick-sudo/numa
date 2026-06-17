@@ -56,6 +56,7 @@ function withDefaults(c?: CreditConfig): FullConfig {
       agent: { ...DEFAULT_CREDIT_CONFIG.valueTiers.agent, ...c?.valueTiers?.agent },
     },
     marginsByTier: { ...DEFAULT_CREDIT_CONFIG.marginsByTier, ...c?.marginsByTier },
+    voiceRates: { ...DEFAULT_CREDIT_CONFIG.voiceRates, ...c?.voiceRates },
     monthlyAllocations:
       c?.monthlyAllocations && c.monthlyAllocations.length === 12
         ? c.monthlyAllocations
@@ -152,6 +153,8 @@ export default function NumaCredits() {
     setConfig((c) => ({ ...c, valueTiers: { ...c.valueTiers, [ctx]: { ...c.valueTiers[ctx], [tier]: v } } }));
   const setMargin = (tier: string, v: number) =>
     setConfig((c) => ({ ...c, marginsByTier: { ...c.marginsByTier, [tier]: v } }));
+  const setVoiceRate = (k: 'telephonyPerMin' | 'transcribePerMin' | 'contactLensPerMin', v: number) =>
+    setConfig((c) => ({ ...c, voiceRates: { ...c.voiceRates, [k]: v } }));
   const setAllMonths = (v: number) =>
     setConfig((c) => ({ ...c, monthlyAllocations: Array.from({ length: 12 }, () => v) }));
   const setMonth = (i: number, v: number) =>
@@ -860,6 +863,42 @@ export default function NumaCredits() {
                               </Row>
                             </div>
                           ))}
+
+                          <Form.Label className="fw-semibold mt-3">Numa Voice — consumption rates (USD/min)</Form.Label>
+                          <div className="small text-muted mb-2">
+                            The non-LLM cost of a phone call (Connect telephony + Transcribe, plus Contact Lens when
+                            on). Metered into the same credit ledger as tokens — a call charges the cost-recovery floor
+                            over these rates. The call&apos;s AI summary is billed separately via normal usage.
+                          </div>
+                          <Row className="g-2">
+                            <Col xs={4}>
+                              <Form.Label className="small text-muted">Telephony /min</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.005"
+                                value={config.voiceRates.telephonyPerMin ?? 0}
+                                onChange={(e) => setVoiceRate('telephonyPerMin', num(e.target.value))}
+                              />
+                            </Col>
+                            <Col xs={4}>
+                              <Form.Label className="small text-muted">Transcribe /min</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.005"
+                                value={config.voiceRates.transcribePerMin ?? 0}
+                                onChange={(e) => setVoiceRate('transcribePerMin', num(e.target.value))}
+                              />
+                            </Col>
+                            <Col xs={4}>
+                              <Form.Label className="small text-muted">Contact Lens /min</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.005"
+                                value={config.voiceRates.contactLensPerMin ?? 0}
+                                onChange={(e) => setVoiceRate('contactLensPerMin', num(e.target.value))}
+                              />
+                            </Col>
+                          </Row>
                         </Card.Body>
                       </div>
                     </Collapse>

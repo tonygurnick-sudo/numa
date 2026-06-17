@@ -2,7 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import { getFlag } from '../../utils/featureFlags';
 import { Button, Form, Spinner, Modal, Dropdown, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Search, Robot } from 'react-bootstrap-icons';
-import { Paperclip, Send } from 'lucide-react';
+import { Paperclip, Send, ChevronDown } from 'lucide-react';
 import VoiceRecordButton, { isVoiceRecordingSupported } from './VoiceRecordButton';
 import type { VoiceRecordingState } from './VoiceRecordButton';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,7 @@ import {
 import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import { useDrawerBackClose } from '../../hooks/useDrawerBackClose';
 import type { WorkspaceChatModelId } from '../../types/workspaceChatTypes';
-import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
+import { WORKSPACE_MODEL_OPTIONS, WORKSPACE_MODEL_OPTIONS_CURATED } from '../../types/workspaceChatTypes';
 import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 
 // WebSocket message size limit (AWS API Gateway limit is 32KB)
@@ -65,6 +65,9 @@ const ChatInput = ({
   selectedModelId = undefined as WorkspaceChatModelId | undefined,
   setSelectedModelId = undefined as ((id: WorkspaceChatModelId) => void) | undefined,
   showModelSelector = false,
+  // Lock the model selector once the conversation has started (no mid-conversation
+  // switching). Independent of streaming/controls-disabled. Used by the v2 composer.
+  modelLocked = false,
   onStop = undefined as (() => void) | undefined,
   isStopping = false,
   // V2 variant props
@@ -355,6 +358,84 @@ const ChatInput = ({
     }
   };
 
+  // Compact inline model selector for the v2 composer — a small chip in the
+  // bottom-controls row (`Premium ⌄`) that opens the three curated tiers. Mirrors
+  // the v1 `model-selector-dropdown` markup but trimmed (no "Select Model" header,
+  // label-only toggle). Locks via `modelLocked` after the first message so the
+  // model can't change mid-conversation.
+  const renderV2ModelSelector = () => {
+    if (variant !== 'v2' || !showModelSelector || !setSelectedModelId) return null;
+
+    const activeOption = WORKSPACE_MODEL_OPTIONS_CURATED.find((m) => m.id === selectedModelId);
+    const activeLabel = activeOption ? t(activeOption.labelKey) : t('input.modelSelector.title');
+    const isModelDisabled = isControlsDisabled || modelLocked;
+
+    return (
+      <Dropdown
+        drop="up"
+        className="model-selector-dropdown model-selector-dropdown-v2"
+        show={showModelDropdown}
+        onToggle={(isOpen) => !isModelDisabled && setShowModelDropdown(isOpen)}
+      >
+        <Dropdown.Toggle
+          variant="link"
+          className="model-selector-toggle-v2"
+          disabled={isModelDisabled}
+          aria-label={t('input.modelSelector.title')}
+          title={t('input.tooltips.model')}
+        >
+          <span className="model-selector-toggle-v2-label">{activeLabel}</span>
+          {activeOption?.creditNoteKey && getFlag('SHOW_CREDITS') && (
+            <span
+              className={`model-selector-credit-note model-credit-note-${activeOption.creditNoteVariant ?? 'neutral'}`}
+            >
+              {t(activeOption.creditNoteKey)}
+            </span>
+          )}
+          <ChevronDown size={14} strokeWidth={2} className="model-selector-toggle-v2-caret" />
+        </Dropdown.Toggle>
+
+        <Dropdown.Menu
+          className="model-selector-menu-v2"
+          popperConfig={{
+            strategy: 'fixed',
+            modifiers: [
+              { name: 'offset', options: { offset: [0, 8] } },
+              { name: 'preventOverflow', options: { boundary: 'viewport', padding: 8, altAxis: true } },
+              { name: 'flip', enabled: false },
+            ],
+          }}
+        >
+          {WORKSPACE_MODEL_OPTIONS_CURATED.map((model) => (
+            <div
+              key={model.id}
+              className={`model-item ${selectedModelId === model.id ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedModelId(model.id);
+                setShowModelDropdown(false);
+              }}
+            >
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <div className="model-name">
+                    {t(model.labelKey)}
+                    {model.creditNoteKey && getFlag('SHOW_CREDITS') && (
+                      <span className={`model-credit-note model-credit-note-${model.creditNoteVariant ?? 'neutral'}`}>
+                        {t(model.creditNoteKey)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="model-description">{t(model.descriptionKey)}</div>
+                </div>
+                {selectedModelId === model.id && <i className="bi bi-check-lg"></i>}
+              </div>
+            </div>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown>
+    );
+  };
+
   const renderUploadButton = (className = 'attachment-icon') => {
     const isV2InlineUploadButton = variant === 'v2' && className.includes('v2-inline');
 
@@ -466,12 +547,19 @@ const ChatInput = ({
     );
   };
 
-  // When the chat-health slot is mounted in v2 inline-tools, the textarea
-  // needs extra right-padding so typed text doesn't slide under the icons.
-  const v2InlineToolsWidth = chatHealthSlot ? (isMobile ? 95 : 104) : isMobile ? 39 : 44;
+  // When controls are mounted in the v2 inline-tools cluster, the textarea needs
+  // extra right-padding so typed text doesn't slide under them. Base reservation
+  // covers the paperclip; the chat-health slot and the model-tier chip each add
+  // their own width on top. The reservation is published as the `--v2-textarea-pad-right`
+  // custom property because the textarea's padding is locked by an `!important` rule
+  // in the stylesheet — a plain inline `padding` would lose to it, so the SCSS reads
+  // the var instead (see `.chat-textarea-v2` in _chat_v2_overrides.scss).
+  const showV2ModelSelector = variant === 'v2' && showModelSelector && !!setSelectedModelId;
+  const v2InlineToolsWidth =
+    (chatHealthSlot ? (isMobile ? 95 : 104) : isMobile ? 39 : 44) + (showV2ModelSelector ? (isMobile ? 78 : 92) : 0);
   const v2TextareaStyle =
     variant === 'v2'
-      ? {
+      ? ({
           minHeight: `${v2BaseHeight}px`,
           maxHeight: isMobile ? '46vh' : '56vh',
           fontSize: '0.875rem',
@@ -481,7 +569,8 @@ const ChatInput = ({
           display: 'block',
           boxSizing: 'border-box' as const,
           overflowY: 'hidden' as const,
-        }
+          '--v2-textarea-pad-right': `${v2InlineToolsWidth}px`,
+        } as React.CSSProperties)
       : undefined;
 
   return (
@@ -509,6 +598,7 @@ const ChatInput = ({
                   style={v2TextareaStyle}
                 />
                 <div className="chat-input-inline-tools">
+                  {renderV2ModelSelector()}
                   {renderUploadButton('attachment-icon v2-inline')}
                   {chatHealthSlot}
                 </div>

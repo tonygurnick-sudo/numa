@@ -334,6 +334,12 @@ class KnowledgeBaseManager:
             if kb.get("status") != "ACTIVE":
                 continue
 
+            # Hidden/auto-managed system KBs (e.g. the Synergy cross-job corpus)
+            # are surfaced in the chat KB selector by the frontend, not in this
+            # Files/Folders management listing — keep them out.
+            if kb.get("hidden"):
+                continue
+
             editors = kb.get("editors", [])
             viewers = kb.get("viewers", [])
             visibility = self._compute_visibility(
@@ -935,6 +941,8 @@ class KnowledgeBaseManager:
             ),
             "is_shared": visibility["is_shared"],
             "is_public": visibility["is_public"],
+            "hidden": item.get("hidden", {}).get("BOOL", False),
+            "auto_managed": item.get("auto_managed", {}).get("BOOL", False),
         }
 
     def _parse_membership_item(self, item: Dict) -> Dict[str, Any]:

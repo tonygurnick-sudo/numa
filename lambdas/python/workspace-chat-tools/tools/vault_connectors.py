@@ -19,7 +19,12 @@ import structlog
 
 from prm import client as prm_client
 
-from .approval import APPROVAL_POLL_INTERVAL_SECONDS, APPROVAL_TIMEOUT_SECONDS
+from .approval import (
+    APPROVAL_POLL_INTERVAL_SECONDS,
+    APPROVAL_TIMEOUT_SECONDS,
+    UNATTENDED_MESSAGE,
+    approval_is_unattended,
+)
 
 logger = structlog.get_logger()
 
@@ -150,6 +155,8 @@ def _poll_approval(approval_id: str) -> str:
         )
         return initial_status
 
+    poll_started_at = time.time()
+
     while time.time() < deadline:
         time.sleep(APPROVAL_POLL_INTERVAL_SECONDS)
 
@@ -167,6 +174,14 @@ def _poll_approval(approval_id: str) -> str:
                 status=status,
             )
             return status
+
+        if approval_is_unattended(item, poll_started_at):
+            logger.warning(
+                "Vault approval unattended — card never acknowledged",
+                _name="APPROVAL_UNATTENDED",
+                approval_id=approval_id,
+            )
+            return "unattended"
 
     logger.warning(
         "Vault approval timed out",
@@ -312,6 +327,9 @@ def handle_vault_request_secret(params: Dict[str, Any]) -> Dict[str, Any]:
                 approved_by="denied",
             )
             return {"status": "denied"}
+
+        if decision == "unattended":
+            return {"status": "unattended", "message": UNATTENDED_MESSAGE}
 
         if decision == "timeout":
             return {"status": "timeout"}

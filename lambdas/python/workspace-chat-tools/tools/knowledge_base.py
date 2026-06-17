@@ -50,7 +50,7 @@ QB_RETRIEVER_ID = os.getenv("Q_RETRIEVER_ID")
 QBUSINESS_USER_ROLE_ARN = os.getenv("QBUSINESS_USER_ROLE_ARN", "")
 BEDROCK_KNOWLEDGE_BASE_ID = os.getenv("BEDROCK_KNOWLEDGE_BASE_ID")
 FAST_MODEL_ID = os.getenv("FAST_MODEL_ID", "global.amazon.nova-2-lite-v1:0")
-SYSTEM_KB_IDS = {"company", "numa-support"}
+SYSTEM_KB_IDS = {"company", "numa-support", "synergy"}
 MAX_KB_ID_LENGTH = 128
 MAX_FILENAME_LENGTH = 255
 MAX_RELATIVE_PATH_LENGTH = 1024
@@ -158,6 +158,10 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     # Raw Cognito JWT — required by _query_qbusiness for OIDC-federated calls.
     id_token = params.get("__id_token", "")
 
+    # Caller identity — required to apply the per-document allowed_users ACL on
+    # the Synergy cross-job KB (fail-closed if absent).
+    user_sub = params.get("__user_sub", "")
+
     # Validate bucket is configured (required for oversized query results)
     if not DATA_BUCKET_NAME:
         raise ValueError("DATA_BUCKET_NAME not configured")
@@ -172,6 +176,7 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
                 summarise_results=summarise_results,
                 allowed_kbs_with_names=allowed_kbs_with_names,
                 id_token=id_token,
+                user_sub=user_sub,
             )
         )
 
@@ -189,7 +194,9 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     # Query single KB
-    kb_result = _query_single_kb(query, max_results, kb_id, id_token=id_token)
+    kb_result = _query_single_kb(
+        query, max_results, kb_id, id_token=id_token, user_sub=user_sub
+    )
 
     # Combine content
     all_content = "\n\n".join(kb_result["content_pieces"])
@@ -222,7 +229,7 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _query_single_kb(
-    query: str, max_results: int, kb_id: str, id_token: str = ""
+    query: str, max_results: int, kb_id: str, id_token: str = "", user_sub: str = ""
 ) -> Dict[str, Any]:
     """Query a single knowledge base.
 
@@ -243,7 +250,7 @@ def _query_single_kb(
         return _query_qbusiness(query, max_results, id_token=id_token)
 
     if BEDROCK_KNOWLEDGE_BASE_ID:
-        return _query_bedrock(query, max_results, kb_id)
+        return _query_bedrock(query, max_results, kb_id, user_sub=user_sub)
     raise ValueError("Bedrock knowledge base is not configured")
 
 
@@ -254,6 +261,7 @@ def _handle_all_kbs_query(
     summarise_results: bool,
     allowed_kbs_with_names: List[Dict[str, str]],
     id_token: str = "",
+    user_sub: str = "",
 ) -> Dict[str, Any]:
     """
     Query all enabled KBs sequentially and synthesize results.
@@ -288,7 +296,9 @@ def _handle_all_kbs_query(
 
         try:
             logger.info("Querying KB", kb_id=kb_id, kb_name=kb_name)
-            kb_result = _query_single_kb(query, max_results, kb_id, id_token=id_token)
+            kb_result = _query_single_kb(
+                query, max_results, kb_id, id_token=id_token, user_sub=user_sub
+            )
 
             # Add KB attribution to each content piece
             attributed_content = []
@@ -489,7 +499,9 @@ def _query_qbusiness(
     }
 
 
-def _query_bedrock(query: str, max_results: int, kb_id: str) -> Dict[str, Any]:
+def _query_bedrock(
+    query: str, max_results: int, kb_id: str, user_sub: str = ""
+) -> Dict[str, Any]:
     """Query Bedrock knowledge base with metadata filtering."""
     start_time = time.time()
     logger.info(
@@ -500,6 +512,17 @@ def _query_bedrock(query: str, max_results: int, kb_id: str) -> Dict[str, Any]:
         max_results=max_results,
     )
 
+    # The Synergy cross-job corpus is shared across users; every document carries
+    # an `allowed_users` list (the users whose own Synergy permissions cover that
+    # job). Enforce it as a per-document ACL. Fail closed if we don't know who is
+    # asking — a doc is only retrievable when its allowed_users contains the
+    # caller (Bedrock `listContains`).
+    if kb_id == "synergy" and not user_sub:
+        logger.warning(
+            "Synergy KB query without caller identity — denying (fail-closed)"
+        )
+        return {"content_pieces": [], "references": [], "provider": "bedrock"}
+
     kb_client = prm_client("bedrock-agent-runtime", region=REGION)
 
     # Build retrieval configuration with metadata filtering
@@ -509,16 +532,22 @@ def _query_bedrock(query: str, max_results: int, kb_id: str) -> Dict[str, Any]:
 
     # Add metadata filter for tenant and KB isolation
     if CLIENT_NAME and kb_id:
+        and_clauses: List[Dict[str, Any]] = [
+            {"equals": {"key": "tenant_id", "value": CLIENT_NAME}},
+            {"equals": {"key": "kb_id", "value": kb_id}},
+        ]
+        if kb_id == "synergy":
+            and_clauses.append(
+                {"listContains": {"key": "allowed_users", "value": user_sub}}
+            )
         retrieval_config["vectorSearchConfiguration"]["filter"] = {
-            "andAll": [
-                {"equals": {"key": "tenant_id", "value": CLIENT_NAME}},
-                {"equals": {"key": "kb_id", "value": kb_id}},
-            ]
+            "andAll": and_clauses
         }
         logger.info(
             "Applied metadata filter",
             tenant_id=CLIENT_NAME,
             kb_id=kb_id,
+            per_user_acl=(kb_id == "synergy"),
         )
 
     # Query Bedrock knowledge base
@@ -546,14 +575,57 @@ def _query_bedrock(query: str, max_results: int, kb_id: str) -> Dict[str, Any]:
         if item.get("content"):
             source_uri = _extract_bedrock_uri(item.get("location"))
             content = item.get("content", {}).get("text", "")
-            content_pieces.append(f"Source: {source_uri}\n{content}")
-            refs.append(source_uri)
+            metadata = item.get("metadata") or {}
+            synergy_source = (
+                _format_synergy_source(metadata) if kb_id == "synergy" else ""
+            )
+            if synergy_source:
+                content_pieces.append(f"Source: {synergy_source}\n{content}")
+                refs.append(synergy_source)
+            else:
+                content_pieces.append(f"Source: {source_uri}\n{content}")
+                refs.append(source_uri)
 
     return {
         "content_pieces": content_pieces,
         "references": refs,
         "provider": "bedrock",
     }
+
+
+def _format_synergy_source(metadata: Dict[str, Any]) -> str:
+    """Human-useful citation for a Synergy crawler hit.
+
+    The crawler sidecar carries job/file attribution + a best-effort 12d
+    weblink; cite those instead of the opaque S3 URI so chat can point the
+    user at the originating job (and link straight into Synergy).
+    Returns '' when the metadata doesn't look like a crawler document.
+    """
+    job_name = str(metadata.get("job_name") or "").strip()
+    file_name = str(metadata.get("file_name") or "").strip()
+    if not (job_name or file_name):
+        return ""
+    version = str(metadata.get("version") or "").strip()
+    revision = str(metadata.get("revision") or "").strip()
+    weblink = str(metadata.get("source_weblink") or "").strip()
+
+    parts = [
+        p for p in (f"Synergy job: {job_name}" if job_name else "", file_name) if p
+    ]
+    detail_bits = [
+        b
+        for b in (
+            f"v{version}" if version else "",
+            f"rev {revision}" if revision else "",
+        )
+        if b
+    ]
+    source = " — ".join(parts)
+    if detail_bits:
+        source += f" ({', '.join(detail_bits)})"
+    if weblink:
+        source += f" — {weblink}"
+    return source
 
 
 def _extract_bedrock_uri(location: Dict[str, Any] | None) -> str:

@@ -1,256 +1,121 @@
 ---
-api_name: 'PrintIQ'
-api_slug: 'printiq'
-version: 'IQConnect (version scheme unknown)'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-update_source: 'web research only — NO live API access; partner-gated docs'
-line_count_target: '< 300 lines'
+api_name: PrintIQ
+api_slug: printiq
+api_label: IQConnect (version scheme unknown — NOT a path segment)
+base_url: per-tenant — https://{instance}.printiq.com (instance host supplied by user/config, NOT in credentials)
+route_prefix: /api (inferred; e.g. /api/Quote/GetPrice)
+path_version_segment: none (no /v1/; "v48/v49" is a product version, never a path)
+auth: credential-exchange → session token (4 creds → token endpoint → token on calls); NOT OAuth2, NOT static PAT
+token_header: '[UNKNOWN] — try Authorization: Bearer {token}, else custom header, else query token'
+field_casing: '[UNKNOWN]'
+id_format: '[INFERRED] human ref (e.g. Q-100234) + GUID pair'
+rate_limit: '[UNKNOWN] — none published; throttle conservatively + exponential backoff'
+call_surface: HTTP via `numa integrations request` (Direct API / connect_request, action-oriented). NOT a Files browser. NOT MCP.
+confidence: LOW. Every path, field, token-header, error shape, enum, and pagination detail is [INFERRED] or [UNKNOWN] UNLESS tagged [DOCUMENTED]. Web research only 2026-05-29; no live call. Treat the first real call as discovery — trust the live response over this doc.
+companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
 
-# PrintIQ -- Workspace Agent API Rules
+# PrintIQ — API Rules
 
-> **This file is loaded into the workspace agent's context when the PrintIQ integration is active.**
-> It must stay under 300 lines. Be precise, not verbose.
-> Companion files (01a-01d) contain the detailed reference material.
->
-> ⚠️ **CONFIDENCE: LOW. The IQConnect API reference is partner-gated and was never accessed.**
-> The credential _model_ and the existence of `GetPrice` are the only things confirmed from
-> public material. **Every endpoint path, field name, token-header name, error shape, and
-> pagination detail below is `[INFERRED]` or `[UNKNOWN]`.** Do NOT present any inferred endpoint
-> as fact to the user. Treat the first call against a real instance as a discovery exercise —
-> read the actual response, then trust that over this document.
+Print MIS (estimating, quotes, orders/jobs, products, customers). Hero capability: real-time pricing via `GetPrice` — pricing lives in printIQ, fetched on demand. [DOCUMENTED]
 
-## Context
+## BLOCKER — instance host (read first)
 
-- **API:** PrintIQ "IQConnect" API (print MIS — estimating, quotes, orders/jobs, products, customers)
-- **Base URL:** **Per-tenant** — each customer has their own instance. Inferred pattern `https://{instance}.printiq.com/api/` (custom domains also exist). **Exact API base path is `[UNKNOWN]`.**
-- **Auth:** Credential exchange → bearer-style session token. Four credentials issued by printIQ support: `username`, `password`, `app_name`, `app_key`. [DOCUMENTED: credential model] [INFERRED: token mechanics]
-- **Integration path:** Direct API via `connect_request` (action-oriented; this is NOT a Files browser). Mirrors the Fergus connector pattern.
-- **Rate limits:** `[UNKNOWN]` — none published. Throttle conservatively + exponential backoff.
+No global base URL; printIQ is per-tenant. Connector `credentialFields` collect ONLY `username`, `password`, `app_name`, `app_key` (verified in `connectorRegistry.ts`) — NOT the instance URL. Without the host the API has no target. If the instance URL is unknown, STOP and ask the user — do NOT guess a hostname.
 
-## ⚠️ BLOCKER: instance/base URL is not in the connector credentials
+## Paths
 
-The connector's `credentialFields` collect ONLY `username`, `password`, `app_name`, `app_key`
-(verified in `connectorRegistry.ts`). They do **NOT** include the per-tenant instance/base URL,
-**without which the API has no host to target.** Before any call can succeed, the instance URL must
-be supplied (connector setup field, metadata, or asked from the user). If you cannot determine the
-instance host, STOP and ask the user for their printIQ instance URL — do not guess a hostname.
+- Inferred host+route: `https://{instance}.printiq.com/api/...` (e.g. `/api/Quote/GetPrice`). All paths `[INFERRED]` except `GetPrice` existence `[DOCUMENTED]`.
+- NO version path segment. "v48/v49" = product version, never `/v1/`.
+- Do NOT present any inferred path to the user as fact. On 404, re-check the host first (404 is ambiguous: wrong ref OR wrong instance host/base path).
 
-## Auth Structure
+## Auth
 
-Credential-exchange authentication. POST the four credentials to a token endpoint on the instance,
-receive a token, then send the token on subsequent calls.
+Credential exchange → session token. POST the 4 creds to a token endpoint on the instance, get a token, send it on subsequent calls.
 
 ```
-[INFERRED — path, field names, and token header are ALL unverified]
-POST https://{instance}.printiq.com/api/Site/Token
-Content-Type: application/json
-
+[INFERRED — path, field names, token header ALL unverified]
+POST https://{instance}.printiq.com/api/Site/Token   Content-Type: application/json
 { "username": "apiuser", "password": "••••", "app_name": "MyApp", "app_key": "••••" }
+→ { "token": "eyJhbGciOi...", "expires": "2026-05-29T12:00:00Z" }
 ```
 
-Subsequent calls (header name `[INFERRED]` — could be `Authorization: Bearer`, a custom header, or a query token):
+Subsequent calls (header name `[UNKNOWN]`): `Authorization: Bearer {token}` + `Content-Type: application/json`.
 
-```
-[INFERRED]
-Authorization: Bearer {token}
-Content-Type: application/json
-```
+- Token lifetime `[UNKNOWN]` — treat short-lived. No refresh grant; re-POST the 4 creds to re-mint `[INFERRED]`.
+- `app_name`+`app_key` belong to the token exchange ONLY — never append them to data requests.
 
-**Token lifecycle:**
+## CAN (once paths confirmed against a live instance)
 
-- Lifetime `[UNKNOWN]`. Treat as short-lived; be ready to re-mint.
-- No refresh-token grant is documented — re-POST the four credentials to mint a fresh token `[INFERRED]`.
+1. `GetPrice` — real-time price for product + spec + quantity. Hero capability; printIQ pricing is authoritative. [DOCUMENTED exists / INFERRED shape]
+2. Look up quotes, orders/jobs, customers, products by reference. [INFERRED]
+3. Check a job's production/shipping status. [INFERRED]
+4. Create/save quotes and customers (writes — confirm with user first). [INFERRED]
 
-## Capabilities
+## CANNOT
 
-### CAN (once endpoints are confirmed against a live instance)
-
-1. Get **real-time pricing** for a product + specification + quantity via `GetPrice` — the hero capability; pricing is authoritative in printIQ. [DOCUMENTED capability / INFERRED shape]
-2. Look up quotes, orders/jobs, customers, and products by reference. [INFERRED]
-3. Check a job's production / shipping status. [INFERRED]
-4. Create / save quotes and customers (writes — confirm with the user first). [INFERRED]
-
-### CANNOT
-
-1. Do **anything** reliably until the instance URL + token mechanics + endpoint paths are confirmed against a real instance — everything here is inferred. [UNKNOWN]
-2. Punch-Out / cXML procurement flows — a **separate XML surface**, not this connector. [DOCUMENTED out-of-scope]
-3. Configure webhooks — printIQ webhooks are **provisioned by printIQ support per request**, not self-service via API. [DOCUMENTED]
+1. Do anything reliably until instance URL + token mechanics + paths are confirmed live — everything is inferred. [UNKNOWN]
+2. Punch-Out / cXML procurement — separate XML surface, not this connector. [DOCUMENTED out-of-scope]
+3. Self-service webhooks — printIQ support provisions them per request, no API to register. [DOCUMENTED]
 4. Bulk operations / exports — none documented. [UNKNOWN]
-5. Delete operations — not documented; do NOT assume they exist or are safe. [UNKNOWN]
+5. Delete — not documented; do NOT assume it exists/is safe. Prefer cancel/void over DELETE. [UNKNOWN]
 
-## Critical Gotchas
+## Gotchas
 
-> Things that will cause errors if you get them wrong.
+1. Per-tenant host mandatory and NOT in credentials — no host = no call. Ask the user. [DOCUMENTED gap]
+2. `app_name`+`app_key` are AUTH (token exchange), not per-request headers. [INFERRED]
+3. Never compute prices yourself — always `GetPrice`; printIQ is source of truth, prices change. [DOCUMENTED]
+4. `GetPrice` needs a valid product code + its required option/spec selections; a bare code fails or misprices. [INFERRED]
+5. Token header name unverified — if `Authorization: Bearer` 401s a known-good token, try custom-header / query-token variants. [UNKNOWN]
+6. REST-vs-SOAP unconfirmed — modern punch-out + Zapier imply JSON REST, but older surfaces may be SOAP/XML. If JSON 400s on a malformed-body error, check whether the endpoint expects XML. [INFERRED]
+7. Writes have real business impact (a saved quote / created customer is visible to staff). Confirm before any POST. [INFERRED]
+8. Pricing is per-customer/per-`priceList` — same product prices differently by tier; don't reuse one customer's price for another. [INFERRED]
+9. No idempotency keys — a repeated POST likely creates a duplicate. Read-before-write; guard creates. [INFERRED]
+10. Quote→Order/Job conversion is ONE-WAY (irreversible, creates production work). [INFERRED]
 
-1. **Per-tenant host is mandatory and not in the credentials.** There is no global base URL. If you don't have the instance URL, you cannot call anything — ask the user. [DOCUMENTED gap]
-2. **`app_name` + `app_key` are part of AUTH, not per-request headers.** They are sent in the token exchange, not on every API call. Do not append them to data requests. [INFERRED]
-3. **Pricing lives in printIQ — never compute prices yourself.** Always call `GetPrice`; printIQ is the source of truth and prices change. [DOCUMENTED]
-4. **`GetPrice` needs a valid product code + its option/spec selections.** A bare product code without required options will fail or misprice. [INFERRED]
-5. **Token header name is unverified.** If `Authorization: Bearer` gives 401 on a known-good token, try the custom-header / query-token variants and capture what works. [UNKNOWN]
-6. **REST vs SOAP is unconfirmed.** Modern punch-out + Zapier publication imply JSON REST, but older surfaces may be SOAP/XML. If JSON 400s on a malformed-body error, check whether the endpoint expects XML. [INFERRED]
-7. **Writes have real business impact** (a saved quote / created customer is visible to staff). Confirm with the user before any POST. [INFERRED]
+## Defaults (override only if user specifies)
 
-## Default Parameters
+price caching=none (always live) · writes=confirm-first · pagination size=20 (conservative, limits unknown) · retries on 5xx/429=exponential backoff ≤3.
 
-Use these defaults unless the user specifies otherwise:
+## Operations (all paths `[INFERRED]` — confirm live; only `GetPrice` existence is `[DOCUMENTED]`)
 
-| Parameter          | Default                 | Reason                                                 |
-| ------------------ | ----------------------- | ------------------------------------------------------ |
-| price caching      | none (always live)      | printIQ is the pricing source of truth; prices change  |
-| writes             | confirm-first           | Creating quotes/customers has business impact          |
-| pagination size    | small (e.g. 20)         | Unknown limits — stay conservative until discovered    |
-| retries on 5xx/429 | exponential backoff, ≤3 | No published limits; avoid hammering a tenant instance |
-
-## Working Examples
-
-> ⚠️ All examples below are `[INFERRED]` reconstructions, NOT captured live calls. Use them as a
-> shape to validate against the real response, not as a guaranteed contract.
-
-### Example 1: Exchange credentials for a token [INFERRED]
-
-```http
-POST /api/Site/Token HTTP/1.1
-Host: {instance}.printiq.com
-Content-Type: application/json
-
-{ "username": "apiuser", "password": "••••", "app_name": "MyApp", "app_key": "••••" }
-```
-
-```json
-{ "token": "eyJhbGciOi...", "expires": "2026-05-29T12:00:00Z" }
-```
-
-### Example 2: Price a product (GetPrice) [DOCUMENTED it exists / INFERRED shape]
-
-```http
-POST /api/Quote/GetPrice HTTP/1.1
-Host: {instance}.printiq.com
-Authorization: Bearer {token}
-Content-Type: application/json
-
-{ "productCode": "BC-350GSM", "quantity": 500,
-  "options": { "finish": "Matte Laminate", "sides": "Double Sided" } }
-```
-
-```json
-{ "price": 250.0, "currency": "NZD", "leadTimeDays": 3, "breakdown": [] }
-```
-
-### Example 3: Look up a job/order status [INFERRED]
-
-```http
-GET /api/Job/{jobNo} HTTP/1.1
-Host: {instance}.printiq.com
-Authorization: Bearer {token}
-```
-
-```json
-{
-  "jobNo": "J-100234",
-  "orderNo": "O-55012",
-  "quoteNo": "Q-100234",
-  "customerCode": "CUST001",
-  "status": "In Production",
-  "dueDate": "2026-06-04"
-}
-```
-
-### Example 4: Get a customer by code [INFERRED]
-
-```http
-GET /api/Customer/{customerCode} HTTP/1.1
-Host: {instance}.printiq.com
-Authorization: Bearer {token}
-```
-
-```json
-{
-  "customerCode": "CUST001",
-  "name": "Acme Signs Ltd",
-  "accountStatus": "Active",
-  "priceList": "Trade",
-  "contacts": [],
-  "addresses": []
-}
-```
-
-## Proxy API Operations
-
-> Quick reference. **All paths are `[INFERRED]`** — confirm each against the live instance / IQConnect doc pack.
-
-| Operation       | Method | Path (INFERRED)      | Key Parameters                        | Notes                                  |
-| --------------- | ------ | -------------------- | ------------------------------------- | -------------------------------------- |
-| Token exchange  | POST   | /api/Site/Token      | username, password, app_name, app_key | Auth call; no token required           |
-| Get price       | POST   | .../GetPrice         | productCode, quantity, options        | Hero capability [DOCUMENTED it exists] |
-| Get quote       | GET    | /api/Quote/{quoteNo} | quoteNo                               | [INFERRED]                             |
-| Create quote    | POST   | /api/Quote           | customerCode, lines[]                 | Write — confirm first [INFERRED]       |
-| Get job/order   | GET    | /api/Job/{jobNo}     | jobNo                                 | Production/shipping status [INFERRED]  |
-| Get customer    | GET    | /api/Customer/{code} | customerCode                          | [INFERRED]                             |
-| Create customer | POST   | /api/Customer        | name, contacts[]                      | Write — confirm first [INFERRED]       |
-| Get product     | GET    | /api/Product/{code}  | productCode                           | [INFERRED]                             |
-| (Punch-Out)     | —      | cXML surface         | shared secret identities              | **Out of scope** [DOCUMENTED]          |
+| Operation       | Method | Path                 | Key params / notes                                       |
+| --------------- | ------ | -------------------- | -------------------------------------------------------- |
+| Token exchange  | POST   | /api/Site/Token      | username, password, app_name, app_key; no token required |
+| Get price       | POST   | .../GetPrice         | productCode, quantity, options; HERO [DOCUMENTED exists] |
+| Get quote       | GET    | /api/Quote/{quoteNo} | —                                                        |
+| Create quote    | POST   | /api/Quote           | customerCode, lines[]; write, confirm first              |
+| Get job/order   | GET    | /api/Job/{jobNo}     | production/shipping status                               |
+| Get customer    | GET    | /api/Customer/{code} | —                                                        |
+| Create customer | POST   | /api/Customer        | name, contacts[]; write, confirm first                   |
+| Get product     | GET    | /api/Product/{code}  | —                                                        |
+| (Punch-Out)     | —      | cXML surface         | OUT OF SCOPE [DOCUMENTED]                                |
 
 ## Pagination
 
-- **Type:** `[UNKNOWN]` — likely page-number or offset on list endpoints. [INFERRED]
-- **Default / max page size:** `[UNKNOWN]`.
-- **How to paginate:** Discover from a live list response — read the actual envelope, look for `page` / `pageSize` / `offset` / `total` / `next` fields, then follow whatever it returns.
-- **Last page detection:** `[UNKNOWN]` — likely empty result array or absent `next`. [INFERRED]
+Type `[UNKNOWN]` — likely page-number or offset. Default/max size `[UNKNOWN]`. Discover from a live list envelope: fetch page 1, look for `page`/`pageSize`/`offset`/`total`/`next`, then follow it. Last page `[UNKNOWN]` — likely empty array or absent `next`. [INFERRED]
 
-## Webhooks / Events
+## Errors
 
-PrintIQ webhooks exist but are **provisioned by printIQ support on request** — you provide a webhook
-URL and printIQ's team configures the events. There is **no public self-service API** to register them.
+Format `[UNKNOWN]` — not public. Anticipated (do NOT rely on field names): `{ "success": false, "message": "Invalid credentials", "errorCode": "..." }` `[INFERRED]`. On the first real error, capture the exact body shape and adapt parsing.
+Recovery (status semantics generic-REST `[INFERRED]`, not printIQ-confirmed): 400 fix body/params + check REST-vs-XML · 401 re-mint token (re-POST 4 creds) + verify token header · 403 API user lacks permission, check role · 404 verify reference AND instance host/base path (ambiguous!) · 409 re-read then retry · 422 fix fields per message · 429 honor Retry-After else exponential backoff (limits unknown) · 5xx exponential backoff (≤3).
 
-| Event (from Infigo integration) | Trigger                        | Notes                            |
-| ------------------------------- | ------------------------------ | -------------------------------- |
-| Static PDF product sync         | Product change                 | Support-provisioned [DOCUMENTED] |
-| Inventory Items product sync    | Inventory/stock product change | Support-provisioned [DOCUMENTED] |
-| Shipped status update           | Job/order ships                | Support-provisioned [DOCUMENTED] |
+## Examples (all `[INFERRED]` reconstructions, NOT live calls — validate against the real response)
 
-**Full event catalog, payload shape, signature, and retry policy:** `[UNKNOWN]`.
-**Polling fallback:** poll `GET /api/Job/{jobNo}` (or a job list with a modified-since filter, if one
-exists) for status changes when webhooks aren't provisioned. See `01d`.
+1. Exchange credentials for a token:
+   `POST /api/Site/Token` `{ "username": "apiuser", "password": "••••", "app_name": "MyApp", "app_key": "••••" }`
+   → `{ "token": "eyJhbGciOi...", "expires": "2026-05-29T12:00:00Z" }`
 
-## Error Handling
+2. Price a product (`POST /api/Quote/GetPrice`) [DOCUMENTED exists / INFERRED shape]:
+   `{ "productCode": "BC-350GSM", "quantity": 500, "options": { "finish": "Matte Laminate", "sides": "Double Sided" } }`
+   → `{ "price": 250.0, "currency": "NZD", "leadTimeDays": 3, "breakdown": [] }`
 
-**Standard error format:** `[UNKNOWN]` — not public. Likely an HTTP status + JSON body with a message/code:
+3. Job/order status (`GET /api/Job/J-100234`):
+   → `{ "jobNo": "J-100234", "orderNo": "O-55012", "quoteNo": "Q-100234", "customerCode": "CUST001", "status": "In Production", "dueDate": "2026-06-04" }`
 
-```json
-[INFERRED — UNVERIFIED]
-{ "success": false, "message": "Invalid credentials", "errorCode": "..." }
-```
+4. Customer by code (`GET /api/Customer/CUST001`):
+   → `{ "customerCode": "CUST001", "name": "Acme Signs Ltd", "accountStatus": "Active", "priceList": "Trade", "contacts": [], "addresses": [] }`
 
-**Recovery by status** (status semantics are generic-REST `[INFERRED]`, not confirmed for printIQ):
+## Required next step (discovery)
 
-| Status | Meaning          | Action                                                   |
-| ------ | ---------------- | -------------------------------------------------------- |
-| 400    | Bad request      | Fix request body/params; check REST-vs-XML expectation   |
-| 401    | Unauthorized     | Re-mint token (re-POST credentials); verify token header |
-| 403    | Forbidden        | API user lacks permission for that resource — check role |
-| 404    | Not found        | Verify reference AND the instance host/base path         |
-| 409    | Conflict         | Re-read resource, resolve, retry                         |
-| 422    | Validation error | Fix fields per message (format unknown)                  |
-| 429    | Rate limited     | Backoff (limits unknown); honor Retry-After if present   |
-| 5xx    | Server error     | Retry with exponential backoff (≤3)                      |
-
-## Known Limitations
-
-1. **Low confidence overall** — no public endpoint reference, OpenAPI spec, or SDK. All paths/fields inferred.
-2. **Instance/base URL not captured by the connector** — must be supplied before any call works.
-3. Token endpoint path, token header name, and token lifetime are unverified.
-4. No rate-limit, pagination, error-format, or enum data is public.
-5. Punch-Out (cXML) and webhook provisioning are out of band (support-driven, separate surface).
-6. **Required next step:** obtain the IQConnect API doc pack + a test instance from printIQ support and run a discovery pass (token → GetPrice → reads → list → errors), then re-tag every `[INFERRED]` item.
-
----
-
-_Generated from investigation questionnaire (web research only; partner-gated docs; no live call)._
-_See companion files for detailed reference:_
-
-- _01a-domain-model-reference.md — Entity catalog, relationships, state machines_
-- _01b-query-patterns.md — Filtering, search, pagination examples_
-- _01c-mutation-patterns.md — Create, update, delete patterns_
-- _01d-event-and-error-handling.md — Events, webhooks, error recovery_
+Get the IQConnect doc pack + a test instance from printIQ support, then run: token → GetPrice → reads → list+pagination → errors → ask account manager for webhook events. Re-tag every `[INFERRED]` item afterward.

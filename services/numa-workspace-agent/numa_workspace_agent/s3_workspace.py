@@ -154,25 +154,26 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
         "numa-codebase",
     }
 
-    # DISABLED: chat-workflows feature temporarily disabled
-    # Scan chat-workflows (globally persistent)
-    # workflows_dir = paths["workflows"]
-    # if workflows_dir.exists():
-    #     for file_path in workflows_dir.rglob("*"):
-    #         if not file_path.is_file():
-    #             continue
-    #         try:
-    #             rel_path = str(file_path.relative_to(root))
-    #             checksums[rel_path] = FileChecksum(
-    #                 path=rel_path,
-    #                 checksum=_compute_file_checksum(file_path),
-    #                 size=file_path.stat().st_size,
-    #                 mtime=file_path.stat().st_mtime,
-    #             )
-    #         except (OSError, IOError) as e:
-    #             logger.warning(
-    #                 "Failed to checksum file", path=str(file_path), error=str(e)
-    #             )
+    # Scan chat-workflows (globally persistent — syncs to the user's root S3
+    # path, not the conversation path, so saved workflows survive across all
+    # of the user's conversations).
+    workflows_dir = paths["workflows"]
+    if workflows_dir.exists():
+        for file_path in workflows_dir.rglob("*"):
+            if not file_path.is_file():
+                continue
+            try:
+                rel_path = str(file_path.relative_to(root))
+                checksums[rel_path] = FileChecksum(
+                    path=rel_path,
+                    checksum=_compute_file_checksum(file_path),
+                    size=file_path.stat().st_size,
+                    mtime=file_path.stat().st_mtime,
+                )
+            except (OSError, IOError) as e:
+                logger.warning(
+                    "Failed to checksum file", path=str(file_path), error=str(e)
+                )
 
     # Scan uploads and outputs (per-conversation)
     for dir_key in ["uploads", "outputs"]:
@@ -253,6 +254,73 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
     return checksums
 
 
+def workspace_is_dirty(previous: dict[str, FileChecksum]) -> bool:
+    """Cheap stat-only check: has any in-scope file appeared, changed (size or
+    mtime), or disappeared since ``previous``? No hashing — used to gate an eager
+    pre-tool sync so the common "nothing changed" path is a handful of ``stat()``
+    calls, not a full MD5 pass over the workspace.
+
+    Mirrors get_local_checksums' file scope (chat-workflows, uploads, outputs,
+    root-level files + AI-created dirs, the trace file). The authoritative
+    post-turn sync still hashes, so anything this misses — e.g. an edit that
+    preserves BOTH size and mtime, which is vanishingly rare — is caught then.
+    The cost of a miss is only a slightly-late eager sync, never lost data.
+    """
+    paths = get_workspace_paths()
+    root = paths["root"]
+    seen: set[str] = set()
+
+    def _changed(rel_path: str, fp: Path) -> bool:
+        seen.add(rel_path)
+        prev = previous.get(rel_path)
+        if prev is None:
+            return True  # new file
+        try:
+            st = fp.stat()
+        except OSError:
+            return True  # unreadable now → treat as changed
+        return st.st_size != prev["size"] or st.st_mtime != prev["mtime"]
+
+    # chat-workflows (global) + uploads + outputs (per-conversation)
+    for dir_key in ("workflows", "uploads", "outputs"):
+        scan_dir = paths[dir_key]
+        if scan_dir.exists():
+            for fp in scan_dir.rglob("*"):
+                if fp.is_file() and _changed(str(fp.relative_to(root)), fp):
+                    return True
+
+    # root-level files + AI-created non-protected dirs
+    protected = {
+        ".system",
+        "chat-workflows",
+        "uploads",
+        "outputs",
+        "tools",
+        "numa-codebase",
+    }
+    try:
+        for item in root.iterdir():
+            if item.name in protected or item.name.startswith("."):
+                continue
+            if item.is_file():
+                if _changed(item.name, item):
+                    return True
+            elif item.is_dir():
+                for fp in item.rglob("*"):
+                    if fp.is_file() and _changed(str(fp.relative_to(root)), fp):
+                        return True
+    except PermissionError:
+        pass
+
+    # trace file (synced as _system/trace.jsonl)
+    trace_file = paths["trace_file"]
+    if trace_file.exists() and _changed("_system/trace.jsonl", trace_file):
+        return True
+
+    # A previously-synced file that's now gone locally is also a change.
+    return any(rel_path not in seen for rel_path in previous)
+
+
 def is_cold_start() -> bool:
     """
     Check if this is a cold start (no active conversation set).
@@ -309,10 +377,11 @@ def sync_from_s3(
         ]
     else:
         # Default: standard chat workspace prefix
-        # DISABLED: chat-workflows feature temporarily disabled
         prefixes = [
-            # Globally persistent chat-workflows (DISABLED)
-            # (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
+            # Globally persistent saved workflows (user-level, not per-conversation).
+            # Synced down on cold start so the user's saved workflows are present
+            # in every conversation.
+            (f"{S3_PREFIX}/{user_sub}/chat-workflows/", paths["workflows"]),
             # Conversation-specific files (uploads, outputs, root files, _system)
             (f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", root),
         ]

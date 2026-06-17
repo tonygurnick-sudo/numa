@@ -26,6 +26,22 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 
 ---
 
+## Saving or uploading the deck — save the `.pptx`, never the QA PDF
+
+The deliverable the user keeps is the **`.pptx`** — the editable source. When the user asks you to
+**save, store, upload, or put the presentation in Numa Files / a folder**, upload the **source
+`.pptx`**, **never** a PDF rendition of it.
+
+The PDF you produce during Visual QA (below) is a **throwaway** for your own visual inspection — it is
+_not_ the deliverable, so don't upload it as the saved file. Only save/upload a PDF when the user
+**explicitly** asks for a PDF copy (and keep the `.pptx` too unless told otherwise).
+
+After saving, report the **actual** filename and extension you uploaded — never tell the user you saved
+a `.pptx` when you in fact uploaded a `.pdf`. (This silent `.pptx → .pdf` swap on save was a real
+customer bug: the agent converted the deck for QA, then uploaded the PDF while reporting the `.pptx`.)
+
+---
+
 ## Reading Content
 
 ```bash
@@ -33,16 +49,16 @@ description: "Use this skill any time a .pptx file is involved — as input, out
 python -m markitdown presentation.pptx
 ```
 
-> **For richer extraction** and for legacy/template formats (`.ppt`, `.pot`, `.potx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+> **For richer extraction** and for legacy/template formats (`.ppt`, `.pot`, `.potx`) where markitdown often returns empty or truncated content, prefer `numa docs extract /path -m "..."` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 For visual overview, convert to PDF then render as images:
 
-```
+```bash
 # Step 1: Convert PPTX to PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/presentation.pptx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/presentation.pptx --format pdf -m "Converting PPTX to PDF for visual overview"
 
 # Step 2: Render PDF pages as images
-Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
+pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide
 ```
 
 This creates `slide-01.jpg`, `slide-02.jpg`, etc. in `/workdir/tmp/` so they don't clutter the user's outputs view.
@@ -59,7 +75,10 @@ Write the script to `/workdir/tmp/`, then run with Bash. To iterate, Edit the fi
 Write(file_path="/workdir/tmp/create_deck.js", content="""
 const pptxgen = require("pptxgenjs");
 let pres = new pptxgen();
-pres.layout = "LAYOUT_16x9";
+// LAYOUT_WIDE = 13.333 x 7.5 in (modern 16:9 — the standard). Do NOT use
+// LAYOUT_16x9: that's the old 10 x 5.625 in canvas, which leaves content
+// cramped and prone to falling off the bottom of the slide.
+pres.layout = "LAYOUT_WIDE";
 
 let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
@@ -99,6 +118,8 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 ## Design Guidelines
 
 **Don't create boring slides.** Plain bullets on a white background won't impress anyone.
+
+> **Load the `visual-design` skill first** for the brand colour/font tokens (or to match a user's own brand — it resolves whose brand applies). Pull slide accents and chart colours from its `numa_theme` so embedded charts match the deck. For a Numa-branded deck, its tokens are the default; the palette guidance below is for a distinctive topic-specific look when no brand applies.
 
 ### Before Starting
 
@@ -153,6 +174,9 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 - 0.5" minimum margins from slide edges
 - 0.3-0.5" between content blocks
 - Leave breathing room — don't fill every inch
+- **Footers and bottom shapes need a safe zone.** A shape's `top + height` must stay above the slide's bottom edge. On a 7.5" slide put a footer at `y ≈ 6.9"`, `height ≤ 0.4"`. Never place a shape whose bottom (or right) runs past the slide — that's the #1 cause of "text falling off screen".
+- **Fit embedded images to the available area.** A full dashboard/chart PNG is often taller than the slide. Compute the available height (`slideH − top − bottom margin`) and scale the image to it, preserving aspect ratio — don't drop a 5.5"-tall image onto a slide at `y=1"`. In PptxGenJS use `sizing: { type: "contain", w, h }`.
+- **Don't over-stuff a slide.** If a title + cards + a table won't fit with ≥0.5" margins, split across slides or cut content. Six panels plus a table on one slide will overflow.
 
 ### Avoid (Common Mistakes)
 
@@ -168,17 +192,29 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 
 Your first render is almost never correct. Always verify output visually.
 
+### Step 0: Programmatic bounds check (always — works without the converter)
+
+Before rendering images, validate geometry with the helper. It flags every shape that falls off the slide and any sub-12pt text, and it runs **in-container**, so it catches overflow even when the PPTX→PDF convert below is unavailable:
+
+```bash
+python3 /app/plugins/numa/skills/pptx-handling/helpers/slide_check.py /workdir/outputs/presentation.pptx
+```
+
+Fix every OFF-SLIDE finding (scale images to fit, move shapes into the safe area, split over-stuffed slides) and bump fonts to ≥12pt, then re-run until it exits 0. This deterministically catches the "compressed / falling off screen" failures a human-eyeball pass misses.
+
 ### Convert to Images
 
-```
+```bash
 # Step 1: Convert PPTX to PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/presentation.pptx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/outputs/presentation.pptx --format pdf -m "Converting PPTX to PDF for visual QA"
 
 # Step 2: Render PDF pages as images (in /workdir/tmp/ — they're not for the user)
-Bash(command="pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide")
+pdftoppm -jpeg -r 120 /workdir/outputs/converted_presentation.pdf /workdir/tmp/slide
 ```
 
-> `convert_document` accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx` — same `mode="file"` call.
+> `numa docs convert` **auto-detects** the conversion mode from the file type — for any Office/PDF file just pass `--format pdf`, no `--mode` needed (binary formats are routed to direct LibreOffice conversion automatically). It accepts legacy PowerPoint binary formats (`.ppt`, `.pot`) and the modern template variant (`.potx`) in addition to `.pptx`.
+
+> ⚠️ **The `converted_*.pdf` this produces is a QA throwaway, not a deliverable.** If the user later asks you to save/upload the deck, upload the source `.pptx` — not this PDF. See "Saving or uploading the deck" above.
 
 ### Content QA
 
@@ -206,6 +242,14 @@ After converting to images, read each slide image and check for:
 3. Fix **critical issues only** (overlapping text, corrupted layout, missing content, text cut off)
 4. Re-verify the affected slides ONE time to confirm the fix worked
 5. **Stop here.** Do NOT loop more than once. Present the result to the user and say something like "Here's your presentation — let me know if you'd like me to adjust anything." Minor cosmetic issues (spacing tweaks, colour preferences, font size adjustments) should be mentioned to the user rather than auto-fixed in another loop.
+
+### Don't chase render artifacts — verify against source first
+
+The PPTX→PDF step can introduce artifacts that aren't in your deck — LibreOffice has been seen to turn `<` into `·`, garble a glyph, or nudge a box. Before you "fix" an apparent visual issue, confirm it exists in the **source**: check the markitdown text or the python-pptx run/shape. If the text is correct in the `.pptx` and only wrong in the rendered image, it's a preview artifact — leave the deck alone. (One bench burned a third of a turn chasing a `<`→`·` non-bug.)
+
+### Verify brand/spec colours actually landed
+
+When the user specified brand or spec colours, don't claim you applied them on faith — confirm. Inspect the shape fills with python-pptx, or `numa vision view` the rendered slide and check navy actually appears where navy was specified. A "brand colours applied" claim over a deck that has none is a silent, embarrassing failure. (The `helpers/verify_artifact.py` script checks fills/colours for you — see Helper Scripts.)
 
 ---
 
@@ -262,3 +306,18 @@ All pre-installed in the workspace:
 - **Input presentations**: `/workdir/uploads/`
 - **Output presentations**: `/workdir/outputs/`
 - **Working files**: `/workdir/outputs/`
+
+---
+
+## Helper Scripts
+
+Read-only at `/app/plugins/numa/skills/pptx-handling/helpers/`. Generic — adapt via `/workdir/chat-workflows/` for a bespoke look.
+
+- **`constants.js`** — the valid PptxGenJS shape names (stop guessing `ROUNDED_RECT` — it's `roundRect`), the Numa palette, and a `shape()` normaliser. `require()` it from your generator script.
+- **`starter_deck.js`** — build a branded deck from a JSON spec: title / section / content / chart / table / stat masters in the Numa palette. The fast path for a standard deck — it uses the correct 13.333×7.5" wide canvas, fits images to the slide (`sizing: contain`), and keeps content in-bounds, so it sidesteps the off-slide / overflow failures entirely. **Prefer it; only hand-roll for genuinely custom layouts** (and then run `slide_check.py`).
+  ```bash
+  NODE_PATH=/app/node_packages/node_modules node \
+    /app/plugins/numa/skills/pptx-handling/helpers/starter_deck.js --spec @/workdir/tmp/deck.json
+  ```
+- **`slide_check.py`** — validate a finished deck: flags any shape that falls off the slide and any sub-12pt text, exits 1 if so. Runs in-container (no converter needed), so it's the always-on first step of Visual QA. `python3 /app/plugins/numa/skills/pptx-handling/helpers/slide_check.py /workdir/outputs/deck.pptx`
+- Charts go in as pre-rendered PNGs: **`make_chart.py`** (`/app/plugins/numa/skills/data-analysis/helpers/make_chart.py`) → reference the PNG in a `"chart"` slide. Verify the deck embedded them with **`verify_artifact.py`** (`/app/plugins/numa/skills/pdf-handling/helpers/verify_artifact.py --expect-images N`).

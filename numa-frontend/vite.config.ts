@@ -93,6 +93,13 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       'node_modules/@popperjs/core': '@popperjs/core/dist/umd/popper.min.js',
+      // Tool-display metadata is shared with the numa CLI (single source of
+      // truth — see CLAUDE.md "Tool Rendering Pipeline"). Resolve it to the
+      // CLI package's SOURCE so the frontend never depends on @numa/cli
+      // having been built first — CI jobs (frontend-check) and fresh
+      // checkouts have no dist/, which broke vite resolution of the
+      // package-exports path.
+      '@numa/cli/metadata': fileURLToPath(new URL('../numa-cli/packages/cli/src/metadata/index.ts', import.meta.url)),
     },
     extensions: ['.ts', '.tsx', '.js', '.jsx', '.json'],
   },

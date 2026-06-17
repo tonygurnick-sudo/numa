@@ -9,43 +9,48 @@ Display HTML, SVG diagrams, visualisations, or images directly in the chat conve
 
 ## Quick Reference
 
+Call via the `numa render` CLI (through the `Bash` tool). Every call needs a
+short `-m` caption — it's what the user sees in chat while the visual loads.
+
 ```python
-# Render inline HTML
-mcp__numa__numa_tool(name="render", description="Showing bucket strategy diagram", params={
-    "operation": "render", "type": "html",
-    "content": "<div style='text-align:center'><h2>Strategy Overview</h2>...</div>",
-    "title": "Bucket Strategy"
-})
+# Render inline HTML (pass the markup via --content)
+Bash("""numa render --type html --title 'Bucket Strategy' -m 'Showing bucket strategy diagram' \\
+  --content "<div style='text-align:center'><h2>Strategy Overview</h2>...</div>" """)
 
 # Render an SVG diagram (rendered directly, no iframe)
-mcp__numa__numa_tool(name="render", description="Architecture diagram", params={
-    "type": "html",
-    "content": "<svg width='100%' viewBox='0 0 680 400'>...</svg>",
-    "title": "System Architecture"
-})
+Bash("""numa render --type html --title 'System Architecture' -m 'Architecture diagram' \\
+  --content "<svg width='100%' viewBox='0 0 680 400'>...</svg>" """)
 
-# Render an HTML file from workspace
-mcp__numa__numa_tool(name="render", description="Previewing dashboard", params={
-    "type": "html", "file_path": "/workdir/outputs/dashboard.html", "title": "Dashboard"
-})
+# Render an HTML file from workspace (--type inferred from the .html extension)
+Bash("numa render --file-path /workdir/outputs/dashboard.html --title 'Dashboard' -m 'Previewing dashboard'")
 
-# Render an image
-mcp__numa__numa_tool(name="render", description="Showing chart", params={
-    "type": "image", "file_path": "/workdir/outputs/chart.png", "title": "Sales Chart"
-})
+# Render an image (--type inferred from the .png extension; base64-encoded for you)
+Bash("numa render --file-path /workdir/outputs/chart.png --title 'Sales Chart' -m 'Showing chart'")
 ```
 
-## Parameters
+For larger or quote-heavy HTML, write it to a workspace file first, then render
+with `--file-path` — that sidesteps shell-escaping the markup on the command line.
 
-| Parameter   | Required | Default | Description                                               |
-| ----------- | -------- | ------- | --------------------------------------------------------- |
-| `type`      | Yes      | -       | `"html"` or `"image"`                                     |
-| `content`   | No\*     | -       | Inline HTML/SVG string or base64 image data               |
-| `file_path` | No\*     | -       | Path to file in /workdir/ to render                       |
-| `title`     | No       | -       | Title shown above the rendered content                    |
-| `height`    | No       | 400     | Iframe height in pixels (html only, ignored for pure SVG) |
+## Flags
 
-\*Either `content` or `file_path` must be provided.
+| Flag                   | Required | Default | Description                                                                 |
+| ---------------------- | -------- | ------- | --------------------------------------------------------------------------- |
+| `--type`               | No†      | -       | `html` or `image`. Inferred from the `--file-path` extension when omitted.  |
+| `--content`            | No\*     | -       | Inline HTML/SVG string (html only)                                          |
+| `--file-path`          | No\*     | -       | Path to a file under `/workdir/` to render (images are base64-encoded here) |
+| `--title`              | No       | -       | Title shown above the rendered content                                      |
+| `--height`             | No       | 400     | Iframe height in pixels (html only, ignored for pure SVG)                   |
+| `-m`, `--user-message` | Yes      | -       | Short caption shown to the user in chat while the visual loads              |
+
+\*Provide exactly one of `--content` or `--file-path`.
+†Required only when it can't be inferred — i.e. inline `--content` always
+needs nothing (defaults to html), but a `--file-path` with an unusual extension
+needs an explicit `--type`. Recognised extensions: `.html` / `.htm` / `.svg` →
+html; `.png` / `.jpg` / `.jpeg` / `.gif` / `.webp` → image.
+
+`numa render` only works inside an active workspace chat stream — it pushes the
+visual onto the live SSE rail. Files passed via `--file-path` must live under
+`/workdir/` and be under 2MB.
 
 ## When to Use
 
@@ -59,6 +64,12 @@ Proactively use render when the conversation naturally calls for a visual:
 
 **Multi-render responses**: Call render multiple times in a single response, interleaved with prose. Write a paragraph of explanation, then render a diagram, then more text, then a chart. Each visual should feel like it belongs exactly where it appears.
 
+**Defaults to get right:**
+
+- **"Show me" / "preview" / "let me see" means render — not a markdown table.** When the user asks to _see_ data or a comparison, produce an actual rendered visual (chart, comparison cards, a table component). A markdown table in your text is the fallback for when a visual genuinely doesn't fit, not the default.
+- **Re-render after you edit the visual.** If you change an HTML/SVG file the user has already seen, call render again on the updated file in the same turn. Editing the file does NOT refresh what's on screen — without a re-render the user is still looking at the old visual and thinks nothing happened.
+- **Charts include every requested category — even empty ones.** If the user asks for a breakdown across six buckets and four are zero, render all six; the zeros are information. Never silently drop categories. For series spanning very different magnitudes (counts vs revenue), use a secondary axis or normalise — otherwise the small series renders as invisible flat bars.
+
 ## When NOT to Use
 
 - Simple text output (just write it as a message)
@@ -71,7 +82,9 @@ Proactively use render when the conversation naturally calls for a visual:
 - **Render** (this tool): Inline visual in the conversation. Designed for the chat viewport. Think: a diagram, a card, a chart, a preview. Compact and self-contained.
 - **Create file** (Write to `/workdir/outputs/` or run a generator script in `/workdir/tmp/`): A standalone HTML document the user can download. Full dashboards, multi-page layouts, complex apps.
 
-If you want to both create AND preview, create the file first, then render it with `file_path`.
+If you want to both create AND preview, create the file first, then render it with `--file-path`.
+
+**Don't build a standalone HTML document unless the user asked for one.** For an inline preview, render is enough — reaching for a full self-contained `.html` file (page chrome, multiple sections, interactive handlers) when the user only wanted to "see" something is wasted effort and usually ships dead, unwired controls. Match the artifact to the request.
 
 ---
 
@@ -90,6 +103,8 @@ An `openLink(url)` function is also available for opening external URLs safely.
 ---
 
 ## Design System
+
+> **Brand styling:** load the `visual-design` skill for the Numa colour/font tokens — or to match a user's own brand if they have one (it resolves whose brand applies). Use its palette for colours here. The flat / seamless / compact rules below are specific to in-chat rendering — keep them.
 
 ### Philosophy
 
@@ -351,7 +366,15 @@ White background, 0.5px border, 12px radius, 16px padding.
 ## Tips
 
 - Use inline SVG for diagrams and flowcharts -- renders directly without iframe, crisper and lighter
-- For complex dashboards: Write the HTML file to `/workdir/tmp/<name>.html` (or `/workdir/outputs/<name>.html` if it's the deliverable), then render with `file_path`. To iterate on the dashboard, use `Edit` to patch the HTML in place — much cheaper than re-Writing the whole file.
+- For complex dashboards: Write the HTML file to `/workdir/tmp/<name>.html` (or `/workdir/outputs/<name>.html` if it's the deliverable), then render with `--file-path`. To iterate on the dashboard, use `Edit` to patch the HTML in place — much cheaper than re-Writing the whole file.
 - Use colour to convey meaning -- status indicators, priority levels, category groupings
 - Rounded corners and subtle borders make rendered content feel native to the chat
 - Multiple renders per response is encouraged -- interleave visuals with explanation text
+- **Design once for open-ended work.** For a free-form dashboard, a classifier, or a rule-set, plan the full spec and edge cases up front, then build in one pass. Iterating shape-by-shape on an underspecified target churns turns (one bench took 40) — settle the structure first, then execute.
+
+## Helper Scripts
+
+- **`numa-palette.css`** — the Numa brand palette as drop-in CSS (`:root` variables + `.numa-card` / `.numa-btn` / `.numa-stat` / `.numa-table` recipes). Read it and inline the parts you need into your render HTML for an on-brand look without reinventing colours and type. Read-only at `/app/plugins/numa/skills/render/helpers/`.
+  ```bash
+  cat /app/plugins/numa/skills/render/helpers/numa-palette.css
+  ```

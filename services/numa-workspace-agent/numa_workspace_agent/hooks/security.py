@@ -94,14 +94,11 @@ DANGEROUS_COMMANDS = [
     "declare -x",
     "/proc/self/environ",
     "/proc/1/environ",
-    # System information disclosure (reveals root user, kernel version, etc.)
-    "whoami",
-    "groups",
-    "uname",
-    "hostname",
-    "hostnamectl",
-    # Note: "df" moved to ENV_VAR_PATTERNS with word-boundary regex to avoid
-    # false positives (e.g., "--format pdf" was matching "df " substring)
+    # System information disclosure (whoami / groups / uname / hostname /
+    # hostnamectl) is handled by a command-boundary regex in ENV_VAR_PATTERNS,
+    # NOT as a substring here — otherwise `numa whoami` (a vetted CLI
+    # subcommand) false-positives on the bare "whoami" substring. Same reason
+    # "df" was moved there (it matched "--format pdf").
     # Package installation (could install malicious packages or bypass restrictions)
     "pip install",
     "pip3 install",
@@ -166,6 +163,11 @@ ENV_VAR_PATTERNS = [
     r"\$\((?:whoami|id|hostname|uname|groups)\)",
     # Standalone 'id' command (special case - common substring)
     r"(?:^|\||;|&&)\s*id\s*(?:$|\||;|&&|>|\s+-)",
+    # System-info commands at a command boundary (start, or after | ; && $( ).
+    # Anchored so they only match as the COMMAND, not as an argument — e.g.
+    # `numa whoami` (whoami preceded by `numa `, not a separator) is allowed,
+    # while `whoami`, `; whoami`, `| uname -a`, `$(hostname)` are blocked.
+    r"(?:^|\||;|&&|\$\()\s*(?:whoami|groups|uname|hostname|hostnamectl)\b",
     # Note: standalone `df` (disk free) was previously blocked here. Removed —
     # the regex trailing `(?:\s|$|-)` false-positived on the canonical pandas
     # variable name in `python3 -c "...; df = pd.read_excel(...)"` (df followed
@@ -412,12 +414,22 @@ SDK_TOOL_RESULT_ALLOWLIST = re.compile(
     r"^/workdir/\.system/\.claude/projects/[^/]+/tool-results/[^/]+\.json$"
 )
 
+# Skill helper scripts ship read-only under /app/plugins/numa/skills/<skill>/helpers/.
+# They are trusted, first-party code that the skills explicitly instruct the model
+# to run (e.g. make_chart.py, build_styled_pdf.py). The model must be able to Read
+# and Bash-execute them even though they live outside /workdir. Write/Edit stay
+# blocked (the directory is read-only from the model's perspective). Matched
+# against the realpath in is_blocked_path (so `..` is already resolved); the Bash
+# check additionally rejects any token containing `..`.
+SKILL_HELPERS_DIR_RE = re.compile(r"^/app/plugins/numa/skills/[^/]+/helpers/")
+
 
 def is_blocked_path(
     path: str,
     cwd: str = WORKSPACE_ROOT,
     *,
     allow_sdk_tool_results: bool = False,
+    allow_skill_helpers: bool = False,
 ) -> tuple[bool, str | None]:
     """
     Check if a path should be blocked.
@@ -437,6 +449,13 @@ def is_blocked_path(
         return False, None
 
     normalized = normalize_path(path, cwd)
+
+    # Read-only skill helper scripts: trusted first-party code under
+    # /app/plugins/.../helpers/. Permitted for Read only (allow_skill_helpers);
+    # Write/Edit don't pass the flag, so they stay blocked. normalized is the
+    # realpath, so `..` traversal can't sneak a path in here.
+    if allow_skill_helpers and SKILL_HELPERS_DIR_RE.match(normalized):
+        return False, None
 
     # Block EVERYTHING outside /workdir - simple and secure
     if not normalized.startswith(WORKSPACE_ROOT + "/") and normalized != WORKSPACE_ROOT:
@@ -571,6 +590,19 @@ def strip_data_content(command: str) -> str:
     return result
 
 
+# The numa CLI is an allow-listed, API-gated tool that takes URL paths as
+# arguments (e.g. `numa integrations request <slug> GET /jobs`). Such a
+# relative URL path starts with "/" and would otherwise trip the
+# outside-/workdir filesystem-path guard. We allow a leading-slash token ONLY
+# when it is a numa-CLI request URL — the command starts with the numa binary
+# AND the token is immediately preceded by an HTTP method. That stays
+# exfiltration-safe: it does NOT relax filesystem-path args such as
+# `numa files upload /etc/passwd` (preceded by `upload`, not a method) or
+# `-o /etc/...`, nor a non-numa command like `cat GET /etc/passwd`.
+_NUMA_CLI_BINARIES = frozenset({"numa", "numa-dev"})
+_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
+
+
 def check_bash_command(
     command: str, cwd: str = WORKSPACE_ROOT
 ) -> tuple[bool, str | None]:
@@ -651,9 +683,12 @@ def check_bash_command(
             path = match.group(1)
             if path.startswith(WORKSPACE_ROOT):
                 continue
+            if SKILL_HELPERS_DIR_RE.match(path) and ".." not in path:
+                continue
             return True, f"Command references path outside workspace: {path}"
     else:
-        for token in tokens:
+        is_numa_cli = bool(tokens) and tokens[0] in _NUMA_CLI_BINARIES
+        for i, token in enumerate(tokens):
             # Only inspect tokens that look like absolute paths.
             # Skip data tokens (no leading /), flags, command names, redirect
             # residue like "2>/dev/null", and shell operators.
@@ -664,6 +699,17 @@ def check_bash_command(
                 continue
             # Allow common harmless device paths used in shell redirection
             if token in ALLOWED_DEVICE_PATHS:
+                continue
+            # Allow a relative URL path passed to the numa CLI as a request URL
+            # (immediately preceded by an HTTP method, e.g.
+            # `numa integrations request <slug> GET /jobs`). Scoped to numa AND
+            # the method position so a stray `cat GET /etc/passwd` or
+            # `numa files upload /etc/passwd` stays blocked.
+            prev = tokens[i - 1] if i > 0 else ""
+            if is_numa_cli and prev.upper() in _HTTP_METHODS:
+                continue
+            # Allow executing read-only skill helper scripts shipped in the image.
+            if SKILL_HELPERS_DIR_RE.match(token) and ".." not in token:
                 continue
             return True, f"Command references path outside workspace: {token}"
 
@@ -842,6 +888,7 @@ async def security_hook(
             file_path,
             cwd,
             allow_sdk_tool_results=(tool_name == "Read"),
+            allow_skill_helpers=(tool_name == "Read"),
         )
 
     # Check MultiEdit tool (has edits array with file_path in each)

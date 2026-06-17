@@ -255,14 +255,7 @@ QUOTING_V2 = AgentTypeConfig(
         "KillShell",
         # Sub-agent task delegation
         "Task",
-        # MCP tools: execute_script for sandboxed code execution
-        "mcp__scripts__execute_script",
-        # Numa platform tools (KB, web search, extract, convert)
-        "mcp__numa__numa_tool",
-        # Pipedream integration tools (email, CRM, etc.)
-        "mcp__integrations__run_action",
-        "mcp__integrations__configure_props",
-        "mcp__integrations__proxy_request",
+        "Bash(numa:*)",  # Numa platform CLI (replaces the numa/integrations/connectors MCP)
         # Bash with allowed commands
         "Bash(python:*)",
         "Bash(python3:*)",
@@ -300,9 +293,9 @@ QUOTING_V2 = AgentTypeConfig(
         "Bash(pandoc:*)",
     ],
     # Layer 2 MCP tools
-    enable_scripts_mcp=True,
-    enable_integrations_mcp=True,
-    enable_numa_mcp=True,
+    enable_scripts_mcp=False,
+    enable_integrations_mcp=False,
+    enable_numa_mcp=False,
     # Scope Numa operations to what's relevant for quoting
     allowed_numa_operations=[
         "numa_files",

@@ -95,12 +95,19 @@ fi
 
 info "Reading workspace config from .env..."
 
-# Parse .env handling "KEY = VALUE" format with spaces around =
+# Parse .env handling "KEY = VALUE" format with spaces around =, and
+# `export KEY=VALUE` shell-style lines (sourceable form is convenient).
 while IFS= read -r line || [ -n "$line" ]; do
     # Skip empty lines and comments
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
     # Strip inline comments
     line="${line%%#*}"
+    # Strip leading whitespace + optional `export ` prefix so the key matcher
+    # below sees the bare name (`X`, not `export X`) — otherwise the
+    # AWS-credential skip-check misses and we end up doing
+    # `export "export AWS_ACCESS_KEY_ID=..."` which fails on the prefix.
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line#export }"
     # Extract key and value, trimming whitespace
     key="$(echo "$line" | cut -d'=' -f1 | xargs)"
     value="$(echo "$line" | cut -d'=' -f2- | xargs)"

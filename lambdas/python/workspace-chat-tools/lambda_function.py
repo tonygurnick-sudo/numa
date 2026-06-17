@@ -45,7 +45,9 @@ from tools import (
     handle_convert_document,
     handle_convert_preview,
     handle_create_agent,
+    handle_delete_agent,
     handle_delete_kb_file,
+    handle_delete_memory,
     handle_duplicate_agent,
     handle_extract_content,
     handle_get_agent,
@@ -63,6 +65,7 @@ from tools import (
     handle_transcribe,
     handle_update_agent,
     handle_update_memory,
+    handle_view_image,
     handle_web_search,
 )
 from tools.enhanced_vault_connectors import (
@@ -124,6 +127,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "convert_document": handle_convert_document,
     "convert_preview": handle_convert_preview,
     "create_agent": handle_create_agent,
+    "delete_agent": handle_delete_agent,
     "duplicate_agent": handle_duplicate_agent,
     "extract_content": handle_extract_content,
     "get_agent": handle_get_agent,
@@ -134,6 +138,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "retrieve_kb_file": handle_retrieve_kb_file,
     "update_agent": handle_update_agent,
     "transcribe": handle_transcribe,
+    "view_image": handle_view_image,
     "web_search": handle_web_search,
     "pipedream_list_actions": handle_list_actions,
     "pipedream_batch_get_schemas": handle_batch_get_schemas,
@@ -145,6 +150,7 @@ TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "user_profile_list_memories": handle_list_memories,
     "user_profile_add_memory": handle_add_memory,
     "user_profile_update_memory": handle_update_memory,
+    "user_profile_delete_memory": handle_delete_memory,
     # Consolidated Vault Tools
     "vault_list_consolidated_secrets": handle_vault_list_consolidated_secrets,
     "vault_request_consolidated_secret": handle_vault_request_consolidated_secret,
@@ -520,6 +526,19 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
             conversation_id=conversation_id[:8] + "..." if conversation_id else "",
         )
 
+    # Handle view_image tool - pass user context for S3 path construction
+    # (reads a workspace image, not a KB file, so no KB validation needed)
+    if tool_name == "view_image":
+        params["__user_sub"] = user_sub
+        params["__conversation_id"] = conversation_id
+
+        logger.info(
+            "View image tool invoked",
+            file_path=params.get("file_path"),
+            user_sub=user_sub[:8] + "..." if user_sub else "",
+            conversation_id=conversation_id[:8] + "..." if conversation_id else "",
+        )
+
     # Handle convert_document tool - pass user context for S3 path construction
     if tool_name == "convert_document":
         # No KB validation needed - this tool accesses workspace files, not KBs
@@ -543,6 +562,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         "update_agent",
         "patch_agent_prompt",
         "duplicate_agent",
+        "delete_agent",
     }
     if tool_name in agent_tools:
         # Security: Validate create_agent_tool access (fail-closed)
@@ -594,6 +614,7 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         "user_profile_list_memories",
         "user_profile_add_memory",
         "user_profile_update_memory",
+        "user_profile_delete_memory",
     }
     if tool_name in user_profile_tools:
         # Check that memories_tool is in the allowed tools list
@@ -749,6 +770,9 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
     params["__allowed_kbs_with_names"] = allowed_kbs_with_names
     # Pass raw JWT for tools that need identity-aware AWS access (Q Business).
     params["__id_token"] = id_token
+    # Pass caller identity for tools that apply per-document ACLs (e.g. the
+    # Synergy cross-job KB filters retrieval by allowed_users == this sub).
+    params["__user_sub"] = user_sub
     # Inject auth context for ops handlers (user_sub/email/name/groups from top-level event)
     if tool_name and tool_name.startswith("ops_"):
         params["user_sub"] = user_sub

@@ -297,6 +297,32 @@ const crmFields: FieldDef[] = [
   },
   { id: 'field-contract-value', name: 'Contract Value', fieldType: 'currency', category: 'crm' },
   { id: 'field-renewal-date', name: 'Renewal Date', fieldType: 'date', category: 'crm' },
+  // Numa Voice SDR pre-read fields — populated by the post-call agent on a qualified
+  // prospect (the AE's hand-off context). source_phone is also the find-or-create join key.
+  {
+    id: 'field-ai-maturity',
+    name: 'AI Maturity',
+    fieldType: 'select',
+    category: 'crm',
+    options: ['beginner', 'intermediate', 'advanced', 'enterprise'],
+  },
+  {
+    id: 'field-champion',
+    name: 'Champion',
+    fieldType: 'text',
+    category: 'crm',
+    helpText: 'Decision-maker identified on the call',
+  },
+  { id: 'field-pain-points', name: 'Pain Points', fieldType: 'richtext', category: 'crm' },
+  { id: 'field-discovery-questions', name: 'Discovery Questions', fieldType: 'richtext', category: 'crm' },
+  {
+    id: 'field-source-phone',
+    name: 'Source Phone',
+    fieldType: 'text',
+    category: 'crm',
+    helpText: 'Dialled E.164 number (Numa Voice)',
+  },
+  { id: 'field-lost-reason', name: 'Lost Reason', fieldType: 'text', category: 'crm' },
 ];
 
 const operationsFields: FieldDef[] = [

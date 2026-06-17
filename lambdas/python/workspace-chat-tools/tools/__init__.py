@@ -6,6 +6,7 @@ Each tool is implemented as a separate module with a handle_* function.
 
 from .agents import (
     handle_create_agent,
+    handle_delete_agent,
     handle_duplicate_agent,
     handle_get_agent,
     handle_list_agents,
@@ -35,9 +36,11 @@ from .pipedream_integration import (
 from .transcribe import handle_transcribe
 from .user_profile import (
     handle_add_memory,
+    handle_delete_memory,
     handle_list_memories,
     handle_update_memory,
 )
+from .view_image import handle_view_image
 from .web_search import handle_web_search
 
 __all__ = [
@@ -46,6 +49,7 @@ __all__ = [
     "handle_convert_document",
     "handle_convert_preview",
     "handle_create_agent",
+    "handle_delete_agent",
     "handle_duplicate_agent",
     "handle_extract_content",
     "handle_get_agent",
@@ -64,8 +68,10 @@ __all__ = [
     "handle_run_action",
     "handle_poll_connector_approval",
     "handle_add_memory",
+    "handle_delete_memory",
     "handle_list_memories",
     "handle_update_memory",
     "handle_ops_operation",
     "handle_transcribe",
+    "handle_view_image",
 ]

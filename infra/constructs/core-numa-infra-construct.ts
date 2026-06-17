@@ -47,6 +47,7 @@ import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { ConfigBucket } from './config-bucket-construct';
 import { z } from 'zod';
 import { WebCrawlerConstruct } from './web-crawler-construct';
+import { SynergyKbCrawlerConstruct } from './synergy-kb-crawler-construct';
 import { CognitoGroupsConstruct, FEATURE_SET_NAMES } from './cognito-groups-construct';
 import { KnowledgeBase } from './knowledge-base-construct';
 import { PublicS3Bucket } from './public-s3-bucket-construct';
@@ -97,6 +98,15 @@ export class CoreNumaInfra extends Construct {
   readonly sharedChatHistoryTable: DynamodbTable;
   readonly mfaSettingsTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
+  readonly synergyKbCrawler?: SynergyKbCrawlerConstruct;
+  /** Synergy crawl Step Function ARN (empty string when the crawler is disabled). */
+  readonly synergyCrawlStateMachineArn: string;
+  /** Synergy crawl-state table name/ARN ('' when disabled) — sync-config/status API + on-visit sync. */
+  readonly synergyCrawlStateTableName: string;
+  readonly synergyCrawlStateTableArn: string;
+  /** Synergy crawl worker Lambda name/ARN ('' when disabled) — on-visit async invoke. */
+  readonly synergyTextCrawlerFunctionName: string;
+  readonly synergyTextCrawlerFunctionArn: string;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
   readonly connectorEventsTable!: DynamodbTable;
@@ -1298,6 +1308,38 @@ export class CoreNumaInfra extends Construct {
       deployerRoleArn: props.deployerRoleArn!,
     });
 
+    // Synergy 12d → Bedrock KB crawler (only when explicitly enabled). Gated so
+    // clients without it never create the ECR repo / container Lambda / SFN, and
+    // synth never needs the worker image.tar.
+    let synergyCrawlStateMachineArn = '';
+    let synergyCrawlStateTableName = '';
+    let synergyCrawlStateTableArn = '';
+    let synergyTextCrawlerFunctionName = '';
+    let synergyTextCrawlerFunctionArn = '';
+    if (props.synergyKbCrawlEnabled) {
+      const synergyCrawlLogGroup = new CloudwatchLogGroup(this, 'synergy-kb-crawl-log-group', {
+        name: `/numa/${props.clientName}-synergy-kb-crawl`,
+      });
+      this.synergyKbCrawler = new SynergyKbCrawlerConstruct(this, 'synergy-kb-crawler', {
+        clientName: props.clientName,
+        environmentName: props.environmentName,
+        dataBucket: this.dataBucket,
+        logGroup: synergyCrawlLogGroup,
+        region: props.region,
+        deployerRoleArn: props.deployerRoleArn!,
+      });
+      synergyCrawlStateMachineArn = this.synergyKbCrawler.stateMachine.arn;
+      synergyCrawlStateTableName = this.synergyKbCrawler.stateTable.name;
+      synergyCrawlStateTableArn = this.synergyKbCrawler.stateTable.arn;
+      synergyTextCrawlerFunctionName = this.synergyKbCrawler.workerLambda.functionName;
+      synergyTextCrawlerFunctionArn = this.synergyKbCrawler.workerLambda.arn;
+    }
+    this.synergyCrawlStateMachineArn = synergyCrawlStateMachineArn;
+    this.synergyCrawlStateTableName = synergyCrawlStateTableName;
+    this.synergyCrawlStateTableArn = synergyCrawlStateTableArn;
+    this.synergyTextCrawlerFunctionName = synergyTextCrawlerFunctionName;
+    this.synergyTextCrawlerFunctionArn = synergyTextCrawlerFunctionArn;
+
     // We'll create the Cognito IDP construct after determining Q Business configuration
     let qBusinessApplicationIdForIdp: string | undefined = undefined;
 
@@ -2017,6 +2059,7 @@ export class CoreNumaInfra extends Construct {
       outputsBucket: this.outputsBucket,
       companyBucket: this.companyBucket,
       chatHistoryTable: this.chatHistoryTable,
+      voiceIntakeBucketArn: props.voiceIntakeBucketArn,
       groups: props.groups,
       pipedreamIntegrations: props.pipedreamIntegrations,
       pipedreamRelayLambdaArn: pipedreamRelayLambda?.lambda.arn,
@@ -2174,6 +2217,13 @@ const _coreNumaInfraPropsSchema = z
     loadSampleFile: z.boolean().optional(),
     createServiceLinkedRole: z.boolean().optional(),
     webCrawlerConfigs: z.array(webCrawlerDataSourcePropsSchema).optional(),
+    /**
+     * When **true**, provision the Synergy 12d → Bedrock KB crawler (state table,
+     * coordinator/worker/restart Lambdas, Step Function). Gated on data connectors.
+     *
+     * @default false
+     */
+    synergyKbCrawlEnabled: z.boolean().optional(),
     temporaryPasswordValidityDays: z.number().optional(),
     passwordLength: z.number().optional(),
     mfa: z.boolean().optional(),
@@ -2278,6 +2328,9 @@ export const coreNumaInfraPropsSchema = _coreNumaInfraPropsSchema
       groups: z.record(z.string(), z.array(z.enum(FEATURE_SET_NAMES as [string, ...string[]]))).optional(),
       brandingAssetsBucketArn: z.string().optional(),
       brandingAssetsPrefix: z.string().optional(),
+      /** FEAT-167: voice prospect-intake bucket ARN (set only when numaVoice is
+       *  on) — threaded to CognitoGroupsConstruct for the browser upload grant. */
+      voiceIntakeBucketArn: z.string().optional(),
     })
   );
 export type CoreNumaInfraProps = z.infer<typeof coreNumaInfraPropsSchema> & {

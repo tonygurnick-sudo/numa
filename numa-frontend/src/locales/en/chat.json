@@ -23,7 +23,22 @@
     },
     "modelSelector": {
       "title": "Select Model",
-      "mobileTitle": "Select Model"
+      "mobileTitle": "Select Model",
+      "standard": {
+        "label": "Standard",
+        "description": "Fast & efficient for everyday tasks",
+        "creditNote": "1/4 the credits of Premium"
+      },
+      "premium": {
+        "label": "Premium",
+        "description": "Best for complex work and image-based tasks",
+        "creditNote": "Baseline credit rate"
+      },
+      "expert": {
+        "label": "Expert",
+        "description": "Maximum capability for the hardest problems",
+        "creditNote": "3× the credits of Premium"
+      }
     },
     "aria": {
       "upload": "Upload Files",
@@ -143,6 +158,7 @@
     "agentError": "Agent error: {{message}}",
     "loadConversationFailed": "Error loading conversation. Please try again or select a different conversation.",
     "loadTraceFailed": "Unable to load conversation history. This may happen after stopping a response. Please send a new message to continue.",
+    "loadTraceNetworkFailed": "Couldn't reach Numa to load this conversation. Your conversation is safe — check your connection and reopen it to try again.",
     "stoppedByUser": "Response stopped. You can send a follow-up message to continue.",
     "streamTimedOut": "Numa's response was interrupted. You can send a follow-up message to continue where it left off.",
     "continueButton": "Continue",
@@ -660,5 +676,8 @@
       "high": "High",
       "very_high": "Very high"
     }
+  },
+  "render": {
+    "unavailable": "This visual is no longer available."
   }
 }

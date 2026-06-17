@@ -83,8 +83,9 @@ def ensure_directories() -> WorkspacePaths:
     # Create all directories
     paths["system_dir"].mkdir(parents=True, exist_ok=True)
     paths["claude_dir"].mkdir(parents=True, exist_ok=True)
-    # DISABLED: chat-workflows feature temporarily disabled
-    # paths["workflows"].mkdir(parents=True, exist_ok=True)
+    # chat-workflows/ — user-level persistent saved workflows (Saved Workflows
+    # feature). Globally persistent across the user's conversations.
+    paths["workflows"].mkdir(parents=True, exist_ok=True)
     paths["uploads"].mkdir(parents=True, exist_ok=True)
     paths["outputs"].mkdir(parents=True, exist_ok=True)
 

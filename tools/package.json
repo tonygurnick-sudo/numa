@@ -23,6 +23,7 @@
     "@aws-sdk/lib-storage": "^3.676.0",
     "adm-zip": "^0.5.16",
     "chalk": "^5.3.0",
+    "cognito-srp-helper": "^2.3.1",
     "commander": "^13.0.0",
     "csv": "^6.3.11",
     "flat-cache": "^6.1.10",

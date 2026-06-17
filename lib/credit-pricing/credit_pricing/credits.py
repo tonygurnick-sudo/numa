@@ -48,6 +48,28 @@ MARGINS_BY_TIER: dict[str, float] = {
 # Tunable — confirm with Asa. (Does NOT touch the cost floor, which already self-limits at low cost.)
 TRIVIAL_CONSUMPTION_USD: float = 0.01
 
+# Per-model VALUE multiplier. The VALUE-tier credits are scaled by a per-model factor so the price
+# tracks how expensive the model that delivered the work is, relative to the Premium baseline
+# (Sonnet = 1.0, implicit/unlisted). The cheap Numa Standard Model bills 1/4; the premium Expert
+# model (Opus) bills 3x. Keyed on the canonical BARE model id — regional inference-profile prefixes
+# (us./global./au./…) are stripped before lookup, and the proxy stamps the opaque `numa-standard-model`
+# id on every Standard turn. It scales the *value* only; the cost-recovery floor is computed
+# separately from the model's real measured cost and is deliberately NOT scaled (the floor already
+# self-adjusts to true cost — scaling it too would double-count). Fleet-wide constants for now; could
+# become portal-tunable later. Applied per-conversation by `conversation_value_multiplier`.
+MODEL_VALUE_MULTIPLIER: dict[str, float] = {
+    "numa-standard-model": 0.25,  # Standard — cheap non-Anthropic model
+    "anthropic.claude-opus-4-6-v1": 3.0,  # Expert — Opus 4.6 (premium)
+}
+
+
+# Granularity of the cost-recovery floor: it rounds UP to the nearest 1/FLOOR_STEPS_PER_CREDIT credit.
+# 10 = tenth-credit (0.1) steps — was 2 (half-credit, 0.5). Finer steps let cheap-model conversations
+# (e.g. the Numa Standard Model at 1/4 value) bill in small increments instead of snapping to a 0.5
+# minimum on any non-zero cost. Purely the rounding step: the ceil still keeps charge >= cost x margin,
+# so the margin guarantee is unchanged. Tune freely (2 / 10 / 20 = 0.5 / 0.1 / 0.05 credit steps).
+FLOOR_STEPS_PER_CREDIT: int = 10
+
 
 def floor_credits(
     consumption_usd: float,
@@ -55,15 +77,19 @@ def floor_credits(
     margin: float = MARGIN_TARGET,
     credit_usd: float = CREDIT_USD,
 ) -> float:
-    """Cost-recovery floor: the fewest half-credits whose value >= consumption x margin.
+    """Cost-recovery floor: the fewest tenth-credits whose value >= consumption x margin.
 
-    Rounds UP (to the nearest 0.5 credit) so the floored charge never dips below the target
-    margin. Half-credit granularity lets sub-1-credit value tiers (e.g. agent low = 0.5)
-    genuinely bill instead of being absorbed by a whole-credit ceil.
+    Rounds UP (to the nearest 0.1 credit — see ``FLOOR_STEPS_PER_CREDIT``) so the floored charge
+    never dips below the target margin. Tenth-credit granularity lets cheap-model conversations
+    (e.g. the Numa Standard Model at 1/4 value) bill in fine steps instead of snapping to a 0.5
+    minimum on any positive cost.
     """
     if consumption_usd <= 0:
         return 0
-    return math.ceil(consumption_usd * margin / credit_usd * 2) / 2
+    return (
+        math.ceil(consumption_usd * margin / credit_usd * FLOOR_STEPS_PER_CREDIT)
+        / FLOOR_STEPS_PER_CREDIT
+    )
 
 
 def credits_to_usd(credits: float, *, credit_usd: float = CREDIT_USD) -> float:

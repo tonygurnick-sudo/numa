@@ -118,6 +118,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: ['NUMA_OPS'],
   },
   {
+    flag: 'VOICE_ANALYTICS',
+    title: 'Voice Analytics',
+    description:
+      'Contact-center dashboard + call logs for Numa Voice — call volume, dispositions, per-agent efficiency, recording playback, transcripts, and live monitoring.',
+    icon: 'bi-graph-up',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['NUMA_VOICE'],
+  },
+  {
     flag: 'KNOWLEDGE_BASES',
     title: 'Knowledge Bases',
     description: 'Enterprise search and retrieval from uploaded documents.',
@@ -165,6 +176,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     description:
       'Richer Synergy 12d file experience in Files: revision/version/status columns, a lock indicator, in-job file search (name + contents), and per-file actions (details, version history, copy link). When off, Synergy browsing stays basic (jobs → folders → files + download).',
     icon: 'bi-folder-symlink',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['DATA_CONNECTORS_ENABLED'],
+  },
+  {
+    flag: 'SYNERGY_KB_SEARCH',
+    title: 'Synergy Cross-Job Search',
+    description:
+      'Index the text of all Synergy 12d documents into a knowledge base so chat can search across every job (e.g. "which jobs use material X"). 12d has no cross-project search; this crawls and indexes document contents, respecting each user\'s Synergy permissions per document. Adds a selectable "Synergy" entry in the chat knowledge-base picker.',
+    icon: 'bi-search',
     system_only: false,
     dev_only: false,
     enabled: false,

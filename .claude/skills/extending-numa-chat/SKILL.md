@@ -1,259 +1,177 @@
 ---
 name: extending-numa-chat
-description: Extend Numa chat with new tools and capabilities. Use when adding a new MCP tool, creating a tool group, wiring HITL approvals, adding frontend tool rendering, writing tool skills/prompts, configuring agent types for tools, or building Lambda tool handlers.
+description: Extend Numa chat with new tools and capabilities. Use when adding a new numa CLI command, wiring HITL approvals, adding frontend tool rendering, writing tool skills/prompts, configuring agent types for tools, or building Lambda tool handlers.
 ---
 
 # Extending Numa Chat with New Tools
 
-This skill covers everything needed to add new capabilities to Numa's chat agent. Read `documentation/extending-numa-chat/README.md` for the full guide with code examples. Open `documentation/extending-numa-chat/architecture-explainer.html` for interactive visual diagrams.
+This skill covers everything needed to add new capabilities to Numa's chat agent. Read `documentation/extending-numa-chat/README.md` for the full guide with code examples.
 
-## Architecture: Three-Layer Tool System
+> **Architecture note:** Numa's chat tools are no longer MCP servers. The whole `numa`/`integrations`/`connectors`/`vault`/`scripts` MCP layer was replaced by a unified **`numa` CLI** that the agent invokes via `Bash("numa <category> <command> ... -m \"caption\"")`. The agent runs with **zero MCP servers** (`mcp_servers = {}`). The server-side Python handlers still exist (in `lambdas/python/workspace-chat-tools/`), but they're now reached through the **`numa-cli-api` Lambda** instead of an MCP transport. "Adding a tool" means **adding a CLI command + (usually) a Lambda handler + a skill**, not registering an MCP tool.
+
+## Architecture: How a `numa` command flows
 
 ```
-Layer 1: Claude SDK Tools (Read, Write, Bash, etc.) -- built-in, per agent type
-Layer 2: MCP Tool Groups (numa, integrations, connectors, vault, scripts) -- custom, feature-flaggable
-Layer 3: Skill Documentation (plugins/numa/skills/) -- teaches Claude how to use tools
+Agent (Bash)                                      Browser
+  │  numa <cat> <cmd> ... -m "caption"               ▲
+  ▼                                                  │ SSE tool card / approval
+numa CLI  (numa-cli/packages/cli)                    │
+  │  POST /cli/tools/invoke {tool, params, context}  │
+  ▼                                                  │
+numa-cli-api Lambda  (lambdas/node/numa-cli-api)     │
+  │  routes by registry.ts:                          │
+  │   • workspace_chat_tools (default)  ──────────►  Python handler
+  │   • kb_manager (REST file ops)                   (lambdas/python/workspace-chat-tools/tools/)
+  │   • oauth_workspace_tools (native connectors)
+  │  + ops gate + Phase-5 CLI allow-list + HITL approval poll
+  ▼
+result → CLI → stdout (JSON) → agent
 ```
 
-## Six Systems to Consider
+Three trust/enforcement gates live in `numa-cli-api` (`src/tools/index.ts`), in order: the **Ops entitlement gate** (`ops_*` blocked unless `NUMA_OPS_ENABLED`), the **Phase-5 per-agent-type CLI allow-list** (`src/tools/policy.ts` — e.g. Nolia → `docs` only), then the **HITL approval gate** (create DDB record + poll).
 
-When adding a new tool, you touch up to six systems. Not all apply to every tool.
+## Five Systems to Consider
 
-### 1. MCP Tool Group (Backend - Service)
+When adding a new tool, you touch up to five systems. Not all apply to every tool.
 
-**Files:** `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/`
+### 1. The CLI command (the agent-facing surface)
 
-**Decision:** Add to an existing group (preferred for related operations) or create a new group (for independently feature-flaggable capabilities).
+**Files:** `numa-cli/packages/cli/src/commands/actions/<category>.ts` + `numa-cli/packages/cli/src/metadata/` (`tool-types.ts`, `tool-display.ts`)
 
-**The Single-Dispatcher Pattern (preferred):**
+A `numa <category> <command>` invocation is a Commander subcommand that maps to a `{tool, params}` and calls `invokeTool()` (`src/api/tools.ts`), which POSTs to `numa-cli-api`.
 
-All major tools use one `@tool()` decorated function with a `name` enum to dispatch to operation handlers. This is more token-efficient than many separate tools.
+**Decision:** add a `command` to an existing category file (preferred for related ops) or create a new `actions/<category>.ts` for a new top-level category.
 
-```python
-@tool(
-    name="my_tool",
-    input_schema={
-        "properties": {
-            "name": {"type": "string", "enum": ["op1", "op2"], "description": "Operation"},
-            "params": {"type": "object", "description": "Operation-specific params"},
-            "description": {"type": "string", "description": "Human-readable (shown to user)"}
-        },
-        "required": ["name", "params", "description"]
-    }
-)
-async def my_tool(args):
-    handler = HANDLERS.get(args["name"])
-    return await handler(args["params"])
-```
+**Steps:**
+
+1. Add the subcommand in `actions/<category>.ts`: define flags, build `params`, require `-m/--user-message` (the user-visible caption), call `invokeTool(account, accessToken, { tool, params, context, user_message })`.
+2. For **write ops**, gate via `gateWriteOp()` (`src/commands/actions/_hitl.ts`) — it generates a `request_id` so the server emits an approval card and blocks on the user's decision.
+3. Add typed metadata so TS narrows params and the frontend can render the result:
+   - `src/metadata/tool-types.ts` — extend the `ToolCall` union: `tool` name → params shape and result shape.
+   - `src/metadata/tool-display.ts` — `tool` → `category` + frontend render hint.
 
 **Key rules:**
 
-- Always include a `description` param -- shown to the user in the UI and approval cards
-- Use `_ok(text)` and `_err(text)` helpers for uniform response format
-- Two-level dispatch is fine (e.g., `name="knowledge_base"` + `params.operation="query"`)
-- Register in `sdk_config.py` with a `type_config.enable_*_mcp` flag
+- `-m "..."` (`user_message`) is REQUIRED on every API-hitting command — it's the approval-card / inline-tool caption.
+- Default output is the `--standard` `_summary` envelope in-workspace and `--json` when piped; big results spill to `/workdir/tmp/numa-cli/` and return a schema preview + path (the LLM `jq`/`cat`s the spill).
+- The prod binary (`numa`) ships only user-safe commands; bypass/auto-approve flags live in `numa-dev` only (not in the prod import graph).
 
-**Adding to an existing group (e.g., numa_tool):**
-
-1. Write async handler function: `async def _handle_my_op(params) -> dict`
-2. Add to `TOOL_HANDLERS` dict
-3. Add operation name to the `enum` in the tool's `input_schema`
-
-**Creating a new group:**
-
-1. Create `mcp_tools/my_tool.py` with the `@tool()` decorator
-2. Add `enable_my_tool_mcp` field to `AgentTypeConfig` in `agent_types/base.py`
-3. Register MCP server in `sdk_config.py`:
-   ```python
-   if type_config.enable_my_tool_mcp:
-       mcp_servers["my_tool"] = create_sdk_mcp_server(name="my_tool", tools=[my_tool])
-   ```
-
-**Three-layer access control:**
-
-1. Agent type config: `allowed_numa_operations` (developer hard limit)
-2. Feature flags: environment variables like `NUMA_OPS_ENABLED` (deployment-level)
-3. Frontend toggles: `NUMA_ENABLED_TOOLS` allowlist (user-level)
-
-### 2. Prompting & Skills (Backend - Service)
+### 2. Lambda handler (server-side execution)
 
 **Files:**
 
-- `services/numa-workspace-agent/plugins/numa/skills/<tool-name>/SKILL.md`
-- `services/numa-workspace-agent/numa_workspace_agent/prompts.py`
-- `services/numa-workspace-agent/integration-prompts/<slug>.md`
+- `lambdas/python/workspace-chat-tools/` (primary tools Lambda — the default dispatch target)
+- `lambdas/python/oauth-workspace-tools/` (native OAuth connectors)
+- `lambdas/python/kb-manager/` (file-management REST ops)
 
-**Create a skill file** teaching Claude how to use your tool:
+**When to use a Lambda:** when the tool needs IAM permissions or user credentials the agent shouldn't have. Pure in-workspace computation just runs as a script the agent writes to `/workdir/tmp/` and executes with Bash — no Lambda needed.
 
-```markdown
----
-name: my-tool
-description: Description of when to use this tool
----
-
-# My Tool Skill
-
-## Operations
-
-| Operation | Description | Required Params  |
-| --------- | ----------- | ---------------- |
-| op1       | Does X      | param_a, param_b |
-
-## Examples
-
-mcp**my_tool**my_tool(
-name="op1",
-description="Doing X with the data",
-params={"param_a": "value", "param_b": 42}
-)
-```
-
-**Register in prompts.py** TOOL_USAGE section so Claude knows the skill exists.
-
-**For integrations:** Add per-integration prompt files (`integration-prompts/<slug>.md`) with platform-specific guidance (search syntax, field formats, etc.). These are injected when the integration is enabled.
-
-### 3. Lambda Delegation (Backend - Lambda)
-
-**Files:**
-
-- `lambdas/python/workspace-chat-tools/` (primary tools Lambda)
-- `lambdas/python/oauth-workspace-tools/` (OAuth connectors)
-- `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/lambda_client.py`
-
-**When to use a Lambda:** When your tool needs IAM permissions or user credentials the agent shouldn't have. When the tool is pure computation in the workspace, run it directly (like `execute_script`).
-
-**Lambda invocation pattern:**
+**Most tools** land in `workspace-chat-tools` (the default route). Add a handler keyed on the `tool` name:
 
 ```python
-from numa_workspace_agent.mcp_tools.lambda_client import invoke_workspace_tool
-
-result = invoke_workspace_tool(
-    "my_operation",
-    {"param_a": "value"},
-    extra_event_fields={"user_sub": user_sub, "allowed_kbs": kb_ids}
-)
-```
-
-**In the Lambda**, add handler + register in `TOOL_HANDLERS`:
-
-```python
-def handle_my_operation(params):
+def handle_my_operation(params, *, user_sub, **_):
     # Validate, execute, return result
     return {"status": "success", "data": {...}}
 
 TOOL_HANDLERS["my_operation"] = handle_my_operation
 ```
 
-**Security gates (fail-closed):**
+`numa-cli-api` forwards the CLI request to this Lambda as an event `{tool, params, user_sub, user_email, user_groups, allowed_kbs, enabled_tools, conversation_id, id_token, user_message, request_id}`. `user_sub` is server-trusted (derived from the verified token in `numa-cli-api`); scoping hints (`allowed_kbs`, `enabled_tools`) can only narrow, never grant — enforce ownership in the handler.
 
-- Validate `allowed_tools` / `allowed_kbs` allowlists
-- Check `user_sub` for ownership/permission
-- Server-side DynamoDB verification as defense-in-depth
+**Security gates (fail-closed):** validate `enabled_tools`/`allowed_kbs` allowlists; check `user_sub` ownership; server-side DynamoDB verification as defense-in-depth.
 
-**Credential isolation:** MCP tools use `NUMA_LOCAL_AWS_*` env vars (local account session tokens) for Lambda invocation. The agent never sees raw credentials. User OAuth tokens are looked up by the Lambda from Secrets Manager using identifiers (user_sub, external_user_id).
+### 3. numa-cli-api routing (only if NOT the default Lambda)
 
-### 4. HITL Approvals (Backend + Frontend)
+**File:** `lambdas/node/numa-cli-api/src/tools/registry.ts`
 
-**Files:**
+Anything not registered defaults to `workspace_chat_tools` — so a new chat-tools handler needs **no** registry entry. Add an entry only if the tool lives elsewhere:
 
-- `services/numa-workspace-agent/numa_workspace_agent/sdk_runner.py` (approval emission)
-- `lambdas/python/workspace-chat-tools/tools/approval.py` (polling)
-- `numa-frontend/src/Pages/Settings.tsx` (user settings)
-- `numa-frontend/src/Components/Agents/AgentCreateModal.tsx` (agent builder)
-- `numa-frontend/src/Components/WorkspaceChat/WorkspaceChatToolApproval.tsx` (approval UI)
+- **kb_manager** (REST-shaped file ops) → `KbManagerRoute` with `method` + `pathTemplate` (`{kb_id}` placeholders substituted from params).
+- **oauth_workspace_tools** (native connectors) → `OauthWorkspaceToolsRoute`.
 
-**Three approval modes:** `always` (manual for everything), `non_destructive` (auto-approve reads, manual for writes), `never` (auto-approve all).
+If the tool is `ops_*` or needs a per-agent-type restriction, also update the gates in `src/tools/index.ts` / `src/tools/policy.ts`.
 
-**Five categories:** `integrations`, `agents`, `memories`, `knowledgeBases`, `ops`.
-
-**To add HITL for a new tool:**
-
-1. Classify operations as safe (read-only) or write (side effects)
-2. Add category to `numaToolApprovalMode` options in Settings.tsx
-3. Add category to approval modes grid in AgentCreateModal.tsx
-4. In your MCP tool, pop approval ID: `pop_approval_id(action_key)`
-5. Pass `request_id` and `auto_approved` in Lambda event
-6. In Lambda, use `poll_approval(approval_id)` -- polls DynamoDB every 5s, 90s timeout
-7. Handle results: `approved` (execute), `denied` (skip), `timeout` (report)
-
-**Approval flow:** SDK runner emits SSE `tool_approval` event -> frontend shows card with countdown -> user decides -> decision written to DynamoDB -> Lambda polls and picks up decision.
-
-**Resolution priority:** Agent override > User setting > Default.
-
-### 5. Frontend Rendering (Frontend)
+### 4. Prompting & Skills (so the agent knows the command exists)
 
 **Files:**
 
-- `numa-frontend/src/utils/workspaceChatEventHandlers.ts` (tool routing, display text)
-- `numa-frontend/src/utils/ToolConfig.ts` (tool metadata, icons)
-- `numa-frontend/src/Components/WorkspaceChat/WorkspaceChatInlineTool.tsx` (inline rendering)
-- `numa-frontend/src/Components/UnifiedToolCard.tsx` (card rendering)
-- `numa-frontend/src/toolRenderers/` (specialized result renderers)
+- `services/numa-workspace-agent/plugins/numa/skills/<tool-name>/SKILL.md`
+- `services/numa-workspace-agent/numa_workspace_agent/prompts.py` (`build_numa_cli_section`)
+- `services/numa-workspace-agent/integration-prompts/<slug>.md`
 
-**Segment types:**
+The CLI doesn't self-document the way MCP injected schemas did, so the **prompt must teach it**. For a new top-level category, add it to `build_numa_cli_section()` in `prompts.py` (which is included only for types with `Bash(numa:*)`, and whose Ops subsection is gated on `NUMA_OPS_ENABLED`). For richer guidance, add a skill:
 
-- `inline_tool` -- Single-line indicator (file reads, searches, integrations)
-- `tool_card` -- Card with structured results (KB, web search, data analysis)
+```markdown
+---
+name: my-tool
+description: When to use this tool
+---
 
-**To add frontend rendering:**
+# My Tool
 
-1. Route tool name in `getToolSegmentKind()` to `inline_tool` or `tool_card`
-2. Set display text in `getInlineToolDisplay()` -- extract meaningful info from input
-3. Set icon in `getToolCategoryAndIcon()` -- Bootstrap icon class or custom image URL
-4. For card results: create renderer in `toolRenderers/` and register in `UnifiedToolCard.tsx`
-5. Approval panel renders automatically when approval data is attached
+## Commands
 
-**Tool categories:** `transient` (fades out), `important` (always visible with icon), `default`.
+- `numa <category> <command> --flag <v> --json -m "..."` — does X
 
-**The description param matters here** -- it's what the user sees in the inline tool indicator and the approval card.
+## Examples
 
-### 6. Agent Type Configuration (Backend - Service)
+Bash: numa <category> <command> --foo bar --json -m "Doing X for the user"
+```
+
+Teach `--help` discovery (`numa <category> --help`) and Bash composition (`numa ... --json | jq ...`). **For integrations:** add per-integration prompt files (`integration-prompts/<slug>.md`), injected when the integration is enabled.
+
+### 5. HITL Approvals (Backend + Frontend)
 
 **Files:**
 
-- `services/numa-workspace-agent/numa_workspace_agent/agent_types/base.py` (AgentTypeConfig)
-- `services/numa-workspace-agent/numa_workspace_agent/agent_types/registry.py`
-- `services/numa-workspace-agent/numa_workspace_agent/agent_types/*.py` (specific types)
+- `numa-cli/packages/cli/src/commands/actions/_hitl.ts` (`gateWriteOp` — CLI side)
+- `lambdas/node/numa-cli-api/src/tools/index.ts` (`createApprovalRequest` + `pollApproval`)
+- `lambdas/python/workspace-chat-tools/tools/approval.py` (downstream handler honours `auto_approved`)
+- `numa-frontend/src/Pages/Settings.tsx`, `Components/Agents/AgentCreateModal.tsx`, `Components/WorkspaceChat/WorkspaceChatToolApproval.tsx`
 
-**AgentTypeConfig controls:**
+**Three approval modes:** `always`, `non_destructive` (auto-approve reads), `never`. **Five categories:** `integrations`, `agents`, `memories`, `knowledgeBases`, `ops`.
 
-- `enable_*_mcp` -- Boolean flags to enable/disable MCP tool groups
-- `allowed_numa_operations` -- List to restrict which Numa operations are allowed (None = all)
-- `enabled_numa_tools` -- Which tool docs to copy to workspace
-- `tools` / `allowed_tools` / `disallowed_tools` -- SDK tool control
+**To add HITL for a new write command:**
 
-**When adding a new tool group:**
+1. Classify operations as read (no approval) or write (approval).
+2. In the CLI command, route writes through `gateWriteOp({...})` — it returns a `request_id` and `auto_approved`, forwarded on the invoke.
+3. `numa-cli-api` creates the DDB approval record (action_key from `deriveActionKey`) and polls until approve/deny/timeout — only dispatching downstream on approval (with `auto_approved=true` so the Python handler skips its own approval block).
+4. Add the category to `numaToolApprovalMode` in Settings.tsx + the approval grid in AgentCreateModal.tsx if it's a new category.
 
-1. Add `enable_my_tool_mcp` to AgentTypeConfig dataclass
-2. Enable for `numa-chat` (default agent)
-3. Decide per specialized agent type: research agent probably doesn't need CRM tools
-4. Add to `enabled_numa_tools` for types that should get skill docs
-5. Update `_OPERATION_TO_ENABLED_TOOL_KEYS` if the tool has frontend toggles
+**Flow:** CLI sets `request_id` → `numa-cli-api` emits/records approval + polls → frontend shows card with countdown → user decides → DDB update → poll resolves → result returns to the agent.
 
-**Resolution chain:** Agent type config (baseline) -> Agent instance config (DynamoDB overrides) -> Request-level toggles (runtime) -> SDK config build.
+### 6. Frontend Rendering & Agent Type Config
+
+**Frontend** (`numa-frontend/src/`): the agent emits a `Bash` tool call; a PostToolUse reframe / the CLI metadata gives it a synthetic `tool_name` (`numa_<category>_<command>`) so the existing per-tool renderers pick it up. Touchpoints: `utils/workspaceChatEventHandlers.ts` (routing/display), `utils/ToolConfig.ts` (icons/metadata), `toolRenderers/` (result cards), `Components/UnifiedToolCard.tsx`.
+
+**Agent type config** (`services/numa-workspace-agent/numa_workspace_agent/agent_types/`):
+
+- `allowed_tools` must include `Bash(numa:*)` for the type to use the CLI at all.
+- `allowed_cli_commands` (Phase 5) restricts which CLI categories the type may use (`None` = all; e.g. Nolia phases = `["docs"]`). Enforced server-side in `numa-cli-api` keyed on `NUMA_AGENT_TYPE`.
+- `enabled_numa_tools` — which tool reference docs to copy into the workspace.
 
 ## Quick Reference: Key Files
 
-| Component                  | Path                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------- |
-| MCP tool implementations   | `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/`                 |
-| Lambda client (invocation) | `services/numa-workspace-agent/numa_workspace_agent/mcp_tools/lambda_client.py` |
-| Agent type configs         | `services/numa-workspace-agent/numa_workspace_agent/agent_types/`               |
-| SDK config builder         | `services/numa-workspace-agent/numa_workspace_agent/sdk_config.py`              |
-| System prompt builder      | `services/numa-workspace-agent/numa_workspace_agent/prompts.py`                 |
-| SDK runner (approvals)     | `services/numa-workspace-agent/numa_workspace_agent/sdk_runner.py`              |
-| Skills/plugins             | `services/numa-workspace-agent/plugins/numa/skills/`                            |
-| Integration prompts        | `services/numa-workspace-agent/integration-prompts/`                            |
-| Primary tools Lambda       | `lambdas/python/workspace-chat-tools/`                                          |
-| OAuth tools Lambda         | `lambdas/python/oauth-workspace-tools/`                                         |
-| Approval polling           | `lambdas/python/workspace-chat-tools/tools/approval.py`                         |
-| Frontend tool routing      | `numa-frontend/src/utils/workspaceChatEventHandlers.ts`                         |
-| Frontend tool config       | `numa-frontend/src/utils/ToolConfig.ts`                                         |
-| Inline tool component      | `numa-frontend/src/Components/WorkspaceChat/WorkspaceChatInlineTool.tsx`        |
-| Tool card component        | `numa-frontend/src/Components/UnifiedToolCard.tsx`                              |
-| Tool result renderers      | `numa-frontend/src/toolRenderers/`                                              |
-| Approval UI component      | `numa-frontend/src/Components/WorkspaceChat/WorkspaceChatToolApproval.tsx`      |
-| Settings (HITL config)     | `numa-frontend/src/Pages/Settings.tsx`                                          |
-| Agent builder (HITL)       | `numa-frontend/src/Components/Agents/AgentCreateModal.tsx`                      |
-| Full documentation         | `documentation/extending-numa-chat/README.md`                                   |
-| Visual explainer           | `documentation/extending-numa-chat/architecture-explainer.html`                 |
+| Component                       | Path                                                                             |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| CLI commands (agent surface)    | `numa-cli/packages/cli/src/commands/actions/`                                    |
+| CLI tool metadata / types       | `numa-cli/packages/cli/src/metadata/` (`tool-types.ts`, `tool-display.ts`)       |
+| CLI → API invoke                | `numa-cli/packages/cli/src/api/tools.ts`                                         |
+| CLI HITL gate                   | `numa-cli/packages/cli/src/commands/actions/_hitl.ts`                            |
+| Dispatch / gates (ops, Phase 5) | `lambdas/node/numa-cli-api/src/tools/index.ts`                                   |
+| Tool routing registry           | `lambdas/node/numa-cli-api/src/tools/registry.ts`                                |
+| Per-agent CLI allow-list policy | `lambdas/node/numa-cli-api/src/tools/policy.ts`                                  |
+| Auth (verified-token identity)  | `lambdas/node/numa-cli-api/src/shared/auth.ts`                                   |
+| Primary tools Lambda            | `lambdas/python/workspace-chat-tools/`                                           |
+| OAuth/native connectors Lambda  | `lambdas/python/oauth-workspace-tools/`                                          |
+| Approval polling (downstream)   | `lambdas/python/workspace-chat-tools/tools/approval.py`                          |
+| Agent type configs              | `services/numa-workspace-agent/numa_workspace_agent/agent_types/`                |
+| System prompt builder           | `services/numa-workspace-agent/numa_workspace_agent/prompts.py`                  |
+| SDK config builder              | `services/numa-workspace-agent/numa_workspace_agent/sdk_config.py`               |
+| Skills/plugins                  | `services/numa-workspace-agent/plugins/numa/skills/`                             |
+| Integration prompts             | `services/numa-workspace-agent/integration-prompts/`                             |
+| Frontend tool routing           | `numa-frontend/src/utils/workspaceChatEventHandlers.ts`                          |
+| Tool result renderers           | `numa-frontend/src/toolRenderers/`                                               |
+| Approval UI component           | `numa-frontend/src/Components/WorkspaceChat/WorkspaceChatToolApproval.tsx`       |
+| Settings / agent-builder HITL   | `numa-frontend/src/Pages/Settings.tsx`, `Components/Agents/AgentCreateModal.tsx` |
+| Full documentation              | `documentation/extending-numa-chat/README.md`                                    |

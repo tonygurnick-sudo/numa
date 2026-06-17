@@ -116,6 +116,8 @@ type NewChatProps = {
   setSelectedModelId?: (id: WorkspaceChatModelId) => void;
   /** Whether to show the model selector (V2 only) */
   showModelSelector?: boolean;
+  /** Lock the model selector once the conversation has started (V2 only) */
+  modelLocked?: boolean;
   // Staged files display props (V2 only - for pre-minted conversations)
   /** Files staged for upload before first message is sent */
   stagedItems?: StagedItem[];
@@ -243,6 +245,7 @@ const NewChat = ({
   selectedModelId,
   setSelectedModelId,
   showModelSelector = false,
+  modelLocked = false,
   // Staged files props
   stagedItems = [],
   onRemoveStagedItem,
@@ -518,6 +521,7 @@ const NewChat = ({
         selectedModelId={selectedModelId}
         setSelectedModelId={setSelectedModelId}
         showModelSelector={showModelSelector}
+        modelLocked={modelLocked}
         onPasteFiles={onFilesDropped}
         hasStagedAttachments={stagedItems.length > 0}
         voiceInputEnabled={voiceInputEnabled}

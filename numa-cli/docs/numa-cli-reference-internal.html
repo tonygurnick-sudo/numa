@@ -1,0 +1,1912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Numa CLI Reference (Internal)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* Colors */
+      --color-primary:        #9949AC;
+      --color-primary-light:  #DFBDE7;
+      --color-primary-dark:   #7D3490;
+      --color-primary-soft:   rgba(153, 73, 172, 0.08);
+      --color-teal:           #1F4B5E;
+      --color-charcoal:       #1F1F1F;
+      --color-charcoal-light: #323232;
+      --color-warm-bg:        #F7F5F1;
+      --color-white:          #FFFFFF;
+      --color-black:          #000000;
+      --color-border:         rgba(0, 0, 0, 0.08);
+      --color-success:        #22C55E;
+      --color-error:          #EF4444;
+      --color-muted:          #6B6B6B;
+
+      /* Typography */
+      --font-display:  'Figtree', system-ui, sans-serif;
+      --font-body:     'Inter', system-ui, sans-serif;
+      --font-mono:     'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+      /* Spacing */
+      --space-xs:  4px;
+      --space-sm:  8px;
+      --space-md:  16px;
+      --space-lg:  24px;
+      --space-xl:  40px;
+      --space-2xl: 64px;
+
+      /* Radii */
+      --radius-sm:   4px;
+      --radius-md:   8px;
+      --radius-lg:   16px;
+      --radius-pill: 999px;
+
+      /* Shadows */
+      --shadow-sm: 0 1px 4px rgba(0,0,0,0.06);
+      --shadow-md: 0 2px 12px rgba(0,0,0,0.08);
+
+      /* Surfaces — semantic names that flip between modes */
+      --surface-page:     var(--color-white);
+      --surface-card:     var(--color-white);
+      --surface-warm:     var(--color-warm-bg);
+      --surface-sidebar:  var(--color-white);
+    }
+
+    /* ─────────── Dark mode ───────────
+       Override tokens via [data-theme="dark"] on <html>. Toggle persists in
+       localStorage and respects prefers-color-scheme on first visit. The
+       light mode above remains the canonical default — dark mode is opt-in.
+    */
+    [data-theme="dark"] {
+      /* Surfaces */
+      --surface-page:         #1A1A1A;
+      --surface-card:         #232323;
+      --surface-warm:         #2A2A2A;
+      --surface-sidebar:      #1F1F1F;
+
+      /* Text */
+      --color-charcoal:       #F0EEE8;   /* h3, strong */
+      --color-charcoal-light: #C8C6C0;   /* body */
+      --color-black:          #FFFFFF;   /* strongest headings */
+      --color-muted:          #8E8E8E;
+      --color-warm-bg:        #2A2A2A;   /* code blocks */
+      --color-white:          #232323;   /* card bg fallback (anywhere we still use it) */
+
+      /* Borders */
+      --color-border:         rgba(255, 255, 255, 0.08);
+
+      /* Purple — lighten for legibility on dark */
+      --color-primary:        #C982D9;
+      --color-primary-light:  #DFBDE7;
+      --color-primary-dark:   #DFBDE7;   /* was darker — flip for code highlights */
+      --color-primary-soft:   rgba(201, 130, 217, 0.16);
+
+      /* Status — lighter so they pop without burning eyes */
+      --color-success:        #4ADE80;
+      --color-error:          #F87171;
+      --color-teal:           #5BA3B8;
+
+      /* Shadows — subtle on dark */
+      --shadow-sm: 0 1px 4px rgba(0,0,0,0.4);
+      --shadow-md: 0 2px 12px rgba(0,0,0,0.5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body { height: 100%; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--color-charcoal-light);
+      background: var(--surface-page);
+      -webkit-font-smoothing: antialiased;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+
+    /* Layout */
+    .app {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--surface-sidebar);
+      border-right: 1px solid var(--color-border);
+      padding: var(--space-lg) 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .brand {
+      padding: 0 var(--space-lg) var(--space-lg);
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: var(--space-md);
+      position: relative;
+    }
+    .brand-title {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--color-primary);
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+    .theme-toggle {
+      position: absolute;
+      top: 0;
+      right: var(--space-md);
+      width: 32px;
+      height: 32px;
+      border: 1px solid var(--color-border);
+      background: var(--surface-card);
+      border-radius: var(--radius-pill);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      color: var(--color-charcoal-light);
+      transition: all 0.15s ease;
+      font-family: inherit;
+      padding: 0;
+    }
+    .theme-toggle:hover {
+      background: var(--color-primary-soft);
+      color: var(--color-primary);
+      border-color: var(--color-primary);
+    }
+    .theme-toggle:focus-visible {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2px;
+    }
+    .brand-mark {
+      width: 28px; height: 28px;
+      background: var(--color-primary);
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: var(--color-muted);
+      margin-top: var(--space-xs);
+      padding-left: 36px;
+    }
+
+    .nav-section-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.09em;
+      color: var(--color-charcoal);
+      padding: var(--space-lg) var(--space-lg) var(--space-sm);
+      margin-top: var(--space-md);
+      border-top: 1px solid var(--color-border);
+      position: relative;
+    }
+    .nav-section-label::before {
+      content: '';
+      position: absolute;
+      left: var(--space-lg);
+      top: -1px;
+      width: 24px;
+      height: 2px;
+      background: var(--color-primary);
+    }
+    .nav-section-label:first-of-type {
+      margin-top: 0;
+      border-top: none;
+      padding-top: var(--space-md);
+    }
+    .nav-section-label:first-of-type::before {
+      display: none;
+    }
+    .nav-item {
+      display: block;
+      padding: 10px var(--space-lg);
+      color: var(--color-charcoal-light);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 14px;
+      border-left: 3px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .nav-item:hover {
+      background: var(--color-primary-soft);
+      color: var(--color-primary);
+    }
+    .nav-item.active {
+      background: var(--color-primary-soft);
+      color: var(--color-primary);
+      border-left-color: var(--color-primary);
+      font-weight: 600;
+    }
+    .nav-item .nav-count {
+      float: right;
+      font-size: 11px;
+      color: var(--color-muted);
+      background: var(--color-warm-bg);
+      padding: 2px 8px;
+      border-radius: var(--radius-pill);
+      font-weight: 500;
+    }
+    .nav-item.active .nav-count {
+      background: var(--color-primary);
+      color: white;
+    }
+
+    /* Main content */
+    .main {
+      padding: var(--space-2xl) var(--space-xl);
+      max-width: 1100px;
+    }
+
+    .section {
+      display: none;
+    }
+    .section.active {
+      display: block;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Typography */
+    h1 {
+      font-family: var(--font-display);
+      font-size: 44px;
+      font-weight: 600;
+      color: var(--color-primary);
+      line-height: 1.1;
+      margin-bottom: var(--space-md);
+    }
+    h2 {
+      font-family: var(--font-display);
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--color-primary);
+      margin-top: var(--space-2xl);
+      margin-bottom: var(--space-md);
+    }
+    h3 {
+      font-family: var(--font-display);
+      font-size: 19px;
+      font-weight: 600;
+      color: var(--color-black);
+      margin-top: var(--space-xl);
+      margin-bottom: var(--space-sm);
+    }
+    h4 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-charcoal);
+      margin-top: var(--space-md);
+      margin-bottom: var(--space-xs);
+    }
+    p {
+      margin-bottom: var(--space-md);
+      max-width: 720px;
+    }
+    strong { color: var(--color-charcoal); font-weight: 600; }
+    a { color: var(--color-primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .lede {
+      font-size: 16px;
+      color: var(--color-charcoal-light);
+      max-width: 720px;
+      margin-bottom: var(--space-lg);
+    }
+
+    /* Code */
+    code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: var(--surface-warm);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      color: var(--color-charcoal);
+      transition: background 0.2s ease;
+    }
+    pre {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      background: var(--surface-warm);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      overflow-x: auto;
+      margin-bottom: var(--space-md);
+      line-height: 1.55;
+      color: var(--color-charcoal);
+      border: 1px solid var(--color-border);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+      font-size: 13px;
+    }
+    pre .comment { color: var(--color-muted); }
+    pre .prompt { color: var(--color-primary); user-select: none; }
+    pre .out { color: var(--color-charcoal-light); }
+    pre .err { color: var(--color-error); }
+    pre .ok { color: var(--color-success); }
+    pre .key { color: var(--color-primary-dark); }
+
+    /* Cards */
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: var(--space-md);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    /* .card-dark + .diagram are intentionally hardcoded — they're meant to
+       stay deliberately darker than the surrounding surface in BOTH modes,
+       so they keep their visual weight. */
+    .card-dark {
+      background: #0F0F0F;
+      color: #F0EEE8;
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+    }
+    .card-dark h3, .card-dark h4 { color: #FFFFFF; }
+    .card-dark p { color: var(--color-primary-light); }
+
+    .warm-section {
+      background: var(--surface-warm);
+      border-radius: var(--radius-lg);
+      padding: var(--space-xl);
+      margin: var(--space-lg) 0;
+    }
+    .warm-section h3:first-child { margin-top: 0; }
+
+    /* Command card */
+    .cmd {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-md) var(--space-lg);
+      margin-bottom: var(--space-md);
+      background: var(--surface-card);
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .cmd-sig {
+      font-family: var(--font-mono);
+      font-size: 14px;
+      color: var(--color-charcoal);
+      font-weight: 500;
+      margin-bottom: var(--space-xs);
+    }
+    .cmd-sig .arg { color: var(--color-primary); }
+    .cmd-sig .opt { color: var(--color-muted); font-weight: 400; }
+    .cmd-desc {
+      color: var(--color-charcoal-light);
+      font-size: 13px;
+      margin-bottom: var(--space-sm);
+    }
+    .cmd-flags {
+      font-size: 12px;
+      color: var(--color-muted);
+      font-family: var(--font-mono);
+      line-height: 1.7;
+    }
+    .cmd-flags .flag {
+      display: inline-block;
+      background: var(--color-warm-bg);
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      margin-right: var(--space-xs);
+      color: var(--color-charcoal);
+    }
+
+    /* Tags / pills */
+    .tag {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: var(--radius-pill);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tag-purple { background: var(--color-primary-soft); color: var(--color-primary-dark); }
+    .tag-teal   { background: rgba(31, 75, 94, 0.1); color: var(--color-teal); }
+    .tag-warn   { background: rgba(239, 68, 68, 0.1); color: var(--color-error); }
+    .tag-ok     { background: rgba(34, 197, 94, 0.12); color: #166534; }
+    .tag-muted  { background: var(--color-warm-bg); color: var(--color-muted); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: var(--space-md) 0;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: var(--space-sm) var(--space-md);
+      border-bottom: 1px solid var(--color-border);
+      vertical-align: top;
+    }
+    th {
+      background: var(--surface-warm);
+      color: var(--color-charcoal);
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    tr:hover td { background: var(--color-primary-soft); }
+    td code { font-size: 12px; }
+
+    /* Worked example */
+    .worked-example {
+      background: var(--surface-warm);
+      border-radius: var(--radius-lg);
+      padding: var(--space-xl);
+      margin: var(--space-lg) 0;
+      border-left: 4px solid var(--color-primary);
+      transition: background 0.2s ease;
+    }
+    .worked-example h3 {
+      margin-top: 0;
+      color: var(--color-primary);
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+    .worked-example h3::before {
+      content: '▸';
+      color: var(--color-primary);
+    }
+    .step {
+      display: flex;
+      gap: var(--space-md);
+      margin: var(--space-md) 0;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 28px; height: 28px;
+      background: var(--color-primary);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .step-body { flex: 1; min-width: 0; }
+    .step-body p { margin-bottom: var(--space-sm); }
+
+    /* Callouts */
+    .callout {
+      padding: var(--space-md) var(--space-lg);
+      border-radius: var(--radius-md);
+      margin: var(--space-md) 0;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .callout-info {
+      background: rgba(31, 75, 94, 0.08);
+      border-left: 4px solid var(--color-teal);
+      color: var(--color-charcoal-light);
+    }
+    .callout-warn {
+      background: rgba(239, 68, 68, 0.08);
+      border-left: 4px solid var(--color-error);
+    }
+    .callout-tip {
+      background: var(--color-primary-soft);
+      border-left: 4px solid var(--color-primary);
+    }
+    .callout strong { color: var(--color-charcoal); }
+
+    /* Lists */
+    ul, ol { margin: var(--space-sm) 0 var(--space-md) var(--space-lg); }
+    li { margin-bottom: var(--space-xs); }
+
+    /* Diagram — deliberately dark in BOTH modes (visual weight). */
+    .diagram {
+      background: #0F0F0F;
+      color: #F0EEE8;
+      padding: var(--space-lg);
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-x: auto;
+      margin: var(--space-md) 0;
+      white-space: pre;
+    }
+
+    /* Footer */
+    .footer {
+      margin-top: var(--space-2xl);
+      padding-top: var(--space-lg);
+      border-top: 1px solid var(--color-border);
+      font-size: 12px;
+      color: var(--color-muted);
+    }
+
+    /* Mobile (functional minimum, not optimised) */
+    @media (max-width: 800px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; }
+      .main { padding: var(--space-lg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-title">
+          <span class="brand-mark">N</span> Numa CLI
+        </div>
+        <div class="brand-sub">Reference (Internal)</div>
+        <button class="theme-toggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">☾</button>
+      </div>
+
+      <div class="nav-section-label">Get started</div>
+      <a href="#overview" class="nav-item active" data-section="overview">Overview</a>
+      <a href="#internals" class="nav-item" data-section="internals">Design &amp; Architecture</a>
+
+      <div class="nav-section-label">Commands</div>
+      <a href="#auth" class="nav-item" data-section="auth">auth <span class="nav-count">5</span></a>
+      <a href="#files" class="nav-item" data-section="files">files <span class="nav-count">12</span></a>
+      <a href="#docs" class="nav-item" data-section="docs">docs <span class="nav-count">3</span></a>
+      <a href="#memory" class="nav-item" data-section="memory">memory <span class="nav-count">5</span></a>
+      <a href="#agents" class="nav-item" data-section="agents">agents <span class="nav-count">7</span></a>
+      <a href="#web" class="nav-item" data-section="web">web <span class="nav-count">2</span></a>
+      <a href="#integrations" class="nav-item" data-section="integrations">integrations <span class="nav-count">8</span></a>
+      <a href="#ops" class="nav-item" data-section="ops">ops <span class="nav-count">58</span></a>
+
+      <div class="nav-section-label">Concepts</div>
+      <a href="#conventions" class="nav-item" data-section="conventions">Conventions</a>
+      <a href="#output" class="nav-item" data-section="output">Output modes</a>
+      <a href="#self-tests" class="nav-item" data-section="self-tests">Self-tests</a>
+    </aside>
+
+    <main class="main">
+
+      <!-- ───────────── Overview ───────────── -->
+      <section id="overview" class="section active">
+        <h1>Numa CLI</h1>
+        <p class="lede">
+          A TypeScript CLI that wraps the Numa platform's tool surface (files, docs, memory, agents, web search, integrations) for dual consumption: by <strong>Numa-the-LLM</strong> running inside workspace MicroVMs, and by <strong>developers</strong> running locally to test or script against a Numa instance.
+        </p>
+
+        <div class="callout callout-info">
+          <strong>Audience:</strong> This reference is internal to the Arcanum team. It documents the CLI as it currently exists — not external user docs.
+        </div>
+
+        <div class="callout callout-info">
+          <strong>This is the per-command reference.</strong> For the <strong>architecture &amp; design</strong> — the identity model, the three <code>numa-cli-api</code> gates (Ops entitlement, the Phase-5 per-agent-type allow-list, HITL approval), the permission model (<code>bypassPermissions</code> vs <code>acceptEdits</code>), the agent-side hooks, the per-command rate limit, Saved Workflows, and render-on-reload — read the canonical doc <code>documentation/numa-cli/README.md</code>. Update <em>that</em> doc when a design decision changes, and regenerate this reference when commands/flags change.
+        </div>
+
+        <h2>Two packages, two binaries</h2>
+        <p>The CLI is split into two npm packages so the workspace image can install only the production surface. The dev binary is a separate package that depends on the prod one and adds extras on top.</p>
+        <table>
+          <thead>
+            <tr><th style="width: 22%">Package</th><th style="width: 18%">Binary</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>@numa/cli</code><br><span class="tag tag-purple">prod</span></td>
+              <td><code>numa</code></td>
+              <td>Production binary. Used by Numa-the-LLM inside the workspace MicroVM. Contains no bypass flags or test runners — they don't exist in the bundle.</td>
+            </tr>
+            <tr>
+              <td><code>@numa/cli-dev</code><br><span class="tag tag-warn">dev only</span></td>
+              <td><code>numa-dev</code></td>
+              <td>Developer binary. Depends on <code>@numa/cli</code> and bolts on <code>--d-hum</code> (root) + <code>--yes</code> (per-command) + per-category self-tests + dev-context tools + <code>reference</code> launcher. <strong>NEVER install in a workspace MicroVM.</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="callout callout-tip">
+          <strong>How the dev binary reuses prod commands:</strong> <code>@numa/cli-dev</code> imports the <code>createXxxCommand()</code> factories from <code>@numa/cli/commands</code> and composes the same Commander trees as the prod binary — then bolts on its own <code>*Test</code> subcommand under each. <code>numa-dev integrations list</code> goes through exactly the same code path as <code>numa integrations list</code>.
+        </div>
+        <div class="callout callout-info">
+          <strong>Hermetic security model:</strong> when the workspace Docker image runs <code>npm install @numa/cli</code> (not <code>@numa/cli-dev</code>), the dev code physically isn't on disk inside the MicroVM. Numa-the-LLM can't <code>find</code> it, can't <code>node ./numa-dev.js</code>, can't bypass HITL by reaching for the dev binary. The boundary is enforced at the package layer, not at runtime.
+        </div>
+
+        <h2>Two execution contexts</h2>
+        <p>The CLI behaves differently depending on whether it's running inside a workspace MicroVM or on a developer machine. Both routes share the same code path — only the <em>scoping context resolution</em> differs.</p>
+
+        <table>
+          <thead>
+            <tr><th style="width: 30%">Context</th><th>How resolved</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="tag tag-purple">In workspace</span></td>
+              <td>Detected via <code>NUMA_CONVERSATION_ID</code> env var. Reads <code>NUMA_ENABLED_TOOLS</code>, <code>NUMA_ENABLED_INTEGRATIONS</code>, <code>NUMA_ALLOWED_KBS</code> from the MicroVM environment — the frontend toggle is source of truth. LLM cannot self-elevate.</td>
+            </tr>
+            <tr>
+              <td><span class="tag tag-teal">Local dev</span></td>
+              <td>Falls back to bootstrap context cache at <code>~/.config/numa/context-&lt;account&gt;.json</code>. Auto-injects required <code>allowed_tools</code> slugs for the command being invoked — the human typing IS the policy.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Three output modes</h2>
+        <p>Every data-returning command supports three flags. Resolution priority: per-command flag &gt; root flag &gt; <code>NUMA_OUTPUT_MODE</code> env &gt; context default.</p>
+        <table>
+          <thead>
+            <tr><th>Flag</th><th>Default when</th><th>Shape</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--pretty</code></td><td>TTY</td><td>Human-readable tables, status lines, truncated content</td></tr>
+            <tr><td><code>--standard</code></td><td><code>NUMA_CONVERSATION_ID</code> set</td><td><code>_summary</code> envelope: schema + sample + file path (or inline for &lt; 4 KB)</td></tr>
+            <tr><td><code>--json</code></td><td>non-TTY, no workspace</td><td>Raw passthrough — clean for <code>jq</code></td></tr>
+          </tbody>
+        </table>
+        <p>See <a href="#output" data-jump="output">Output modes</a> for full details on the envelope shape and file-spill behaviour.</p>
+
+        <h2>Install / setup</h2>
+        <pre><span class="comment"># 1. From the monorepo root — yarn discovers both packages via workspaces</span>
+<span class="prompt">$</span> yarn install
+<span class="prompt">$</span> cd numa-cli &amp;&amp; yarn build   <span class="comment"># topological — @numa/cli first, then @numa/cli-dev</span>
+
+<span class="comment"># 2. Symlink both binaries onto your PATH</span>
+<span class="prompt">$</span> ln -sf "$(pwd)/packages/cli/dist/cli/numa.js"         ~/.local/bin/numa
+<span class="prompt">$</span> ln -sf "$(pwd)/packages/cli-dev/dist/cli/numa-dev.js" ~/.local/bin/numa-dev
+
+<span class="comment"># 3. First-time login</span>
+<span class="prompt">$</span> numa login nd-labs</pre>
+
+        <div class="callout callout-tip">
+          <strong>Quick tour:</strong> <code>numa --help</code> for the prod surface, <code>numa-dev --help</code> for dev extras. Per-category help with <code>numa &lt;cat&gt; --help</code> (e.g. <code>numa integrations --help</code>).
+        </div>
+
+        <div class="footer">
+          Built on the same workspace-chat-tools, kb_manager, and oauth_workspace_tools Lambdas the chat agent uses. The CLI is a strict superset of what the MCP layer exposes today.
+        </div>
+      </section>
+
+      <!-- ───────────── auth ───────────── -->
+      <section id="auth" class="section">
+        <h1>auth</h1>
+        <p class="lede">Cognito SRP authentication, profile management, and context bootstrap. No AWS credentials needed — Cognito public API only.</p>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa login <span class="opt">[account]</span></div>
+          <div class="cmd-desc">SRP login flow. Account from positional arg, <code>NUMA_ACCOUNT</code> env var, or interactive prompt. Triggers a post-login bootstrap automatically.</div>
+          <div class="cmd-flags"><span class="flag">--verbose</span> include AWS <code>$metadata</code> in errors</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa logout</div>
+          <div class="cmd-desc">Clear stored tokens for the active profile.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa-dev whoami <span class="opt">(dev binary only)</span></div>
+          <div class="cmd-desc">Print the active profile's identity claims (sub, email, groups, expiry). Auto-refreshes the access token if expired. <strong>Removed from the prod <code>numa</code> binary</strong> — inside the workspace the agent already has its identity from env/prompt, and it errors on token decode under workspace-IAM auth. Available on <code>numa-dev</code> for laptop use.</div>
+          <div class="cmd-flags"><span class="flag">--pretty</span><span class="flag">--standard</span><span class="flag">--json</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa profile <span class="opt">[name]</span></div>
+          <div class="cmd-desc">Show or set the active profile. No SRP, no token mutation — just the pointer at <code>~/.config/numa/profile</code>.</div>
+          <div class="cmd-flags"><span class="flag">--pretty</span><span class="flag">--standard</span><span class="flag">--json</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa bootstrap</div>
+          <div class="cmd-desc">Refresh <code>~/.config/numa/context-&lt;account&gt;.json</code> from <code>/api/cli/bootstrap</code>. Holds KBs, integrations, enabled_tools, user groups — the source of truth for local scoping.</div>
+          <div class="cmd-flags"><span class="flag">--pretty</span><span class="flag">--standard</span><span class="flag">--json</span></div>
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — first-time setup</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Run login. Account positional or env var:</p>
+            <pre><span class="prompt">$</span> numa login nd-labs
+<span class="prompt">$</span> <span class="comment"># or:</span> NUMA_ACCOUNT=nd-labs numa login
+<span class="prompt">$</span> <span class="comment"># or:</span> numa login   <span class="comment"># interactive prompt for account name</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Enter your Cognito password at the secure prompt. Bootstrap runs automatically and writes context to <code>~/.config/numa/context-nd-labs.json</code>.</p>
+            <pre><span class="prompt">$</span> numa login nd-labs
+Password: ********
+<span class="ok">✓</span> logged in as nathan@arcanum.ai
+<span class="out">numa: bootstrap saved (~/.config/numa/context-nd-labs.json)</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Verify with <code>whoami</code>:</p>
+            <pre><span class="prompt">$</span> numa whoami
+account  nd-labs
+email    nathan@arcanum.ai
+sub      f4088468-1051-7091-5229-8f49cc9cf34a
+groups   admin
+expires  2026-05-26T06:22:16.000Z</pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Switch profiles later without re-logging:</p>
+            <pre><span class="prompt">$</span> numa profile arcanum-demo-greg   <span class="comment"># switches active profile</span>
+<span class="prompt">$</span> numa whoami                       <span class="comment"># now shows greg's identity</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">5</div><div class="step-body">
+            <p>Refresh bootstrap context after the user's groups or KB access changes server-side:</p>
+            <pre><span class="prompt">$</span> numa bootstrap
+<span class="ok">✓</span> bootstrap saved for 'nd-labs' (client_name=nd-labs)</pre>
+          </div></div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Token storage:</strong> <code>~/.config/numa/tokens-&lt;account&gt;.json</code>. Access tokens auto-refresh via Cognito refresh token (30 days). If refresh expires, the next command prompts you to re-login.
+        </div>
+      </section>
+
+      <!-- ───────────── files ───────────── -->
+      <section id="files" class="section">
+        <h1>files</h1>
+        <p class="lede">Knowledge-base operations (the user-facing surface still calls them "files" / "folders" but backend vocabulary is "KBs"). Mirrors the workspace agent's <code>numa_tool</code> MCP operations 1:1.</p>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files list</div>
+          <div class="cmd-desc">List folders (KBs) you have access to. Bootstrap-local — no Lambda call.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files show <span class="arg">&lt;folder&gt;</span></div>
+          <div class="cmd-desc">List files inside a folder. Includes nested subfolders.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files search <span class="arg">&lt;query&gt;</span></div>
+          <div class="cmd-desc">RAG query across enabled folders. Defaults to LLM-summarised results; <code>--no-summarise</code> returns raw snippets.</div>
+          <div class="cmd-flags"><span class="flag">--intent &lt;text&gt;</span><span class="flag">--folder &lt;name|id&gt;</span><span class="flag">--max-results &lt;n&gt;</span><span class="flag">--no-summarise</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files find <span class="arg">&lt;pattern&gt;</span></div>
+          <div class="cmd-desc">Filename-pattern search (glob). For content search use <code>numa files search</code>.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files download <span class="arg">&lt;folder/file&gt;</span></div>
+          <div class="cmd-desc">Download a file using a presigned S3 URL (bypasses the 30s API Gateway timeout).</div>
+          <div class="cmd-flags"><span class="flag">-o, --output &lt;path&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files download-folder <span class="arg">&lt;folder&gt;</span></div>
+          <div class="cmd-desc">Download a whole folder as a zip.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files upload <span class="arg">&lt;local-path&gt;</span></div>
+          <div class="cmd-desc">Upload a local file into a folder. <span class="tag tag-warn">write</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files mv <span class="arg">&lt;src&gt;</span> <span class="arg">&lt;dst&gt;</span></div>
+          <div class="cmd-desc">Move a file between folders (or to a subfolder). <span class="tag tag-warn">write</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files rename <span class="arg">&lt;src&gt;</span> <span class="arg">&lt;new-filename&gt;</span></div>
+          <div class="cmd-desc">Rename a file in place (same folder + subpath, new filename only). <span class="tag tag-warn">write</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files mkdir <span class="arg">&lt;folder/path&gt;</span></div>
+          <div class="cmd-desc">Create an empty subfolder inside an existing folder. <span class="tag tag-warn">write</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files rmdir <span class="arg">&lt;folder/path&gt;</span></div>
+          <div class="cmd-desc">Delete a subfolder and everything inside it. <span class="tag tag-warn">destructive</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa files delete <span class="arg">&lt;folder/file&gt;</span></div>
+          <div class="cmd-desc">Delete a file from a folder. <span class="tag tag-warn">destructive</span></div>
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — find a doc, download it</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Browse available folders:</p>
+            <pre><span class="prompt">$</span> numa files list
+<span class="out">name                     id
+-----------------------  ------------------------------------
+Company Knowledge Base   company
+Personal                 f4088468-1051-7091-5229-8f49cc9cf34a
+Pipedream Docs           c4fa4026-8cfb-47d6-a029-c6bcc06e6530
+...</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Search by content (RAG):</p>
+            <pre><span class="prompt">$</span> numa files search <span class="key">"compliance rules"</span> --folder Personal --max-results 3
+<span class="out">3 results matched, summarised:
+
+The Personal folder contains compliance rules across two assessment frameworks...
+
+Sources (3):
+  s3://numa-nd-labs-data/.../global-rules.md
+  s3://numa-nd-labs-data/.../titanic.csv
+  s3://numa-nd-labs-data/.../test.dot</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Search by filename (glob):</p>
+            <pre><span class="prompt">$</span> numa files find <span class="key">"*.md"</span> --folder Personal
+<span class="out">Personal/global-rules.md           32.7 KB
+Personal/numa-demo/titanic.md       3.1 KB</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Download the file (presigned URL, no API Gateway timeout):</p>
+            <pre><span class="prompt">$</span> numa files download Personal/global-rules.md -o ./rules.md
+<span class="ok">✓</span> downloaded 32.7 KB → ./rules.md</pre>
+          </div></div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Folder argument:</strong> Accepts either the folder <em>name</em> (case-insensitive, e.g. <code>Personal</code>) or the <em>id</em> (UUID-shaped). Names with spaces work — quote them.
+        </div>
+      </section>
+
+      <!-- ───────────── docs ───────────── -->
+      <section id="docs" class="section">
+        <h1>docs</h1>
+        <p class="lede">Document processing on <strong>workspace</strong> files (paths under <code>/workdir/...</code>). All three commands need an active <code>conversation_id</code> to construct the S3 path where the file lives.</p>
+
+        <div class="callout callout-warn">
+          <strong>Local dev gotcha:</strong> <code>conversation_id</code> is empty by default outside the workspace. Tools fail server-side with "Missing conversation context". Set one with <code>numa-dev context set --conversation-id &lt;id&gt;</code> and seed a fixture at the right S3 path. See the docs self-test for the pattern.
+        </div>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa docs extract <span class="arg">&lt;file&gt;</span></div>
+          <div class="cmd-desc">Extract text from a workspace file (PDF, DOCX, images, audio, video). Audio/video auto-route to the transcription pipeline. Returns metadata + workspace path of the extracted text file.</div>
+          <div class="cmd-flags"><span class="flag">-o, --output &lt;local-path&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa docs transcribe <span class="arg">&lt;file&gt;</span></div>
+          <div class="cmd-desc">Transcribe audio/video to text. Returns text <em>inline</em> (not a workspace path). Large transcripts auto-spill to <code>tmp/numa-cli/</code> in pretty mode.</div>
+          <div class="cmd-flags"><span class="flag">--mode &lt;voice|meeting&gt;</span><span class="flag">-o, --output &lt;path&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa docs convert <span class="arg">&lt;file&gt;</span></div>
+          <div class="cmd-desc">Convert between formats. <code>markdown</code> mode: text→PDF via Pandoc + LibreOffice. <code>file</code> mode: direct DOCX↔PDF via LibreOffice.</div>
+          <div class="cmd-flags"><span class="flag">-f, --format &lt;pdf|docx&gt;</span><span class="flag">--mode &lt;markdown|file&gt;</span><span class="flag">--title &lt;title&gt;</span></div>
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — extract a PDF, transcribe a meeting</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Filenames are normalised — relative paths go under <code>/workdir/uploads/</code> automatically:</p>
+            <pre><span class="prompt">$</span> numa docs extract report.pdf
+<span class="comment"># resolves to /workdir/uploads/report.pdf
+
+</span><span class="out">extracted: /workdir/uploads/report.pdf
+  → /workdir/tmp/extracted_report.txt
+  47,328 chars
+  s3 key: numa-chat/users/.../tmp/extracted_report.txt
+</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Transcribe an audio file — voice mode (plain text) is the default:</p>
+            <pre><span class="prompt">$</span> numa docs transcribe call.mp3
+<span class="out">numa: transcribed 1847.3s (en-US, 28,440 chars)
+[transcript text streamed to stdout]</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Meeting mode adds speaker diarisation. For long meetings, pretty mode auto-spills:</p>
+            <pre><span class="prompt">$</span> numa docs transcribe team-meeting.m4a --mode meeting --pretty
+<span class="out">transcript: 3680.2s of en-US audio → 87,234 chars (87.1 KB)
+Saved to: ./tmp/numa-cli/numa-transcribe-2026-05-26T....json</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Convert a markdown file to PDF for sharing:</p>
+            <pre><span class="prompt">$</span> numa docs convert report.md --format pdf --title <span class="key">"Q2 Report"</span>
+<span class="out">converted: /workdir/uploads/report.md
+  → /workdir/outputs/q2-report.pdf
+  format: pdf (markdown), size: 142.8 KB</span></pre>
+          </div></div>
+        </div>
+      </section>
+
+      <!-- ───────────── memory ───────────── -->
+      <section id="memory" class="section">
+        <h1>memory</h1>
+        <p class="lede">Long-term memory CRUD. Memories live on the user's <code>chat-settings</code> profile (DynamoDB <code>userProfile.memories</code>). Server-side gating requires <code>memories_tool</code> in <code>allowed_tools</code> — the CLI auto-injects this locally.</p>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa memory list</div>
+          <div class="cmd-desc">List your memories. Compact table: id | scope | content (truncated at 80 chars).</div>
+          <div class="cmd-flags"><span class="flag">--scope &lt;personal|company&gt;</span><span class="flag">--search &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa memory show <span class="arg">&lt;id&gt;</span></div>
+          <div class="cmd-desc">Show full content of a single memory (no truncation). Convenience over <code>list | grep</code>.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa memory add <span class="arg">&lt;content&gt;</span></div>
+          <div class="cmd-desc">Add a new memory. <span class="tag tag-warn">write</span></div>
+          <div class="cmd-flags"><span class="flag">--scope &lt;personal|company&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa memory update <span class="arg">&lt;id&gt;</span> <span class="arg">&lt;content&gt;</span></div>
+          <div class="cmd-desc">Replace the content of an existing memory. <span class="tag tag-warn">write</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa memory delete <span class="arg">&lt;id&gt;</span></div>
+          <div class="cmd-desc">Delete a memory. <span class="tag tag-warn">destructive</span></div>
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — memory CRUD</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Add a personal memory:</p>
+            <pre><span class="prompt">$</span> numa memory add <span class="key">"prefers Python over JavaScript for backend work"</span>
+<span class="ok">✓</span> created mem_a8f3...
+<span class="out">id:      mem_a8f3...
+scope:   personal
+content: prefers Python over JavaScript for backend work</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>List + search:</p>
+            <pre><span class="prompt">$</span> numa memory list --search python
+<span class="out">id         scope     content
+---------  --------  -------
+mem_a8f3   personal  prefers Python over JavaScript for backend work
+mem_b2c1   personal  uses pytest for unit tests, not unittest</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Update an existing memory (replace content wholesale):</p>
+            <pre><span class="prompt">$</span> numa memory update mem_a8f3 <span class="key">"prefers Python 3.12+ for backend (typing improvements)"</span>
+<span class="ok">✓</span> updated mem_a8f3</pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Delete when no longer relevant:</p>
+            <pre><span class="prompt">$</span> numa memory delete mem_a8f3
+<span class="prompt">?</span> Delete memory mem_a8f3? (type <span class="key">"yes"</span>) yes
+<span class="ok">✓</span> deleted mem_a8f3</pre>
+          </div></div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Scope:</strong> <code>personal</code> memories are user-private. <code>company</code> memories shared org-wide — needs admin group membership to write.
+        </div>
+      </section>
+
+      <!-- ───────────── agents ───────────── -->
+      <section id="agents" class="section">
+        <h1>agents</h1>
+        <p class="lede">Full CRUD on Numa Agents (custom agent personas with system prompts, integrations, KB access). Uses the same DDB tables as the Agent Builder frontend.</p>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents list</div>
+          <div class="cmd-desc">List agents you own or have access to. Compact table: id | scope | visibility | title.</div>
+          <div class="cmd-flags"><span class="flag">--scope &lt;personal|company|workspace&gt;</span><span class="flag">--search &lt;text&gt;</span><span class="flag">--title &lt;title&gt;</span><span class="flag">--limit &lt;n&gt;</span><span class="flag">--offset &lt;n&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents show <span class="arg">&lt;id&gt;</span></div>
+          <div class="cmd-desc">Full agent detail including <code>systemPrompt</code>, integrations, KB filters, created/updated metadata.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents create <span class="arg">&lt;title&gt;</span></div>
+          <div class="cmd-desc">Create a new agent. Prompt body via <code>--prompt</code> or <code>--prompt-file</code>. <span class="tag tag-warn">write</span></div>
+          <div class="cmd-flags"><span class="flag">--prompt &lt;text&gt;</span><span class="flag">--prompt-file &lt;path&gt;</span><span class="flag">--description &lt;text&gt;</span><span class="flag">--scope &lt;...&gt;</span><span class="flag">--visibility &lt;...&gt;</span><span class="flag">--agent-type &lt;...&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents update <span class="arg">&lt;id&gt;</span></div>
+          <div class="cmd-desc">Update fields on an existing agent. Use <code>patch-prompt</code> for find/replace edits on the system prompt. <span class="tag tag-warn">write</span></div>
+          <div class="cmd-flags"><span class="flag">--title</span><span class="flag">--description</span><span class="flag">--visibility</span><span class="flag">--prompt-file</span><span class="flag">--integrations &lt;json&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents patch-prompt <span class="arg">&lt;id&gt;</span> <span class="arg">&lt;old-text&gt;</span> <span class="arg">&lt;new-text&gt;</span></div>
+          <div class="cmd-desc">Find/replace edit on system prompt. Cheap diff without re-uploading the whole prompt. Errors if <code>&lt;old-text&gt;</code> appears more than once (use <code>--replace-all</code> if intended).</div>
+          <div class="cmd-flags"><span class="flag">--replace-all</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents duplicate <span class="arg">&lt;id&gt;</span></div>
+          <div class="cmd-desc">Duplicate an agent into your personal library. New id, new ownership.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa agents delete <span class="arg">&lt;id&gt;</span></div>
+          <div class="cmd-desc">Delete an agent. <span class="tag tag-warn">destructive</span></div>
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — create &amp; iterate on an agent</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Create with prompt inline:</p>
+            <pre><span class="prompt">$</span> numa agents create <span class="key">"Weekly Summariser"</span> \
+    --prompt <span class="key">"You generate weekly summaries from Slack messages..."</span> \
+    --description <span class="key">"Monday morning team digest"</span> \
+    --visibility company
+<span class="ok">✓</span> created agent_x9k2...</pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Or load the prompt from a file (preferred for long prompts):</p>
+            <pre><span class="prompt">$</span> numa agents create <span class="key">"Code Reviewer"</span> --prompt-file ./prompts/reviewer.md</pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Update a specific phrase without re-uploading the whole prompt:</p>
+            <pre><span class="prompt">$</span> numa agents patch-prompt agent_x9k2 \
+    <span class="key">"summarise the past 7 days"</span> \
+    <span class="key">"summarise the past 7 days in bullet points"</span>
+<span class="ok">✓</span> patched 1 occurrence</pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Duplicate a company agent into your personal library to iterate:</p>
+            <pre><span class="prompt">$</span> numa agents duplicate agent_x9k2
+<span class="ok">✓</span> duplicated → agent_x9k2-copy (personal)</pre>
+          </div></div>
+        </div>
+
+        <div class="callout callout-tip">
+          <strong>Scope vs visibility:</strong> <code>scope</code> = where the agent lives (personal / company / workspace). <code>visibility</code> = who else can see + use it.
+        </div>
+      </section>
+
+      <!-- ───────────── web ───────────── -->
+      <section id="web" class="section">
+        <h1>web</h1>
+        <p class="lede">Web search + page fetch. Wraps <code>workspace_chat_tools</code>' single <code>web_search</code> tool — dispatches on <code>operation</code> param.</p>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa web search <span class="arg">&lt;query&gt;</span></div>
+          <div class="cmd-desc">Multi-engine search with failover: DuckDuckGo → Startpage → Yahoo → Google. Returns <code>{results: [{title, url, snippet}], ...}</code>.</div>
+          <div class="cmd-flags"><span class="flag">--max-results &lt;n&gt;</span><span class="flag">--intent &lt;text&gt;</span><span class="flag">--summarise</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa web fetch <span class="arg">&lt;url&gt;</span></div>
+          <div class="cmd-desc">Fetch a single URL's content. Uses the browser Lambda (Playwright + Chromium) by default for JS-rendered pages. <code>--no-playwright</code> for static HTML fetch.</div>
+          <div class="cmd-flags"><span class="flag">--no-playwright</span><span class="flag">--intent &lt;text&gt;</span><span class="flag">--summarise</span></div>
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — research a topic</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Broad search with summarisation:</p>
+            <pre><span class="prompt">$</span> numa web search <span class="key">"AWS Bedrock AgentCore pricing 2026"</span> --summarise --max-results 5
+<span class="out">[summarised content from top 5 results]
+
+Sources:
+  https://aws.amazon.com/bedrock/agentcore/pricing/
+  https://...</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Drill into a specific URL with full JS rendering:</p>
+            <pre><span class="prompt">$</span> numa web fetch https://aws.amazon.com/bedrock/agentcore/ --summarise
+<span class="out">[summarised content]
+
+--- raw (47,283 chars from https://aws.amazon.com/bedrock/agentcore/) ---
+[page body]</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Big pages auto-spill to file in pretty mode:</p>
+            <pre><span class="prompt">$</span> numa web fetch https://news.ycombinator.com --pretty
+<span class="out">fetched https://news.ycombinator.com → 184,234 chars (185.1 KB)
+Saved to: ./tmp/numa-cli/numa-web_search-2026-05-26T....json</span></pre>
+          </div></div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Tool gating:</strong> Server requires <code>web_search</code> in <code>allowed_tools</code>. In workspace, this respects <code>NUMA_ENABLED_TOOLS</code> (frontend toggle wins). Locally, the CLI auto-injects.
+        </div>
+      </section>
+
+      <!-- ───────────── integrations ───────────── -->
+      <section id="integrations" class="section">
+        <h1>integrations</h1>
+        <p class="lede">External integrations (Gmail, Slack, Salesforce, etc.) across <strong>two methods</strong> — Pipedream-backed and native — unified under one command tree. Each slug has exactly one active method per user.</p>
+
+        <h2>Commands</h2>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations list</div>
+          <div class="cmd-desc">List enabled integrations with method tag (<code>pipedream</code> | <code>native</code>).</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations docs <span class="arg">&lt;slug&gt;</span></div>
+          <div class="cmd-desc">Show paths to integration reference docs. In-workspace: points at <code>/workdir/tools/integrations/&lt;slug&gt;/</code> (Pipedream) or <code>/workdir/api-docs/&lt;slug&gt;/</code> (native). Outside: fetches via API and caches at <code>~/.cache/numa/integrations/</code>.</div>
+          <div class="cmd-flags"><span class="flag">--via pipedream|native</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations search <span class="arg">&lt;query&gt;</span></div>
+          <div class="cmd-desc">Fuzzy-search Pipedream action names across enabled integrations.</div>
+          <div class="cmd-flags"><span class="flag">--max &lt;n&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations pipedream-actions <span class="arg">&lt;slug&gt;</span></div>
+          <div class="cmd-desc">List all pre-built Pipedream actions for an integration.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations pipedream-props <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;action-key&gt;</span></div>
+          <div class="cmd-desc">Show the prop schema for a single Pipedream action. In-workspace, reads <code>/workdir/tools/integrations/&lt;slug&gt;/&lt;action&gt;.json</code> directly.</div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations pipedream-props-options <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;action&gt;</span> <span class="arg">&lt;prop&gt;</span> <span class="opt">[--&lt;prop&gt; &lt;value&gt; ...]</span></div>
+          <div class="cmd-desc">Resolve dynamic dropdown options for a prop. Wraps <code>pipedream_configure_props</code>. Response varies by prop type: <code>{stringOptions: [...]}</code> for string-typed dropdowns, <code>{options: [{label, value}, ...]}</code> for object-typed. Accepts ad-hoc <code>--&lt;prop&gt; &lt;value&gt;</code> flags for the configured-props set (merged with <code>--configured</code>).</div>
+          <div class="cmd-flags"><span class="flag">--configured &lt;json&gt;</span><span class="flag">--&lt;prop&gt; &lt;value&gt; (ad-hoc)</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations pipedream-call <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;action&gt;</span> <span class="opt">[--&lt;prop&gt; &lt;value&gt; ...]</span></div>
+          <div class="cmd-desc">Execute a Pipedream action. HITL-gated server-side; CLI auto-approves locally with terminal prompt. Accepts ad-hoc <code>--&lt;prop&gt; &lt;value&gt;</code> flags (auto-camelized, value-coerced) as syntactic sugar over <code>--props '{...}'</code>. <span class="tag tag-warn">side effects</span></div>
+          <div class="cmd-flags"><span class="flag">--&lt;prop&gt; &lt;value&gt; (ad-hoc)</span><span class="flag">--props &lt;json&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span><span class="flag">--stash-id &lt;id&gt;</span><span class="flag">-y, --yes</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations request <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;method&gt;</span> <span class="arg">&lt;url&gt;</span> <span class="opt">[--&lt;field&gt; &lt;value&gt; ...]</span></div>
+          <div class="cmd-desc">Universal HTTP request — auto-routes to Pipedream proxy or native connector based on the slug's method. Accepts ad-hoc <code>--&lt;field&gt; &lt;value&gt;</code> flags as body fields (merged with <code>--body</code>). Headers stay JSON only — header values often contain <code>:</code> and special chars. <span class="tag tag-warn">side effects</span></div>
+          <div class="cmd-flags"><span class="flag">--&lt;field&gt; &lt;value&gt; (ad-hoc body)</span><span class="flag">--body &lt;json&gt;</span><span class="flag">--headers &lt;json&gt;</span><span class="flag">--via pipedream|native</span><span class="flag">-m, --user-message &lt;text&gt;</span><span class="flag">-y, --yes</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations list-files <span class="arg">&lt;slug&gt;</span> <span class="opt">[--folder-id &lt;id&gt;] [--query &lt;text&gt;]</span></div>
+          <div class="cmd-desc">Browse folders/files from a native file-store connector (Synergy 12d, Google Drive, Gmail, OneDrive, Dropbox). Omit <code>--folder-id</code> for the connector root; Synergy uses <code>job:&lt;id&gt;</code> / <code>folder:&lt;id&gt;</code> ids from a prior listing. Read-only.</div>
+          <div class="cmd-flags"><span class="flag">--folder-id &lt;id&gt;</span><span class="flag">--query &lt;text&gt;</span><span class="flag">--page-size &lt;n&gt;</span><span class="flag">--page-token &lt;token&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations search-files <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;query&gt;</span></div>
+          <div class="cmd-desc">Search files/jobs by name in a native file-store connector. Read-only.</div>
+          <div class="cmd-flags"><span class="flag">--folder-id &lt;id&gt;</span><span class="flag">--page-size &lt;n&gt;</span><span class="flag">--page-token &lt;token&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations download-file <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;file-id&gt;</span> <span class="opt">[-o &lt;path&gt;]</span></div>
+          <div class="cmd-desc">Download a connector file by id. In-workspace it lands under <code>/workdir/uploads/connect-&lt;slug&gt;/</code>; sha256-verified end-to-end. Read-only.</div>
+          <div class="cmd-flags"><span class="flag">-o, --output &lt;path&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="cmd">
+          <div class="cmd-sig">numa integrations file-info <span class="arg">&lt;slug&gt;</span> <span class="arg">&lt;file-id&gt;</span></div>
+          <div class="cmd-desc">Detailed metadata for a single file (OAuth providers only — Synergy has no metadata endpoint). Read-only.</div>
+          <div class="cmd-flags"><span class="flag">-m, --user-message &lt;text&gt;</span></div>
+        </div>
+
+        <div class="callout callout-tip">
+          <strong>Three input forms (all four wildcard-shape commands):</strong>
+          <ul style="margin-top: 8px">
+            <li><strong>Ad-hoc flags</strong> — <code>--ticket-type-id tt-bug --title "Fix"</code> (kebab→camel, value-coerced)</li>
+            <li><strong>JSON blob</strong> — <code>--props '{"ticketTypeId":"tt-bug","title":"Fix"}'</code> (best for nested structures + auth)</li>
+            <li><strong>Mix</strong> — JSON blob wins on conflict (most explicit). <code>numa ops</code> additionally supports a positional shortcut for <code>search_*</code> ops.</li>
+          </ul>
+          Applies to: <code>numa ops</code>, <code>integrations pipedream-call</code>, <code>integrations pipedream-props-options</code>, <code>integrations request</code>.
+        </div>
+
+        <div class="worked-example">
+          <h3>Worked example — send an email via Gmail (full discovery flow)</h3>
+          <p>This is the canonical end-to-end flow. Same shape applies to any Pipedream action.</p>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>List enabled integrations — confirm gmail is connected:</p>
+            <pre><span class="prompt">$</span> numa integrations list
+<span class="out">slug                  method     name
+--------------------  ---------  ----
+gmail                 pipedream
+hubspot               pipedream
+...</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Get the docs index — tells you where the per-action JSONs live:</p>
+            <pre><span class="prompt">$</span> numa integrations docs gmail
+<span class="out">Documentation for gmail (pipedream integration)
+Source: local cache
+
+Reference files (read directly):
+  ~/.cache/numa/integrations/gmail/pipedream/_index.json</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Browse actions — or search:</p>
+            <pre><span class="prompt">$</span> numa integrations search <span class="key">"send email"</span>
+<span class="out">gmail  gmail-send-email
+  Send Email
+  Send an email from your Google Workspace email account...</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Inspect the prop schema. Look for required props + dynamic dropdowns:</p>
+            <pre><span class="prompt">$</span> numa integrations pipedream-props gmail gmail-send-email
+<span class="out">{
+  "name": "Send Email",
+  "configurable_props": [
+    { "name": "gmail", "type": "app", "app": "gmail" },
+    { "name": "to", "type": "string[]" },
+    { "name": "subject", "type": "string" },
+    { "name": "body", "type": "string" },
+    { "name": "fromEmail", "type": "string", "remoteOptions": true },
+    ...
+  ]
+}</span></pre>
+            <p><code>"remoteOptions": true</code> = dynamic dropdown — resolve with <code>pipedream-props-options</code> before calling.</p>
+          </div></div>
+
+          <div class="step"><div class="step-num">5</div><div class="step-body">
+            <p>Resolve <code>fromEmail</code> options (the user's Gmail send-as aliases). Pass auth via ad-hoc flag — same as <code>--configured '{"gmail":{"authProvisionId":"auto"}}'</code> but easier to type:</p>
+            <pre><span class="prompt">$</span> numa integrations pipedream-props-options gmail gmail-send-email fromEmail \
+    --gmail <span class="key">'{"authProvisionId":"auto"}'</span>
+<span class="out">nathan@arcanum.ai
+numa: 1 option(s)</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">6</div><div class="step-body">
+            <p>Execute the action. Two forms — pick whichever is less typing:</p>
+            <pre><span class="comment"># Form A — ad-hoc flags (cleaner for simple values)</span>
+<span class="prompt">$</span> numa integrations pipedream-call gmail gmail-send-email \
+    --gmail <span class="key">'{"authProvisionId":"auto"}'</span> \
+    --to <span class="key">'["alice@example.com"]'</span> \
+    --subject <span class="key">"Hi Alice"</span> \
+    --body <span class="key">"Sending from numa-cli"</span> \
+    --from-email <span class="key">"nathan@arcanum.ai"</span> \
+    -m <span class="key">"Send greeting to Alice"</span>
+
+<span class="comment"># Form B — single JSON blob (best for nested structures, copy-paste from a schema)</span>
+<span class="prompt">$</span> numa integrations pipedream-call gmail gmail-send-email \
+    --props <span class="key">'{"gmail":{"authProvisionId":"auto"},"to":["alice@example.com"],"subject":"Hi","body":"...","fromEmail":"nathan@arcanum.ai"}'</span> \
+    -m <span class="key">"Send greeting to Alice"</span>
+
+<span class="prompt">?</span> Run gmail-send-email (gmail) — Send greeting to Alice (type <span class="key">"yes"</span>) yes
+<span class="ok">✓</span> sent</pre>
+            <p>Both forms work — <code>--props</code> wins on key conflict. Kebab-case flag names are auto-camelized (<code>--from-email</code> → <code>fromEmail</code>); string values get coerced (<code>"true"</code> → <code>true</code>, <code>"42"</code> → <code>42</code>, <code>"[...]"</code>/<code>"{...}"</code> → parsed JSON).</p>
+          </div></div>
+
+          <div class="step"><div class="step-num">7</div><div class="step-body">
+            <p>Or skip the dropdown discovery entirely and use the universal HTTP <code>request</code> command. Body fields also support ad-hoc flags:</p>
+            <pre><span class="comment"># GET — no body needed</span>
+<span class="prompt">$</span> numa integrations request gmail GET \
+    https://gmail.googleapis.com/gmail/v1/users/me/profile \
+    -m <span class="key">"GET my Gmail profile"</span>
+
+<span class="comment"># POST with ad-hoc body fields (--name and --email become body {"name":...,"email":...})</span>
+<span class="prompt">$</span> numa integrations request hubspot POST https://api.hubapi.com/crm/v3/objects/contacts \
+    --properties <span class="key">'{"firstname":"Alice","lastname":"Smith","email":"alice@x.com"}'</span> \
+    -m <span class="key">"Create contact"</span></pre>
+          </div></div>
+        </div>
+
+        <div class="callout callout-info">
+          <strong>Auto-injection:</strong> The CLI auto-injects two things behind the scenes:
+          <ul style="margin-top: 8px">
+            <li><code>external_user_id = "&lt;client_name&gt;_&lt;user_sub&gt;"</code> — Pipedream Connect's user-namespacing scheme</li>
+            <li>The integration slug into <code>allowed_tools</code> (local-only — workspace inherits from frontend)</li>
+          </ul>
+        </div>
+
+        <div class="callout callout-warn">
+          <strong>Native vs Pipedream:</strong> Native integrations don't expose pre-built actions. For native slugs, use <code>numa integrations request</code> for authenticated HTTP API calls, or the file commands (<code>list-files</code> / <code>search-files</code> / <code>download-file</code> / <code>file-info</code>) to browse a connector's files. <strong>Synergy 12d is a file-store connector — use the file commands, not <code>request</code></strong> (its <code>request</code> path is intentionally disabled). The <code>pipedream-*</code> commands error helpfully if you target a native slug. A slug should only ever be enabled via one method at a time (the workspace agent dedupes); if a stale context presents both, <code>docs</code>/<code>request</code> refuse to pick silently — re-run with <code>--via pipedream|native</code>.
+        </div>
+      </section>
+
+      <!-- ───────────── ops ───────────── -->
+      <section id="ops" class="section">
+        <h1>ops</h1>
+        <p class="lede">Numa Ops — tickets, boards, customers, suppliers, projects, work units, custom fields, statuses. Generic pass-through CLI mirroring the 58 operations of the Ops API. <span class="tag tag-purple">single generic command</span></p>
+
+        <h2>Command</h2>
+        <div class="cmd">
+          <div class="cmd-sig">numa ops <span class="arg">&lt;operation&gt;</span> <span class="opt">[--params '&lt;json&gt;'] [-m '&lt;text&gt;']</span></div>
+          <div class="cmd-desc">Generic dispatcher. Sends <code>{tool: "ops_&lt;op&gt;", params: {operation, params, ...}}</code> to the workspace-chat-tools Lambda, which routes any <code>ops_*</code> tool name to the same handler the MCP layer uses today.</div>
+          <div class="cmd-flags"><span class="flag">--params &lt;json&gt;</span><span class="flag">-m, --user-message &lt;text&gt;</span><span class="flag">-y, --yes</span><span class="flag">--pretty</span><span class="flag">--standard</span><span class="flag">--json</span></div>
+        </div>
+
+        <h2>Why one generic command?</h2>
+        <p>The Ops surface has 54 operations. Hand-writing per-op subcommands would be high maintenance for little win — the LLM is shaping JSON either way. The CLI's <code>--help</code> lists all valid operations for discovery, and the early validation step catches typos before a Lambda roundtrip.</p>
+
+        <h2>Approval model</h2>
+        <table>
+          <thead><tr><th>Category</th><th>Operations</th><th>Approval</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="tag tag-ok">read</span></td>
+              <td><code>get_config</code>, <code>list_boards</code>, <code>get_board</code>, <code>list_tickets</code>, <code>get_ticket</code>, <code>search_tickets</code>, <code>list_comments</code>, <code>get_audit</code>, <code>list_work_units</code>, <code>list_customers</code>, <code>get_customer</code>, <code>list_suppliers</code>, <code>get_supplier</code>, <code>list_projects</code>, <code>get_metrics</code></td>
+              <td>Auto-approved (no prompt)</td>
+            </tr>
+            <tr>
+              <td><span class="tag tag-warn">write</span></td>
+              <td>Everything else (<code>create_*</code>, <code>update_*</code>, <code>delete_*</code>, <code>add_comment</code>, <code>upload_attachment</code>, <code>bulk_*</code>)</td>
+              <td>Local terminal prompt (per the user's <code>ops</code> approval policy); server-side gate enforces independently</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Display IDs vs UUIDs</h2>
+        <p>Tickets have two identifiers — a human-readable display ID (e.g. <code>BUG-001</code>, <code>TASK-042</code>) and a UUID. The Python bridge auto-resolves display IDs to UUIDs for mutation operations (<code>update_ticket</code>, <code>delete_ticket</code>, <code>add_comment</code>, etc.). <strong>Always pass <code>displayId</code> when calling those ops</strong>; only use <code>ticketId</code> if you already have the UUID. <code>get_ticket</code> has its own display-id route (<code>/ops/tickets/by-display-id/&lt;id&gt;</code>).</p>
+
+        <div class="worked-example">
+          <h3>Worked example — create a ticket, comment on it, delete it</h3>
+
+          <div class="step"><div class="step-num">1</div><div class="step-body">
+            <p>Look up board IDs + ticket type IDs from the config:</p>
+            <pre><span class="prompt">$</span> numa ops list_boards --json | jq '.boards[] | {id, name}'
+<span class="prompt">$</span> numa ops get_config --json | jq '.ticketTypes[] | {id, name, prefix}'</pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">2</div><div class="step-body">
+            <p>Create a ticket. <code>boardId</code> + <code>title</code> + <code>ticketTypeId</code> are required; <code>stageId</code> usually needed too:</p>
+            <pre><span class="prompt">$</span> numa ops create_ticket \
+    --params <span class="key">'{
+      "boardId": "&lt;board-uuid&gt;",
+      "title": "Investigate API timeout in scheduled run",
+      "ticketTypeId": "tt-bug",
+      "description": "Customer reported 504s during overnight scheduled run"
+    }'</span> \
+    -m <span class="key">"file bug for scheduled-run timeout"</span></pre>
+            <p>Response contains <code>ticket.displayId</code> (e.g. <code>BUG-099</code>) — capture it for the next steps.</p>
+          </div></div>
+
+          <div class="step"><div class="step-num">3</div><div class="step-body">
+            <p>Fetch the ticket by display ID:</p>
+            <pre><span class="prompt">$</span> numa ops get_ticket --params <span class="key">'{"displayId":"BUG-099"}'</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">4</div><div class="step-body">
+            <p>Add a comment (description shown in approval card):</p>
+            <pre><span class="prompt">$</span> numa ops add_comment \
+    --params <span class="key">'{"displayId":"BUG-099","content":"Initial investigation: ..."}'</span> \
+    -m <span class="key">"add investigation note"</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">5</div><div class="step-body">
+            <p>Update fields (any subset of the create body):</p>
+            <pre><span class="prompt">$</span> numa ops update_ticket \
+    --params <span class="key">'{"displayId":"BUG-099","priority":"high","assigneeId":"&lt;sub&gt;"}'</span> \
+    -m <span class="key">"escalate + assign"</span></pre>
+          </div></div>
+
+          <div class="step"><div class="step-num">6</div><div class="step-body">
+            <p>Delete when done:</p>
+            <pre><span class="prompt">$</span> numa ops delete_ticket --params <span class="key">'{"displayId":"BUG-099"}'</span> -m <span class="key">"close out"</span></pre>
+          </div></div>
+        </div>
+
+        <h2>Common operations</h2>
+        <p>The full list (54) is in <code>numa ops --help</code>. Most-used:</p>
+        <ul>
+          <li><strong>Tickets</strong>: <code>list_tickets</code>, <code>get_ticket</code>, <code>search_tickets</code>, <code>create_ticket</code>, <code>update_ticket</code>, <code>delete_ticket</code>, <code>bulk_update_tickets</code>, <code>add_comment</code>, <code>list_comments</code>, <code>get_audit</code>, <code>upload_attachment</code></li>
+          <li><strong>Boards</strong>: <code>list_boards</code>, <code>get_board</code>, <code>create_board</code>, <code>update_board</code>, <code>update_stages</code>, <code>update_zones</code></li>
+          <li><strong>Work units (sprints)</strong>: <code>list_work_units</code>, <code>create_work_unit</code>, <code>update_work_unit</code>, <code>delete_work_unit</code></li>
+          <li><strong>Projects</strong>: <code>list_projects</code>, <code>get_project</code>, <code>create_project</code>, <code>update_project</code>, <code>delete_project</code></li>
+          <li><strong>Customers + activities</strong>: <code>list_customers</code>, <code>get_customer</code>, <code>search_customers</code>, <code>create_customer</code>, <code>update_customer</code>, <code>delete_customer</code>, <code>create_customer_activity</code>, <code>update_customer_activity</code>, <code>delete_customer_activity</code></li>
+          <li><strong>Suppliers + activities</strong>: <code>list_suppliers</code>, <code>get_supplier</code>, <code>search_suppliers</code>, <code>create_supplier</code>, <code>update_supplier</code>, <code>delete_supplier</code>, <code>create_supplier_activity</code>, <code>update_supplier_activity</code>, <code>delete_supplier_activity</code></li>
+          <li><strong>Config (admin)</strong>: <code>get_config</code>, <code>update_crm_config</code>, <code>update_supplier_config</code>, <code>create/update/delete_field</code>, <code>create/update/delete_ticket_type</code>, <code>create/update_status</code>, <code>create/delete_link</code></li>
+          <li><strong>Other</strong>: <code>get_metrics</code></li>
+        </ul>
+
+        <div class="callout callout-info">
+          <strong>Wire shape parity:</strong> CLI sends <code>{tool: "ops_&lt;op&gt;", params: {operation, params, description, auto_approved, request_id}}</code>. <code>numa-cli-api</code> doesn't recognise <code>ops_*</code> so falls back to <code>workspace_chat_tools</code>, which routes any <code>ops_*</code> to <code>handle_ops_operation</code> — exactly the same code path the MCP <code>mcp__numa__numa_ops_tool</code> uses today.
+        </div>
+      </section>
+
+      <!-- ───────────── Conventions ───────────── -->
+      <section id="conventions" class="section">
+        <h1>Conventions</h1>
+        <p class="lede">Cross-cutting patterns every command follows. Worth a one-time read — internalising these means you can drive any command without reading its <code>--help</code>.</p>
+
+        <h2><code>-m / --user-message &lt;text&gt;</code> — REQUIRED on every command</h2>
+        <p>Every CLI invocation that hits the platform must supply a short human-readable caption. The chat UI renders it as:</p>
+        <pre><span class="comment"># Frontend rendering</span>
+<span class="out">(tool icon) Numa &lt;category&gt;: &lt;user-message&gt;</span></pre>
+        <p>For HITL-gated write ops, the same text is used as the approval card body. The LLM should always supply it — it's the only window the user has into what an agent is doing. Missing the flag is an instant error.</p>
+        <pre><span class="comment"># Required everywhere — short-flag alias is `-m`</span>
+<span class="prompt">$</span> numa files show Personal -m <span class="key">"browsing Personal folder"</span>
+<span class="prompt">$</span> numa web search <span class="key">"tax law NZ"</span> -m <span class="key">"researching tax law"</span> --summarise
+<span class="prompt">$</span> numa ops create_ticket --board-id &lt;id&gt; --title <span class="key">"Fix bug"</span> --ticket-type-id tt-bug \
+    -m <span class="key">"file bug for failing login flow"</span>
+
+<span class="comment"># Missing it = clear error</span>
+<span class="prompt">$</span> numa files show Personal
+<span class="err">error: required option '-m, --user-message &lt;text&gt;' not specified</span></pre>
+        <p>Renamed from <code>--description</code> in earlier versions — <code>description</code> collided with body fields on commands like <code>create_ticket</code> (which has its own <code>description</code> field).</p>
+
+        <h2><code>@file</code> shorthand for JSON-blob options</h2>
+        <p>Every option that takes a JSON blob also accepts <code>@/path/to/file.json</code> to read the JSON from disk. Mirrors curl's convention. Solves the shell-escaping pain when payloads contain HTML, embedded quotes, or deep nesting.</p>
+        <table>
+          <thead><tr><th>Option</th><th>Used on</th></tr></thead>
+          <tbody>
+            <tr><td><code>--params @file.json</code></td><td><code>numa ops &lt;op&gt;</code></td></tr>
+            <tr><td><code>--props @file.json</code></td><td><code>numa integrations pipedream-call</code></td></tr>
+            <tr><td><code>--configured @file.json</code></td><td><code>numa integrations pipedream-props-options</code></td></tr>
+            <tr><td><code>--body @file.json</code></td><td><code>numa integrations request</code></td></tr>
+            <tr><td><code>--headers @file.json</code></td><td><code>numa integrations request</code></td></tr>
+          </tbody>
+        </table>
+        <pre><span class="comment"># Without @file — escaping HTML in --params is a nightmare</span>
+<span class="prompt">$</span> numa ops create_ticket \
+    --params <span class="key">'{"boardId":"...","title":"...","description":"&lt;p&gt;&lt;strong&gt;Context:&lt;/strong&gt;..."}'</span> \
+    -m <span class="key">"file ticket"</span>
+
+<span class="comment"># With @file — write JSON to disk, reference by path</span>
+<span class="prompt">$</span> cat &gt; /tmp/ticket.json &lt;&lt;'EOF'
+{
+  "boardId": "...",
+  "title": "Harden workspace sandbox: ctypes/cffi block, IMDS firewall",
+  "description": "&lt;p&gt;&lt;strong&gt;Context:&lt;/strong&gt; Full HTML body here with no escaping pain.&lt;/p&gt;..."
+}
+EOF
+<span class="prompt">$</span> numa ops create_ticket --params @/tmp/ticket.json -m <span class="key">"file workspace hardening ticket"</span></pre>
+        <p>Useful pattern when the LLM is composing a long body — write to <code>/tmp</code>, reference with <code>@</code>, no inline JSON wrestling.</p>
+
+        <h2>Three input forms for op-specific args (mix freely)</h2>
+        <p>Applies to <code>numa ops</code>, <code>integrations pipedream-call</code>, <code>integrations pipedream-props-options</code>, and <code>integrations request</code>:</p>
+        <ol>
+          <li><strong>Positional shortcut</strong> — <code>search_*</code> ops only. First positional becomes the <code>search</code> term:
+            <pre><span class="prompt">$</span> numa ops search_customers acme -m <span class="key">"find Acme contact"</span></pre>
+          </li>
+          <li><strong>Ad-hoc <code>--kebab-case</code> flags</strong> — auto-camelized (<code>--ticket-type-id</code> → <code>ticketTypeId</code>), value-coerced (<code>"true"</code> → <code>true</code>, <code>"42"</code> → <code>42</code>, <code>"[...]"</code>/<code>"{...}"</code> → parsed JSON):
+            <pre><span class="prompt">$</span> numa ops list_tickets --board-id &lt;uuid&gt; --limit 10 -m <span class="key">"list recent tickets"</span></pre>
+          </li>
+          <li><strong>JSON blob</strong> — best for nested objects or copy-paste from a schema:
+            <pre><span class="prompt">$</span> numa ops create_ticket --params @/tmp/ticket.json -m <span class="key">"..."</span></pre>
+          </li>
+        </ol>
+        <p><strong>Conflict resolution</strong>: <code>--params</code> JSON wins over ad-hoc flags wins over positional. Most explicit beats least explicit.</p>
+
+        <h2>Output modes — pretty / standard / json</h2>
+        <p>See the <a href="#output" data-jump="output">Output modes</a> section for the deep dive. Quick summary: TTY defaults to <code>--pretty</code>; piped output defaults to <code>--json</code>; workspace context defaults to <code>--standard</code> (LLM-friendly envelope with auto-spill for large results).</p>
+
+        <h2>Default board stage on <code>create_ticket</code></h2>
+        <p>If you omit <code>stageId</code>/<code>stageName</code> when creating a ticket, the bridge auto-resolves to the board's <code>defaultStageId</code> (set in the board config UI under "Default Location for New Tickets"). No-stage tickets land in the board's configured backlog slot.</p>
+        <pre><span class="comment"># Stage omitted — uses board's default ("New" in the Backlog zone, typically)</span>
+<span class="prompt">$</span> numa ops create_ticket --board-id &lt;id&gt; --title <span class="key">"Investigate timeout"</span> \
+    --ticket-type-id tt-bug -m <span class="key">"file timeout bug"</span></pre>
+
+        <h2>Wire shape</h2>
+        <p>Every command that hits the dispatcher sends <code>{tool, params, context, id_token, user_message}</code> to <code>POST /api/cli/tools/invoke</code>. <code>numa-cli-api</code> routes to one of three downstream targets (<code>workspace_chat_tools</code>, <code>kb_manager</code>, or <code>oauth_workspace_tools</code>) and forwards <code>user_message</code> both at the event top level and inside <code>params</code> for back-compat with existing approval handlers.</p>
+      </section>
+
+      <!-- ───────────── Output modes ───────────── -->
+      <section id="output" class="section">
+        <h1>Output modes</h1>
+        <p class="lede">Every data-returning command flows through a unified emitter that resolves to one of three modes. Designed so the LLM consumer gets lean envelopes while humans get readable tables — without per-command branching.</p>
+
+        <h2>The three modes</h2>
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Default when</th><th>Use case</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--pretty</code></td><td>TTY</td>
+              <td>Human reading at the terminal. Per-command renderers: tables, status lines, truncated content.</td>
+            </tr>
+            <tr>
+              <td><code>--standard</code></td><td><code>NUMA_CONVERSATION_ID</code> set</td>
+              <td>LLM-friendly envelope. Schema + sample + file path lets the LLM use code (cat/jq) to query large results from disk without bloating context.</td>
+            </tr>
+            <tr>
+              <td><code>--json</code></td><td>non-TTY, no workspace</td>
+              <td>Clean passthrough for <code>jq</code> piping in scripts.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Resolution priority</h2>
+        <p>Highest wins:</p>
+        <ol>
+          <li>Per-command flag (e.g. <code>numa files show Personal --json</code>)</li>
+          <li>Root flag (e.g. <code>numa --json files show Personal</code>) — root preAction stashes choice in <code>NUMA_OUTPUT_MODE</code></li>
+          <li><code>NUMA_OUTPUT_MODE</code> env var (for scripting)</li>
+          <li>Context default (TTY → pretty, workspace → standard, otherwise → json)</li>
+        </ol>
+
+        <h2>Standard envelope shape</h2>
+        <pre>{
+  <span class="key">"_summary"</span>: {
+    <span class="key">"tool"</span>:    <span class="out">"user_profile_list_memories"</span>,
+    <span class="key">"count"</span>:   <span class="out">47</span>,                  <span class="comment">// largest array in the result</span>
+    <span class="key">"size"</span>:    <span class="out">"12.3 KB"</span>,            <span class="comment">// serialised size</span>
+    <span class="key">"schema"</span>:  { ... },                <span class="comment">// structural shape — leaves are type names</span>
+    <span class="key">"sample"</span>:  { ... },                <span class="comment">// truncated arrays (2 each), strings (200ch), depth (8)</span>
+    <span class="key">"path"</span>:    <span class="out">"./tmp/numa-cli/numa-..."</span>, <span class="comment">// file path | null if inlined</span>
+    <span class="key">"inlined"</span>: <span class="out">false</span>
+  },
+  <span class="key">"result"</span>: { ... } | <span class="out">null</span>            <span class="comment">// populated iff inlined</span>
+}</pre>
+
+        <h2>File spill behaviour</h2>
+        <p>Results &gt; 4 KB serialised auto-dump to a file. The envelope contains schema + a bounded sample; the consumer reads the file when it needs the rest.</p>
+
+        <table>
+          <thead><tr><th>Context</th><th>Spill location</th></tr></thead>
+          <tbody>
+            <tr><td>In workspace (<code>NUMA_CONVERSATION_ID</code> set)</td><td><code>/workdir/tmp/numa-cli/numa-&lt;tool&gt;-&lt;ts&gt;.json</code> — MicroVM syncs to S3</td></tr>
+            <tr><td>Outside workspace</td><td><code>./tmp/numa-cli/numa-&lt;tool&gt;-&lt;ts&gt;.json</code> — cwd-relative</td></tr>
+            <tr><td>Override</td><td><code>NUMA_CLI_TMP_DIR=&lt;path&gt;</code></td></tr>
+          </tbody>
+        </table>
+
+        <p>Write failures fall back to inline — never crashes a tool call because a filesystem isn't writable.</p>
+
+        <h3>Sample bounds</h3>
+        <p>The <code>sample</code> field is bounded to keep the envelope small even on pathological payloads (Gmail messages with base64 body data, etc.):</p>
+        <table>
+          <thead><tr><th>Constant</th><th>Value</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr><td><code>SAMPLE_ARRAY_LIMIT</code></td><td>2</td><td>First 2 entries per array</td></tr>
+            <tr><td><code>SAMPLE_STRING_LIMIT</code></td><td>200 chars</td><td>Longer strings get <code>...[truncated, N more chars]</code></td></tr>
+            <tr><td><code>SAMPLE_DEPTH_LIMIT</code></td><td>8 levels</td><td>Deeper values become <code>"[depth limit]"</code></td></tr>
+          </tbody>
+        </table>
+        <p>Schema is unaffected — only shows type names, no bloat risk.</p>
+
+        <h2>prettyOrSpill — for wildcard-shape commands</h2>
+        <p>Commands whose response shape is unpredictable (<code>pipedream-call</code>, <code>request</code>, <code>web fetch</code>, <code>docs transcribe</code>) use <code>prettyOrSpill()</code> instead of <code>emitResult()</code>. Same mode resolution, but in pretty mode the result is size-checked and spilled to file when &gt; 4 KB instead of dumped to stdout.</p>
+
+        <div class="card-dark">
+          <h4>Why both helpers?</h4>
+          <p style="color: #DFBDE7; margin: 0">Commands with a known shape (memory list, agents list, files list) write per-row renderers in pretty mode — these are always table-sized and never need spilling. Wildcard commands return arbitrary JSON shapes (gmail messages, hubspot records, raw HTTP responses); for these, the pretty renderer is essentially "JSON.stringify and dump", which blows up on big results. <code>prettyOrSpill</code> adds the size check before calling the renderer.</p>
+        </div>
+      </section>
+
+      <!-- ───────────── Self-tests ───────────── -->
+      <section id="self-tests" class="section">
+        <h1>Self-tests</h1>
+        <p class="lede">Each command category has a <code>numa-dev &lt;cat&gt; test</code> subcommand that runs a roundtrip self-test against the live backend. Used during development for regression checking after any Lambda or CLI change.</p>
+
+        <table>
+          <thead>
+            <tr><th>Test</th><th>Steps</th><th>Covers</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>numa-dev files test</code></td><td>12</td><td>Full roundtrip including subfolder ops, upload, download, mv, rename, mkdir, rmdir, delete</td></tr>
+            <tr><td><code>numa-dev docs test</code></td><td>6</td><td>Real markdown → PDF → extracted text; verifies S3 artifacts</td></tr>
+            <tr><td><code>numa-dev memory test</code></td><td>5</td><td>Full CRUD; verifies DDB state via list-after-mutation</td></tr>
+            <tr><td><code>numa-dev agents test</code></td><td>10</td><td>Full CRUD + patch-prompt (unique + replace-all) + duplicate</td></tr>
+            <tr><td><code>numa-dev web test</code></td><td>4</td><td>Search + bounded search + fetch + summarised search</td></tr>
+            <tr><td><code>numa-dev integrations test</code></td><td>5-7</td><td>List shape, docs fetch, search, pipedream-actions, pipedream-props, plus conditional props-options (gmail) and method-mismatch (native)</td></tr>
+            <tr><td><code>numa-dev ops test</code></td><td>23</td><td>5 reads (get_config, list_boards, list_projects, list_tickets, get_metrics), 9-step ticket roundtrip (create + get + update + search + comment + list_comments + get_audit + delete), 5-step customer roundtrip (create + get + search + update + delete — exercises new <code>search_customers</code>), 4-step project roundtrip (create + get_project + update + delete — exercises new <code>get_project</code>). Conditional on board availability for ticket steps; CRM + project steps always run.</td></tr>
+          </tbody>
+        </table>
+
+        <h2>Test framework conventions</h2>
+        <ul>
+          <li>Step framework: <code>[N/M] step name ... ok|FAIL (duration)</code></li>
+          <li>Exit 0 on full pass, 1 on any failure</li>
+          <li>Cleanup in <code>finally</code> — artefacts deleted unless <code>--keep-artefacts</code></li>
+          <li>Each test outputs scope info upfront (account, source, enabled integrations) for debugging</li>
+        </ul>
+
+        <h2>Known gaps</h2>
+        <p>The integrations self-test deliberately avoids commands with real side effects:</p>
+        <ul>
+          <li><code>pipedream-call</code> — would actually run an action (send email, create record). No safe noop universally available.</li>
+          <li><code>request</code> — same problem; could hit a known idempotent GET but per-account credentials vary.</li>
+          <li>Native <code>connect_request</code> — requires a native integration enabled (nd-labs has none).</li>
+        </ul>
+        <p>The five-to-seven existing steps cover everything that's deterministic-friendly. Manual smoke for write paths after Lambda changes.</p>
+
+        <pre><span class="comment"># Run all self-tests in sequence</span>
+<span class="prompt">$</span> for cat in files docs memory agents web integrations; do numa-dev $cat test; done</pre>
+      </section>
+
+      <!-- ───────────── Design & Architecture ───────────── -->
+      <section id="internals" class="section">
+        <h1>Design &amp; Architecture</h1>
+        <p class="lede">How a <code>numa &lt;cat&gt; &lt;cmd&gt;</code> invocation reaches the right downstream Lambda — dispatcher routing, scoping resolution, type discipline, and the HITL story.</p>
+
+        <h2>Request flow</h2>
+        <div class="diagram">numa &lt;cmd&gt;                                                 (CLI binary, TS)
+   │
+   │ HTTPS w/ Cognito Bearer
+   ▼
+API Gateway /api/cli/tools                            (nd-labs domain → CloudFront → APIGW)
+   │
+   ▼
+numa-cli-api Lambda                                   (Node, ~/lambdas/node/numa-cli-api)
+   │  ─ extracts auth context (sub, email, groups)
+   │  ─ looks up tool in registry
+   │  ─ routes to one of three downstream targets
+   │
+   ├─→  workspace_chat_tools  (Python)               files, docs, memory, agents, web,
+   │                                                 integrations (Pipedream)
+   │
+   ├─→  kb_manager            (Python)               files mv/rename/mkdir/rmdir
+   │
+   └─→  oauth_workspace_tools (Python)               integrations (native): connect_request,
+                                                     connect_status</div>
+
+        <h2>Tool registry routing</h2>
+        <p>Centralised in <code>numa-cli-api/src/tools/registry.ts</code>. Maps tool name → downstream target. Unknown tools fall back to <code>workspace_chat_tools</code> (default).</p>
+
+        <h3>Per-target event shapes</h3>
+        <table>
+          <thead>
+            <tr><th>Target</th><th>Event shape</th><th>Dispatcher</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>workspace_chat_tools</code></td>
+              <td><code>{tool, params, user_sub, user_email, user_groups, allowed_kbs, allowed_tools, external_user_id, conversation_id, id_token}</code></td>
+              <td><code>dispatch-chat-tools.ts</code></td>
+            </tr>
+            <tr>
+              <td><code>kb_manager</code></td>
+              <td>Synthetic API Gateway event w/ method + path template</td>
+              <td><code>dispatch-kb-manager.ts</code></td>
+            </tr>
+            <tr>
+              <td><code>oauth_workspace_tools</code></td>
+              <td><code>{tool, user_sub, conversation_id, params}</code></td>
+              <td><code>dispatch-oauth-tools.ts</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Auto-injection</h2>
+        <p>The dispatcher auto-injects two things callers shouldn't need to know about:</p>
+        <ul>
+          <li><code>external_user_id = f"{client_name}_{user_sub}"</code> — Pipedream Connect's user-namespacing scheme. Required for any Pipedream tool. Mirrored from how the workspace agent builds it at chat start.</li>
+          <li><code>user_email</code> + <code>user_groups</code> — used by the agents handler for admin overrides + permission checks.</li>
+        </ul>
+
+        <h2>Scoping resolution (CLI side)</h2>
+        <p><code>resolveScopingContext(account)</code> in <code>context/resolve.ts</code> resolves the user's <code>allowed_kbs</code>, <code>enabled_tools</code>, <code>enabled_integrations</code>, and <code>conversation_id</code>. Three sources, priority order:</p>
+
+        <table>
+          <thead>
+            <tr><th>Source</th><th>When</th><th>Auth fields</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="tag tag-purple">workspace-env</span></td>
+              <td><code>NUMA_CONVERSATION_ID</code> set</td>
+              <td>From env vars: <code>NUMA_ENABLED_TOOLS</code>, <code>NUMA_ENABLED_INTEGRATIONS</code>, <code>NUMA_ENABLED_NATIVE_CONNECTORS</code>, <code>NUMA_ALLOWED_KBS</code>, <code>NUMA_ALLOWED_KB_OPERATIONS</code></td>
+            </tr>
+            <tr>
+              <td><span class="tag tag-teal">dev-context</span></td>
+              <td><code>~/.config/numa/dev-context-&lt;account&gt;.json</code> exists</td>
+              <td>From the file. Set via <code>numa-dev context set --conversation-id ...</code> etc. Used for local testing of workspace-context behaviour.</td>
+            </tr>
+            <tr>
+              <td><span class="tag tag-muted">bootstrap-default</span></td>
+              <td>Otherwise</td>
+              <td>From <code>~/.config/numa/context-&lt;account&gt;.json</code>. Full bootstrap response with all admin-enabled tools/integrations/KBs. CLI auto-injects per-tool gates locally.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>Tool-gate auto-injection (CLI side)</h2>
+        <p>Server-side handlers require specific keys in <code>event.allowed_tools</code> (<code>memories_tool</code>, <code>create_agent_tool</code>, <code>web_search</code>, integration slug). Two paths:</p>
+        <ul>
+          <li><strong>In workspace</strong> — pass through <code>NUMA_ENABLED_TOOLS</code> unchanged. The frontend toggle is the source of truth; LLM cannot self-elevate.</li>
+          <li><strong>Locally</strong> — auto-inject the relevant key for the command being invoked. The human typing IS the policy.</li>
+        </ul>
+
+        <h2>Type discipline</h2>
+        <p>Discriminated unions in <code>metadata/tool-types.ts</code>:</p>
+        <ul>
+          <li><code>ToolCall</code> — discriminated on <code>tool</code> field, narrows <code>params</code> automatically</li>
+          <li><code>ToolResult&lt;T&gt;</code> — conditional mapped type, infers result shape from tool name</li>
+          <li><code>ParamsForTool&lt;T&gt;</code> — same idea for params</li>
+        </ul>
+        <p>Every command uses <code>invokeTool&lt;T&gt;()</code> with the tool name as generic; TypeScript flags mismatched param shapes at compile time.</p>
+
+        <h2>HITL — write op approval</h2>
+        <p>Every write op goes through <code>gateWriteOp()</code> (<code>commands/actions/_hitl.ts</code>). Whether it gates at all comes from the user's approval policy (<code>never</code> / <code>non_destructive</code> / <code>always</code>, per category) resolved in <code>context/approval.ts</code>:</p>
+        <ul>
+          <li><strong>Workspace-IAM</strong> — the agent resolves the modes per turn (agent override &gt; user chat-settings &gt; default, incl. per-slug integration overrides) and injects them as <code>NUMA_APPROVAL_MODES</code>. Absent/malformed env fails safe to <code>non_destructive</code>. When approval is needed the CLI emits an SSE approval card and sends a <code>request_id</code>; <code>numa-cli-api</code> creates the DDB record and polls until the user clicks Approve/Deny.</li>
+          <li><strong>Laptop</strong> — modes come from the bootstrap context file; gating shows a TTY confirm prompt. <code>--yes</code> skips it.</li>
+        </ul>
+        <p>Integrations consult slug override → <code>integrations</code> category mode; under <code>non_destructive</code>, safety comes from the action schema annotations on disk (<code>readOnlyHint</code>, draft + <code>destructiveHint:false</code>; missing schema fails closed) or GET/HEAD for raw proxy requests. Full design: <code>documentation/numa-cli/README.md</code> §5.</p>
+
+        <h2>File layout</h2>
+        <pre>numa-cli/                                  <span class="comment">workspace root (@numa/cli-workspace, private)</span>
+  package.json                             <span class="comment">workspaces: ["packages/*"]</span>
+  docs/
+    numa-cli-reference-internal.html       <span class="comment">← this file (shared across both packages)</span>
+  packages/
+    cli/                                   <span class="comment">@numa/cli — prod</span>
+      package.json                         <span class="comment">bin: { numa }, exports subpaths</span>
+      src/
+        cli/numa.ts                        <span class="comment">prod entrypoint</span>
+        commands/
+          bootstrap.ts, prompt.ts
+          auth/                            login / logout / whoami / profile
+          actions/                         files / docs / memory / agents / web / integrations
+        api/                               bootstrap + tool dispatcher clients
+        auth/                              SRP login, tokens, JWT
+        context/                           scope resolver, approval policy, integration doc cache
+        metadata/                          ToolCall union, ToolResult, TOOL_DISPLAY
+        output/                            emitResult, prettyOrSpill, modes, pretty/json/confirm
+        index.ts                           <span class="comment">root barrel — re-exports every subpath</span>
+
+    cli-dev/                               <span class="comment">@numa/cli-dev — dev addon</span>
+      package.json                         <span class="comment">bin: { numa-dev }, deps @numa/cli</span>
+      src/
+        cli/numa-dev.ts                    <span class="comment">dev entrypoint — composes prod factories from @numa/cli/commands</span>
+        commands/dev/
+          context.ts                       mock frontend payload mgmt
+          reference.ts                     opens this HTML in browser
+          *-test.ts                        per-category self-tests
+
+lambdas/node/numa-cli-api/
+  index.ts                                 Thin HTTP router
+  src/
+    bootstrap/                             Fan-out aggregator
+    integrations/docs.ts                   GET /api/cli/integrations/&lt;slug&gt;/docs
+    tools/
+      index.ts                             Dispatcher entry
+      registry.ts                          Tool name → target
+      dispatch-chat-tools.ts
+      dispatch-kb-manager.ts
+      dispatch-oauth-tools.ts
+    shared/                                Auth, AWS clients, config, response helpers</pre>
+
+        <h3>Subpath exports from @numa/cli</h3>
+        <p><code>@numa/cli-dev</code> imports prod internals via narrow subpaths rather than reaching into <code>dist/</code> directly. The boundary is enforced by the package's <code>exports</code> field:</p>
+        <table>
+          <thead><tr><th>Subpath</th><th>What's there</th></tr></thead>
+          <tbody>
+            <tr><td><code>@numa/cli</code></td><td>Root barrel — every subpath re-exported</td></tr>
+            <tr><td><code>@numa/cli/api</code></td><td><code>invokeTool</code>, <code>fetchBootstrap</code>, <code>fetchIntegrationDocs</code>, <code>apiCall</code></td></tr>
+            <tr><td><code>@numa/cli/auth</code></td><td><code>getValidTokens</code>, <code>loadTokens</code>, <code>saveTokens</code>, <code>clearTokens</code>, <code>decodeJwtClaims</code></td></tr>
+            <tr><td><code>@numa/cli/commands</code></td><td>Every <code>createXxxCommand()</code> factory + <code>runBootstrap</code>, <code>tryBootstrapAfterLogin</code>, <code>prompt</code></td></tr>
+            <tr><td><code>@numa/cli/context</code></td><td><code>activeProfile</code>, <code>resolveScopingContext</code>, <code>ScopingContext</code>, dev-context helpers, <code>requiresLocalApproval</code>, integration cache</td></tr>
+            <tr><td><code>@numa/cli/metadata</code></td><td>Tool types + <code>TOOL_DISPLAY</code> registry</td></tr>
+            <tr><td><code>@numa/cli/output</code></td><td><code>emitResult</code>, <code>prettyOrSpill</code>, <code>buildEnvelope</code>, <code>info/success/warn/fail</code>, <code>printJson</code>, <code>confirm</code></td></tr>
+          </tbody>
+        </table>
+
+        <div class="footer">
+          Reference doc generated 2026-05-27. Update when commands change shape or new categories are added.
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // Theme toggle — light is the canonical default; dark mode is opt-in.
+    // First visit respects prefers-color-scheme, subsequent visits use the
+    // user's last explicit choice from localStorage.
+    (function () {
+      const root = document.documentElement;
+      const btn = document.querySelector('.theme-toggle');
+      const STORAGE_KEY = 'numa-cli-docs-theme';
+
+      function applyTheme(theme) {
+        root.setAttribute('data-theme', theme);
+        if (btn) {
+          btn.textContent = theme === 'dark' ? '☀' : '☾';
+          btn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+        }
+      }
+
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(stored || (systemPrefersDark ? 'dark' : 'light'));
+
+      if (btn) {
+        btn.addEventListener('click', () => {
+          const current = root.getAttribute('data-theme') || 'light';
+          const next = current === 'dark' ? 'light' : 'dark';
+          applyTheme(next);
+          localStorage.setItem(STORAGE_KEY, next);
+        });
+      }
+    })();
+
+    // Tab switching + URL hash sync.
+    // Sections are hidden by default; clicking nav (or loading a URL with a
+    // matching hash) shows just that one section and updates the active nav
+    // state. Smooth scroll-to-top on each switch.
+    (function () {
+      const sections = Array.from(document.querySelectorAll('.section'));
+      const navItems = Array.from(document.querySelectorAll('.nav-item'));
+      const sectionIds = new Set(sections.map((s) => s.id));
+
+      function showSection(id) {
+        if (!sectionIds.has(id)) id = 'overview';
+        sections.forEach((s) => s.classList.toggle('active', s.id === id));
+        navItems.forEach((n) => n.classList.toggle('active', n.dataset.section === id));
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
+
+      // Initial: prefer URL hash, else overview.
+      const initialId = (window.location.hash || '#overview').slice(1);
+      showSection(initialId);
+
+      // Nav clicks
+      navItems.forEach((n) => {
+        n.addEventListener('click', (e) => {
+          e.preventDefault();
+          const id = n.dataset.section;
+          history.pushState(null, '', '#' + id);
+          showSection(id);
+        });
+      });
+
+      // Inline cross-references (e.g. "see Output modes" links inside section bodies)
+      document.querySelectorAll('a[data-jump]').forEach((link) => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const id = link.dataset.jump;
+          history.pushState(null, '', '#' + id);
+          showSection(id);
+        });
+      });
+
+      // Back/forward
+      window.addEventListener('popstate', () => {
+        const id = (window.location.hash || '#overview').slice(1);
+        showSection(id);
+      });
+    })();
+  </script>
+</body>
+</html>

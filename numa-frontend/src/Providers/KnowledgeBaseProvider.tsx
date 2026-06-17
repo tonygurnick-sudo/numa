@@ -12,6 +12,7 @@ import {
   COMPANY_KB_ID,
   NUMA_SUPPORT_KB_ID,
   SHAREPOINT_KB_ID,
+  SYNERGY_KB_ID,
   SYSTEM_KB_IDS,
   sortKnowledgeBases,
 } from '../constants/knowledgeBase';
@@ -73,6 +74,20 @@ function getDefaultSharePointKB(): UserKB {
   return {
     kb_id: SHAREPOINT_KB_ID,
     kb_name: i18n.t('knowledgeBase:selector.sharepointKbName'),
+    role: 'VIEWER',
+  };
+}
+
+/**
+ * Synergy (12d) cross-job KB — the corpus crawled from a client's 12d Synergy
+ * instance, indexed once and gated per-document by allowed_users. Backend listing
+ * hides it (it's auto-managed), so we inject it into the picker here, only where
+ * the crawler is enabled (SYNERGY_KB_SEARCH flag).
+ */
+function getDefaultSynergyKB(): UserKB {
+  return {
+    kb_id: SYNERGY_KB_ID,
+    kb_name: i18n.t('knowledgeBase:selector.synergyKbName'),
     role: 'VIEWER',
   };
 }
@@ -221,6 +236,17 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
       // hiding it from the picker keeps the UX honest.
       if (!hasSharepointKb && getFlag('PROVISION_Q_RESOURCES')) {
         systemKbsToAdd.push(getDefaultSharePointKB());
+      }
+      // Synergy cross-job KB is auto-managed and hidden from the backend listing;
+      // surface it in the picker only where the crawler is explicitly enabled.
+      // Hidden-by-default: require the raw DEPLOY_ flag (getFlag defaults missing
+      // flags to true, which would wrongly show it on pre-flag deployments) AND
+      // the live flag so the admin Capabilities toggle is honoured.
+      const hasSynergyKb = sanitizedKbs.some((kb) => kb.kb_id === SYNERGY_KB_ID);
+      const synergyKbDeployed =
+        sessionStorage.getItem('DEPLOY_SYNERGY_KB_SEARCH') === 'true' && getFlag('SYNERGY_KB_SEARCH');
+      if (!hasSynergyKb && synergyKbDeployed) {
+        systemKbsToAdd.push(getDefaultSynergyKB());
       }
       const augmentedKbs: UserKB[] = sortKnowledgeBases([...systemKbsToAdd, ...sanitizedKbs]);
 

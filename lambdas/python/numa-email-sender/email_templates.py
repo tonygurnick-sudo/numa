@@ -222,6 +222,43 @@ EMAIL_TEMPLATES: Dict[str, TemplateConfig] = {
             "{% if manage_url %}\nPause or manage this schedule: {{manage_url}}{% endif %}"
         ),
     },
+    "voice_call_summary_ready": {
+        "subject": "Call summary ready",
+        "title": "Call summary ready",
+        "html": (
+            '<div class="status-icon status-icon-success">&#128222;</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            'Hi {{sdr_name|default("there")}}, your post-call summary is ready.</p>'
+            '{% if summary %}<div class="summary">'
+            '<p style="font-weight:600;margin:0 0 8px;color:#333;font-size:13px;">Summary</p>'
+            '<p style="margin:0;color:#555;">{{summary}}</p>'
+            "</div>{% endif %}"
+        ),
+        "text": (
+            "Hi {{sdr_name|default('there')}}, your post-call summary is ready."
+            "{% if summary %}\n\nSummary: {{summary}}{% endif %}"
+        ),
+    },
+    "voice_prospect_qualified": {
+        "subject": "New qualified prospect: {{company_name|default('a prospect')}}",
+        "title": "New qualified prospect",
+        "html": (
+            '<div class="status-icon status-icon-success">&#9733;</div>'
+            '<p style="font-size:16px;color:#333;margin:4px 0 20px;">'
+            '<span style="font-weight:600;">{{company_name|default("A prospect")}}</span>'
+            " has been qualified and handed to you.</p>"
+            '{% if summary %}<div class="summary">'
+            '<p style="font-weight:600;margin:0 0 8px;color:#333;font-size:13px;">Call summary</p>'
+            '<p style="margin:0;color:#555;">{{summary}}</p>'
+            "</div>{% endif %}"
+            '{% if crm_url %}<a href="{{crm_url}}" class="button">View in CRM &rarr;</a>{% endif %}'
+        ),
+        "text": (
+            "{{company_name|default('A prospect')}} has been qualified and handed to you."
+            "{% if summary %}\n\nCall summary: {{summary}}{% endif %}"
+            "{% if crm_url %}\n\nView in CRM: {{crm_url}}{% endif %}"
+        ),
+    },
     "schedule_failed": {
         "subject": "{{agent_name|default(schedule_name)}} - failed",
         "title": "Automation Failed",

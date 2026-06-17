@@ -10,11 +10,11 @@
  * Integration tools with human-in-the-loop approval render an expandable
  * glass panel below the tool indicator when approval data is present.
  */
-import React, { memo, useState, useEffect, useCallback } from 'react';
+import React, { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { Spinner, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import type { WorkspaceChatInlineToolSegment } from '@/types/workspaceChatTypes';
-import { approveToolAction } from '../../Services/workspaceChatAgentService';
+import { ackToolApproval, approveToolAction } from '../../Services/workspaceChatAgentService';
 import { ConnectorsService } from '../../Services/ConnectorsService';
 
 // If you change this, also update APPROVAL_TIMEOUT_SECONDS in
@@ -173,6 +173,20 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
 
   const decision = localDecision || approval?.decision || (approval?.autoApproved ? 'approved' : undefined);
   const showApprovalPanel = approval && !decision && !approval.autoApproved;
+
+  // Acknowledge that the card rendered (writes seen_at via the proxy) so the
+  // backend grants the full approval window instead of fast-failing the
+  // approval as "unattended" (BUG-140). Fire-and-forget; skipped for stale
+  // trace replays where the window already expired (secondsLeft 0).
+  const ackSentForRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!showApprovalPanel || !approval || !conversationId || secondsLeft <= 0) return;
+    if (ackSentForRef.current === approval.requestId) return;
+    ackSentForRef.current = approval.requestId;
+    ackToolApproval(approval.requestId, conversationId).catch((err) => {
+      console.warn('[WorkspaceChat] Approval ack failed:', err);
+    });
+  }, [showApprovalPanel, approval, conversationId, secondsLeft]);
 
   const handleDecision = useCallback(
     async (choice: 'approved' | 'denied') => {

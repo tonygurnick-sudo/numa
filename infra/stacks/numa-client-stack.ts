@@ -74,6 +74,16 @@ const nextGenOrgId = 'o-apdsu3c1a7';
 // Dedicated account for secure Pipedream proxy operations
 const PIPEDREAM_PROXY_ACCOUNT_ID = '965745962688';
 
+// Numa Standard Model relay (deployer-account streaming egress). ONE relay
+// serves every client, reached at its Lambda Function URL. Unlike the Pipedream
+// proxy ARN above, a Function URL is AWS-generated and can't be derived — so set
+// this ONCE after the relay's first deploy (the `numa-standard-model-relay-
+// function-url` TerraformOutput). It's injected into the workspace container as
+// an env var only when workspaceChatModelSelection is on (see the construct call
+// below) — a global value gated by a per-client flag, never per-client config,
+// exactly like PIPEDREAM_PROXY_ACCOUNT_ID. Empty → standard-model path stays inert.
+const NUMA_STANDARD_MODEL_RELAY_URL: string = 'https://4b65jot6l6ogoif6n7f4siadqa0lyngv.lambda-url.us-east-1.on.aws/';
+
 export class NumaClientStack extends TerraformStack {
   constructor(scope: Construct, name: string, props: NumaClientStackProps) {
     const defaults = {
@@ -233,6 +243,14 @@ export class NumaClientStack extends TerraformStack {
       knowledgeBase: knowledgeBase,
       deployerRoleArn: deployerRole,
       emailSenderLambdaArn,
+      // FEAT-167: browser-upload grant for the voice prospect-intake bucket.
+      // Name must match NumaVoiceConstruct's intakeBucketName derivation.
+      voiceIntakeBucketArn: clientConfig.numaVoice
+        ? `arn:aws:s3:::numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}-prospect-intake`
+        : undefined,
+      // Synergy → Bedrock KB crawler depends on the Synergy data connector + vault,
+      // so it only provisions when data connectors are also enabled.
+      synergyKbCrawlEnabled: (clientConfig.synergyKbCrawl ?? false) && (clientConfig.dataConnectorsEnabled ?? false),
     });
 
     // ── Disaster Recovery ────────────────────────────────────────────────────
@@ -283,6 +301,21 @@ export class NumaClientStack extends TerraformStack {
 
     const agentScheduleSecretParam = new SsmParameter(this, 'agent-schedule-runner-secret', {
       name: clientConfig.clientName + '_' + 'agent-schedule-runner-secret',
+      type: 'String',
+      value: uuidv4(),
+      lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
+      provider: hostedZoneProvider,
+    });
+
+    // HMAC secret the workspace-chat-agent-proxy uses to sign short-lived
+    // "service identity" tokens for non-interactive runs (scheduled agents,
+    // V2 apps, Nolia) — runs that have no user Cognito token. numa-cli-api
+    // verifies these tokens with the same secret. Shared ONLY between the
+    // proxy and numa-cli-api; deliberately never injected into the workspace
+    // agent container, so the LLM inside a MicroVM has no path to it and
+    // cannot forge an identity. See lambdas/node/numa-cli-api/src/shared/auth.ts.
+    const cliIdentitySecretParam = new SsmParameter(this, 'numa-cli-identity-secret', {
+      name: clientConfig.clientName + '_' + 'numa-cli-identity-secret',
       type: 'String',
       value: uuidv4(),
       lifecycle: { createBeforeDestroy: true, ignoreChanges: ['value'] },
@@ -403,6 +436,11 @@ export class NumaClientStack extends TerraformStack {
       const opsCrmApiLambdaArn = clientConfig.numaOps
         ? `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_ops-crm-api', 64)}`
         : undefined;
+
+      // numa-cli-api Lambda ARN — always created in AppAgnosticApiGatewayLambdaCollection
+      // (the `numa` CLI is the agent's entire tool layer). Computed here so the
+      // workspace agent role can be granted invoke permission at construct time.
+      const numaCliApiLambdaArn = `arn:aws:lambda:${clientConfig.region}:${clientConfig.clientAccountId}:function:${awsNameWithHashedPrefix(props.clientName, '_numa-cli-api', 64)}`;
 
       // Shared secret for file redirect HMAC tokens (used by both tools and proxy Lambdas)
       const fileRedirectSecret = new SsmParameter(this, 'file-redirect-secret', {
@@ -530,8 +568,19 @@ export class NumaClientStack extends TerraformStack {
         creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
         creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
         creditMeteringEnabled: true,
+        // numa-cli-api Lambda — workspace IAM role gets InvokeFunction so
+        // the @numa/cli binary in the MicroVM can call the dispatcher.
+        // Always set (numa-cli-api is always deployed).
+        numaCliApiLambdaArn,
         // Centralized email sender — V2 app run-completion emails (FEAT-174)
         emailSenderLambdaArn,
+        // Numa Standard Model (opaque cheap model) — the relay URL is a single
+        // global constant (one relay serves all clients), injected as an env var
+        // only when the model-selection flag is on. Same shape as the Pipedream
+        // proxy ARN above: a global value gated by a per-client flag, never
+        // per-client config. visionModelId falls back to the construct default
+        // (Haiku 4.5), so it isn't wired here.
+        numaStandardModelRelayUrl: clientConfig.workspaceChatModelSelection ? NUMA_STANDARD_MODEL_RELAY_URL : undefined,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK
@@ -555,11 +604,18 @@ export class NumaClientStack extends TerraformStack {
         // Schedule runner secret so the proxy can authenticate server-to-server calls
         // from the agent-schedule-runner Lambda (scheduled agents use V2 sync mode)
         scheduleRunnerSecret: agentScheduleSecretParam.value,
+        // HMAC secret the proxy signs service-identity tokens with for
+        // non-interactive runs; numa-cli-api verifies them with the same secret.
+        cliIdentitySecret: cliIdentitySecretParam.value,
         // Workspace chat tools Lambda for document conversion preview (DOCX → PDF)
         workspaceToolsLambdaArn: workspaceChatTools.lambdaArn,
         workspaceToolsLambdaName: workspaceChatTools.lambdaName,
         // Cross-region AgentCore support (when client region doesn't support AgentCore)
         agentCoreRegion,
+        // Active-runs mirror table (BUG-140) — the proxy serves
+        // /runs/{id}/status from this table instead of invoking AgentCore
+        activeRunsTableName: workspaceChatAgent.activeRunsTable.name,
+        activeRunsTableArn: workspaceChatAgent.activeRunsTable.arn,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {
@@ -677,6 +733,9 @@ export class NumaClientStack extends TerraformStack {
       },
       mfaSettingsTableName: core.mfaSettingsTable.name,
       userPoolId: core.userPoolId,
+      additionalCognitoClientIds: clientConfig.additionalCognitoClientIds,
+      // Verifies proxy-minted service tokens for non-interactive numa CLI calls.
+      cliIdentitySecret: cliIdentitySecretParam.value,
       chatSettingsTableName: core.chatSettingsTable.name,
       dataConnectorsTableName: core.dataConnectorsTable.name,
       dataConnectorsSettingsTableName: core.dataConnectorsSettingsTable.name,
@@ -685,6 +744,13 @@ export class NumaClientStack extends TerraformStack {
       capabilitiesTableName: core.capabilitiesTable.name,
       creditLedgerTableName: core.creditLedgerTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
+      // Synergy KB crawl Step Function — the data-connectors "Sync now" route
+      // StartExecutions it. Empty strings when the crawler is disabled.
+      synergyKbCrawlStateMachineArn: core.synergyCrawlStateMachineArn,
+      synergyCrawlStateTableName: core.synergyCrawlStateTableName,
+      synergyCrawlStateTableArn: core.synergyCrawlStateTableArn,
+      synergyTextCrawlerFunctionName: core.synergyTextCrawlerFunctionName,
+      synergyTextCrawlerFunctionArn: core.synergyTextCrawlerFunctionArn,
       // Admin-side gate. When false, the unified integrations catalog skips
       // every native row so users never see them; when true, admins can
       // manage native connectors and they surface alongside Pipedream.
@@ -736,6 +802,20 @@ export class NumaClientStack extends TerraformStack {
       recoveryBucketName: disasterRecovery?.recoveryBucketName,
       recoveryBucketArn: disasterRecovery?.recoveryBucketArn,
       pipedreamRelayLambdaArn: core.pipedreamRelayLambdaArn,
+      // Numa CLI API — backend for the `numa` CLI binary (/numa-cli/).
+      // Numa Ops entitlement — forwarded to numa-cli-api as NUMA_OPS_ENABLED so
+      // it can hard-gate `ops_*` CLI tool calls server-side (the old MCP-
+      // registration gate is gone now the CLI has broad `Bash(numa:*)`). Same
+      // flag source the workspace agent construct uses (line ~542).
+      numaOpsEnabled: clientConfig.numaOps,
+      // numa-cli-api reads `company-data.json` from the company bucket for
+      // bootstrap's `company_profile` field. Optional — not every stack
+      // provisions the company bucket.
+      companyBucketName: core.companyBucket?.bucket.bucket,
+      companyBucketArn: core.companyBucket?.bucket.arn,
+      // Phase 2 centralised approval orchestrator — DDB create + poll.
+      integrationsApprovalTableName: core.integrationsApprovalTable?.name,
+      integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
@@ -775,6 +855,10 @@ export class NumaClientStack extends TerraformStack {
         voiceRegion: NUMA_VOICE_REGION,
         voiceProvider,
         clientAccountId: clientConfig.clientAccountId,
+        // Resolved tenant origin (custom domain or standard subdomain) — drives the
+        // Connect Approved Origin + intake-bucket upload CORS so custom-domain
+        // tenants aren't locked out.
+        frontendOrigin: `https://${domainName}`,
         connectInstanceUrl: clientConfig.connectInstanceUrl,
         // FEAT-169 config write-back relay (deployer account, fixed name).
         voiceConfigWriterLambdaArn,
@@ -796,6 +880,11 @@ export class NumaClientStack extends TerraformStack {
         runnerArn: coreApis.agentScheduleRunnerLambda.arn,
         connectAutoProvision: clientConfig.connectAutoProvision,
         connectClaimDid: clientConfig.connectClaimDid,
+        // FEAT-164: per-client morning call-prep run time (defaults inside the construct).
+        callPrepTime: clientConfig.voiceCallPrepTime,
+        callPrepTimezone: clientConfig.voiceCallPrepTimezone,
+        // FEAT-168: realtime Contact Lens for the live-assist sidebar (off by default).
+        liveAssist: clientConfig.voiceLiveAssist,
         // Seed (AdminGetUser) must run after the system user is created.
         systemUserDependsOn: core.systemUserCreator.dependsOn,
       });
@@ -992,6 +1081,7 @@ export class NumaClientStack extends TerraformStack {
         // file search, per-file actions). Sub-capability of data connectors;
         // off by default so it ships dark until a client opts in.
         SYNERGY_FILE_PARITY: clientConfig.synergyFileParity ?? false,
+        SYNERGY_KB_SEARCH: clientConfig.synergyKbCrawl ?? false,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
@@ -1022,6 +1112,10 @@ export class NumaClientStack extends TerraformStack {
         // Numa Voice (Amazon Connect + AI call intelligence). Emitted explicitly
         // so getFlag('NUMA_VOICE') does NOT default-true on older deployments.
         NUMA_VOICE: clientConfig.numaVoice ?? false,
+        // Voice Analytics ships with Voice (admin can toggle it off via the
+        // Capabilities tab). Tied to numaVoice to avoid a new client-config key
+        // (which would need adding to both the infra + CSP config schemas).
+        VOICE_ANALYTICS: clientConfig.numaVoice ?? false,
         // When autoProvision creates the instance, derive its access URL from the
         // deterministic instance alias (numa-{client}{envSuffix}, matching the
         // construct) so the softphone is wired in ONE deploy — no manual
@@ -1034,6 +1128,20 @@ export class NumaClientStack extends TerraformStack {
               // *.awsapps.com host does NOT resolve for instances created via CreateInstance.
               `https://numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}.my.connect.aws`
             : ''),
+        // Connect/Transcribe always live in NUMA_VOICE_REGION regardless of the
+        // client's primary region — emit it so the FE CCP hook doesn't rely on
+        // its hardcoded fallback.
+        CONNECT_REGION: NUMA_VOICE_REGION,
+        // FEAT-168: live-assist (realtime transcript keyword matching). Emitted
+        // explicitly so the FE's hidden-by-default check (sessionStorage ===
+        // 'true') stays false on older deployments.
+        VOICE_LIVE_ASSIST: clientConfig.voiceLiveAssist ?? false,
+        // FEAT-167: prospect-spreadsheet intake bucket (client region) — the FE
+        // uploads .xlsx here; its S3 notification fires the ingest agent. Name
+        // must match NumaVoiceConstruct's intakeBucketName derivation.
+        VOICE_INTAKE_BUCKET: clientConfig.numaVoice
+          ? `numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}-prospect-intake`
+          : '',
         V2_APPS: clientConfig.v2Apps ?? false,
         NUMA_APPS: clientConfig.allApps ?? false,
         JOB_HISTORY: (clientConfig.allApps ?? false) ? (clientConfig.jobHistory ?? true) : false,
@@ -1627,9 +1735,15 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * (details / version history / copy link) in the Files Remote UI.
          * Sub-capability of data connectors; ships dark by default.
          *
+         * Schema-only on this branch: the feature's config.json wiring and
+         * frontend gating live on the Synergy parity branch. Declared here so
+         * the strict client-config parse tolerates the flag already present on
+         * dev-stack configs (e.g. arcanum-demo-tony) without failing synth.
+         *
          * @default false
          */
         synergyFileParity: z.boolean().optional().default(false),
+        synergyKbCrawl: z.boolean().optional().default(false),
 
         /**
          * Whether to enable site-wide search (DynamoDB search index + /api/search).
@@ -1686,21 +1800,32 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         connectInstanceUrl: z.string().optional(),
 
         /**
-         * Numa Voice call-recording S3 bucket name. Written back into client config
-         * by the numa-voice-config-writer Lambda (FEAT-169) so it's discoverable in
-         * the single source of truth rather than only recomputed by convention.
-         * Write-back field — not admin-authored. Declared here so the strict deploy
-         * schema accepts it (the writer pre-validates the value).
+         * FEAT-169 write-back fields. numa-voice-config-writer (deployer account)
+         * persists these from the voice-admin Lambda so the recordings bucket and
+         * claimed DID numbers are discoverable in tenant config. They are
+         * informational for the stack (the bucket name is always re-derived by
+         * convention) but MUST be in the schema — the first write-back would
+         * otherwise fail every subsequent deploy with `unrecognized_keys`.
          */
         recordingsBucket: z.string().optional(),
+        didNumbers: z.array(z.string()).optional(),
 
         /**
-         * Numa Voice claimed DID phone numbers (E.164). Written back into client
-         * config by the numa-voice-config-writer Lambda (FEAT-169) on claim/release.
-         * Write-back field — not admin-authored. Declared here so the strict deploy
-         * schema accepts it (the writer de-dupes, E.164-validates, and caps at 100).
+         * FEAT-164: local time ('HH:MM' 24-hour) + IANA timezone the morning
+         * Call List Preparer runs at. Defaults: 07:30 Pacific/Auckland.
          */
-        didNumbers: z.array(z.string()).optional(),
+        voiceCallPrepTime: z
+          .string()
+          .regex(/^([01]?\d|2[0-3]):[0-5]\d$/, "voiceCallPrepTime must be 'HH:MM' 24-hour")
+          .optional(),
+        voiceCallPrepTimezone: z.string().optional(),
+
+        /**
+         * FEAT-168: real-time Contact Lens on outbound calls feeding the SDR
+         * assist sidebar's live keyword matching. Adds per-minute Contact Lens
+         * cost — default false (zero cost when off).
+         */
+        voiceLiveAssist: z.boolean().optional().default(false),
 
         /**
          * Feature flags from other branches (not yet implemented in this branch)

@@ -10,6 +10,7 @@ import type {
   CloudfrontDistributionOrigin,
   CloudfrontDistributionOrderedCacheBehavior,
 } from '@cdktf/provider-aws/lib/cloudfront-distribution';
+import { CloudfrontFunction } from '@cdktf/provider-aws/lib/cloudfront-function';
 import { CloudfrontOriginAccessIdentity } from '@cdktf/provider-aws/lib/cloudfront-origin-access-identity';
 import { DataAwsIamPolicyDocument } from '@cdktf/provider-aws/lib/data-aws-iam-policy-document';
 import { DataAwsRoute53Zone } from '@cdktf/provider-aws/lib/data-aws-route53-zone';
@@ -620,6 +621,50 @@ export class NumaFrontendInfra extends Construct {
       cachePolicyId: apiCachePolicy.id,
     });
 
+    // SPA routing function (BUG-133).
+    //
+    // Previously a distribution-level `customErrorResponse` rewrote *every* 404
+    // (from *any* origin) into a 200 with the `/index.html` body. That is correct
+    // for the S3 SPA fallback, but `customErrorResponse` is distribution-wide and
+    // cannot be scoped per-behavior — so a JSON 404 from the `/api/*` origins
+    // (e.g. "folder not found") reached the browser as an HTML 200, and frontend
+    // services choked trying to parse HTML as JSON.
+    //
+    // Instead we do the SPA fallback at the edge: a CloudFront Function on
+    // viewer-request, attached only to the S3 (`default`) behavior, rewrites
+    // client-side routes to `/index.html` *before* they hit the origin — so S3
+    // returns the shell with a real 200 and there is no 404 to convert. The
+    // `/api/*` behaviors never run this function, so their JSON error responses
+    // (including 404s) pass through to the browser intact. The distribution-level
+    // `customErrorResponse` is removed entirely.
+    const spaRoutingFunction = new CloudfrontFunction(this, 'spaRoutingFunction', {
+      name: `${props.clientName}-spa-routing`,
+      runtime: 'cloudfront-js-2.0',
+      comment: 'SPA fallback: rewrite extensionless client-side routes to /index.html (BUG-133)',
+      publish: true,
+      code: `function handler(event) {
+  var request = event.request;
+  var uri = request.uri;
+
+  // Trailing slash -> serve the SPA shell.
+  if (uri.charAt(uri.length - 1) === '/') {
+    request.uri = '/index.html';
+    return request;
+  }
+
+  // A final path segment with no file extension is a client-side route
+  // (e.g. /chat, /dash/jobs/123) -> serve the SPA shell so React Router can
+  // resolve it. Requests for real files (with an extension) pass through, so a
+  // missing asset returns a true 404 rather than the HTML shell.
+  var lastSegment = uri.substring(uri.lastIndexOf('/') + 1);
+  if (lastSegment.indexOf('.') === -1) {
+    request.uri = '/index.html';
+  }
+
+  return request;
+}`,
+    });
+
     this.distribution = new CloudfrontDistribution(this, 'cloudfront', {
       aliases: [props.domainName],
       enabled: true,
@@ -629,16 +674,15 @@ export class NumaFrontendInfra extends Construct {
         viewerProtocolPolicy: 'redirect-to-https',
         targetOriginId: 'default',
         cachePolicyId: cachingDisabledPolicyId,
+        functionAssociation: [
+          {
+            eventType: 'viewer-request',
+            functionArn: spaRoutingFunction.arn,
+          },
+        ],
       },
       origin: origins,
       defaultRootObject: 'index.html',
-      customErrorResponse: [
-        {
-          errorCode: 404,
-          responsePagePath: '/index.html',
-          responseCode: 200,
-        },
-      ],
       restrictions: {
         geoRestriction: {
           restrictionType: 'none',

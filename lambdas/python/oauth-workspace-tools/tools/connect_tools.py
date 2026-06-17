@@ -33,8 +33,9 @@ from .synergy_helpers import (
     get_synergy_credentials,
     is_synergy_configured,
     list_job_folders,
-    search_jobs,
+    search_all_jobs,
 )
+from .synergy_helpers import search_files as synergy_search_files
 
 logger = structlog.get_logger()
 
@@ -300,7 +301,13 @@ def _user_connector_fields(connector: str, user_sub: str) -> Optional[Dict[str, 
     return fields if isinstance(fields, dict) else None
 
 
-_TOKEN_FIELD_KEYS = ("api_key", "bearer_token", "access_token", "token", "refresh_token")
+_TOKEN_FIELD_KEYS = (
+    "api_key",
+    "bearer_token",
+    "access_token",
+    "token",
+    "refresh_token",
+)
 
 
 def _connector_header_map(connector: str) -> Dict[str, str]:
@@ -517,7 +524,7 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
     """List Synergy jobs/folders/files using folder_id prefix routing.
 
     folder_id mapping:
-      - None/empty → search_jobs() → return jobs as folders
+      - None/empty → search_all_jobs() → return ALL jobs as folders
       - "job:{id}" → list_job_folders(id) → return folders
       - "folder:{id}" → get_folder_items(id) → return subfolders + files
     """
@@ -537,8 +544,11 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
         server, token = creds
 
         if not folder_id:
-            # Root level — list jobs
-            data = search_jobs(server, token, name=query, page=1, page_size=page_size)
+            # Root level — list ALL jobs (search_jobs returns one page; page 1
+            # only would silently truncate accounts with many jobs).
+            data = search_all_jobs(
+                server, token, name=query, page_size=max(page_size, 100)
+            )
             folders = [
                 {
                     "folder_id": f"job:{job['job_id']}",
@@ -556,6 +566,7 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
                     "files": [],
                     "total_count": data.get("total_rows") or len(folders),
                     "connector": "synergy",
+                    "truncated": data.get("truncated", False),
                 },
                 "error": None,
             }
@@ -639,12 +650,39 @@ def handle_connect_synergy_list(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "error", "result": None, "error": str(e)}
 
 
+def _synergy_job_scope(folder_id: str) -> Optional[str]:
+    """Extract a bare job IDString from a search scope param, else None.
+
+    File search must scope to a *job* (there is no global file search). Accepts
+    ``"job:8_1"`` and a bare ``"8_1"``; a ``"folder:..."`` value returns None
+    (folder-scoped file search isn't supported by this path — the agent should
+    pass the parent job).
+    """
+    if not folder_id:
+        return None
+    if folder_id.startswith("job:"):
+        return folder_id[4:] or None
+    if folder_id.startswith("folder:"):
+        return None
+    return folder_id  # bare IDString, e.g. "8_1"
+
+
 def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
-    """Search Synergy jobs by name."""
+    """Search Synergy.
+
+    12d file search is job-scoped (no global file search), so this op does two
+    things depending on whether a job scope is supplied:
+
+      - ``folder_id="job:{id}"`` → search FILES (name + contents, merged) within
+        that job and its sub-jobs.
+      - no scope → search JOBS by name so the agent can first locate the job,
+        then re-search files inside it.
+    """
     try:
         user_sub = params.get("user_sub", "")
         query = params.get("query", "").strip()
-        page_size = int(params.get("page_size", 20))
+        folder_id = params.get("folder_id", "") or ""
+        page_size = int(params.get("page_size", 25))
 
         if not user_sub:
             return {"status": "error", "result": None, "error": "Missing user_sub"}
@@ -657,7 +695,41 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
             return _needs_credential_response("synergy")
 
         server, token = creds
-        data = search_jobs(server, token, name=query, page=1, page_size=page_size)
+
+        job_scope = _synergy_job_scope(folder_id)
+        if job_scope:
+            # File search within a job — matches file names AND contents.
+            data = synergy_search_files(
+                server, token, query, job_scope, page_size=page_size
+            )
+            files = [
+                {
+                    "file_id": f["file_id"],
+                    "name": f["name"],
+                    "size": f.get("size"),
+                    "content_type": f.get("content_type"),
+                    "modified_at": f.get("modified_at"),
+                    "path": f.get("path", ""),
+                }
+                for f in data.get("files", [])
+            ]
+            return {
+                "status": "success",
+                "result": {
+                    "folders": [],
+                    "files": files,
+                    "total_count": data.get("files_total") or len(files),
+                    "query": query,
+                    "scope": f"job:{job_scope}",
+                    "connector": "synergy",
+                },
+                "error": None,
+            }
+
+        # No job scope → locate matching jobs by name (file search needs a job).
+        # Walk all pages — a single page would silently truncate a name match
+        # that spans more than one page.
+        data = search_all_jobs(server, token, name=query, page_size=max(page_size, 100))
 
         folders = [
             {
@@ -677,7 +749,13 @@ def handle_connect_synergy_search(params: Dict[str, Any]) -> Dict[str, Any]:
                 "files": [],
                 "total_count": data.get("total_rows") or len(folders),
                 "query": query,
+                "hint": (
+                    "These are JOBS matching the query. To search file names and "
+                    "contents inside a job, call search_files again with "
+                    "folder_id='job:<job_id>'."
+                ),
                 "connector": "synergy",
+                "truncated": data.get("truncated", False),
             },
             "error": None,
         }
@@ -1024,7 +1102,9 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 user_fields = _user_connector_fields(connector, user_sub)
                 header_map = _connector_header_map(connector)
-                declared = str(_connector_config(connector).get("connector_type") or "").strip()
+                declared = str(
+                    _connector_config(connector).get("connector_type") or ""
+                ).strip()
                 if header_map:
                     custom_auth_headers = _headers_from_fields(header_map, user_fields)
                 elif declared == "username-password":

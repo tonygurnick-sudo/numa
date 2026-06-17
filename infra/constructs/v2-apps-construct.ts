@@ -25,6 +25,8 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
 
   public readonly runsTable: DynamodbTable;
   public readonly settingsTable: DynamodbTable;
+  public readonly inboxTable: DynamodbTable;
+  public readonly sourcesTable: DynamodbTable;
 
   constructor(scope: Construct, name: string, props: V2AppsConstructProps) {
     super(scope, name, props);
@@ -97,6 +99,65 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
       },
     });
 
+    // ── DynamoDB: App Inbox (FEAT-130) ───────────────────────────────────────
+    // Work items that exist outside of a run — arrive from sources, queue as
+    // `new`, and are dispatched to v2-app-runs by the inbox API.
+    //
+    // Partition key is the composite `appUserKey` = `${appId}#${userId}`. The
+    // inbox is always read as "this app's items, for me" (items are user-private
+    // in Card 1), so partitioning on (appId, userId) lets the list endpoint
+    // paginate the caller's items directly — no userId FilterExpression, so
+    // `Limit`/pagination apply to the user's items rather than the whole app's.
+    // It also makes cross-user access structurally impossible: a caller can only
+    // ever address items in their own partition.
+    this.inboxTable = new DynamodbTable(this, 'app-inbox-table', {
+      name: `numa-${clientName}-app-inbox`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'appUserKey',
+      rangeKey: 'itemId',
+      attribute: [
+        { name: 'appUserKey', type: 'S' },
+        { name: 'itemId', type: 'S' },
+        { name: 'createdAt', type: 'S' },
+      ],
+      // LSI so the list endpoint can return a user's items for an app
+      // newest-first without a client-side sort. Must be declared at creation —
+      // LSIs can't be added to an existing table.
+      localSecondaryIndex: [
+        {
+          name: 'appUserKey-createdAt-index',
+          rangeKey: 'createdAt',
+          projectionType: 'ALL',
+        },
+      ],
+      pointInTimeRecovery: { enabled: true },
+      tags: {
+        Name: `numa-${clientName}-app-inbox`,
+        Environment: props.environmentName,
+        Purpose: 'v2-apps-inbox-items',
+      },
+    });
+
+    // ── DynamoDB: App Sources (FEAT-130) ─────────────────────────────────────
+    // Ingestion source configs per app (email, webhook, …). Card 1 only
+    // deploys the table — ingestion (Card 2) adds the writers/consumers.
+    this.sourcesTable = new DynamodbTable(this, 'app-sources-table', {
+      name: `numa-${clientName}-app-sources`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'appId',
+      rangeKey: 'sourceId',
+      attribute: [
+        { name: 'appId', type: 'S' },
+        { name: 'sourceId', type: 'S' },
+      ],
+      pointInTimeRecovery: { enabled: true },
+      tags: {
+        Name: `numa-${clientName}-app-sources`,
+        Environment: props.environmentName,
+        Purpose: 'v2-apps-ingestion-sources',
+      },
+    });
+
     // ── V2 Apps API Lambda ────────────────────────────────────────────────────
     const dynamoFullActions = [
       'dynamodb:Query',
@@ -106,7 +167,7 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
       'dynamodb:DeleteItem',
     ];
 
-    this.addLambdaFunction(this, 'v2-apps-api', {
+    const v2AppsApiLambda = this.addLambdaFunction(this, 'v2-apps-api', {
       addAuthorizer: true,
       lambdaDirectory: 'node/v2-apps-api',
       runtime: 'nodejs22.x',
@@ -159,6 +220,43 @@ export class V2AppsConstruct extends ApiGatewayLambdaCollection {
         { verb: 'ANY', path: 'v2-apps/files' },
         { verb: 'ANY', path: 'v2-apps/files/{proxy+}' },
         { verb: 'ANY', path: 'v2-apps/settings' },
+      ],
+    });
+
+    // ── App Inbox API Lambda (FEAT-130) ──────────────────────────────────────
+    // CRUD + dispatch for inbox work items. Delegates run execution to the
+    // v2-apps-api Lambda (create + start) with the caller's auth passed
+    // through, so dispatched runs are owned by the dispatching user.
+    this.addLambdaFunction(this, 'numa-app-inbox-api', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/numa-app-inbox-api',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      memorySize: 512,
+      timeout: 120,
+      systemLogLevel: 'WARN',
+      environment: {
+        APP_INBOX_TABLE: this.inboxTable.name,
+        V2_APPS_API_FUNCTION_NAME: v2AppsApiLambda.functionName,
+        REGION: props.region,
+      },
+      additionalPolicyStatements: [
+        // DynamoDB: full access to inbox table + LSI
+        {
+          effect: 'Allow',
+          actions: dynamoFullActions,
+          resources: [this.inboxTable.arn, `${this.inboxTable.arn}/index/*`],
+        },
+        // Lambda: invoke v2-apps-api to create/start/read runs on dispatch
+        {
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: [v2AppsApiLambda.arn],
+        },
+      ],
+      route: [
+        { verb: 'ANY', path: 'inbox' },
+        { verb: 'ANY', path: 'inbox/{proxy+}' },
       ],
     });
   }

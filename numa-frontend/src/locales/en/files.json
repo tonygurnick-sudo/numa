@@ -4,6 +4,9 @@
   "synergy": {
     "searchPlaceholder": "Search files in {{job}} by name or contents",
     "searchInJob": "Search files in this job (name or contents)",
+    "searchInJobNamed": "Click here to search for files in {{job}}",
+    "resultCount_one": "{{count}} file",
+    "resultCount_other": "{{count}} files",
     "searchAria": "Search files in this job",
     "searchButton": "Search",
     "clearSearch": "Clear search",

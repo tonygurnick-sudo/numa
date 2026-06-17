@@ -1297,6 +1297,80 @@ def handle_patch_agent_prompt(params: Dict[str, Any]) -> Dict[str, Any]:
     raise ValueError(f"Agent not found: {agent_id}")
 
 
+def handle_delete_agent(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Delete an agent. Mirrors the dual-table lookup of get/update:
+    checks the user's personal agents first, then the workspace table.
+
+    For workspace agents, the creator OR an admin can delete. For personal
+    agents, only the owner (table key is (user_id, agent_id)).
+
+    Returns the deleted agent payload (same shape as get) so callers can
+    show what was removed. Errors on missing id (never silently succeeds).
+
+    Params:
+        agent_id: Agent ID to delete (required)
+        __user_sub: User's Cognito sub (required)
+        __user_groups: User's Cognito groups (for admin check on workspace agents)
+
+    Returns:
+        agent: The agent details that were deleted.
+    """
+    user_sub = params.get("__user_sub")
+    agent_id = params.get("agent_id")
+    user_groups = params.get("__user_groups", [])
+
+    if not user_sub:
+        raise ValueError("User authentication required")
+    if not agent_id:
+        raise ValueError("agent_id is required")
+
+    # HITL approval gate
+    denial = _check_approval(
+        params,
+        action_key="numa_agents_delete",
+        description=f"Delete agent: {agent_id}",
+        props_preview={"agent_id": agent_id},
+    )
+    if denial:
+        return denial
+
+    mode = _get_agents_settings_mode()
+    if mode == "off":
+        raise ValueError("Agents are disabled")
+
+    is_admin = "admin" in user_groups
+    dynamo = _get_dynamo_resource()
+
+    # Personal agent first
+    user_agent = _get_user_agent(agent_id, user_sub)
+    if user_agent:
+        table = dynamo.Table(USER_AGENTS_TABLE)
+        table.delete_item(Key={"user_id": user_sub, "agent_id": agent_id})
+        logger.info(
+            "Deleted user agent",
+            agent_id=agent_id,
+            user_sub=user_sub[:8] + "...",
+        )
+        return {"agent": _map_user_agent(user_agent)}
+
+    # Workspace agent
+    workspace_agent = _get_workspace_agent(agent_id)
+    if workspace_agent:
+        if workspace_agent.get("created_by_user_id") != user_sub and not is_admin:
+            raise ValueError("You do not have permission to delete this agent")
+        table = dynamo.Table(WORKSPACE_AGENTS_TABLE)
+        table.delete_item(Key={"tenant_id": CLIENT_NAME, "agent_id": agent_id})
+        logger.info(
+            "Deleted workspace agent",
+            agent_id=agent_id,
+            user_sub=user_sub[:8] + "...",
+        )
+        return {"agent": _map_workspace_agent(workspace_agent)}
+
+    raise ValueError(f"Agent not found: {agent_id}")
+
+
 def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Duplicate an agent to the user's personal library.

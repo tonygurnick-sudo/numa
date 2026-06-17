@@ -61,7 +61,7 @@ The `.env` file at the project root (`/Users/nathandouglas/arcanum/numa/.env`) s
 Even without DynamoDB/S3/Lambda vars, these features work:
 
 - Bedrock model calls (chat, thinking)
-- Code execution via `execute_script` MCP tool
+- Code execution via Bash (write a Python script to `/workdir/tmp/` and run it)
 - File operations (Read, Write, Edit, Glob, Grep)
 - All agent types and response modes (stream, sync)
 
@@ -100,6 +100,17 @@ eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
 
 **Note:** Do NOT try to `sts assume-role` into the same role you're already in — it will fail with AccessDenied. The `export-credentials` command handles this correctly.
 
+**GOTCHA — credential order matters.** The `.env` file currently hardcodes a long-term IAM access key (`AWS_ACCESS_KEY_ID=AKIA...`, plus its secret), which means **`source .env` will silently overwrite SSO temp creds** even if you exported them first. Symptoms: container starts fine, then every AWS call fails with `InvalidToken` / `UnrecognizedClientException`, and `boto3.client("sts").get_caller_identity()` inside the container resolves to a totally different IAM identity (e.g. `arn:aws:iam::442483608950:user/nathan`) instead of the q-demo SSO role. The correct order is `source` first, then unset the AKIA creds, then `eval` the SSO export last:
+
+```bash
+source /Users/nathandouglas/arcanum/numa/.env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
+# Verify: $AWS_ACCESS_KEY_ID should now start with ASIA (SSO temp creds), not AKIA
+```
+
+Eventually the hardcoded AKIA creds in `.env` should be moved into a named profile in `~/.aws/credentials` (or removed if unused) so this ordering dance isn't needed.
+
 ### Step 4: Run the Container
 
 Read env vars from `.env` and start the container. Note: the `.env` uses `AWS_REGION_WORKSPACE` to avoid conflicting with the deployment region, but the container needs `AWS_REGION`:
@@ -107,8 +118,11 @@ Read env vars from `.env` and start the container. Note: the `.env` uses `AWS_RE
 ```bash
 docker rm -f workspace-test 2>/dev/null
 
-# Source the .env file (reading AWS_REGION_WORKSPACE)
+# Source the .env file (reading AWS_REGION_WORKSPACE), then re-export SSO creds
+# so the AKIA values in .env don't override them (see GOTCHA above).
 source /Users/nathandouglas/arcanum/numa/.env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
 
 docker run -d --rm --name workspace-test \
   -p 8080:8080 \
@@ -159,11 +173,11 @@ The workspace agent supports multiple agent types, each with different tools, re
 
 ### Agent Type Overview
 
-| Type ID               | Response Mode | Tools                                       | Use Case               |
-| --------------------- | ------------- | ------------------------------------------- | ---------------------- |
-| `numa-chat`           | stream        | Full (SDK + scripts MCP + integrations MCP) | Interactive chat       |
-| `research-agent`      | stream        | SDK + scripts MCP (no integrations)         | Research & analysis    |
-| `document-summariser` | sync          | Minimal (Read, Write, Glob, Grep only)      | Structured JSON output |
+| Type ID               | Response Mode | Tools                                  | Use Case               |
+| --------------------- | ------------- | -------------------------------------- | ---------------------- |
+| `numa-chat`           | stream        | Full (SDK tools + numa CLI via Bash)   | Interactive chat       |
+| `research-agent`      | stream        | SDK tools + numa CLI (no integrations) | Research & analysis    |
+| `document-summariser` | sync          | Minimal (Read, Write, Glob, Grep only) | Structured JSON output |
 
 ### Test: numa-chat (streaming)
 
@@ -177,8 +191,8 @@ curl -s -X POST http://localhost:8080/invocations \
 **What to verify:**
 
 - `session_init` event with `isNewSession: true`
-- `system` init event shows tools including `mcp__integrations__run_action` and `mcp__scripts__execute_script`
-- MCP servers: `scripts` AND `integrations` both connected
+- `system` init event shows the SDK tools (Bash, Read, Write, Edit, Glob, Grep, etc.) — the agent calls the `numa` CLI through Bash
+- MCP servers: empty `[]` (the agent runs with zero MCP servers)
 - Streaming `StreamEvent` deltas arrive
 - `result` event with `subtype: "success"`
 
@@ -193,8 +207,8 @@ curl -s -X POST http://localhost:8080/invocations \
 
 **What to verify:**
 
-- `system` init shows `mcp__scripts__execute_script` but NO `mcp__integrations__*` tools
-- MCP servers: only `scripts` (no `integrations`)
+- `system` init shows the SDK tools (Bash, Read, Write, etc.) — code runs via Bash, integrations are unavailable for this type
+- MCP servers: empty `[]` (the agent runs with zero MCP servers)
 - Response streams successfully
 
 ### Test: document-summariser (sync)
@@ -239,19 +253,21 @@ done
 
 ```
 === numa-chat ===
-  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill', 'mcp__scripts__execute_script', 'mcp__integrations__run_action', 'mcp__integrations__configure_props', 'mcp__integrations__proxy_request']
-  MCP: ['scripts', 'integrations']
+  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill']
+  MCP: []
 === research-agent ===
-  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill', 'mcp__scripts__execute_script']
-  MCP: ['scripts']
+  Tools: ['Task', 'TaskOutput', 'Bash', 'Glob', 'Grep', 'Read', 'Edit', 'Write', 'TodoWrite', 'KillShell', 'Skill']
+  MCP: []
 === document-summariser ===
   Tools: ['Glob', 'Grep', 'Read', 'Write', 'TodoWrite']
   MCP: []
 ```
 
+All agent types run with zero MCP servers. `numa-chat` and `research-agent` get the full SDK toolset (including Bash) and invoke the `numa` CLI through Bash; `document-summariser` gets a minimal read/write toolset with no Bash.
+
 ### Test: Code Execution (numa-chat or research-agent)
 
-Verify the scripts MCP server works:
+Verify code execution via Bash works:
 
 ```bash
 curl -s -X POST http://localhost:8080/invocations \
@@ -262,7 +278,7 @@ curl -s -X POST http://localhost:8080/invocations \
 
 **What to verify:**
 
-- Agent uses `mcp__scripts__execute_script` tool
+- Agent writes a Python script to `/workdir/tmp/` and runs it via the Bash tool
 - Python executes successfully inside the container
 - Output includes the current datetime
 
@@ -271,6 +287,100 @@ curl -s -X POST http://localhost:8080/invocations \
 ```bash
 docker stop workspace-test
 ```
+
+## Testing Integrations (numa CLI path)
+
+Driving Pipedream integrations (Gmail, Xero, Outlook, …) through the agent locally needs three things the default test sub doesn't have: **(1) a real Cognito sub that actually has Pipedream connections, (2) a valid Cognito id_token, and (3) the integration's approval set to auto-approve so writes don't stall.** (First made to work 2026-06-16 — pre-CLI benches drove integrations via the old MCP layer, so this path was untested locally.)
+
+### How integration auth works (and why it breaks without a token)
+
+A `numa integrations …` call inside the container runs in **workspace-IAM mode**: the CLI invokes `{client}_numa-cli-api` via `lambda:Invoke` and authenticates with `NUMA_IDENTITY_TOKEN`. The agent sets that from the chat request's **`Authorization: Bearer <id_token>`** header (`main.py` → `os.environ["NUMA_IDENTITY_TOKEN"]`; `NUMA_ACCOUNT` = `CLIENT_NAME`, set automatically). With no token, every integration call fails: `NUMA_AUTH_MODE=workspace-iam but NUMA_IDENTITY_TOKEN is unset` (`numa-cli .../api/client.ts:186`).
+
+`bench_drive.py` sends it when you pass `--id-token-file=<path>` (or set the `BENCH_ID_TOKEN` env var).
+
+### Step 1 — get a fresh id_token
+
+The numa CLI caches tokens at `~/.config/numa/tokens-<client>.json` (from `numa login`). The `idToken` expires hourly; the `refreshToken` lasts ~30 days. The nd-labs app client has a **secret**, so refreshing needs a `SECRET_HASH`:
+
+```bash
+python3 <<'PY'
+import json, base64, hmac, hashlib, boto3
+d=json.load(open('/Users/nathandouglas/.config/numa/tokens-nd-labs.json'))
+pool='us-east-1_3tm2uaPJx'; cid='22n77de22vjrct7tma3hdij5u6'   # nd-labs pool + app client
+idp=boto3.Session(profile_name='q-demo').client('cognito-idp', region_name='us-east-1')
+secret=idp.describe_user_pool_client(UserPoolId=pool, ClientId=cid)['UserPoolClient']['ClientSecret']
+sh=base64.b64encode(hmac.new(secret.encode(), (d['sub']+cid).encode(), hashlib.sha256).digest()).decode()
+r=idp.initiate_auth(ClientId=cid, AuthFlow='REFRESH_TOKEN_AUTH',
+      AuthParameters={'REFRESH_TOKEN': d['refreshToken'], 'SECRET_HASH': sh})
+open('/tmp/_idt.txt','w').write(r['AuthenticationResult']['IdToken']); print('saved /tmp/_idt.txt')
+PY
+```
+
+`SECRET_HASH` keys on the **sub** for nd-labs (try `d['sub']`/`d['username']`/`d['email']` if one fails). If the refresh token is also dead, do a fresh `numa login nd-labs` (needs the password).
+
+### Step 2 — pick a sub with connections, and the CORRECT slug
+
+Integrations connect per **`external_user_id` = `{client}_{sub}`**. Nathan's real nd-labs sub (Xero, Outlook, Drive, Notion, Asana, Pipedrive connected): **`f4088468-1051-7091-5229-8f49cc9cf34a`** (`nathan@arcanum.ai`).
+
+⚠️ **`--enable=` takes the Pipedream app `name_slug`, NOT a friendly alias.** `xero` does NOT resolve — the slug is **`xero_accounting_api`** ("Integration X is not connected" = wrong slug). List what's actually connected + the exact slugs:
+
+```bash
+python3 <<'PY'
+import json, urllib.request, urllib.parse, re
+env={}
+for line in open('/Users/nathandouglas/arcanum/numa/.env'):
+    m=re.match(r'\s*(?:export\s+)?([A-Z_]+)\s*=\s*"?([^"\n]*)"?', line)
+    if m: env[m.group(1)]=m.group(2).strip()
+data=urllib.parse.urlencode({'grant_type':'client_credentials','client_id':env['PIPEDREAM_CLIENT_ID'],'client_secret':env['PIPEDREAM_CLIENT_SECRET']}).encode()
+tok=json.load(urllib.request.urlopen(urllib.request.Request('https://api.pipedream.com/v1/oauth/token', data=data)))['access_token']
+ext='nd-labs_f4088468-1051-7091-5229-8f49cc9cf34a'
+url=f"https://api.pipedream.com/v1/connect/{env['PROJECT_ID']}/accounts?external_user_id={urllib.parse.quote(ext)}"
+for a in json.load(urllib.request.urlopen(urllib.request.Request(url, headers={'Authorization':f"Bearer {tok}",'X-PD-Environment':'production'}))).get('data',[]):
+    print(a['app']['name_slug'], '| healthy:', a.get('healthy'))
+PY
+```
+
+### Step 3 — auto-approve writes (or they stall ~180s)
+
+Integration **writes** hit the HITL approval gate; `bench_drive` has no approver, so a write under `non_destructive`/`always` times out at ~180s with `is_error: true`. Set the user's approval to `never` for the test and **restore after** (Nathan's default is `non_destructive`):
+
+```bash
+SUB=f4088468-1051-7091-5229-8f49cc9cf34a
+aws --profile q-demo dynamodb update-item --table-name numa-nd-labs-chat-settings --region us-east-1 \
+  --key "{\"user_id\":{\"S\":\"$SUB\"}}" --update-expression "SET approvalMode = :n" \
+  --expression-attribute-values '{":n":{"S":"never"}}'      # ... run test ... then restore to non_destructive
+```
+
+The container **must** carry `CHAT_SETTINGS_TABLE_NAME` or it silently ignores DDB and behaves as `non_destructive` (writes time out regardless — see the ⚠️ in the env section). Verify: `docker exec workspace-test python3 -c "from numa_workspace_agent.agent_config import fetch_user_approval_mode, clear_user_settings_cache; clear_user_settings_cache(); print(fetch_user_approval_mode('$SUB'))"` → should print `never`.
+
+### Step 4 — drive it, and read the raw result
+
+```bash
+cd dev-notes/research/model-benchmarks/_tools
+python3 bench_drive.py turn t-test anthropic.claude-haiku-4-5-20251001-v1:0 "<prompt>" \
+  --user-sub=f4088468-1051-7091-5229-8f49cc9cf34a --user-email=nathan@arcanum.ai \
+  --enable=xero_accounting_api --id-token-file=/tmp/_idt.txt
+```
+
+The CLI spills each integration result to a file — inspect the **exact Pipedream envelope** (`os[]` observations, `ret`, `Warnings`, errors):
+
+```bash
+docker exec workspace-test bash -lc 'cat /workdir/tmp/numa-cli/numa-pipedream_run_action-*.json' | python3 -m json.tool | head -80
+```
+
+A failed upstream call (e.g. Xero `400 ValidationException`) lands in `result.os[]` as a `{"k":"error","err":{...}}` observation — which the T-14 scan in `pipedream_integration.py` turns into `status: "action_error"`.
+
+### Gotchas
+
+| Symptom                                         | Cause / fix                                                                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NUMA_IDENTITY_TOKEN is unset` / CLI auth fails | No id_token sent — pass `--id-token-file=` (Step 1).                                                                                                                                 |
+| `Integration 'X' is not connected` (but it is)  | Wrong slug — use the Pipedream `name_slug` (`xero_accounting_api`, not `xero`). List accounts (Step 2).                                                                              |
+| Write times out ~180s, `is_error: true`         | Approval not `never`, or `CHAT_SETTINGS_TABLE_NAME` missing from the container env.                                                                                                  |
+| id_token rejected                               | Expired (1h TTL) — refresh (Step 1).                                                                                                                                                 |
+| Real-account safety                             | Writes are real — use a sandbox org. A bad value may still create a DRAFT (Xero strips a bad account code with a `Warning`; the hard `ValidationException` only fires on AUTHORISE). |
+
+---
 
 ## Request Payload Reference
 
@@ -338,6 +448,28 @@ These are OpenTelemetry/AWS resource detectors that only work in cloud environme
 
 **Cause:** The `q-demo` profile is already assumed into the target role
 **Fix:** Use `eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"` instead of `sts assume-role`
+
+### InvalidToken / UnrecognizedClientException everywhere (S3, DynamoDB, Bedrock)
+
+**Symptom:** Container starts cleanly, but every AWS call inside fails with `InvalidToken` / `UnrecognizedClientException` / `InvalidClientTokenId`. `boto3.client("sts").get_caller_identity()` inside the container resolves to an unexpected IAM identity (often `arn:aws:iam::442483608950:user/nathan`).
+
+**Cause:** The `.env` file hardcodes a long-term IAM access key (`AKIA...`). Sourcing `.env` after exporting SSO temp creds silently overwrites them. The container then runs as the wrong identity.
+
+**Fix:** Source `.env` first, unset the AKIA values, then export SSO creds last (see Step 3 GOTCHA):
+
+```bash
+source /Users/nathandouglas/arcanum/numa/.env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)"
+# Sanity check: $AWS_ACCESS_KEY_ID should start with ASIA, not AKIA
+```
+
+To verify inside a running container:
+
+```bash
+docker exec workspace-test bash -c 'python3 -c "import boto3; print(boto3.client(\"sts\").get_caller_identity()[\"Arn\"])"'
+# Should print: arn:aws:sts::905418183804:assumed-role/AWSReservedSSO_AdministratorAccess_.../nathan@arcanum.ai
+```
 
 ### S3/DynamoDB Warnings
 
@@ -480,8 +612,11 @@ AWS_PROFILE=q-demo aws s3 cp \
   --region us-east-1
 
 # 2. Start container with debug logging
+# Source .env BEFORE the SSO export so the AKIA creds in .env don't override
+# the q-demo temp creds (see GOTCHA in Step 3).
+source /Users/nathandouglas/arcanum/numa/.env 2>/dev/null
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
-source /Users/nathandouglas/arcanum/numa/.env 2>/dev/null; \
 docker rm -f workspace-test 2>/dev/null; \
 docker run -d --rm --name workspace-test -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
@@ -584,8 +719,9 @@ Load image, get credentials, start container, test all types, stop:
 
 ```bash
 docker load -i /Users/nathandouglas/arcanum/numa/infra/assets/artifacts/numa-workspace-agent/image.tar && \
-eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
 source /Users/nathandouglas/arcanum/numa/.env && \
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN && \
+eval "$(AWS_PROFILE=q-demo aws configure export-credentials --format env)" && \
 docker rm -f workspace-test 2>/dev/null; \
 docker run -d --rm --name workspace-test -p 8080:8080 \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \

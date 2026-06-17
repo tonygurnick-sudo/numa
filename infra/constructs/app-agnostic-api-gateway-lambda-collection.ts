@@ -475,6 +475,124 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'PUT', path: 'settings/data-connectors/{connector}' },
     });
 
+    // Numa CLI API — backend for the `numa` CLI binary in /numa-cli/.
+    // Always deployed: the `numa` CLI is the workspace agent's entire tool
+    // layer (zero MCP servers), so every stack running the agent needs this
+    // dispatcher. The /api/cli/tools/invoke route translates CLI calls into
+    // workspace-chat-tools events.
+    //
+    // The bootstrap route is intentionally rich — it returns the same context
+    // the workspace chat agent assembles at startup (user identity from
+    // Cognito GetUser + JWT, agents, integrations + admin policies, knowledge
+    // bases, full /config.json). Long-term goal is for the workspace chat
+    // agent itself to consume this endpoint so we have a single source of
+    // truth for "what does this user have access to" instead of assembling
+    // it piecemeal across frontend, proxy, and agent.
+    //
+    // Implementation: the Lambda fans out in parallel to other client-account
+    // Lambdas via Lambda.Invoke with synthetic API Gateway events, plus a
+    // Cognito GetUser call (using the caller's access token as the
+    // credential, no IAM perm needed). For the `kb_manager` Lambda specifically
+    // — which sits behind a Function URL not API Gateway — we also forward
+    // the CloudFront shared secret since kb_manager validates it on every
+    // request.
+    this.addLambdaFunction(this, 'numa-cli-api', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/numa-cli-api',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      timeout: 300,
+      environment: {
+        CLIENT_NAME: props.clientName,
+        CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
+        // Cognito config for in-Lambda JWT verification (src/shared/auth.ts).
+        // numa-cli-api verifies the bearer token itself rather than trusting
+        // the upstream authorizer — a direct lambda:Invoke from the workspace
+        // role bypasses API Gateway entirely. Must accept the same client-ID
+        // set the api-gateway-authorizer does.
+        COGNITO_USER_POOL_ID: props.userPoolId,
+        COGNITO_USER_POOL_CLIENT_ID: props.userPoolClientId,
+        ...(props.additionalCognitoClientIds
+          ? { ADDITIONAL_COGNITO_CLIENT_IDS: props.additionalCognitoClientIds }
+          : {}),
+        // HMAC secret for verifying proxy-minted service tokens (non-interactive
+        // runs). Shared only with workspace-chat-agent-proxy; never reaches the
+        // MicroVM. Without it, service tokens are rejected (fail closed).
+        ...(props.cliIdentitySecret ? { NUMA_CLI_IDENTITY_SECRET: props.cliIdentitySecret } : {}),
+        ...(props.companyBucketName ? { COMPANY_BUCKET_NAME: props.companyBucketName } : {}),
+        ...(props.integrationsApprovalTableName
+          ? { INTEGRATIONS_APPROVAL_TABLE_NAME: props.integrationsApprovalTableName }
+          : {}),
+        // Numa Ops entitlement flag — lets numa-cli-api hard-gate `ops_*`
+        // tool calls server-side. Same flag source + env value the workspace
+        // agent container receives (clientConfig.numaOps → 'true').
+        ...(props.numaOpsEnabled ? { NUMA_OPS_ENABLED: 'true' } : {}),
+      },
+      additionalPolicyStatements: [
+        {
+          // Fan-out aggregator: this Lambda invokes a handful of other
+          // client-account Lambdas (agents, admin-integration-settings-get,
+          // data-connectors-status, kb_manager, chat-settings-get,
+          // workspace_chat_tools, oauth_workspace_tools) with synthetic
+          // API Gateway events. Scoped to the same client's Lambdas only
+          // — no cross-client reach, no cross-account reach.
+          effect: 'Allow',
+          actions: ['lambda:InvokeFunction'],
+          resources: [`arn:aws:lambda:*:*:function:${props.clientName}_*`],
+        },
+        // DDB read/write on the integrations-approval table for the
+        // centralised Phase 2 approval orchestrator (create + poll).
+        ...(props.integrationsApprovalTableArn
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['dynamodb:PutItem', 'dynamodb:GetItem'],
+                resources: [props.integrationsApprovalTableArn],
+              },
+            ]
+          : []),
+        // Read company-data.json from the company bucket for bootstrap's
+        // `company_profile` field. Only added when the bucket exists for
+        // this stack.
+        ...(props.companyBucketArn
+          ? [
+              {
+                effect: 'Allow',
+                actions: ['s3:GetObject'],
+                resources: [`${props.companyBucketArn}/company-data.json`],
+              },
+            ]
+          : []),
+        // List + read native-connector API docs for the integrations docs
+        // endpoint. Same prefix the workspace agent's
+        // `sync_ext_api_docs_for_connectors` reads from at chat start.
+        {
+          effect: 'Allow',
+          actions: ['s3:ListBucket'],
+          resources: [`arn:aws:s3:::numa-${props.clientName}-outputs`],
+        },
+        {
+          effect: 'Allow',
+          actions: ['s3:GetObject'],
+          resources: [`arn:aws:s3:::numa-${props.clientName}-outputs/tools/api-docs/*`],
+        },
+      ],
+      route: [
+        { verb: 'POST', path: 'cli/bootstrap' },
+        { verb: 'GET', path: 'cli/bootstrap' },
+        // Generic tool dispatcher — translates CLI tool calls into
+        // workspace-chat-tools events and invokes via boto3. Single route
+        // for files / integrations / KB / ops — the CLI command tree on
+        // the front side is what's visible; backend routes are an
+        // implementation detail.
+        { verb: 'POST', path: 'cli/tools/invoke' },
+        // Integration reference docs — Pipedream action index OR native
+        // connector markdown bundle, fetched on demand and cached
+        // CLI-side at ~/.cache/numa/integrations/<slug>/.
+        { verb: 'GET', path: 'cli/integrations/{slug}/docs' },
+      ],
+    });
+
     // Admin Capabilities API (GET list, PUT single)
     const adminCapabilitiesEnv = {
       CAPABILITIES_TABLE_NAME: props.capabilitiesTableName,
@@ -1193,6 +1311,13 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME: props.dataConnectorsSyncConfigsTableName,
       CONNECTOR_EVENT_CONFIGS_TABLE_NAME: props.connectorEventConfigsTableName,
+      // Synergy KB crawl Step Function (empty when the crawler is disabled). The
+      // "Sync now" route StartExecutions it with the caller's vault secret_id.
+      SYNERGY_CRAWL_STATE_MACHINE_ARN: props.synergyKbCrawlStateMachineArn ?? '',
+      // Crawl-state table + worker for sync-config/status routes and the
+      // on-visit incremental sync (all no-ops when empty).
+      SYNERGY_CRAWL_STATE_TABLE_NAME: props.synergyCrawlStateTableName ?? '',
+      SYNERGY_TEXT_CRAWLER_FUNCTION_NAME: props.synergyTextCrawlerFunctionName ?? '',
     } as Record<string, string>;
 
     const dataConnectorsPolicy = [
@@ -1245,6 +1370,32 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.connectorEventConfigsTableName}`],
       },
+      {
+        // "Sync now" triggers the Synergy KB crawl Step Function.
+        effect: 'Allow',
+        actions: ['states:StartExecution'],
+        resources: [`arn:aws:states:*:*:stateMachine:numa-${props.clientName}*synergy-kb-crawl`],
+      },
+      // Crawl-state table (sync-config/status + on-visit grant rows) and the
+      // worker invoke — only when the Synergy KB crawler is provisioned.
+      ...(props.synergyCrawlStateTableArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+              resources: [props.synergyCrawlStateTableArn, `${props.synergyCrawlStateTableArn}/index/*`],
+            },
+          ]
+        : []),
+      ...(props.synergyTextCrawlerFunctionArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.synergyTextCrawlerFunctionArn],
+            },
+          ]
+        : []),
     ];
 
     this.addLambdaFunction(this, 'data-connectors-status', {
@@ -1285,6 +1436,44 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: dataConnectorsEnv,
       additionalPolicyStatements: dataConnectorsPolicy,
       route: { verb: 'GET', path: 'data-connectors/synergy/jobs' },
+    });
+
+    // Manual "Sync now" — kicks off the Synergy → Bedrock KB crawl Step Function.
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-now', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'POST', path: 'data-connectors/synergy/sync-now' },
+    });
+
+    // Admin crawl config + run status (admin-gated in the handler).
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-get', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/sync-config' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-put', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'PUT', path: 'data-connectors/synergy/sync-config' },
+    });
+
+    this.addLambdaFunction(this, 'data-connectors-synergy-sync-status', {
+      addAuthorizer: true,
+      lambdaDirectory: 'python/data-connectors',
+      handler: 'lambda_function.handler',
+      environment: dataConnectorsEnv,
+      additionalPolicyStatements: dataConnectorsPolicy,
+      route: { verb: 'GET', path: 'data-connectors/synergy/sync-status' },
     });
 
     this.addLambdaFunction(this, 'data-connectors-synergy-job-folders', {
@@ -1608,6 +1797,8 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       WEBHOOK_URL: `https://${props.domainName}/api/webhooks/connector-events/${props.cloudfrontSharedSecret}`,
+      // Used by the configure-triggers route to register watches for already-connected mailboxes.
+      WATCH_MANAGER_FUNCTION_NAME: gmailWatchManagerLambda.functionName,
     } as Record<string, string>;
 
     const googleCloudSetupPolicy = [
@@ -1625,6 +1816,13 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
           'secretsmanager:GetSecretValue',
         ],
         resources: ['*'],
+      },
+      {
+        // configure-triggers invokes gmail-watch-manager to register watches for
+        // already-connected mailboxes.
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [gmailWatchManagerLambda.arn],
       },
     ];
 
@@ -1696,6 +1894,28 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       environment: googleCloudSetupEnv,
       additionalPolicyStatements: googleCloudSetupPolicy,
       route: { verb: 'GET', path: 'admin/google-cloud/status' },
+    });
+
+    // Token-free trigger setup: the admin provisions Pub/Sub in their own GCP
+    // project (guided by trigger-info), then we wire it up Numa-side.
+    this.addLambdaFunction(this, 'google-cloud-setup-trigger-info', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'GET', path: 'admin/google-cloud/trigger-info' },
+    });
+
+    this.addLambdaFunction(this, 'google-cloud-setup-configure-triggers', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/google-cloud-setup',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: googleCloudSetupEnv,
+      additionalPolicyStatements: googleCloudSetupPolicy,
+      route: { verb: 'POST', path: 'admin/google-cloud/configure-triggers' },
     });
 
     // Agents API (list/create/update/delete/copy + prefs/teams/sharing)
@@ -2883,6 +3103,13 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   outputsBucketArn: string;
   /** Outputs bucket name for constructing S3 keys. */
   outputsBucketName: string;
+  /** Company-data bucket name (holds company-data.json read by numa-cli-api
+   *  for bootstrap and by the workspace agent at chat-start). Optional —
+   *  some client stacks don't provision this bucket. */
+  companyBucketName?: string;
+  /** Company-data bucket ARN — needed to scope the S3 GetObject perm on
+   *  the numa-cli-api Lambda. Optional alongside `companyBucketName`. */
+  companyBucketArn?: string;
   workspaceAgentsTableName: string;
   userAgentsTableName: string;
   /** Exact agents settings table name, passed from Core to avoid name drift. */
@@ -2920,6 +3147,21 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   mfaSettingsTableName: string;
   /** Cognito User Pool ID — needed for admin MFA reset operations. */
   userPoolId: string;
+  /**
+   * Comma-separated extra Cognito app-client IDs (beyond `userPoolClientId`)
+   * that may have minted valid tokens. Forwarded to numa-cli-api so its
+   * in-Lambda JWT verifier accepts the same set the api-gateway-authorizer
+   * does. Optional — most stacks have a single client ID.
+   */
+  additionalCognitoClientIds?: string;
+  /**
+   * HMAC secret numa-cli-api uses to verify proxy-minted "service identity"
+   * tokens for non-interactive runs. Same secret the workspace-chat-agent-proxy
+   * signs with. Never injected into the workspace container. Optional — when
+   * absent, numa-cli-api rejects service tokens (interactive Cognito path is
+   * unaffected).
+   */
+  cliIdentitySecret?: string;
   /** User chat settings table name for per-user defaults (tools, KBs, integrations). */
   chatSettingsTableName: string;
   /** Data connectors table name for per-user connector configs. */
@@ -2936,6 +3178,16 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
+  /** Synergy KB crawl Step Function ARN (empty string when the crawler is
+   *  disabled). The data-connectors "Sync now" route StartExecutions it. */
+  synergyKbCrawlStateMachineArn?: string;
+  /** Synergy crawl-state table ('' when disabled) — sync-config/status routes
+   *  + the on-visit grant/throttle rows. */
+  synergyCrawlStateTableName?: string;
+  synergyCrawlStateTableArn?: string;
+  /** Synergy crawl worker Lambda ('' when disabled) — on-visit async invoke. */
+  synergyTextCrawlerFunctionName?: string;
+  synergyTextCrawlerFunctionArn?: string;
   /** Admin-side gate. When false, the unified integrations catalog returns
    *  no native rows; admins can't add them and users don't see them. The
    *  flag is the only way to suppress natives entirely — there's no
@@ -3024,4 +3276,13 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
    *  Pipedream-trigger schedules. Optional because the relay is only created
    *  when PIPEDREAM_INTEGRATIONS is enabled. */
   pipedreamRelayLambdaArn?: string;
+  /** Numa Ops entitlement flag (client's `numaOps` feature flag). Forwarded to
+   *  numa-cli-api as `NUMA_OPS_ENABLED` so it can hard-gate `ops_*` tool calls
+   *  server-side — same source + env the workspace agent container receives. */
+  numaOpsEnabled?: boolean;
+  /** Integrations approval table name — used by numa-cli-api's Phase 2
+   *  centralised approval orchestrator (DDB create + poll). */
+  integrationsApprovalTableName?: string;
+  /** Integrations approval table ARN — IAM grant for DDB read/write. */
+  integrationsApprovalTableArn?: string;
 }

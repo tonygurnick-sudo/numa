@@ -7,99 +7,74 @@ description: Search, retrieve, upload, download, and delete files in the user's 
 
 Search, retrieve, and manage files inside the user's **Numa Files** folders. Every user has a seeded **Personal** folder (their private default save location), the workspace-wide **Company Files**, and may have additional private folders they've created or shared folders they have access to. The actual set of folders available to you is in the **Available Numa Files folders** section of your context — work from that list rather than assuming a fixed set.
 
-> "Numa Files" is the user-facing name for the Numa file system. Folders inside it are the unit users select; each folder is searchable. Internally the tool dispatch ID is `numa_files` (preferred) and `knowledge_base` (legacy alias for chat history replay).
+> "Numa Files" is the user-facing name for the Numa file system. Folders inside it are the unit users select; each folder is searchable.
 
 ## Quick Reference
 
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching files",
-  params={"operation": "query", "query": "search terms", "user_intent": "what user wants to accomplish"}
-)
+Bash("numa files search 'search terms' --json -m 'Searching files'")
 ```
 
 ## Operations
 
-All Numa Files operations use `name="numa_files"` with an `operation` parameter:
+All Numa Files operations use the `numa files` command:
 
-| Operation         | Purpose                                        |
-| ----------------- | ---------------------------------------------- |
-| `query`           | Search files in a folder with AI summarization |
-| `upload`          | Add files to a folder                          |
-| `download`        | Download a file by S3 URI or filename          |
-| `list`            | List files in a folder                         |
-| `download_folder` | Download a folder (or sub-path) as zip         |
-| `delete`          | Delete files from a folder                     |
+| Operation         | Purpose                                            |
+| ----------------- | -------------------------------------------------- |
+| `search`          | RAG search across folders (raw matches by default) |
+| `upload`          | Add files to a folder                              |
+| `download`        | Download a file by `<folder>/<file>`               |
+| `list`            | List the folders you have access to                |
+| `show`            | List the files inside a folder                     |
+| `download-folder` | Download a folder (or sub-path) as zip             |
+| `delete`          | Delete files from a folder                         |
 
 ---
 
-## operation: query
+## numa files search
 
 Search inside the user's Numa Files folders, with optional AI summarization.
 
 ### Parameters
 
-| Parameter           | Required | Default   | Description                                                                                                                 |
-| ------------------- | -------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `operation`         | Yes      | -         | `"query"`                                                                                                                   |
-| `query`             | Yes      | -         | Natural language search query                                                                                               |
-| `user_intent`       | Yes      | -         | What the user is trying to accomplish                                                                                       |
-| `max_results`       | No       | 6         | Max results (max: 15)                                                                                                       |
-| `kb_id`             | No       | "company" | Folder ID: `"company"` (Company Files), a folder UUID, or `"sharepoint"` (workspace's connected SharePoint, when available) |
-| `summarise_results` | No       | false     | Set to true to summarize results via Nova Lite. Default returns raw retrieved chunks (higher fidelity for reasoning).       |
-| `all_kbs`           | No       | false     | Query all enabled folders and synthesize results                                                                            |
-| `output_file`       | No       | -         | Write results to file instead of returning inline                                                                           |
+| Parameter       | Required | Default | Description                                                                                                                                                                                           |
+| --------------- | -------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `query`         | Yes      | -       | Natural language search query (positional arg)                                                                                                                                                        |
+| `--intent`      | No       | query   | What the user is trying to accomplish. Only used when `--summarise` is set; defaults to the query itself.                                                                                             |
+| `--max-results` | No       | 6       | Max results (max: 15)                                                                                                                                                                                 |
+| `--folder`      | No       | all     | Narrow to a single folder by name or id: `"company"` (Company Files), a folder UUID, or `"sharepoint"` (workspace's connected SharePoint, when available). Omit to search across all enabled folders. |
+| `--all`         | No       | -       | Explicitly search across all enabled folders. This is also the default when `--folder` is omitted; `--all` wins if both are given.                                                                    |
+| `--summarise`   | No       | false   | Opt in to LLM-summarise results via Nova Lite. Default returns raw retrieved chunks (higher fidelity for reasoning).                                                                                  |
 
-### `kb_id="sharepoint"` — only for select workspaces (do not confuse with the Pipedream SharePoint integration)
+### `--folder sharepoint` — only for select workspaces (do not confuse with the Pipedream SharePoint integration)
 
 **Two completely separate things are both called "SharePoint" in this system. Do not mix them up.**
 
-1. **`kb_id="sharepoint"` (this skill)** — only exists on workspaces where the customer has paid for Amazon Q Business with a SharePoint data source indexed at the **workspace** level. Most workspaces do NOT have this. To check: look for `"sharepoint"` in `__allowed_kbs` for the current conversation. If it's not there, the option is unavailable — passing `kb_id="sharepoint"` will fail with an error. Just don't.
+1. **`--folder sharepoint` (this skill)** — only exists on workspaces where the customer has paid for Amazon Q Business with a SharePoint data source indexed at the **workspace** level. Most workspaces do NOT have this. To check: look for `"sharepoint"` in `__allowed_kbs` for the current conversation. If it's not there, the option is unavailable — passing `--folder sharepoint` will fail with an error. Just don't.
 
-2. **The Pipedream `sharepoint-*` integration actions** (`sharepoint-search-files`, `sharepoint-get-file`, etc., invoked via `mcp__integrations__run_action`) — this is the standard, widely-enabled path. Use it for any SharePoint work on a normal workspace, and for write operations (upload, create, move) on any workspace.
+2. **The Pipedream `sharepoint-*` integration actions** (`sharepoint-search-files`, `sharepoint-get-file`, etc., invoked via `numa integrations pipedream-call`) — this is the standard, widely-enabled path. Use it for any SharePoint work on a normal workspace, and for write operations (upload, create, move) on any workspace.
 
-**When `"sharepoint"` IS in `__allowed_kbs`:** prefer `kb_id="sharepoint"` for read / search / "find this content" intents — the query runs with the calling user's own SharePoint ACLs applied automatically (filtered server-side via Q Business identity federation, so the user only sees documents they can already see in SharePoint). Still use the Pipedream `sharepoint-*` actions for writes. For broad "search everything we know" intents, run both `kb_id="company"` and `kb_id="sharepoint"` (or set `all_kbs: true`).
+**When `"sharepoint"` IS in `__allowed_kbs`:** prefer `--folder sharepoint` for read / search / "find this content" intents — the query runs with the calling user's own SharePoint ACLs applied automatically (filtered server-side via Q Business identity federation, so the user only sees documents they can already see in SharePoint). Still use the Pipedream `sharepoint-*` actions for writes. For broad "search everything we know" intents, run both `--folder company` and `--folder sharepoint` (or set `--all`).
 
-**When `"sharepoint"` is NOT in `__allowed_kbs`:** the workspace does not have Q Business SharePoint provisioned. Use the Pipedream `sharepoint-*` integration actions instead. Never pass `kb_id="sharepoint"` on this kind of workspace.
+**When `"sharepoint"` is NOT in `__allowed_kbs`:** the workspace does not have Q Business SharePoint provisioned. Use the Pipedream `sharepoint-*` integration actions instead. Never pass `--folder sharepoint` on this kind of workspace.
 
 ### Examples
 
 ```
-# Simple search across the default folder (Company Files)
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching files for annual leave policy",
-  params={"operation": "query", "query": "annual leave policy", "user_intent": "find how many days of leave employees get"}
-)
+# Simple search across all enabled folders (the default when --folder is omitted)
+Bash("numa files search 'annual leave policy' --json -m 'Searching files for annual leave policy'")
 
-# Search a specific folder
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching the project folder for requirements",
-  params={"operation": "query", "query": "project requirements", "user_intent": "find project specs", "kb_id": "abc-123-uuid"}
-)
+# Search a specific folder (by name or id)
+Bash("numa files search 'project requirements' --folder abc-123-uuid --json -m 'Searching the project folder for requirements'")
 
 # Search the connected SharePoint (ACL-filtered to what the caller can see)
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching SharePoint for the latest pricing deck",
-  params={"operation": "query", "query": "Q4 pricing deck", "user_intent": "find the latest SharePoint pricing deck", "kb_id": "sharepoint"}
-)
+Bash("numa files search 'Q4 pricing deck' --folder sharepoint --json -m 'Searching SharePoint for the latest pricing deck'")
 
-# Search all enabled folders at once (includes SharePoint if enabled)
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Searching all folders for annual leave policy",
-  params={"operation": "query", "query": "annual leave policy", "user_intent": "compare policies across departments", "all_kbs": true}
-)
+# Explicitly search all enabled folders at once (includes SharePoint if enabled)
+Bash("numa files search 'annual leave policy' --all --json -m 'Searching all folders for annual leave policy'")
 
-# Get raw content for detailed analysis
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Compiling security documentation from files",
-  params={"operation": "query", "query": "all IT security policies", "user_intent": "compile complete security documentation", "summarise_results": false, "max_results": 15, "output_file": "/workdir/outputs/security_policies.json"}
-)
+# Opt in to an LLM summary (intent guides the summarisation)
+Bash("numa files search 'all IT security policies' --summarise --intent 'compile complete security documentation' --max-results 15 --json -m 'Compiling security documentation from files'")
 ```
 
 ### Output Format
@@ -110,7 +85,7 @@ JSON response with:
 - `references` - Source documents with S3 URIs
 - `provider` - Search provider type (bedrock or q)
 - `results_count` - Number of results
-- `kbs_queried` - List of folder IDs queried (when using all_kbs)
+- `kbs_queried` - List of folder IDs queried (when searching across all folders)
 
 ### When to Use Summarized vs Raw Results
 
@@ -122,7 +97,7 @@ JSON response with:
 - Creating documentation or reports requiring precision
 - Any task where fidelity matters more than digestibility — raw chunks are strictly higher-fidelity input for reasoning
 
-**Use AI Summary (`summarise_results: true`)** when:
+**Use AI Summary (`--summarise`)** when:
 
 - User explicitly asks for a paraphrased digest or "in plain English" summary
 - Audience is non-technical and a wall of raw chunks would be unhelpful
@@ -140,43 +115,31 @@ Raw results add one Bedrock retrieval; opting into summarisation adds a second N
 
 ---
 
-## operation: upload
+## numa files upload
 
 Add files from the workspace to a folder for future retrieval.
 
 ### Parameters
 
-| Parameter   | Required | Default   | Description                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `operation` | Yes      | -         | `"upload"`                                                                                                                                                                                                                                                                                                                                                                                     |
-| `file`      | Yes      | -         | Path to file in workspace                                                                                                                                                                                                                                                                                                                                                                      |
-| `kb_id`     | No       | "company" | Target folder ID                                                                                                                                                                                                                                                                                                                                                                               |
-| `path`      | **Yes**  | -         | Folder prefix within the target folder. Pass `""` (or `"/"`) to upload to the folder root, or a sub-path like `"reports/2024/"`. This is a directory path, NOT a filename. The parameter name MUST be `path` (not `destination` or `folder`). **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
+| Parameter    | Required | Default  | Description                                                                                                                                                                                                                                                                                           |
+| ------------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`       | Yes      | -        | Local path to file in workspace (positional arg)                                                                                                                                                                                                                                                      |
+| `--to`       | Yes      | -        | Destination folder (name or id). `--folder` is an accepted alias for `--to` — prefer `--to`.                                                                                                                                                                                                          |
+| `--path`     | No       | root     | Subfolder prefix within the destination folder, e.g. `"reports/2024/"`. Omit to upload to the folder root. This is a directory path, NOT a filename. **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
+| `--filename` | No       | basename | Override the destination filename (defaults to the local file's basename).                                                                                                                                                                                                                            |
 
 ### Examples
 
 ```
-# Upload to Company Files root (admin only) — path="" makes the root destination explicit
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Uploading report to Company Files root",
-  params={"operation": "upload", "file": "/workdir/outputs/report.pdf", "kb_id": "company", "path": ""}
-)
+# Upload to Company Files root (admin only) — omit --path for the root
+Bash("numa files upload /workdir/outputs/report.pdf --to company -m 'Uploading report to Company Files root'")
 
 # Upload to a user folder with sub-path
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Uploading analysis to user folder",
-  params={"operation": "upload", "file": "/workdir/outputs/analysis.docx", "kb_id": "abc-123-uuid", "path": "reports/2024/"}
-)
+Bash("numa files upload /workdir/outputs/analysis.docx --to abc-123-uuid --path 'reports/2024/' -m 'Uploading analysis to user folder'")
 
 # Updating a file you downloaded from a sub-path — preserve the sub-path
-# (download said "uri": "...kb/reports/2024/q3.pdf" — upload back to "reports/2024/")
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Uploading updated q3 report back to reports/2024/",
-  params={"operation": "upload", "file": "/workdir/outputs/q3.pdf", "kb_id": "company", "path": "reports/2024/"}
-)
+# (the file lived at reports/2024/q3.pdf — upload back to "reports/2024/")
+Bash("numa files upload /workdir/outputs/q3.pdf --to company --path 'reports/2024/' -m 'Uploading updated q3 report back to reports/2024/'")
 ```
 
 ### Permissions
@@ -188,70 +151,36 @@ mcp__numa__numa_tool(
 
 ---
 
-## operation: download
+## numa files download
 
 Download files from Numa Files storage.
 
 ### Parameters
 
-| Parameter    | Required | Default           | Description                           |
-| ------------ | -------- | ----------------- | ------------------------------------- |
-| `operation`  | Yes      | -                 | `"download"`                          |
-| `file`       | \*       | -                 | Filename to download (use with kb_id) |
-| `kb_id`      | No       | "company"         | Folder ID when using file             |
-| `uri`        | \*       | -                 | Full S3 URI (alternative to file)     |
-| `output_dir` | No       | /workdir/outputs/ | Download location                     |
-
-\*Either `file` or `uri` must be provided.
+| Parameter      | Required | Default      | Description                                                                                                                                                                                               |
+| -------------- | -------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `folder/file`  | Yes      | -            | Single positional arg combining folder and filename, e.g. `Company/titanic.csv` or `<folder-id>/notes.md`. The folder may be a name or id; include sub-paths inline (e.g. `Company/reports/2024/q4.pdf`). |
+| `-o, --output` | No       | ./<filename> | Local file path to write to (a full path, not a directory).                                                                                                                                               |
 
 ### Examples
 
 ```
-# Download by filename (simplest - use when you know the filename)
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading employee handbook from Company Files",
-  params={"operation": "download", "file": "employee-handbook.pdf", "kb_id": "company"}
-)
+# Download by folder/file (use when you know the folder + filename)
+Bash("numa files download 'Company/employee-handbook.pdf' -m 'Downloading employee handbook from Company Files'")
 
-# Download by S3 URI (from query result references)
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading policy document",
-  params={"operation": "download", "uri": "s3://bucket/documents/company/policy.pdf"}
-)
+# Download from a user folder by id
+Bash("numa files download 'abc-123-uuid/policy.pdf' -m 'Downloading policy document'")
 
-# Download to specific directory
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading report to downloads folder",
-  params={"operation": "download", "uri": "s3://bucket/documents/company/report.xlsx", "output_dir": "/workdir/outputs/downloads/"}
-)
+# Download to a specific local path
+Bash("numa files download 'Company/report.xlsx' -o /workdir/outputs/downloads/report.xlsx -m 'Downloading report to downloads folder'")
 ```
-
-### When to use which mode
-
-**Use `file + kb_id`** when:
-
-- You know the filename (e.g., from system prompt folder listings)
-- Downloading files shown in the conversation context
-- Simpler and more direct - no need to run list first
-
-**Use `uri`** when:
-
-- Downloading from query result references (the `references` array includes S3 URIs)
-- You have the full S3 URI from a previous operation
 
 ### Working with sub-paths
 
-For files inside sub-paths, include the relative path in `file`:
+For files inside sub-paths, include the relative path after the folder:
 
 ```
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading Q4 summary",
-  params={"operation": "download", "file": "reports/2024/q4-summary.pdf", "kb_id": "company"}
-)
+Bash("numa files download 'Company/reports/2024/q4-summary.pdf' -m 'Downloading Q4 summary'")
 ```
 
 Use file download when:
@@ -262,81 +191,66 @@ Use file download when:
 
 ---
 
-## operation: list
+## numa files list
 
-List files in a folder, optionally filtered by pattern.
-
-### Parameters
-
-| Parameter   | Required | Default   | Description                     |
-| ----------- | -------- | --------- | ------------------------------- |
-| `operation` | Yes      | -         | `"list"`                        |
-| `kb_id`     | No       | "company" | Folder ID to list files from    |
-| `pattern`   | No       | -         | Filename pattern (e.g., \*.pdf) |
+List the **folders** (knowledge bases) you have access to. Takes no folder/pattern flags — it always returns the full list of accessible folders with their names and ids. To see the files _inside_ a folder, use `numa files show <folder>`.
 
 ### Examples
 
 ```
-# List all files in Company Files
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Listing files in Company Files",
-  params={"operation": "list", "kb_id": "company"}
-)
-
-# List only PDF files
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Listing PDF files in Company Files",
-  params={"operation": "list", "kb_id": "company", "pattern": "*.pdf"}
-)
-
-# List files in a user folder
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Listing files in a user folder",
-  params={"operation": "list", "kb_id": "abc-123-uuid"}
-)
+# List the folders you can access (names + ids)
+Bash("numa files list --json -m 'Listing accessible folders'")
 ```
 
 ---
 
-## operation: download_folder
+## numa files show
+
+List the **files inside** a folder. Pass the folder name or id as a positional argument.
+
+### Parameters
+
+| Parameter | Required | Default | Description       |
+| --------- | -------- | ------- | ----------------- |
+| `folder`  | Yes      | -       | Folder name or id |
+
+### Examples
+
+```
+# List files in Company Files
+Bash("numa files show company --json -m 'Listing files in Company Files'")
+
+# List files in a user folder
+Bash("numa files show abc-123-uuid --json -m 'Listing files in a user folder'")
+```
+
+> To match files by glob pattern (e.g. `*.pdf`), use `numa files find '<pattern>'` instead.
+
+---
+
+## numa files download-folder
 
 Download all files in a folder (or a sub-path of one) as a zip archive.
 
 ### Parameters
 
-| Parameter     | Required | Default           | Description                |
-| ------------- | -------- | ----------------- | -------------------------- |
-| `operation`   | Yes      | -                 | `"download_folder"`        |
-| `kb_id`       | No       | "company"         | Folder ID to download from |
-| `folder_path` | No       | root              | Sub-path within the folder |
-| `output_dir`  | No       | /workdir/outputs/ | Where to save the zip      |
+| Parameter       | Required | Default        | Description                                         |
+| --------------- | -------- | -------------- | --------------------------------------------------- |
+| `folder`        | Yes      | -              | Folder name or id to download from (positional arg) |
+| `--folder-path` | No       | root           | Sub-path within the folder                          |
+| `-o, --output`  | No       | ./<folder>.zip | Local zip path to write to                          |
 
 ### Examples
 
 ```
 # Download entire Company Files
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading entire Company Files",
-  params={"operation": "download_folder", "kb_id": "company"}
-)
+Bash("numa files download-folder company -m 'Downloading entire Company Files'")
 
 # Download a specific sub-path
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading 2024 reports sub-path",
-  params={"operation": "download_folder", "kb_id": "company", "folder_path": "reports/2024/"}
-)
+Bash("numa files download-folder company --folder-path 'reports/2024/' -m 'Downloading 2024 reports sub-path'")
 
-# Download a sub-path of a user folder
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Downloading contracts from user folder",
-  params={"operation": "download_folder", "kb_id": "abc-123-uuid", "folder_path": "contracts/"}
-)
+# Download a sub-path of a user folder, to a specific zip path
+Bash("numa files download-folder abc-123-uuid --folder-path 'contracts/' -o /workdir/outputs/contracts.zip -m 'Downloading contracts from user folder'")
 ```
 
 **Limits:**
@@ -399,34 +313,24 @@ readable_name = unquote(url_encoded_filename)
 
 ---
 
-## operation: delete
+## numa files delete
 
 Delete files from a folder. Use this to remove outdated, duplicate, or incorrectly placed files.
 
 ### Parameters
 
-| Parameter   | Required | Default   | Description                                                                         |
-| ----------- | -------- | --------- | ----------------------------------------------------------------------------------- |
-| `operation` | Yes      | -         | `"delete"`                                                                          |
-| `file`      | Yes      | -         | Relative path within the folder (e.g. `"old-report.pdf"` or `"reports/draft.docx"`) |
-| `kb_id`     | No       | "company" | Folder ID                                                                           |
+| Parameter     | Required | Default | Description                                                                                                                                                                            |
+| ------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `folder/file` | Yes      | -       | Single positional arg combining folder and filename, e.g. `Company/old-report.pdf`. The folder may be a name or id; include sub-paths inline (e.g. `abc-123-uuid/reports/draft.docx`). |
 
 ### Examples
 
 ```
 # Delete file from folder root
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Deleting outdated report from Company Files",
-  params={"operation": "delete", "file": "old-report.pdf", "kb_id": "company"}
-)
+Bash("numa files delete 'company/old-report.pdf' -m 'Deleting outdated report from Company Files'")
 
 # Delete file from a sub-path
-mcp__numa__numa_tool(
-  name="numa_files",
-  description="Removing duplicate file from a folder sub-path",
-  params={"operation": "delete", "file": "3 - Agency Reports/duplicate.docx", "kb_id": "abc-123-uuid"}
-)
+Bash("numa files delete 'abc-123-uuid/3 - Agency Reports/duplicate.docx' -m 'Removing duplicate file from a folder sub-path'")
 ```
 
 ### Permissions
@@ -436,7 +340,7 @@ mcp__numa__numa_tool(
 
 ### Tips
 
-- Use `list` first to see the exact filenames/paths before deleting
+- Use `show <folder>` first to see the exact filenames/paths before deleting
 - Deleting a file also removes its metadata sidecar
 - The folder index will update within ~30 minutes after deletion
 
@@ -468,3 +372,4 @@ Based on the company policy, employees are entitled to 25 days annual leave.
 - Use the S3 URIs from the `references` array in the query results
 - List the most relevant sources (typically 1-3) rather than every result
 - If multiple documents contributed to your answer, cite all relevant ones
+- **Cite on EVERY turn that uses KB content — not just summary turns.** The most-skipped case is the headline explanation on the first turn: if your answer draws on a Numa Files document, it gets a `<kb-source:…>` tag, even when you'll summarise again later. No KB-derived claim ships without its source.

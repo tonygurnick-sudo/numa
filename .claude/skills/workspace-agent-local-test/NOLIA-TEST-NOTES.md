@@ -236,10 +236,10 @@ for line in sys.stdin:
         data = json.loads(line)
         conv = data.get('conversation_id', '')
         label = conv.split('step-')[-1] if 'step-' in conv else conv
-        tool_refs = re.findall(r'\"name\": \"(Task|TaskOutput|mcp__scripts__execute_script|TodoWrite)\"', line)
+        tool_refs = re.findall(r'\"name\": \"(Task|TaskOutput|Bash|TodoWrite)\"', line)
         task_count = sum(1 for t in tool_refs if t in ('Task', 'TaskOutput'))
-        script_count = sum(1 for t in tool_refs if t == 'mcp__scripts__execute_script')
-        print(f'{label:20s} | Task/TaskOutput: {task_count:>2} | execute_script: {script_count:>2}')
+        bash_count = sum(1 for t in tool_refs if t == 'Bash')
+        print(f'{label:20s} | Task/TaskOutput: {task_count:>2} | Bash: {bash_count:>2}')
     except: pass
 "
 

@@ -110,7 +110,7 @@ The demo uses a dedicated agent type (`numa-chat-demo`) registered in the worksp
 - Naturally suggests capabilities when relevant (document creation, data analysis, web search)
 - Explains unavailable features (KB, integrations, Ops) and directs to Arcanum for the full platform
 - Same SDK tools as `numa-chat` (Read, Write, Bash, code execution, file creation)
-- MCP tools restricted to: `execute_script`, `numa_tool` (web search, extract content, convert document only)
+- numa CLI restricted to: `numa web` (search) and `numa docs` (extract/convert) only
 - No integrations, connectors, vault, or Ops tools
 - KBs and integrations forcefully restricted (empty lists, `restrict_kbs=True`)
 - Lower turn limit (50 vs 200) for cost control

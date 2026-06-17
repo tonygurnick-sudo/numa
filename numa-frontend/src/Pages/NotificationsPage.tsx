@@ -318,23 +318,44 @@ export const NotificationsPage: React.FC = () => {
                         </small>
                       </div>
                       <div className="notifications-card-actions">
-                        {notification.schedule_id && notification.schedule_type !== 'connector' && (
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            className="notifications-action-btn"
-                            onClick={async () => {
-                              if (notification.status === 'unread') {
-                                await markAsRead(notification.notification_id);
-                              }
-                              const path = `/automations/${encodeURIComponent(notification.schedule_id)}`;
-                              navigate(path);
-                            }}
-                          >
-                            <Eye size={14} aria-hidden="true" />
-                            {t('notifications.actions.viewSchedule')}
-                          </Button>
-                        )}
+                        {(() => {
+                          if (!notification.schedule_id || notification.schedule_type === 'connector') return null;
+                          const meta = (notification.metadata ?? {}) as Record<string, unknown>;
+                          const customerId = typeof meta.customerId === 'string' ? meta.customerId : '';
+                          const contactId = typeof meta.contactId === 'string' ? meta.contactId : '';
+                          // Voice notifications deep-link to the WORK, not the system schedule:
+                          // the AE hand-off opens the CRM customer (full call history); the SDR's
+                          // call-summary opens the call record. Everything else → the schedule.
+                          const isVoice = notification.schedule_type === 'voice_call';
+                          const path =
+                            isVoice && customerId
+                              ? `/ops?customer=${encodeURIComponent(customerId)}`
+                              : isVoice && contactId
+                                ? `/voice/calls/${encodeURIComponent(contactId)}`
+                                : `/automations/${encodeURIComponent(notification.schedule_id)}`;
+                          const label =
+                            isVoice && customerId
+                              ? t('notifications.actions.viewProspect', { defaultValue: 'View prospect' })
+                              : isVoice && contactId
+                                ? t('notifications.actions.viewCall', { defaultValue: 'View call' })
+                                : t('notifications.actions.viewSchedule');
+                          return (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="notifications-action-btn"
+                              onClick={async () => {
+                                if (notification.status === 'unread') {
+                                  await markAsRead(notification.notification_id);
+                                }
+                                navigate(path);
+                              }}
+                            >
+                              <Eye size={14} aria-hidden="true" />
+                              {label}
+                            </Button>
+                          );
+                        })()}
                         {notification.status === 'unread' && (
                           <Button
                             variant="secondary"

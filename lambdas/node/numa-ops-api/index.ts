@@ -471,6 +471,39 @@ const findTicketByUuid = async (ticketId: string): Promise<Record<string, unknow
 };
 
 /**
+ * IDOR guard for ticket-scoped routes (single-ticket GET, by-display-id, audit,
+ * comments). These routes key off `TICKET#{ticketId}` and historically read or
+ * mutated data without verifying the caller can see the board that owns the
+ * ticket, allowing cross-team data access (NUMA-1211).
+ *
+ * Resolve the ticket — reusing a copy the caller already loaded to avoid a
+ * redundant board fan-out — load its team meta, and apply the same
+ * `hasTeamAccess` rule the board/list routes use. Returns `{ ticket }` on
+ * success or `{ response }` carrying the 404/403 to return verbatim. Matches the
+ * existing convention of only enforcing access when the team meta exists
+ * (orphaned tickets fail open, as elsewhere in this file).
+ */
+const authorizeTicketAccess = async (
+  ticketId: string,
+  auth: AuthContext,
+  knownTicket?: Record<string, unknown>
+): Promise<
+  | { ticket: Record<string, unknown>; response?: undefined }
+  | { ticket?: undefined; response: ReturnType<typeof jsonResponse> }
+> => {
+  const ticket = knownTicket ?? (await findTicketByUuid(ticketId));
+  if (!ticket) return { response: errorResponse(404, 'Ticket not found') };
+  const teamId = String(ticket.teamId ?? '');
+  if (teamId) {
+    const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (teamMeta && !hasTeamAccess(teamMeta, auth)) {
+      return { response: errorResponse(403, 'You do not have access to this board') };
+    }
+  }
+  return { ticket };
+};
+
+/**
  * Sanitize RichTextEditor HTML for inclusion in email bodies. The RTE emits a
  * narrow tag set plus the occasional `<div><br></div>` paragraph-break artefact
  * and bare URLs that aren't wrapped in <a>. We:
@@ -1634,6 +1667,8 @@ const handleTickets = async (
   // GET /ops/tickets/{ticketId}/audit
   if (method === 'GET' && segments.length === 2 && segments[1] === 'audit') {
     const ticketId = segments[0];
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
     const items = await queryByPK(`TICKET#${ticketId}`, 'AUDIT#');
     // Sort reverse chronological (newest first) — SK is AUDIT#{timestamp}#{id}
     items.sort((a, b) => String(b.SK).localeCompare(String(a.SK)));
@@ -1654,6 +1689,8 @@ const handleTickets = async (
   // GET /ops/tickets/{ticketId}/comments
   if (method === 'GET' && segments.length === 2 && segments[1] === 'comments') {
     const ticketId = segments[0];
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
     const items = await queryByPK(`TICKET#${ticketId}`, 'COMMENT#');
     return jsonResponse(200, { comments: items });
   }
@@ -1663,6 +1700,13 @@ const handleTickets = async (
     const ticketId = segments[0];
     const { content, attachments } = body;
     if (!content) return errorResponse(400, 'Missing required field: content');
+
+    // IDOR guard — resolve the ticket and verify board access before writing.
+    // Resolving here also hands us the ticket needed for the mention email and
+    // the commentCount bump below, so there's no second fan-out lookup.
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
+    const ticket = access.ticket;
 
     const commentId = randomUUID();
     const ts = now();
@@ -1692,10 +1736,6 @@ const handleTickets = async (
         mentions.add(match[1]);
       }
     }
-
-    // Look up the ticket up-front — we need its title/displayId/type for the
-    // mention email, and we need to bump commentCount on it afterwards.
-    const ticket = await findTicketByUuid(ticketId);
 
     if (mentions.size > 0 && ticket && process.env.EMAIL_SENDER_LAMBDA_ARN) {
       try {
@@ -1803,6 +1843,8 @@ const handleTickets = async (
   if (method === 'PUT' && segments.length === 3 && segments[1] === 'comments') {
     const ticketId = segments[0];
     const commentId = segments[2];
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
     // Find the comment
     const comments = await queryByPK(`TICKET#${ticketId}`, 'COMMENT#');
     const existing = comments.find((c) => c.commentId === commentId);
@@ -1823,6 +1865,8 @@ const handleTickets = async (
   if (method === 'DELETE' && segments.length === 3 && segments[1] === 'comments') {
     const ticketId = segments[0];
     const commentId = segments[2];
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
     const comments = await queryByPK(`TICKET#${ticketId}`, 'COMMENT#');
     const existing = comments.find((c) => c.commentId === commentId);
     if (!existing) return errorResponse(404, 'Comment not found');
@@ -1860,6 +1904,12 @@ const handleTickets = async (
     const lt = String(linkType);
     const inverse = LINK_INVERSE[lt];
     if (!inverse) return errorResponse(400, `Invalid linkType: ${lt}`);
+
+    // IDOR guard — verify access to the board that owns the source ticket.
+    // Resolved by fan-out rather than trusting the client-supplied boardId.
+    // (NUMA-1211)
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
 
     const linkedId = String(linkedTicketId);
     const linkedDisplayId = String(linkedTicketDisplayId);
@@ -1958,6 +2008,12 @@ const handleTickets = async (
     const inverse = LINK_INVERSE[lt];
     if (!inverse) return errorResponse(400, `Invalid linkType: ${lt}`);
 
+    // IDOR guard — verify access to the board that owns the source ticket.
+    // Resolved by fan-out rather than trusting the client-supplied boardId.
+    // (NUMA-1211)
+    const access = await authorizeTicketAccess(ticketId, auth);
+    if (access.response) return access.response;
+
     const transactItems = [
       {
         Delete: {
@@ -2014,8 +2070,10 @@ const handleTickets = async (
     const displayId = decodeURIComponent(segments[1]);
     const ticket = await queryGSI3(`TID#${displayId}`, 'TICKET');
     if (!ticket) return errorResponse(404, 'Ticket not found');
-    // Fetch links and recent comments
     const ticketId = String(ticket.id);
+    const access = await authorizeTicketAccess(ticketId, auth, ticket as Record<string, unknown>);
+    if (access.response) return access.response;
+    // Fetch links and recent comments
     const [links, comments] = await Promise.all([
       queryByPK(`TICKET#${ticketId}`, 'LINK#'),
       queryByPK(`TICKET#${ticketId}`, 'COMMENT#'),
@@ -2439,6 +2497,9 @@ const handleTickets = async (
 
     if (!ticket) return errorResponse(404, 'Ticket not found');
 
+    const access = await authorizeTicketAccess(ticketId, auth, ticket);
+    if (access.response) return access.response;
+
     // Fetch links, recent comments, and the recurrence (if any) in parallel
     const [links, comments, recurrence] = await Promise.all([
       queryByPK(`TICKET#${ticketId}`, 'LINK#'),
@@ -2515,8 +2576,13 @@ const handleTickets = async (
     ]);
     const unknownKeys = Object.keys(body).filter((k) => !knownCreateFields.has(k));
 
-    if (!rawTeamId || !rawStageId || !title)
-      return errorResponse(400, 'Missing required fields: boardId, stageId, title');
+    if (!rawTeamId || !rawStageId || !title) {
+      const missing: string[] = [];
+      if (!rawTeamId) missing.push('boardId');
+      if (!rawStageId) missing.push('stageId');
+      if (!title) missing.push('title');
+      return errorResponse(400, `Missing required field${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`);
+    }
 
     const teamId = String(rawTeamId);
 
@@ -2661,6 +2727,15 @@ const handleTickets = async (
 
     const existing = await getItem(`TEAM#${currentTeamId}`, `TICKET#${ticketId}`);
     if (!existing) return errorResponse(404, 'Ticket not found');
+
+    // Verify access to the board the ticket currently lives on (source). The
+    // cross-team-move block below additionally guards the *target* board — both
+    // checks are needed so a non-member can neither edit a ticket on a board
+    // they can't see nor move it onto one. (NUMA-1211)
+    const currentMeta = (await queryByPK(`TEAM#${currentTeamId}`, 'META'))[0];
+    if (currentMeta && !hasTeamAccess(currentMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this board');
+    }
 
     // Optimistic locking
     const expectedVersion = body.version;
@@ -3105,6 +3180,12 @@ const handleTickets = async (
     const existing = await getItem(`TEAM#${teamId}`, `TICKET#${ticketId}`);
     if (!existing) return errorResponse(404, 'Ticket not found');
 
+    // IDOR guard — verify access to the board that owns the ticket. (NUMA-1211)
+    const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    if (teamMeta && !hasTeamAccess(teamMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this board');
+    }
+
     const ts = now();
     const updated: Record<string, unknown> = {
       ...existing,
@@ -3143,6 +3224,10 @@ const handleTickets = async (
 
     // Restore ticket to team's default stage (derive statusType from it)
     const teamMeta = (await queryByPK(`TEAM#${teamId}`, 'META'))[0];
+    // IDOR guard — verify access to the board that owns the ticket. (NUMA-1211)
+    if (teamMeta && !hasTeamAccess(teamMeta, auth)) {
+      return errorResponse(403, 'You do not have access to this board');
+    }
     const defaultStageId = teamMeta?.defaultStageId ? String(teamMeta.defaultStageId) : undefined;
     let restoreStageId = existing.stageId as string;
     let restoreZoneId = existing.zoneId as string;

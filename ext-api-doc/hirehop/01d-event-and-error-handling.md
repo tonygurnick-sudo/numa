@@ -1,239 +1,136 @@
 ---
-api_name: 'HireHop'
-api_slug: 'hirehop'
-generated_from: '00-api-investigation-questionnaire'
-generated_date: '2026-05-29'
-source_phases: ['Phase 7: Real-Time & Event-Driven', 'Phase 8: Operational Concerns']
+api_name: HireHop
+api_slug: hirehop
+doc: event-and-error-handling (companion to 01-llm-api-rules.md — on-demand)
+call_surface: HTTP via `numa integrations request`; path = {base_url}{path} incl. .php script; X-TOKEN header
+confidence: MEDIUM — webhook payload + export_key + rate-limit (429/327) well documented; full event list + full numeric error-code table NOT published. Tags [INFERRED]/[UNKNOWN] where below default
 ---
 
-# HireHop -- Event & Error Handling Reference
+# HireHop — Event & Error Handling Reference
 
-> Companion to `01-llm-api-rules.md`. Event-driven capabilities (webhooks, polling),
-> error handling, rate limits, and recovery playbooks.
->
-> **Confidence: MEDIUM.** Webhook payload + `export_key` + rate-limit (429/327) are well
-> documented; the full event list and full numeric error-code table are NOT published.
-> Tags: `[DOCUMENTED]`, `[INFERRED]`, `[UNKNOWN]`.
-
----
+Webhooks, polling, error handling, rate limits, recovery.
 
 ## Event-Driven Capabilities
 
-| Mechanism                | Supported | Notes                                                    |
-| ------------------------ | --------- | -------------------------------------------------------- |
-| Webhooks                 | **Yes**   | First-class; configured in company settings [DOCUMENTED] |
-| WebSocket                | No        | [INFERRED]                                               |
-| Server-Sent Events (SSE) | No        | [INFERRED]                                               |
-| Long polling             | No        | [INFERRED]                                               |
-| Change feeds / streams   | No        | [INFERRED]                                               |
-
----
+| Mechanism              | Supported                                             |
+| ---------------------- | ----------------------------------------------------- |
+| Webhooks               | **Yes** — first-class; configured in company settings |
+| WebSocket              | No [INFERRED]                                         |
+| Server-Sent Events     | No [INFERRED]                                         |
+| Long polling           | No [INFERRED]                                         |
+| Change feeds / streams | No [INFERRED]                                         |
 
 ## Webhooks
 
 ### Setup
 
-- **Registration method:** **UI only** — Settings → Company Settings → Webhooks → New → enter target URL + tick the events to subscribe to. [DOCUMENTED]
-- **Registration endpoint:** none — there is **no API to manage webhook subscriptions.** [DOCUMENTED]
-- **URL requirements:** a reachable HTTP(S) endpoint. [DOCUMENTED]
+UI only — Settings → Company Settings → Webhooks → New → enter target URL + tick events. There is **no API to manage webhook subscriptions.** URL: any reachable HTTP(S) endpoint.
 
 ### Event Catalog
 
-| Event Name                    | Trigger                | Key Payload Fields                           | Confidence                           |
-| ----------------------------- | ---------------------- | -------------------------------------------- | ------------------------------------ |
-| `invoice.status.updated`      | Invoice status changes | `event`, `data`, `changes.{FIELD}.{from,to}` | [DOCUMENTED]                         |
-| `job.status.*`                | Job status changes     | same envelope                                | [INFERRED]                           |
-| (other `entity.action.event`) | per UI checkboxes      | same envelope                                | [INFERRED — full list not published] |
+| Event                         | Trigger                | Confidence                           |
+| ----------------------------- | ---------------------- | ------------------------------------ |
+| `invoice.status.updated`      | Invoice status changes | [DOCUMENTED]                         |
+| `job.status.*`                | Job status changes     | [INFERRED]                           |
+| (other `entity.action.event`) | per UI checkboxes      | [INFERRED — full list not published] |
 
-> The docs publish the **payload shape** and one concrete event (`invoice.status.updated`) but NOT the full event list. Enumerate it from the Webhooks settings UI on a live tenant. [DOCUMENTED / discovery needed]
+Docs publish the payload shape and one concrete event (`invoice.status.updated`) but NOT the full list. Enumerate from the Webhooks settings UI on a live tenant.
 
-### Payload Format [DOCUMENTED]
+### Payload Format
 
 HireHop POSTs JSON to your endpoint:
-
-```json
-{
-  "time": "2026-05-29 07:50:42",
-  "user_id": 1,
-  "user_name": "John Smith",
-  "user_email": "john@email.com",
-  "company_id": 1,
-  "export_key": "22u43mrjwe7u",
-  "event": "invoice.status.updated",
-  "data": {},
-  "changes": {
-    "STATUS": { "from": "1", "to": "2" }
-  }
-}
-```
+`{"time":"2026-05-29 07:50:42","user_id":1,"user_name":"John Smith","user_email":"john@email.com","company_id":1,"export_key":"22u43mrjwe7u","event":"invoice.status.updated","data":{},"changes":{"STATUS":{"from":"1","to":"2"}}}`
 
 - `time` — UTC timestamp the webhook was sent.
-- `user_id` / `user_name` / `user_email` — the user who triggered the event.
+- `user_id`/`user_name`/`user_email` — the user who triggered the event.
 - `company_id` — the tenant.
-- `export_key` — security check value (see below).
-- `event` — the event name.
+- `export_key` — security check value (below).
+- `event` — event name.
 - `data` — event-related info (shape varies by event).
-- `changes` — map of changed fields, each `{ "from": old, "to": new }`. [DOCUMENTED]
+- `changes` — map of changed fields, each `{"from":old,"to":new}`.
 
 ### Verification / Security
 
-- **Shared-secret check:** the body `export_key` must equal the **export key** in the tenant's company settings. Verify it to authenticate the sender. [DOCUMENTED]
-- **Signature header:** **none** — there is NO HMAC signature. The body `export_key` is the only check. Compare it with a constant-time string comparison. [DOCUMENTED]
-- **IP allowlist:** not documented. [UNKNOWN]
+- **Shared-secret check:** body `export_key` must equal the **export key** in the tenant's company settings. Compare constant-time.
+- **No HMAC signature** — the body `export_key` is the only authenticity check.
+- IP allowlist: not documented [UNKNOWN].
 
 ### Reliability
 
-- **Retry policy:** **none.** HireHop does NOT wait for a response, does NOT report HTTP errors back, and does NOT retry — fire-and-forget. [DOCUMENTED]
-- **Ordering / duplicates:** not guaranteed / not documented. [UNKNOWN]
-- **Consequence:** a webhook outage = permanent miss. **Reconcile by polling** (re-read affected jobs/invoices). [DOCUMENTED]
-
----
-
-## WebSocket / SSE
-
-Not supported. [INFERRED]
-
----
+Fire-and-forget — HireHop does NOT wait for a response, does NOT report HTTP errors back, does NOT retry. Ordering/duplicates not guaranteed [UNKNOWN]. A webhook outage = permanent miss → **reconcile by polling** (re-read affected jobs/invoices).
 
 ## Polling Fallback
 
-> HireHop has **no "modified since" filter**, so polling is coarse. Use webhooks for status changes; poll on demand otherwise.
+HireHop has **no "modified since" filter** → polling is coarse. Use webhooks for status changes; poll on demand otherwise.
 
-### Recommended Approach
+- **Jobs:** re-read by ID with `job_data.php?job={id}` when current state is needed. No list-changed-jobs endpoint with a timestamp filter [INFERRED].
+- **Availability:** query `availability_get_available.php` fresh each time (never cache).
+- **Reference data (depots, categories, custom-field defs):** poll infrequently; safe to cache ~5 min [INFERRED].
 
-- **Jobs:** re-read by ID with `job_data.php?job={id}` when you need current state. There is no list-changed-jobs endpoint with a timestamp filter. [INFERRED]
-- **Availability:** query `availability_get_available.php` fresh each time (never cache). [DOCUMENTED]
-- **Reference data (depots, categories, custom-field defs):** poll infrequently; safe to cache ~5 min. [INFERRED]
+**Pattern (coarse):**
 
-### Polling Pattern (coarse)
-
-```
 1. Maintain the set of job IDs you care about.
-2. Re-read each via job_data.php on demand or on a slow cadence.
-3. Compare STATUS / fields against your last-seen snapshot.
+2. Re-read each via `job_data.php` on demand or on a slow cadence.
+3. Compare STATUS/fields against your last-seen snapshot.
 4. Stay within 60 req/min and 3 req/s (one poll per job costs one request).
-```
 
-### Rate-Limit Budget for Polling [DOCUMENTED]
-
-- Hard caps: 60 requests / 60 s AND 3 requests / s per user.
-- Reserve headroom for user-initiated actions — do not consume the whole budget polling.
-- Watch `X-RateLimit-Available` (a Unix timestamp) to time the next request.
-
-### Efficient Polling Tips
-
-- Prefer webhooks for status changes; poll only what webhooks can't cover.
-- Cache slow-changing reference data (depots, categories, custom-field defs).
-- Never cache availability or financial totals.
-- Batch reads logically; a `jobs_totals.php` call covers up to 50 jobs in one request. [DOCUMENTED]
-
----
+**Polling tips:** prefer webhooks for status; cache slow-changing reference data; never cache availability or financial totals; batch reads — `jobs_totals.php` covers up to 50 jobs per request; reserve rate headroom for user-initiated actions; watch `X-RateLimit-Available` (Unix ts) to time the next request.
 
 ## Error Handling
 
-### Standard Error Response Format [DOCUMENTED]
+### Standard Error Format
 
-Application errors return a JSON object with a numeric (or text) `error` code. The human-readable _message_ is NOT in the body — it lives in HireHop language files (e.g. `en-US.js`) keyed by the code. **Inspect the body's `error` field even on an otherwise-2xx response.**
-
-```json
-{ "error": 327 }
-```
-
-### Error Field Summary
-
-| Field | Type          | Always Present? | Description                                                         |
-| ----- | ------------- | --------------- | ------------------------------------------------------------------- |
-| error | number/string | on error        | HireHop error code (numeric usual; resolves to a lang-file message) |
+Application errors return a JSON object with a numeric (or text) `error` CODE — the message is NOT in the body (it lives in HireHop lang files e.g. `en-US.js`, keyed by the code). **Inspect the body's `error` field even on an otherwise-2xx response.**
+`{"error":327}`
+The `error` field is present on error only; type number/string; numeric usual, resolves to a lang-file message.
 
 ### Recovery Playbook
 
-| HTTP Status | Error Code(s) | Meaning                   | Retryable? | Recovery Action                                                                          | Max Retries |
-| ----------- | ------------- | ------------------------- | ---------- | ---------------------------------------------------------------------------------------- | ----------- |
-| 200         | `error` set   | Application error in body | Depends    | Read `error` (3 = missing params); fix the request                                       | 0           |
-| 400         | `error` set   | Bad/malformed request     | No         | Fix params per the code                                                                  | 0           |
-| 401 / 403   | —             | Invalid/expired token     | No         | Token invalidated (user re-login or pw change) → regenerate; advise a dedicated API user | 0           |
-| 404         | —             | Wrong host or path        | No         | Use the tenant `base_url` (NOT `www.hirehop.com`); check the path                        | 0           |
-| 429         | 327           | Rate limit exceeded       | Yes        | Back off; respect 60/min + 3/s; honor `X-RateLimit-Available`                            | 3           |
-| 5xx         | —             | Server error              | Yes        | Retry with exponential backoff                                                           | 3           |
+| HTTP    | Code(s)     | Meaning                   | Retryable | Action                                                                                   | Max retries |
+| ------- | ----------- | ------------------------- | --------- | ---------------------------------------------------------------------------------------- | ----------- |
+| 200     | `error` set | Application error in body | Depends   | Read `error` (3=missing params); fix request                                             | 0           |
+| 400     | `error` set | Bad/malformed request     | No        | Fix params per the code                                                                  | 0           |
+| 401/403 | —           | Invalid/expired token     | No        | Token invalidated (user re-login or pw change) → regenerate; advise a dedicated API user | 0           |
+| 404     | —           | Wrong host or path        | No        | Use tenant `base_url` (NOT `www.hirehop.com`); check the path                            | 0           |
+| 429     | 327         | Rate limit exceeded       | Yes       | Back off; respect 60/min + 3/s; honor `X-RateLimit-Available`                            | 3           |
+| 5xx     | —           | Server error              | Yes       | Exponential backoff                                                                      | 3           |
 
 ### Error Code Reference
 
-| Error Code | Meaning                                                | Common Cause                       | Fix                                                               |
-| ---------- | ------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------------------- |
-| 3          | "Missing parameters"                                   | Required create/edit param omitted | Supply the missing param (e.g. `name`/`out`/`start`) [DOCUMENTED] |
-| 327        | "Security warning, too many transactions" (rate limit) | >60/min or >3/s per token          | Back off and retry after the window [DOCUMENTED]                  |
-| (others)   | Not published                                          | —                                  | Treat as non-retryable; surface the code [INFERRED]               |
+| Code     | Meaning                                                | Common cause                       | Fix                                                  |
+| -------- | ------------------------------------------------------ | ---------------------------------- | ---------------------------------------------------- |
+| 3        | "Missing parameters"                                   | Required create/edit param omitted | Supply the missing param (e.g. `name`/`out`/`start`) |
+| 327      | "Security warning, too many transactions" (rate limit) | >60/min or >3/s per token          | Back off and retry after the window                  |
+| (others) | Not published                                          | —                                  | Treat as non-retryable; surface the code [INFERRED]  |
 
-> The complete numeric error-code table is not published — 3 and 327 are the documented ones. Treat unknown codes as non-retryable and surface them to the user. [DOCUMENTED / INFERRED]
+### Rate Limit Details
 
-### Rate Limit Details [DOCUMENTED]
+| Scope          | Limit       | Window          |
+| -------------- | ----------- | --------------- |
+| Per user/token | 60 requests | 60 s            |
+| Per user/token | 3 requests  | 1 s (burst cap) |
 
-| Scope    | Limit       | Window | Notes     |
-| -------- | ----------- | ------ | --------- |
-| Per user | 60 requests | 60 s   | Per token |
-| Per user | 3 requests  | 1 s    | Burst cap |
+Response headers: `X-Request-Count` = requests made in the last 60 s (e.g. `41`); `X-RateLimit-Available` = **Unix timestamp** of when the next request is allowed (e.g. `1748505600`), NOT a remaining count.
+Exceeded response: `HTTP 429`, headers `X-Request-Count: 61` + `X-RateLimit-Available: 1748505600`, body `{"error":327}`.
 
-**Rate limit headers (on responses):**
+**Backoff:**
 
-| Header                  | Meaning                                                | Example      |
-| ----------------------- | ------------------------------------------------------ | ------------ |
-| `X-Request-Count`       | Requests made in the last 60 s                         | `41`         |
-| `X-RateLimit-Available` | **Unix timestamp** of when the next request is allowed | `1748505600` |
-
-**Rate-limit exceeded response:**
-
-```
-HTTP/1.1 429 Too Many Requests
-X-Request-Count: 61
-X-RateLimit-Available: 1748505600
-```
-
-```json
-{ "error": 327 }
-```
-
-**Backoff strategy:**
-
-1. On 429 / error 327, read `X-RateLimit-Available` and wait until that Unix time before retrying.
-2. If absent, exponential backoff starting at 2 s, max 60 s, with 0–1 s jitter.
+1. On 429/error 327, read `X-RateLimit-Available` and wait until that Unix time before retrying.
+2. If absent, exponential backoff starting 2 s, max 60 s, with 0–1 s jitter.
 3. Proactively throttle to ≤3/s and ≤60/min; watch `X-Request-Count` approaching 60.
 4. Max 3 retries for rate limits, then surface the error.
 
----
+## Counter-Exceptions (differ from standard HTTP/REST)
 
-## Counter-Exceptions
+1. **Application errors can ride on a 2xx** — HireHop may return HTTP 200 with `{"error":<code>}`. Inspect the body `error` regardless of status.
+2. **Error bodies carry a CODE, not a message** — `{"error":327}`; map the code to a message yourself.
+3. **`X-RateLimit-Available` is a timestamp, not a count** — it tells you when you may call again, not how many remain.
+4. **Webhooks are fire-and-forget** — unsigned, `export_key`-only, never retried, no delivery confirmation.
+5. **No "modified since" anywhere** — re-read full records; rely on webhooks for change signals [INFERRED].
 
-> Behaviors that differ from standard HTTP/REST conventions.
+## Output Formatting Guide (presenting responses to the user)
 
-1. **Application errors can ride on a 2xx.** HireHop may return HTTP 200 with `{"error": <code>}` in the body.
-   - Standard: errors use 4xx/5xx status.
-   - Actual: inspect the body `error` field regardless of status. [DOCUMENTED]
-
-2. **Error bodies carry a CODE, not a message.** The text lives in language files; the body is just the number.
-   - Standard: `{"message": "..."}`.
-   - Actual: `{"error": 327}` — map the code to a message yourself. [DOCUMENTED]
-
-3. **`X-RateLimit-Available` is a timestamp, not a count.** Many APIs expose "remaining"; HireHop exposes "when you may call again".
-   - Standard: remaining-requests integer.
-   - Actual: a Unix timestamp. [DOCUMENTED]
-
-4. **Webhooks are fire-and-forget.** No retry, no delivery confirmation, no signature.
-   - Standard: signed payloads with retry/backoff.
-   - Actual: unsigned, `export_key`-only, never retried. [DOCUMENTED]
-
-5. **No "modified since" anywhere.** Polling cannot be incremental.
-   - Standard: `updated_at` / `If-Modified-Since` filters.
-   - Actual: re-read full records; rely on webhooks for change signals. [INFERRED]
-
----
-
-## Output Formatting Guide
-
-> How to present HireHop responses to the user in the workspace agent.
-
-### Recommended Display Formats
-
-| Data Type | Format              | Example                                                                                      |
+| Data type | Format              | Example                                                                                      |
 | --------- | ------------------- | -------------------------------------------------------------------------------------------- |
 | Job       | Summary line        | "Job #52: Summer Festival Main Stage — Booked, Main Depot, 10–15 Jun"                        |
 | Line item | Title + qty + price | "LED Par 64 ×4 — £180.00 (weekly)"                                                           |
@@ -245,16 +142,5 @@ X-RateLimit-Available: 1748505600
 | Status    | Label + colour      | "[Booked]" (label requires the verified status map)                                          |
 | Errors    | Clear message       | "Could not save the job: missing required parameter (error 3). Supply name, out, and start." |
 
-### Truncation Rules
-
-- Lists: show first 10 records, note the total.
-- Long fields (`details`, addresses): truncate at ~200 chars with "…".
-- Nested records: show 2 levels deep (job → line items, not deeper nesting).
-
-### Status Display Caveat
-
-Do NOT display a status label unless you have verified the tenant's numeric→label map. If unverified, show the raw `STATUS` integer and note it is unmapped. [INFERRED]
-
----
-
-_Generated from the investigation questionnaire (Phases 7-8) + official HireHop docs. NOT live-tested._
+**Truncation:** lists — show first 10 records, note the total; long fields (`details`, addresses) — truncate ~200 chars with "…"; nested — show 2 levels deep (job → line items, no deeper).
+**Status display caveat:** do NOT display a status label unless you have verified the tenant's numeric→label map. If unverified, show the raw `STATUS` integer and note it is unmapped [INFERRED].

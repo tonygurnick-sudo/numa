@@ -24,6 +24,19 @@ doc = Document()
 doc.save('/workdir/outputs/result.docx')
 ```
 
+> **Saving/uploading to Files: save the `.docx`, not a PDF rendition.** When the user asks to save,
+> store, or upload the document, upload the source **`.docx`** — never a PDF you generated for
+> rendering/QA. Only save a PDF if the user explicitly asks for one, and report the actual extension you
+> uploaded (don't claim you saved a `.docx` when you uploaded a `.pdf`).
+
+---
+
+## Editing strategy & text fidelity
+
+**Iterate in place — don't regenerate.** When revising a document across turns, load it and edit the specific paragraphs/cells with python-docx (or `Edit` the generator script's _data_, not re-emit the whole script). Do NOT re-run a giant build-from-scratch script every turn — one bench re-ran a ~700-line generator on every edit, which dominated its cost and steadily lost fidelity. Build once; after that, open the real `.docx` and change only what needs changing.
+
+**Preserve diacritics and Unicode exactly.** Names and te reo Māori / accented text must survive verbatim — "Te Whetū" stays "Te Whetū", never "Te Whetu" or a `□` box glyph. python-docx writes Unicode correctly; the failure shows up at render time when the chosen font lacks the glyph. Use a font with full Latin Extended-A coverage (Calibri, Arial, or DejaVu Sans — all installed) and never strip or ASCII-fold accents to "simplify". If you convert the DOCX to PDF, confirm the macrons survived in the output (see pdf-handling for UTF-8 font setup).
+
 ---
 
 ## Understanding Word Document Structure
@@ -44,6 +57,8 @@ Before working with DOCX files, understand their architecture:
 ---
 
 ## Creating DOCX Files
+
+> **For a branded document, load the `visual-design` skill first** for the Numa colour/font tokens and report recipe — or to match a user's own brand (it resolves whose brand applies). `build_styled_doc.py` (Helper Scripts) already applies the Numa look with a diacritic-safe font.
 
 ### Basic Document Creation
 
@@ -71,6 +86,8 @@ print("Created: /workdir/outputs/new_document.docx")
 ```
 
 ### Adding Tables
+
+> **For anything beyond a trivial table, use the `docx_table.py` helper** (see [Helper Scripts](#helper-scripts)) rather than the hand-rolled pattern below — it pads ragged rows so a column is never left blank, handles multi-line cells, and styles the header for you. The manual pattern below is for reference and fine-grained control.
 
 ```python
 from docx import Document
@@ -185,7 +202,7 @@ python -m markitdown /workdir/uploads/document.docx
 
 This outputs the document content as markdown — great for quick review or processing.
 
-> **For richer extraction** (full body, tables, more accurate structure) and for legacy/template formats (`.doc`, `.dot`, `.dotx`) where markitdown often returns empty or truncated content, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+> **For richer extraction** (full body, tables, more accurate structure) and for legacy/template formats (`.doc`, `.dot`, `.dotx`) where markitdown often returns empty or truncated content, prefer `numa docs extract /path -m "..."` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 ### Extract All Text with python-docx
 
@@ -553,10 +570,10 @@ pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx --reference-doc=/workdir/uploads/template.docx
 ```
 
-### MCP Tool Fallback
+### CLI Fallback
 
-```
-mcp__numa__numa_tool(name="convert_document", description="Converting markdown report to DOCX", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
+```bash
+numa docs convert /workdir/outputs/report.md --format docx -m "Converting markdown report to DOCX"
 ```
 
 **Why this approach works well:**
@@ -605,22 +622,22 @@ mcp__numa__numa_tool(name="convert_document", description="Converting markdown r
 
 ## Document Conversion (PDF ↔ DOCX)
 
-Use the `convert_document` tool (via `numa_tool` MCP) for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
+Use the `numa docs convert` CLI for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion. The mode is **auto-detected from the file type** — pass `--format`, not `--mode`: Office/PDF inputs (`.docx`/`.pdf`/…) use direct LibreOffice conversion, text/markdown inputs (`.md`/`.txt`) go through Pandoc.
 
-> `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same `mode="file"` call.
+> `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same call.
 
-```
+```bash
 # DOCX → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.docx", "format": "pdf", "mode": "file"})
+numa docs convert /workdir/uploads/document.docx --format pdf -m "Converting DOCX to PDF"
 
 # PDF → DOCX
-numa_tool(name="convert_document", params={"file_path": "/workdir/uploads/document.pdf", "format": "docx", "mode": "file"})
+numa docs convert /workdir/uploads/document.pdf --format docx -m "Converting PDF to DOCX"
 
 # Markdown → DOCX
-numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/report.md", "format": "docx", "mode": "markdown"})
+numa docs convert /workdir/outputs/report.md --format docx -m "Converting markdown to DOCX"
 
 # Markdown → PDF
-numa_tool(name="convert_document", params={"file_path": "/workdir/outputs/report.md", "format": "pdf", "mode": "markdown"})
+numa docs convert /workdir/outputs/report.md --format pdf -m "Converting markdown to PDF"
 ```
 
 Local markdown conversion is also available:
@@ -640,22 +657,22 @@ pandoc /workdir/outputs/report.md -o /workdir/outputs/report.docx
 
 ### When to Use python-docx vs. Conversion Tools
 
-| Scenario                       | Recommended Approach                                     |
-| ------------------------------ | -------------------------------------------------------- |
-| Creating new DOCX from scratch | python-docx (this skill)                                 |
-| Filling DOCX templates         | python-docx (this skill)                                 |
-| Modifying existing DOCX        | python-docx (this skill)                                 |
-| Converting DOCX → PDF          | `convert_document` tool (mode="file")                    |
-| Converting Markdown → DOCX     | `pandoc` (local) or `convert_document` (mode="markdown") |
-| Complex/scanned PDFs           | `extract_content` tool (via `numa_tool` MCP) + `pandoc`  |
+| Scenario                       | Recommended Approach                        |
+| ------------------------------ | ------------------------------------------- |
+| Creating new DOCX from scratch | python-docx (this skill)                    |
+| Filling DOCX templates         | python-docx (this skill)                    |
+| Modifying existing DOCX        | python-docx (this skill)                    |
+| Converting DOCX → PDF          | `numa docs convert` CLI                     |
+| Converting Markdown → DOCX     | `pandoc` (local) or `numa docs convert` CLI |
+| Complex/scanned PDFs           | `numa docs extract` CLI + `pandoc`          |
 
 ### Alternative: Extract + Convert (for complex PDFs)
 
 For scanned or complex PDFs where direct conversion fails:
 
-```
-# Step 1: Extract content using vision AI (via MCP tool)
-mcp__numa__numa_tool(name="extract_content", description="Extracting content from scanned document", params={"file_path": "/workdir/uploads/scanned_document.pdf"})
+```bash
+# Step 1: Extract content using vision AI
+numa docs extract /workdir/uploads/scanned_document.pdf -m "Extracting content from scanned document"
 ```
 
 ```bash
@@ -672,3 +689,24 @@ pandoc /workdir/tmp/extracted_scanned_document.txt -o /workdir/outputs/document.
 - **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.
+
+---
+
+## Helper Scripts
+
+- **`build_styled_doc.py`** — branded DOCX from a JSON spec with a diacritic-safe font (macrons survive), purple headings, and image/table helpers. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+
+  ```bash
+  python3 /app/plugins/numa/skills/docx-handling/helpers/build_styled_doc.py --spec @/workdir/tmp/doc.json
+  ```
+
+- **`docx_table.py`** — robust, styled table from `--headers` + `--rows` (JSON, inline or `@file`). **Use this for any non-trivial table instead of hand-rolling `add_table` + row-fill code** — it pads short rows and truncates long ones so a column is never silently left blank, renders multi-line cells (newlines), and styles the header (bold + purple). Append to a doc you're already editing with `--into`, or write a fresh one-table doc with `--out`. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+  ```bash
+  # append a table (under a heading) to a report you're building
+  python3 /app/plugins/numa/skills/docx-handling/helpers/docx_table.py \
+    --into /workdir/outputs/report.docx --heading "Risk register" \
+    --headers '["Risk","Likelihood","Impact","Mitigation"]' \
+    --rows @/workdir/tmp/rows.json
+  ```
+
+Generic starting point — copy into `/workdir/chat-workflows/` and adapt for a user's recurring document job.

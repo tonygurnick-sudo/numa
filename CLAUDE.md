@@ -57,41 +57,42 @@ Skills are stored in `.claude/skills/` and contain detailed context for specific
 - **Claude Code / Anthropic models:** Activate the skill by name (e.g., `/numa-connectors`).
 - **Other AI tools:** Read the skill's `SKILL.md` file directly from `.claude/skills/<skill-name>/SKILL.md` (and any supporting `.md` files in the same folder). The content is the same — just markdown on disk.
 
-| Skill                        | When to activate                                                                                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                                           |
-| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                                |
-| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                                |
-| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                                 |
-| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                                              |
-| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers                     |
-| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                                           |
-| `numa-triggers`              | Numa Automations event triggers (native + Pipedream-backed) — adding sources, debugging webhooks, trigger lifecycle, source/trigger picker UX            |
-| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                                   |
-| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                                   |
-| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                                |
-| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                                |
-| `debug-customer-issue`       | Investigating customer-reported bugs — log gathering, user lookup, timeline reconstruction, root cause analysis                                          |
-| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                                              |
-| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development                 |
-| `extending-numa-chat`        | Adding new tools/capabilities to Numa chat -- MCP tool groups, skills/prompts, Lambda delegation, HITL approvals, frontend rendering, agent type configs |
-| `skill-creator`              | Creating new skills                                                                                                                                      |
+| Skill                        | When to activate                                                                                                                                           |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `numa-workspace-agent-skill` | Working on the workspace agent service — code, debugging, features, streaming, tools, agent type configuration                                             |
+| `workspace-agent-local-test` | Testing workspace agent Docker container locally, SDK integration testing                                                                                  |
+| `numa-agents`                | Agent builder, agent APIs, agent database schema, agent tools config, visibility settings                                                                  |
+| `numa-apps`                  | Creating/modifying apps, app constructs, Step Functions, state machines, jobs, manifests                                                                   |
+| `numa-ops`                   | Numa Ops work — tickets, kanban boards, teams, projects, customers, suppliers, CRM, backlog                                                                |
+| `numa-connectors`            | Creating or modifying data connectors (OAuth, token, API-key), connectorRegistry, Files Remote, connector wizards, backend providers                       |
+| `numa-integrations`          | Pipedream integrations — proxy model, adding integrations, admin policies, workspace agent integration prompts                                             |
+| `numa-triggers`              | Numa Automations event triggers (native + Pipedream-backed) — adding sources, debugging webhooks, trigger lifecycle, source/trigger picker UX              |
+| `nolia-developer-guide`      | Any Nolia work — agent types, prompts, orchestrator, workspace setup, KB integration, rules generation                                                     |
+| `numa-scheduled-agents`      | Agent scheduling, schedule runner, EventBridge, cron expressions, scheduled run config                                                                     |
+| `numa-gitlab`                | Checking CI/CD pipeline status, viewing failed jobs, retrying, MR details                                                                                  |
+| `numa-unlock-customer`       | Unblocking stuck customer deployments — Terraform locks, resource conflicts, CNAME issues                                                                  |
+| `debug-customer-issue`       | Investigating customer-reported bugs — log gathering, user lookup, timeline reconstruction, root cause analysis                                            |
+| `lint-and-tests`             | Running linting, type checking, or tests after code changes                                                                                                |
+| `playwright-cli`             | Browser automation — web testing, form filling, screenshots, data extraction, great for doing automated tests of features in development                   |
+| `extending-numa-chat`        | Adding new tools/capabilities to Numa chat -- numa CLI commands, skills/prompts, Lambda delegation, HITL approvals, frontend rendering, agent type configs |
+| `skill-creator`              | Creating new skills                                                                                                                                        |
 
 # Documentation
 
 The `documentation/` folder contains detailed reference docs for specific domains. These are committed to the repo and complement the skills above. Read the relevant docs when working in these areas.
 
-| Folder                                | Contents                                                                                                                                                                                                                                |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `documentation/connectors/`           | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration                                                                                                                         |
-| `documentation/credits/`              | Numa Credit System (SPK-015): full developer/agent reference — value+floor pricing model, ledger schema, drawdown/settlement, shared lib, live metering, portal authoring, in-client view, defaults & flags, operations, open questions |
-| `documentation/deployment-pipelines/` | End-to-end pipeline: GitLab CI → ECR (prod/dev channels) → Customer Success Portal → Step Functions/ECS → CDKTF                                                                                                                         |
-| `documentation/email-sending/`        | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment                                                                                                                              |
-| `documentation/extending-numa-chat/`  | How to extend Numa chat with new tools: MCP groups, skills, Lambda delegation, HITL, frontend rendering, agent types                                                                                                                    |
-| `documentation/gitlab-runners/`       | Shared CI runners: AWS resources, autoscaler architecture, tokens, common ops, hotfix log                                                                                                                                               |
-| `documentation/nolia/`                | Nolia architecture, pipeline details, rules generation, project notes                                                                                                                                                                   |
-| `documentation/numa-voice/`           | Numa Voice (Amazon Connect SDR dialer): FEAT-158 Phase-1 Connect setup runbook (manual instance, recording storage, DIDs, approved origins, deploy guard)                                                                               |
-| `documentation/pipedream/`            | Pipedream integration into Numa: proxy/relay architecture, account model, security boundaries, triggers deep-dive + add-a-trigger guide, API reference cheat sheet                                                                      |
+| Folder                                | Contents                                                                                                                                                                                                                                                                                            |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `documentation/connectors/`           | Data connector architecture, two-secret model, complete checklist, framework rules, workspace agent integration                                                                                                                                                                                     |
+| `documentation/credits/`              | Numa Credit System (SPK-015): full developer/agent reference — value+floor pricing model, ledger schema, drawdown/settlement, shared lib, live metering, portal authoring, in-client view, defaults & flags, operations, open questions                                                             |
+| `documentation/deployment-pipelines/` | End-to-end pipeline: GitLab CI → ECR (prod/dev channels) → Customer Success Portal → Step Functions/ECS → CDKTF                                                                                                                                                                                     |
+| `documentation/email-sending/`        | Centralized email sender: architecture, security model, templates, code examples, infra wiring, deployment                                                                                                                                                                                          |
+| `documentation/extending-numa-chat/`  | How to extend Numa chat with new tools: numa CLI commands, skills, Lambda delegation, HITL, frontend rendering, agent types                                                                                                                                                                         |
+| `documentation/gitlab-runners/`       | Shared CI runners: AWS resources, autoscaler architecture, tokens, common ops, hotfix log                                                                                                                                                                                                           |
+| `documentation/nolia/`                | Nolia architecture, pipeline details, rules generation, project notes                                                                                                                                                                                                                               |
+| `documentation/numa-standard-model/`  | Numa Standard Model (DeepSeek V4 Flash via Novita): opaque-id proxy → relay → OpenRouter architecture, three-tier model selection + feature flag, per-agent model, credits (¼ multiplier) + cost observability (total_cost_usd source of truth), local-dev harness, the 200K context-window finding |
+| `documentation/numa-voice/`           | Numa Voice (Amazon Connect SDR dialer): FEAT-158 Phase-1 Connect setup runbook (manual instance, recording storage, DIDs, approved origins, deploy guard)                                                                                                                                           |
+| `documentation/pipedream/`            | Pipedream integration into Numa: proxy/relay architecture, account model, security boundaries, triggers deep-dive + add-a-trigger guide, API reference cheat sheet                                                                                                                                  |
 
 ---
 
@@ -168,8 +169,9 @@ The `numa-workspace-agent` is the **default and primary chat backend** — a con
 - **Per-conversation MicroVM:** Each conversation gets its own isolated MicroVM (`conv-{conversationId}`). 1hr idle timeout, 8hr max. No cross-conversation contamination.
 - **Persistent workspace (`/workdir`):** Uploads and outputs synced to S3 after each request. Up to 200MB file uploads via direct S3.
 - **Claude Agent SDK:** Agentic loop with up to 50 tool-use turns, extended thinking (up to 10k tokens).
-- **MCP tools + skills/plugins:** Sandboxed code execution (Python/Bash/Node), KB queries, web search, document handling, integrations. Skills are read-only in `/app/plugins/numa/skills/`.
+- **numa CLI + skills/plugins:** Tools are invoked via the `numa` CLI through Bash (`numa <category> <command> ...` — categories: files, web, docs, agents, memory, integrations, ops, render). Covers KB queries, web search, document handling, integrations. Sandboxed code execution runs via Bash (write a script to `/workdir/tmp/` and run it). Skills are read-only in `/app/plugins/numa/skills/`.
 - **Security:** PreToolUse/PostToolUse hooks block dangerous imports, directory traversal, and system path access. Container runs as non-root (UID 1000).
+- **Model selection (`WORKSPACE_CHAT_MODEL_SELECTION` flag):** three tiers, selectable in the chat input and **per-agent** — **Standard** = the **Numa Standard Model** (DeepSeek V4 Flash via Novita, cheap everyday tier, bills ¼ credits), **Premium** = Sonnet 4.6 (the default), **Expert** = Opus 4.6 (3× credits). The Standard model is **non-Anthropic and opaque**: the container only ever sees the id `numa-standard-model` and reaches the real model through an in-container proxy → deployer-account relay → OpenRouter/Novita (the real model name + API key live only in the relay). Currently **feature-flag tested on HQ**. Full architecture, credits, cost observability, and local-dev harness in `documentation/numa-standard-model/`.
 
 ### CloudWatch Log Groups
 
@@ -182,6 +184,37 @@ Per-client patterns (e.g., for client `nd-labs`):
 Filter by `_name` field (e.g., `COST`, `STREAM_COMPLETE`, `CHAT_REQUEST`).
 
 For full details (module structure, API contract, tools, debugging, CloudWatch queries), see `services/numa-workspace-agent/README.md`. Activate the `numa-workspace-agent-skill` before doing any work here.
+
+---
+
+## Numa CLI (the chat agent's tool layer)
+
+The workspace agent invokes all platform capabilities through a unified **`numa` CLI** over Bash (it replaced the old MCP tool layer — the agent runs with **zero MCP servers**):
+
+```
+numa <category> <command> ... -m "user-visible caption"
+```
+
+Categories: `files`, `web`, `docs`, `agents`, `memory`, `integrations`, `ops`, `render`. Each `numa <cat> <cmd> --help` self-documents. The CLI POSTs to the `numa-cli-api` Lambda, which gates (Ops entitlement → per-agent-type allow-list → HITL approval) and routes to the Python handlers in `lambdas/python/workspace-chat-tools/`.
+
+**Two binaries:** `numa` (prod, bundled in the workspace image — production-safe commands only) and `numa-dev` (laptop only — adds bypass flags, self-tests, `whoami`).
+
+**Drive it from a laptop** (debugging / scripting):
+
+```bash
+cd numa-cli && yarn install && yarn build
+node packages/cli/dist/cli/numa.js login <client>      # Cognito SRP; caches ~/.config/numa/tokens-<client>.json
+node packages/cli/dist/cli/numa.js agents list --json -m "check"
+# dev binary (extra commands): node packages/cli-dev/dist/cli/numa-dev.js whoami
+```
+
+**Docs:**
+
+- `documentation/numa-cli/README.md` — **canonical architecture & design reference** (transports, identity model, the gates, permission model, hooks, rate limit, saved workflows).
+- `numa-cli/CLAUDE.md` — package dev guide (auto-loads when working in `numa-cli/`).
+- `documentation/extending-numa-chat/` + the `extending-numa-chat` skill — how to add a new CLI command/tool.
+
+> **Maintenance:** when a CLI architecture/security/design decision changes, update `documentation/numa-cli/README.md` — it's the single source of truth. The CLAUDE.md/skill touchpoints just point to it. Also regenerate the human reference `numa-cli/docs/numa-cli-reference-internal.html` when commands/flags change.
 
 ---
 
@@ -288,6 +321,21 @@ See `documentation/email-sending/` for the full guide: architecture, security mo
 **Lambdas (Node):** Package one: `cd lambdas && bash package-node-lambda.sh node/<name>`. Or `yarn bundle` in the lambda directory.
 
 **Lambdas (Container):** For Lambdas that need system-level deps (e.g. Playwright/Chromium). Each has its own `Dockerfile` in the lambda directory. Build context is the repo root so shared libs (`lib/prm`) are accessible. Package: `cd lambdas && bash package-container-lambda.sh python/<name>`. Output: `infra/assets/artifacts/<name>/image.tar`. Deployed as ARM64 container images via ECR (skopeo push). Uses `NumaLambda` with `packageType: 'Image'` and `imageUri`. First example: `browser-lambda` (Playwright + Chromium for JS-rendered page fetching).
+
+### Deployed Lambda Naming (gotcha — burns us repeatedly)
+
+Lambda names on AWS use **two different separators** between `clientName` and the logical Lambda name, depending on which construct created them:
+
+- **`{clientName}_{lambda-name}`** (underscore) — every Lambda registered via `addLambdaFunction()` on `ApiGatewayLambdaCollection` / `AppAgnosticApiGatewayLambdaCollection`. That's ~110 API-Gateway-fronted Lambdas (most of the `/api/*` surface). Examples: `nd-labs_srp-hasher`, `nd-labs_admin-integration-settings-get`, `nd-labs_numa-cli-api`. Comes from `resourceNameSuffix: '_' + name` in [api-gateway-lambda-collection.ts:58](infra/constructs/api-gateway-lambda-collection.ts#L58) — the underscore is hard-coded into the suffix before `awsNameWithHashedPrefix` concatenates it to the client name with no separator.
+- **`{clientName}-{lambda-name}`** (hyphen) — Lambdas instantiated directly via `NumaLambda` or via other collection constructs (apps, custom resources, schedulers). Examples: `nd-labs-cloudfront-invalidator`, `nd-labs-s3vectors-manager`, `nd-labs-workspace-chat-agent-proxy`. Apps further mix the two: `nd-labs-e2e-test_main-start` (hyphen client→app, underscore inside the step).
+
+When searching for a Lambda by name (`aws lambda get-function`, CloudWatch log filtering, IAM policy targets), try **both** separators. If the Lambda is registered behind `/api/*`, it's almost certainly underscore-separated. To search blind:
+
+```bash
+aws lambda list-functions --profile q-demo --region us-east-1 \
+  --query "Functions[?contains(FunctionName,'<client>') && contains(FunctionName,'<fragment>')].FunctionName" \
+  --output json
+```
 
 > ⚠️ **Adding a new lambda? Update the CI matrix.** If the lambda is part of the per-client **Numa deploy**, you MUST add it to the matching matrix in `.gitlab-ci.yml` — `.python-lambdas-matrix` (Python) or `.node-matrix` (Node). That matrix drives **both** CI packaging (the `lambda_function.zip` the deploy reads) **and** the lint/type/test check. Forget it and `cdktf deploy` dies at synth with `filebase64sha256(".../lambda_function.zip"): no such file or directory`. **Exception — do NOT add** lambdas that aren't in the per-client Numa stack: deployer/portal lambdas (`q-apps-deployer-stack`, e.g. `numa-email-sender`, `numa-voice-config-writer`, `numa-fleet-analytics-rollup`), Pipedream proxy-account lambdas (`pipedream-proxy-stack`, e.g. `pipedream-schema-refresh`), and container lambdas (their own `package-container-lambda.sh` build, e.g. `browser-lambda`).
 

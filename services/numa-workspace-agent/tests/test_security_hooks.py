@@ -171,6 +171,49 @@ class TestBashCommandSecurityStillWorks:
         assert blocked
 
 
+# ── check_bash_command: numa CLI relative URL paths ──────────────────────────
+
+
+class TestNumaCliRelativeUrlPaths:
+    """The numa CLI takes relative URL paths (e.g. `GET /jobs`) as request
+    args. These must be allowed — but ONLY as a numa request URL (preceded by
+    an HTTP method), never as a filesystem-path arg or in a non-numa command.
+    """
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "numa integrations request synergy GET /jobs",
+            "numa integrations request synergy GET /api/v1/jobs",
+            'numa integrations request gdrive GET "/drive/v3/files?q=name"',
+            "numa integrations request xero POST /v1/invoices --body '{}'",
+            "numa-dev integrations request synergy get /jobs",
+        ],
+    )
+    def test_numa_request_relative_url_allowed(self, cmd):
+        blocked, reason = check_bash_command(cmd)
+        assert not blocked, f"should be allowed: {cmd} ({reason})"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # Not a numa command — a leading-slash token after "GET" must still
+            # be treated as a filesystem path (cat reads /etc/passwd here).
+            "cat GET /etc/passwd",
+            # numa upload reads a LOCAL file — the path is preceded by `upload`,
+            # not a method, so it stays blocked (no exfiltration via upload).
+            "numa files upload /etc/passwd --to Personal",
+            # output flag is not a method position — arbitrary write stays blocked.
+            "numa integrations download-file synergy 123 -o /etc/cron.d/x",
+            # chained filesystem read after a valid numa request is still caught.
+            "numa integrations request synergy GET /jobs; cat /etc/passwd",
+        ],
+    )
+    def test_filesystem_paths_still_blocked(self, cmd):
+        blocked, _ = check_bash_command(cmd)
+        assert blocked, f"should be blocked: {cmd}"
+
+
 # ── check_bash_command: /dev/null redirection fix ─────────────────────────────
 
 
@@ -613,3 +656,39 @@ class TestSdkToolResultsAllowlist:
             "ls /workdir/.system/.claude/projects/abc/tool-results/"
         )
         assert blocked
+
+
+# ── System-info commands: boundary match, not substring ──────────────────────
+# Regression: bare "whoami"/"uname"/... in DANGEROUS_COMMANDS substring-matched
+# `numa whoami` (a vetted CLI subcommand) and quoted args. They're now anchored
+# to a command boundary in ENV_VAR_PATTERNS.
+
+
+class TestSystemInfoCommandBoundary:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "numa whoami -m x",
+            "numa whoami --json -m hi",
+            'numa files search "whoami tool" -m x',
+            'numa memory add "check my uname later" -m x',
+        ],
+    )
+    def test_numa_subcommands_and_args_allowed(self, cmd):
+        blocked, _ = check_bash_command(cmd)
+        assert not blocked, f"should be allowed: {cmd}"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "whoami",
+            "foo; whoami",
+            "uname -a",
+            "echo hi | hostname",
+            "groups",
+            "$(whoami)",
+        ],
+    )
+    def test_bare_system_info_commands_blocked(self, cmd):
+        blocked, _ = check_bash_command(cmd)
+        assert blocked, f"should be blocked: {cmd}"

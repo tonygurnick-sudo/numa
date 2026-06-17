@@ -52,6 +52,9 @@ const createFeatureSets = (props: {
   pipedreamRelayLambdaArn?: string;
   brandingAssetsBucketArn?: string;
   brandingAssetsPrefix?: string;
+  /** FEAT-167: voice prospect-intake bucket ARN — present only when numaVoice
+   *  is on. Grants browser PutObject so researchers can drop .xlsx files. */
+  voiceIntakeBucketArn?: string;
 }): Record<string, PolicyStatement[]> => {
   const rawPrefix = props.brandingAssetsPrefix ?? 'branding/';
   const normalizedPrefix = rawPrefix.replace(/^\/+/u, '').replace(/\/+$|$/, '/');
@@ -77,6 +80,17 @@ const createFeatureSets = (props: {
         actions: ['s3:PutObject'],
         resources: [`${props.outputsBucket.bucket.arn}/voice/outcomes/*`],
       },
+      // Numa Voice (FEAT-167): researchers upload prospect spreadsheets straight
+      // to the intake bucket; its S3 notification fires the ingest agent.
+      ...(props.voiceIntakeBucketArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['s3:PutObject'],
+              resources: [`${props.voiceIntakeBucketArn}/*`],
+            },
+          ]
+        : []),
       // Outputs bucket ListBucket permission with user-scoped prefix
       {
         effect: 'Allow',
@@ -192,6 +206,17 @@ const createFeatureSets = (props: {
         actions: ['s3:PutObject'],
         resources: [`${props.outputsBucket.bucket.arn}/voice/outcomes/*`],
       },
+      // Numa Voice (FEAT-167): researchers upload prospect spreadsheets straight
+      // to the intake bucket; its S3 notification fires the ingest agent.
+      ...(props.voiceIntakeBucketArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['s3:PutObject'],
+              resources: [`${props.voiceIntakeBucketArn}/*`],
+            },
+          ]
+        : []),
       // Outputs bucket ListBucket permission with user-scoped prefix
       {
         effect: 'Allow',
@@ -464,6 +489,7 @@ export const cognitoGroupsConstructPropsSchema = z.object({
   pipedreamIntegrations: z.boolean().optional().default(false),
   pipedreamRelayLambdaArn: z.string().optional(),
   knowledgeBase: z.instanceof(KnowledgeBase).optional(),
+  voiceIntakeBucketArn: z.string().optional(),
 });
 
 export class CognitoGroupsConstruct extends Construct {
@@ -510,6 +536,7 @@ export class CognitoGroupsConstruct extends Construct {
       pipedreamRelayLambdaArn: props.pipedreamRelayLambdaArn,
       brandingAssetsBucketArn: props.brandingAssetsBucketArn,
       brandingAssetsPrefix: props.brandingAssetsPrefix,
+      voiceIntakeBucketArn: props.voiceIntakeBucketArn,
     });
 
     // Create a managed policy, store it in the featureSetPolicies object to attach it to the role

@@ -419,6 +419,45 @@
   color: var(--nd-accent);
 }
 
+/* Per-row download control (Top conversations + Per-agent tables) */
+.nd-row-dl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--nd-border);
+  border-radius: 6px;
+  color: var(--nd-text-faint);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.nd-row-dl:hover:not(:disabled) {
+  color: var(--nd-accent);
+  border-color: var(--nd-accent);
+  background: rgba(153, 73, 172, 0.06);
+}
+.nd-row-dl:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.nd-row-dl-menu {
+  font-size: 13px;
+}
+/* The trailing action column hugs its content. */
+.nd-table th.nd-dl-col,
+.nd-table td.nd-dl-col {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+
 .nd-empty {
   color: var(--nd-text-faint);
   font-style: italic;

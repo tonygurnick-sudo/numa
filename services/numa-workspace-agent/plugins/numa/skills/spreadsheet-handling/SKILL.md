@@ -7,6 +7,45 @@ description: 'Read, write, and analyze spreadsheet files (Excel, CSV, TSV). Use 
 
 Read, write, and analyze spreadsheet files using pandas, openpyxl, and XlsxWriter.
 
+---
+
+## Before you touch a workbook — critical rules
+
+These five rules prevent the most damaging spreadsheet failures — the ones that put wrong numbers into board-level deliverables. Read them before any non-trivial spreadsheet work.
+
+> **Saving/uploading to Files: save the workbook, not a PDF rendition.** When the user asks to save,
+> store, or upload the spreadsheet, upload the source **`.xlsx`/`.csv`** — never a PDF you generated to
+> read recalculated values. Only save a PDF if the user explicitly asks for one, and report the actual
+> extension you uploaded.
+
+1. **Enumerate ALL sheets before processing.** Workbooks are usually multi-tab (one sheet per month / region / entity). Never assume the first sheet is the whole story. List every sheet and decide which are in scope _before_ you aggregate anything:
+
+   ```python
+   import pandas as pd
+   xls = pd.ExcelFile('/workdir/uploads/data.xlsx')
+   print(xls.sheet_names)   # e.g. ['Apr-W1','Apr-W2','Apr-W3','Apr-W4'] — process all four, not just the first
+   ```
+
+   Building a reconciliation or total on a single sheet when more exist silently drops half your data and manufactures "crises" (missing timesheets, phantom discrepancies) that don't exist.
+
+2. **Preserve, don't rebuild.** When the user uploads a workbook, never regenerate it from scratch — you will drop tabs, formulas, and formatting. Load the real file with `openpyxl` and edit in place. For what-if scenarios, **copy the relevant sheet(s)** and change only the assumption/input cells; never hardcode a number on top of a formula (it kills reactivity for every cell that referenced it).
+
+3. **Additive sheets only.** Don't modify the user's source tabs. Add your analysis / scenario / summary as **new** sheets and say so explicitly ("I added a `Scenario B` sheet — your original tabs are untouched"). The source of truth stays intact.
+
+4. **Reconcile the same total across sheets before you build on it.** When a workbook reports one quantity at different cuts (revenue by product _and_ by region, headcount by team _and_ by location), those totals are supposed to match — but a softened, reclassified, or eliminated line can make them disagree on purpose. Before you put any total into a deck, report, or headline metric, compare the cross-sheet totals and **surface both figures plus the gap** if they differ — don't silently take the first or "source of truth" sheet. A deliverable whose slides imply two different revenue totals is a board-level red flag.
+
+   ```python
+   product_total = pd.read_excel(path, sheet_name='Revenue by Product').iloc[-1]['Total']
+   region_total  = pd.read_excel(path, sheet_name='Revenue by Region').iloc[-1]['Total']
+   if round(product_total) != round(region_total):
+       print(f"RECONCILE: product ${product_total:,.0f} vs region ${region_total:,.0f} "
+             f"— gap ${abs(product_total - region_total):,.0f}; show both, don't pick one silently")
+   ```
+
+5. **Plain CSV doesn't need this skill.** For a simple flat CSV, the standard-library `csv` module or `pandas.read_csv` is fine. Reserve the openpyxl / XlsxWriter machinery for `.xlsx` with multiple sheets, formulas, or formatting.
+
+---
+
 ## Available Libraries
 
 | Library        | Purpose                                     | Import                                         |
@@ -28,24 +67,32 @@ python -m markitdown /workdir/uploads/data.xlsx
 
 This outputs the spreadsheet content as markdown tables — useful for quick review.
 
-> **For richer extraction** and for legacy/template formats (`.xls`, `.xlt`, `.xltx`) where markitdown may miss structure, prefer `numa_tool(name="extract_content", params={"file_path": ...})` — it routes through the extract-content Lambda and consistently produces fuller output.
+> **For richer extraction** and for legacy/template formats (`.xls`, `.xlt`, `.xltx`) where markitdown may miss structure, prefer `numa docs extract /path -m "..."` — it routes through the extract-content Lambda and consistently produces fuller output.
 
 ---
 
-## Formula Recalculation
+## Formula values — read them, never re-derive them
 
-If an Excel file has formulas that need recalculating (e.g., after modifying data), use openpyxl:
+When a workbook has formula cells with cached values (the normal case — Excel/Sheets saves the last computed result), **read those values**; do not recompute them yourself:
 
 ```python
 from openpyxl import load_workbook
-wb = load_workbook('/workdir/uploads/data.xlsx')
-# openpyxl does not evaluate formulas directly, but you can:
-# 1. Read formula cells and compute results with Python
-# 2. Use pandas to read cached values (data_only=True equivalent)
-# For complex formula dependencies, consider reimplementing the logic in pandas.
+wb = load_workbook('/workdir/uploads/model.xlsx', data_only=True)  # data_only=True returns the saved computed values
+ws = wb['P&L']
+ebitda = ws['B42'].value   # the real, Excel-computed number — trust it
 ```
 
-Alternatively, for simple recalculation needs, read the data with pandas and recompute derived values in Python.
+**Do NOT reimplement the workbook's formulas in pandas/Python.** Re-deriving an EBITDA, a margin, a reconciliation, or any chained calculation by hand is the single biggest source of confidently-wrong deliverables — a missed sign, a dropped adjustment row, or different rounding flips the answer. (One bench re-derived a `+$891K` cash position when the truth was `−$890K`, then shipped an email reassuring the user that "cash is not the problem.") The workbook already did the math correctly; your job is to read it, not to redo it.
+
+**If the cached values are missing** — `data_only=True` returns `None` for formula cells, which means the file was written by a tool that didn't cache results — you cannot recalc in this container (there is no spreadsheet engine here). Your options, best first:
+
+1. **Render through the converter to read recalculated values.** LibreOffice recalculates on load, so converting to PDF gives you the true computed numbers:
+   ```bash
+   numa docs convert /workdir/uploads/model.xlsx --format pdf -m "Rendering the model to read its calculated values"
+   ```
+   Read the values out of the resulting PDF (`pdftotext`, or `numa docs extract` for tables). Note this gives you _values to report_, not an editable recalced workbook.
+2. **Ask the user to open and save the file** in Excel/Sheets (which caches the results) and re-upload.
+3. **Only as a last resort**, if you must produce one specific derived value and you can see the exact formula, compute it explicitly in Python — and state plainly that you did so and which formula you used.
 
 ---
 
@@ -823,3 +870,14 @@ This is actually better practice for any non-trivial analysis anyway.
 - **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.
+
+---
+
+## Helper Scripts
+
+- **`workbook_summary.py`** — the mandatory first step on any spreadsheet you'll aggregate: enumerates every sheet, its shape and dtypes, the value distribution of every status/category column, and flags columns containing negatives (refunds/credits). Read-only at `/app/plugins/numa/skills/spreadsheet-handling/helpers/`.
+  ```bash
+  python3 /app/plugins/numa/skills/spreadsheet-handling/helpers/workbook_summary.py /workdir/uploads/model.xlsx
+  ```
+
+Generic starting point — copy into `/workdir/chat-workflows/` and adapt for a user's recurring spreadsheet job.

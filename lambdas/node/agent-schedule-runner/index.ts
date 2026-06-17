@@ -200,7 +200,9 @@ async function sendEmailNotification(params: {
     | 'schedule_failed'
     | 'schedule_partial'
     | 'schedule_trigger_quota_blocked'
-    | 'schedule_quota_warning';
+    | 'schedule_quota_warning'
+    | 'voice_call_summary_ready'
+    | 'voice_prospect_qualified';
   clientName: string;
   templateData: Record<string, string>;
 }): Promise<void> {
@@ -377,6 +379,9 @@ type AgentSnapshot = {
   userWelcomeMessage?: string;
   requiredIntegrations?: string[];
   toolsConfig?: AgentToolsConfig;
+  // Per-agent workspace-chat model (Standard / Premium / Expert), refreshed live each run so an
+  // existing schedule inherits the agent's current model. Omitted → platform default (Premium).
+  modelId?: string;
 };
 
 type ScheduleRecord = {
@@ -524,6 +529,9 @@ type AgentStatus = {
   artifacts: string[];
   errors: string[];
   warnings: string[];
+  // Optional — the Numa Voice post-call agent writes the CRM customer id it
+  // created/updated so the hand-off notification can deep-link to that customer.
+  customerId?: string;
 };
 
 /**
@@ -963,6 +971,33 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
     }
   }
 
+  // For Numa Voice calls, surface the SDR who placed the call so executeRun can
+  // notify THEM (the schedule owner is the Voice system user, not the SDR).
+  const connectEvt = event.type === 'EVENT' && event.event?.source === 'connect' ? event.event : undefined;
+  const voiceCall = connectEvt
+    ? {
+        sdrSub: typeof connectEvt.sdr_sub === 'string' ? connectEvt.sdr_sub : undefined,
+        sdrEmail: typeof connectEvt.sdr_email === 'string' ? connectEvt.sdr_email : undefined,
+        sdrName: typeof connectEvt.sdr_name === 'string' ? connectEvt.sdr_name : undefined,
+        // The SDR's wrap-up qualification verdict, surfaced onto the event by the
+        // processor. Lets executeRun escalate the post-call alert from a generic
+        // "summary ready" to a high-signal "qualified prospect — follow up".
+        qualified: connectEvt.qualified === true || connectEvt.qualified === 'true',
+        // company_name isn't on the event today (the agent resolves it from the
+        // prospect match), but read it defensively so the qualified alert names
+        // the company the moment the processor starts emitting it.
+        company: typeof connectEvt.company_name === 'string' ? connectEvt.company_name : undefined,
+        // Amazon Connect contactId — the deep-link key for the SDR's "call summary
+        // ready" notification (→ /voice/calls/{contactId}).
+        contactId: typeof connectEvt.contact_id === 'string' ? connectEvt.contact_id : undefined,
+        // The AE the SDR picked in the wrap-up (Phase 2 hand-off). When present + the
+        // prospect qualified, executeRun fires a second notification to this AE.
+        aeSub: typeof connectEvt.assigned_ae_sub === 'string' ? connectEvt.assigned_ae_sub : undefined,
+        aeEmail: typeof connectEvt.assigned_ae_email === 'string' ? connectEvt.assigned_ae_email : undefined,
+        aeName: typeof connectEvt.assigned_ae_name === 'string' ? connectEvt.assigned_ae_name : undefined,
+      }
+    : undefined;
+
   await executeRun({
     schedule,
     prompt: interpolatedPrompt,
@@ -972,6 +1007,7 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
     adHoc: false,
     triggeredBySchedule: true,
     runId: event.runId,
+    voiceCall,
   });
 };
 
@@ -1643,6 +1679,20 @@ type ExecuteRunParams = {
   adHoc: boolean;
   triggeredBySchedule?: boolean;
   runId?: string;
+  /** Numa Voice post-call context — when present, the SDR who placed the call
+   *  also gets a "call summary ready" notification (the schedule itself is owned
+   *  by the Voice system user, so without this they'd get nothing). */
+  voiceCall?: {
+    sdrSub?: string;
+    sdrEmail?: string;
+    sdrName?: string;
+    qualified?: boolean;
+    company?: string;
+    contactId?: string;
+    aeSub?: string;
+    aeEmail?: string;
+    aeName?: string;
+  };
 };
 
 const executeRun = async ({
@@ -1654,6 +1704,7 @@ const executeRun = async ({
   adHoc,
   triggeredBySchedule,
   runId: providedRunId,
+  voiceCall,
 }: ExecuteRunParams): Promise<RunScheduleResponse> => {
   const runPrompt = (prompt ?? '').trim();
   const apiPrompt = runPrompt || 'Scheduled run';
@@ -1969,6 +2020,89 @@ const executeRun = async ({
         summary: notificationMessage || '',
         runStartedAtMs: now,
       });
+
+      // Numa Voice: also notify the SDR who placed the call ("summary ready").
+      // The schedule owner above is the Voice system user — the SDR would
+      // otherwise get nothing. Only on a usable result (skip failed). Best-effort:
+      // a notify/email error must never fail the run.
+      if (voiceCall?.sdrSub && agentReportedStatus !== 'failed') {
+        const isQualified = voiceCall.qualified === true;
+        // The CRM customer the post-call agent created/updated (Phase 1) — the AE
+        // hand-off notification deep-links to it. contactId deep-links the SDR's
+        // notification to the call record (/voice/calls/{contactId}).
+        const customerId = agentStatus?.customerId;
+        const callMeta = voiceCall.contactId ? { contactId: voiceCall.contactId } : {};
+        // (1) SDR "summary ready" / "qualified" notification → opens the call record.
+        try {
+          await NotificationService.createNotification(
+            voiceCall.sdrSub,
+            'completed',
+            'voice_call',
+            schedule.schedule_id,
+            isQualified ? 'New qualified prospect' : 'Call summary ready',
+            isQualified
+              ? `${voiceCall.company || 'A prospect'} has been qualified — follow up.`
+              : notificationMessage || 'Your post-call summary is ready.',
+            { ...notifExtra, voice: true, qualified: isQualified, ...callMeta }
+          );
+          if (voiceCall.sdrEmail) {
+            await sendEmailNotification({
+              to: voiceCall.sdrEmail,
+              template: isQualified ? 'voice_prospect_qualified' : 'voice_call_summary_ready',
+              clientName: CLIENT_NAME,
+              templateData: isQualified
+                ? { company_name: voiceCall.company, summary: notificationMessage || '' }
+                : {
+                    sdr_name: voiceCall.sdrName || 'there',
+                    summary: notificationMessage || 'Your post-call summary is ready.',
+                  },
+            });
+          }
+        } catch (e) {
+          console.warn('voice: SDR notification failed (non-fatal)', e);
+        }
+        // (2) AE hand-off notification — only when qualified AND a distinct AE was
+        // picked in the wrap-up. Deep-links to the CRM customer (full call history +
+        // pre-read). Best-effort; never fails the run.
+        if (isQualified && voiceCall.aeSub && voiceCall.aeSub !== voiceCall.sdrSub) {
+          try {
+            await NotificationService.createNotification(
+              voiceCall.aeSub,
+              'completed',
+              'voice_call',
+              schedule.schedule_id,
+              'New qualified prospect handed to you',
+              `${voiceCall.company || 'A prospect'} was qualified${
+                voiceCall.sdrName ? ` by ${voiceCall.sdrName}` : ''
+              } and handed to you.`,
+              {
+                ...notifExtra,
+                voice: true,
+                qualified: true,
+                handoff: true,
+                ...callMeta,
+                ...(customerId ? { customerId } : {}),
+              }
+            );
+            if (voiceCall.aeEmail) {
+              await sendEmailNotification({
+                to: voiceCall.aeEmail,
+                template: 'voice_prospect_qualified',
+                clientName: CLIENT_NAME,
+                templateData: {
+                  company_name: voiceCall.company,
+                  summary: notificationMessage || '',
+                  ...(customerId
+                    ? { crm_url: `https://${CLIENT_NAME}.numa.arcanum.ai/ops?customer=${customerId}` }
+                    : {}),
+                },
+              });
+            }
+          } catch (e) {
+            console.warn('voice: AE hand-off notification failed (non-fatal)', e);
+          }
+        }
+      }
     }
   } catch (err) {
     console.error('Failed to persist assistant response', err);
@@ -2568,12 +2702,14 @@ const readWorkspaceStatus = async (userId: string, conversationId: string): Prom
 
       const validStatuses = ['success', 'partial', 'failed'];
 
+      const customerId = parsed.customer_id ?? parsed.customerId;
       return {
         status: validStatuses.includes(parsed.status) ? parsed.status : 'partial',
         summary: String(parsed.summary).substring(0, 500),
         artifacts: Array.isArray(parsed.artifacts) ? parsed.artifacts.map(String) : [],
         errors: Array.isArray(parsed.errors) ? parsed.errors.map(String) : [],
         warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
+        ...(typeof customerId === 'string' && customerId ? { customerId } : {}),
       };
     } catch (err: unknown) {
       const errorName = err instanceof Error ? (err as { name?: string }).name : undefined;
@@ -2839,6 +2975,7 @@ const mapDynamoItemToSnapshot = (item: Record<string, unknown>): AgentSnapshot =
   userWelcomeMessage: item.user_instructions as string | undefined,
   requiredIntegrations: (item.required_integrations as string[] | undefined) ?? [],
   toolsConfig: item.tools_config as AgentToolsConfig | undefined,
+  modelId: item.model_id as string | undefined,
 });
 
 /** System KBs that are accessible to all authenticated users (mirrors kb_permissions.py). */
@@ -2982,6 +3119,10 @@ const mergeRunConfig = (
   const autoToolsEnabled = base.autoToolsEnabled ?? toolsConfig.autoToolsEnabled;
   const webSearchEnabled = base.webSearchEnabled ?? toolsConfig.webSearchEnabled;
   const createAgentEnabled = base.createAgentEnabled ?? toolsConfig.createAgentEnabled;
+  // Model: an explicit per-schedule run_config.modelId wins (none is set today — there's no
+  // scheduler model picker), else inherit the agent's live model from the refreshed snapshot so an
+  // existing schedule follows the agent's current model. Undefined on both → backend default (Premium).
+  const modelId = base.modelId ?? agentSnapshot?.modelId;
 
   console.info('[SCHEDULE_RUNNER] mergeRunConfig KB resolution', {
     'base.enabledKBIds': base.enabledKBIds,
@@ -3043,6 +3184,7 @@ const mergeRunConfig = (
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
+    modelId,
   };
 };
 
@@ -3070,8 +3212,22 @@ const mergeIntegrationRows = (rows: IntegrationListItem[]): IntegrationListItem[
  * KB access: The new allowedKnowledgeBases field (null / [] / [...ids]) is authoritative
  * when present. The legacy queryDataSources boolean is only used as a fallback for
  * agents created before allowedKnowledgeBases existed.
+ *
+ * Auto-tools semantics MUST match interactive chat (see the frontend's
+ * `getEnabledTools` in `numa-frontend/src/utils/chatSystemPromptUtils.ts`).
+ * "Auto" means "let Numa use all its standard tools" — so the per-tool
+ * booleans (createAgentEnabled, webSearchEnabled) only gate the MANUAL path.
+ * In Auto mode web_search, memories_tool, and create_agent_tool are all on
+ * regardless of the individual toggles, exactly like the chat UI which
+ * renders those switches as ON+disabled whenever Auto is enabled.
+ *
+ * BUG-187: this used to gate create_agent_tool on `createAgentEnabled` even
+ * in Auto mode, so an agent with autoToolsEnabled=true but
+ * createAgentEnabled=false (the default) could create agents in interactive
+ * chat but got "Agent Creation tool isn't enabled" in scheduled/triggered
+ * runs. Aligning Auto mode below fixes that divergence.
  */
-const buildEnabledTools = ({
+export const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
   createAgentEnabled,
@@ -3113,9 +3269,11 @@ const buildEnabledTools = ({
   });
 
   if (auto) {
+    // Auto mode = all standard tools on, individual toggles ignored
+    // (mirrors the chat UI rendering these switches ON+disabled).
     if (hasKBs) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
-    if (createAgentEnabled) enabledTools.push('create_agent_tool');
+    enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
   } else {
     if (hasKBs) enabledTools.push('knowledge_base');

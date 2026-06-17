@@ -1,6 +1,3 @@
-# syntax=docker/dockerfile:1
-# check=skip=FromPlatformFlagConstDisallowed
-
 # Numa Workspace Agent - AgentCore Service
 # Based on Python 3.13 slim for minimal image size
 # ARM64 required for AWS Bedrock AgentCore
@@ -49,7 +46,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     # PDF manipulation CLI
     qpdf \
+    # fontconfig so we can register the brand fonts below (fc-cache)
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
+
+# Brand fonts (OFL, ~0.9 MB): Figtree (display) + Inter (body), so on-brand
+# matplotlib charts and WeasyPrint PDFs render in the real brand fonts. HTML
+# artifacts load these from Google Fonts; this is the in-container copy so
+# server-side renders match. DejaVu (above) stays the ultimate glyph fallback.
+RUN mkdir -p /usr/share/fonts/truetype/brand \
+    && curl -fsSL -o /usr/share/fonts/truetype/brand/Figtree.ttf \
+       "https://github.com/google/fonts/raw/main/ofl/figtree/Figtree%5Bwght%5D.ttf" \
+    && curl -fsSL -o /usr/share/fonts/truetype/brand/Inter.ttf \
+       "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf" \
+    && fc-cache -f \
+    && rm -rf /root/.cache/matplotlib
 
 # Node.js 20 LTS for PptxGenJS presentation creation
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -67,6 +78,16 @@ RUN mkdir -p /app/node_packages && cd /app/node_packages \
     && npm init -y && npm install --production pptxgenjs@3.12.0 sharp@0.33.0 \
     && npm cache clean --force
 ENV NODE_PATH="/app/node_packages/node_modules"
+
+# numa-cli — production binary (@numa/cli only; the @numa/cli-dev addon with
+# bypass flags MUST NEVER ship into a workspace MicroVM). The tarball is built
+# by package-service.sh via `npm pack` in numa-cli/packages/cli/ and copied
+# into the build context immediately before `docker buildx build` runs.
+COPY numa-cli.tgz /tmp/numa-cli.tgz
+RUN npm install --global --production /tmp/numa-cli.tgz \
+    && rm /tmp/numa-cli.tgz \
+    && npm cache clean --force \
+    && numa --version
 
 # Create non-root user with UID 1000
 # Note: AgentCore uses ephemeral storage, no EFS access point needed

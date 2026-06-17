@@ -242,7 +242,7 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
         # MCP tools -- numa (web search) only; no integrations/connectors/vault.
         # Note: mcp__scripts__execute_script removed (model now uses Write+Bash+Edit;
         # see numa_chat.py for rationale).
-        "mcp__numa__numa_tool",
+        "Bash(numa:*)",  # Numa platform CLI (replaces the numa/integrations/connectors MCP)
         # NOTE: No mcp__integrations__*, mcp__connectors__*, mcp__vault__*, mcp__numa__numa_ops_tool
         # Bash commands
         "Bash(python:*)",
@@ -289,7 +289,7 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
     # Write+Bash+Edit instead.
     enable_scripts_mcp=False,
     enable_integrations_mcp=False,
-    enable_numa_mcp=True,
+    enable_numa_mcp=False,
     allowed_numa_operations=[
         "web_search",
         "extract_content",

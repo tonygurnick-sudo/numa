@@ -59,9 +59,14 @@ export type WorkspaceChatModelId =
   | 'anthropic.claude-sonnet-4-6@medium-thinking'
   | 'anthropic.claude-sonnet-4-6@high-thinking'
   | 'anthropic.claude-opus-4-6-v1'
+  | 'anthropic.claude-opus-4-6-v1@medium-thinking'
   | 'anthropic.claude-opus-4-6-v1@no-thinking'
   | 'anthropic.claude-haiku-4-5-20251001-v1:0'
-  | 'anthropic.claude-haiku-4-5-20251001-v1:0@no-thinking';
+  | 'anthropic.claude-haiku-4-5-20251001-v1:0@no-thinking'
+  // Numa Standard Model — opaque id for the cheap non-Anthropic model. The
+  // backend maps it via an in-container proxy → deployer relay; the client only
+  // ever sees this id. No regional prefix (not a Bedrock inference profile).
+  | 'numa-standard-model';
 
 /** Model option for display in the UI */
 export interface WorkspaceChatModelOption {
@@ -70,8 +75,84 @@ export interface WorkspaceChatModelOption {
   description: string;
 }
 
-/** Default model for workspace chat */
+/**
+ * Curated model option for the production-facing two-option selector
+ * (Standard / Premium). Labels + descriptions are i18n keys resolved through
+ * `t()` at the render site (the bare `WorkspaceChatModelOption` carries
+ * hardcoded English for the benchmarking list and is not used here).
+ */
+export interface WorkspaceChatCuratedModelOption {
+  id: WorkspaceChatModelId;
+  /** i18n key under the `chat` namespace, e.g. `input.modelSelector.standard.label` */
+  labelKey: string;
+  /** i18n key under the `chat` namespace, e.g. `input.modelSelector.standard.description` */
+  descriptionKey: string;
+  /**
+   * Optional i18n key (chat namespace) for a short credit-cost note shown beside the model chip and
+   * in the selector dropdown — rendered only when SHOW_CREDITS is on. Standard bills 1/4 the value
+   * credits of Premium; Expert (Opus) bills 3x. See MODEL_VALUE_MULTIPLIER in lib/credit-pricing.
+   */
+  creditNoteKey?: string;
+  /** Visual tone for the credit note: 'save' (cheaper, green) / 'neutral' (baseline) / 'premium' (pricier). */
+  creditNoteVariant?: 'save' | 'neutral' | 'premium';
+}
+
+/** Default model for workspace chat (benchmarking list — plain Sonnet, no thinking suffix) */
 export const DEFAULT_WORKSPACE_MODEL: WorkspaceChatModelId = 'anthropic.claude-sonnet-4-6';
+
+/**
+ * Standard = the Numa Standard Model (cheap, non-Anthropic). This is the
+ * default tier in the curated selector when WORKSPACE_CHAT_MODEL_SELECTION is
+ * on — the everyday, cost-efficient choice. The opaque id is mapped to the
+ * underlying model server-side (in-container proxy → deployer relay).
+ */
+export const STANDARD_WORKSPACE_MODEL: WorkspaceChatModelId = 'numa-standard-model';
+
+/**
+ * Premium = Sonnet 4.6 with medium adaptive thinking. The `@medium-thinking`
+ * suffix is split off and applied as a THINKING_PRESETS override by the backend
+ * (`parse_model_id_with_thinking` in sdk_config.py). This is the pre-selected
+ * default for the curated selector — it preserves today's behaviour.
+ */
+export const PREMIUM_WORKSPACE_MODEL: WorkspaceChatModelId = 'anthropic.claude-sonnet-4-6@medium-thinking';
+
+/**
+ * Expert = Opus 4.6 with medium adaptive thinking. Same `@medium-thinking`
+ * suffix handling as Premium — split off and applied as a THINKING_PRESETS
+ * override server-side (`parse_model_id_with_thinking` in sdk_config.py). The
+ * most capable tier in the curated selector, for hard problems.
+ */
+export const EXPERT_WORKSPACE_MODEL: WorkspaceChatModelId = 'anthropic.claude-opus-4-6-v1@medium-thinking';
+
+/**
+ * The three-tier curated selector shown when WORKSPACE_CHAT_MODEL_SELECTION is
+ * on: Standard (Numa Standard Model), Premium (Sonnet 4.6 @ medium thinking),
+ * and Expert (Opus 4.6 @ medium thinking). Premium is pre-selected; the
+ * selector locks once the conversation has started.
+ */
+export const WORKSPACE_MODEL_OPTIONS_CURATED: WorkspaceChatCuratedModelOption[] = [
+  {
+    id: 'numa-standard-model',
+    labelKey: 'input.modelSelector.standard.label',
+    descriptionKey: 'input.modelSelector.standard.description',
+    creditNoteKey: 'input.modelSelector.standard.creditNote',
+    creditNoteVariant: 'save',
+  },
+  {
+    id: PREMIUM_WORKSPACE_MODEL,
+    labelKey: 'input.modelSelector.premium.label',
+    descriptionKey: 'input.modelSelector.premium.description',
+    creditNoteKey: 'input.modelSelector.premium.creditNote',
+    creditNoteVariant: 'neutral',
+  },
+  {
+    id: EXPERT_WORKSPACE_MODEL,
+    labelKey: 'input.modelSelector.expert.label',
+    descriptionKey: 'input.modelSelector.expert.description',
+    creditNoteKey: 'input.modelSelector.expert.creditNote',
+    creditNoteVariant: 'premium',
+  },
+];
 
 /** Available model options for the selector */
 export const WORKSPACE_MODEL_OPTIONS: WorkspaceChatModelOption[] = [
@@ -800,6 +881,7 @@ export type SDKEventType =
   | 'completion'
   | 'assistant_advice'
   | 'tool_approval'
+  | 'tool_render'
   | 'background_tasks_pending';
 
 /** Base SDK event with common fields */
@@ -979,6 +1061,7 @@ export type SDKEvent =
   | SDKCompletionEvent
   | SDKAssistantAdviceEvent
   | SDKToolApprovalEvent
+  | SDKToolRenderEvent
   | SDKBackgroundTasksPendingEvent;
 
 /**
@@ -1016,6 +1099,32 @@ export interface SDKToolApprovalEvent {
   auto_approved?: boolean;
   /** Category of the approval: "integration", "numa_tool", etc. Used by frontend for label rendering. */
   approval_category?: string;
+  parent_tool_use_id?: string | null;
+}
+
+/**
+ * SDK Tool Render event — emitted out-of-band (same SSE rail as `tool_approval`)
+ * when the `numa render` CLI command pushes HTML/SVG/image content to display
+ * inline in chat. The backend POSTs `/internal/emit-render`, which enqueues this
+ * onto the active conversation's approval queue; the SSE stream drains it.
+ *
+ * The frontend appends a standalone `tool_card` segment (sentinel
+ * `toolName: 'numa_render'`) carrying this payload re-wrapped into the
+ * `ToolResultLike` content shape `RenderToolRenderer` / `getRenderPayload` expect.
+ *
+ * NOTE: like `tool_approval`, this event is transient — it is NOT written to the
+ * SDK trace.jsonl, so it does not survive a page refresh / trace replay.
+ */
+export interface SDKToolRenderEvent {
+  type: 'tool_render';
+  timestamp?: string;
+  tool_use_id: string;
+  render_type: 'html' | 'image';
+  content: string;
+  title?: string | null;
+  height?: number;
+  mime_type?: string | null;
+  file_path?: string | null;
   parent_tool_use_id?: string | null;
 }
 

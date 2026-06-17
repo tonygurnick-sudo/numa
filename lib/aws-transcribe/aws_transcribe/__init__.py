@@ -1,7 +1,8 @@
 import json
+import re
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import boto3
 import structlog
@@ -155,6 +156,114 @@ def fetch_transcript_with_speakers(bucket: str, key: str) -> tuple[str, list[str
             key=key,
         )
         raise TranscriptionError("Failed to get transcript") from e
+
+
+_PUNCT_RE = re.compile(r"^[.,!?;:]")
+
+
+def _party_for_speaker(label: str) -> Optional[int]:
+    """Map a Transcribe speaker label (``spk_0`` / ``spk_1``) to a vCon party
+    index. For Numa Voice spk_0=SDR=party 0, spk_1=prospect=party 1. Returns None
+    for an unmappable label (only trusted when diarisation_ok upstream)."""
+    try:
+        return int(label.rsplit("_", 1)[1])
+    except (ValueError, IndexError):
+        return None
+
+
+def _join_words(words: list[str]) -> str:
+    """Join word/punctuation tokens into readable text (no space before punctuation)."""
+    text = ""
+    for w in words:
+        if not w:
+            continue
+        if _PUNCT_RE.match(w) or w.startswith("'"):
+            text += w
+        else:
+            text = f"{text} {w}" if text else w
+    return text.strip()
+
+
+def _build_utterances(items: list, speaker_segments: dict) -> list[dict[str, Any]]:
+    """Group diarised items into per-speaker turns with start/end times.
+
+    Each utterance: ``{party, speaker, text, start, end}``. These per-utterance
+    timestamps are present in the raw Transcribe items but discarded by
+    ``_format_transcript`` — this preserves them for the vCon transcript analysis.
+    """
+    utterances: list[dict[str, Any]] = []
+    current: Optional[dict[str, Any]] = None
+
+    def _flush() -> None:
+        if current is not None:
+            utterances.append(
+                {
+                    "party": _party_for_speaker(current["speaker"]),
+                    "speaker": current["speaker"],
+                    "text": _join_words(current["words"]),
+                    "start": current["start"],
+                    "end": current["end"],
+                }
+            )
+
+    for item in items:
+        content = item.get("alternatives", [{}])[0].get("content", "")
+        if item.get("type") == "punctuation":
+            if current is not None:
+                current["words"].append(content)
+            continue
+        start_time = item.get("start_time")
+        speaker = speaker_segments.get(start_time)
+        if speaker is None:
+            if current is not None:
+                current["words"].append(content)
+            continue
+        end_time = item.get("end_time")
+        if current is None or current["speaker"] != speaker:
+            _flush()
+            current = {
+                "speaker": speaker,
+                "words": [content],
+                "start": float(start_time) if start_time else None,
+                "end": float(end_time) if end_time else None,
+            }
+        else:
+            current["words"].append(content)
+            if end_time:
+                current["end"] = float(end_time)
+    _flush()
+    return utterances
+
+
+def fetch_utterances_with_speakers(
+    bucket: str, key: str
+) -> tuple[str, list[str], list[dict[str, Any]]]:
+    """Like ``fetch_transcript_with_speakers`` but ALSO returns the per-utterance
+    array (``[{party, speaker, text, start, end}]``) with timestamps — the input
+    to the vCon transcript analysis. Returns ``(text, speakers, utterances)``."""
+    try:
+        response = s3_client.get_object(Bucket=bucket, Key=key)
+        transcript_json = json.loads(response["Body"].read().decode("utf-8"))
+
+        results = transcript_json.get("results", {})
+        segments = results.get("speaker_labels", {}).get("segments", [])
+        items = results.get("items", [])
+
+        speaker_segments: dict = {}
+        speakers: set[str] = set()
+        for segment in segments:
+            label = segment.get("speaker_label")
+            if label:
+                speakers.add(label)
+            for item in segment.get("items", []):
+                speaker_segments[item["start_time"]] = segment["speaker_label"]
+
+        text = _format_transcript(items, speaker_segments)
+        utterances = _build_utterances(items, speaker_segments)
+        return text, sorted(speakers), utterances
+    except Exception as e:
+        logger.exception("Failed to get utterances", bucket=bucket, key=key)
+        raise TranscriptionError("Failed to get utterances") from e
 
 
 def fetch_transcript(bucket: str, key: str) -> str:

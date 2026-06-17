@@ -25,7 +25,7 @@ done
 # can't double quote so disable the shellcheck
 # shellcheck disable=SC2086
 # Container-packaged Lambdas (have their own Dockerfile, not ZIP-packaged)
-CONTAINER_LAMBDA_EXCLUDES="browser-lambda"
+CONTAINER_LAMBDA_EXCLUDES="browser-lambda|synergy-text-crawler"
 
 PYTHON_DIRS=$(find ${SCRIPT_DIRECTORY}/python -maxdepth 2 -type f -name pyproject.toml -print0 | xargs -0 realpath | xargs dirname | grep -v -E "(${CONTAINER_LAMBDA_EXCLUDES})")
 

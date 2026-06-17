@@ -566,6 +566,34 @@ export async function approveToolAction(
 }
 
 /**
+ * Acknowledge that an approval card has been rendered to the user.
+ *
+ * Writes `seen_at` on the approval record (via the proxy `ack` action). The
+ * backend fast-fails approvals as "unattended" when no ack arrives within a
+ * short grace window — this is what stops away-from-chat runs from burning
+ * the full approval timeout per tool call (BUG-140). Callers should treat
+ * this as fire-and-forget.
+ */
+export async function ackToolApproval(
+  approvalId: string,
+  conversationId: string,
+  getIdToken?: GetIdToken
+): Promise<void> {
+  const res = await fetch(`${getApiUrl()}/invocations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(await getAuthHeaders(getIdToken)),
+    },
+    body: JSON.stringify({ action: 'ack', approvalId, conversationId }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Approval ack failed (${res.status})`);
+  }
+}
+
+/**
  * Get conversation history by fetching and parsing the trace from S3.
  *
  * This is a lightweight GET endpoint that reads directly from S3
@@ -592,32 +620,70 @@ export async function getWorkspaceChatConversation(
  * Returns NDJSON with thinking blocks and assistant_advice stripped by the proxy.
  * Used for loading conversation history with the frontend's rich trace parser.
  *
- * Includes a 30-second timeout to prevent infinite loading if AgentCore is slow or hung.
+ * The proxy serves this straight from S3 and responds in well under a second.
+ * But Safari/CloudFront can stall the *response* delivery — the server logs a
+ * 200 in 0.1s while the browser fetch hangs and never receives the body
+ * (BUG-140). So we use a SHORT per-attempt timeout (a stall past a few seconds
+ * means the connection is bad, not that the server is slow) and retry timeouts,
+ * dropped connections, and 5xx on a FRESH connection. Each retry opens a new
+ * fetch, which defeats a single poisoned HTTP/2 connection. Only after all
+ * attempts fail do we throw — carrying `name` 'NetworkError' / 'TimeoutError'
+ * so callers can show an accurate message.
  */
 export async function getWorkspaceChatRawTrace(conversationId: string, getIdToken?: GetIdToken): Promise<string> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  const maxAttempts = 4;
+  const perAttemptTimeoutMs = 8000; // server answers in ~0.1s; a stall past this = bad connection
+  const retryDelayMs = 800;
+  let lastError: Error | null = null;
 
-  try {
-    const res = await fetch(`${getApiUrl()}/trace/${encodeURIComponent(conversationId)}`, {
-      headers: await getAuthHeaders(getIdToken),
-      signal: controller.signal,
-    });
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
 
-    clearTimeout(timeoutId);
+    try {
+      const res = await fetch(`${getApiUrl()}/trace/${encodeURIComponent(conversationId)}`, {
+        headers: await getAuthHeaders(getIdToken),
+        signal: controller.signal,
+        // Bypass any stale/poisoned cached connection state on retry
+        cache: 'no-store',
+      });
 
-    if (!res.ok) {
-      throw new Error(`Failed to get trace: ${res.status}`);
+      if (res.ok) {
+        return await res.text();
+      }
+
+      const httpError = new Error(`Failed to get trace: ${res.status}`);
+      if (res.status < 500) {
+        throw httpError; // 4xx — not retryable
+      }
+      lastError = httpError; // 5xx — retry
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Response delivery stalled past the short timeout — retry on a fresh
+        // connection (the server already responded fast; this connection is bad).
+        const timeoutError = new Error(
+          'Unable to load conversation history. The request took too long - please try again.'
+        );
+        timeoutError.name = 'TimeoutError';
+        lastError = timeoutError;
+      } else if (err instanceof TypeError) {
+        // fetch network failure (connection dropped / Safari "Load failed") — retry
+        const networkError = new Error('Unable to reach the server while loading conversation history.');
+        networkError.name = 'NetworkError';
+        lastError = networkError;
+      } else {
+        throw err;
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    return res.text();
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new Error('Unable to load conversation history. The request took too long - please try again.');
+    if (attempt < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
     }
-    throw err;
   }
+
+  throw lastError ?? new Error('Failed to get trace');
 }
 
 /**
@@ -1075,18 +1141,35 @@ export async function pollWorkspaceAgentRun(
 /**
  * Single status check for a conversation's agent run.
  * Returns the current status and whether an agent is actively processing.
+ *
+ * Includes a 10-second timeout: this call gates the conversation-load path,
+ * and a hung status check must never leave the loading spinner up forever
+ * (BUG-140).
  */
 export async function checkConversationStatus(
   conversationId: string,
   getIdToken?: GetIdToken
 ): Promise<{ status: string; active?: boolean; run_id?: string }> {
-  const res = await fetch(`${getApiUrl()}/runs/${encodeURIComponent(conversationId)}/status`, {
-    headers: await getAuthHeaders(getIdToken),
-  });
-  if (!res.ok) {
-    throw new Error(`Status check failed (${res.status})`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+  try {
+    const res = await fetch(`${getApiUrl()}/runs/${encodeURIComponent(conversationId)}/status`, {
+      headers: await getAuthHeaders(getIdToken),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Status check failed (${res.status})`);
+    }
+    return await res.json();
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error('Status check timed out');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return res.json();
 }
 
 /**

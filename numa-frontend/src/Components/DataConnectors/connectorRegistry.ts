@@ -1165,6 +1165,36 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       },
     ],
   },
+
+  // ─── Tier 2: Token (Developer Tools) ────────────────────────────────────
+  {
+    id: 'gitlab',
+    displayName: 'GitLab',
+    icon: 'bi-git',
+    description: 'Source code, merge requests, issues, pipelines and releases on GitLab',
+    category: 'Developer Tools',
+    authType: 'token',
+    // SaaS GitLab.com default. Self-managed admins set the Instance URL in the
+    // wizard to their own API root (e.g. https://gitlab.example.com/api/v4) —
+    // the backend resolver prefers the vault instance_url over this base_url.
+    baseUrl: 'https://gitlab.com/api/v4',
+    surfaces: ['chat'],
+    rateLimitRpm: 2000, // GitLab.com authenticated default is ~2,000 req/min/user
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Per-user Personal Access Token (glpat-…), sent as a Bearer token — GitLab
+    // accepts a PAT in the Authorization: Bearer header just like an OAuth
+    // token. The token carries that user's own GitLab permissions.
+    credentialFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.pat',
+        type: 'password',
+        placeholder: 'glpat-…',
+        required: true,
+        helpText: 'dataConnectors.fields.gitlabTokenHint',
+      },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------

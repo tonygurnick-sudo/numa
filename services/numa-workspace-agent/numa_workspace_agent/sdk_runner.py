@@ -82,17 +82,59 @@ class RunHandle:
 _active_runs: dict[RunKey, RunHandle] = {}
 _active_runs_lock = asyncio.Lock()
 
+# Heartbeat tasks for the DynamoDB active-run mirror (BUG-140). The proxy
+# serves /runs/{id}/status from this table instead of invoking AgentCore,
+# treating a run as active only while last_seen_at is fresh — so the
+# heartbeat must outpace the proxy's staleness threshold (300s) comfortably.
+ACTIVE_RUN_HEARTBEAT_SECONDS = 60
+_active_run_mirror_tasks: dict[RunKey, asyncio.Task] = {}
+
+
+async def _mirror_active_run_loop(key: RunKey) -> None:
+    """Upsert the active-run record immediately, then heartbeat until cancelled."""
+    from .dynamo import upsert_active_run
+
+    user_sub, conversation_id, request_id = key
+    while True:
+        await asyncio.to_thread(
+            upsert_active_run, user_sub, conversation_id, request_id
+        )
+        await asyncio.sleep(ACTIVE_RUN_HEARTBEAT_SECONDS)
+
 
 async def register_run(key: RunKey, handle: RunHandle) -> None:
     """Register an active run so other requests can stop it."""
     async with _active_runs_lock:
         _active_runs[key] = handle
+        # Mirror to DynamoDB so the proxy can see the flag without an
+        # AgentCore invocation. Runs as a background heartbeat task;
+        # best-effort by design (upsert_active_run swallows errors).
+        if key not in _active_run_mirror_tasks:
+            _active_run_mirror_tasks[key] = asyncio.create_task(
+                _mirror_active_run_loop(key)
+            )
 
 
 async def pop_run(key: RunKey) -> Optional[RunHandle]:
     """Remove and return an active run entry."""
+    from .dynamo import clear_active_run
+
     async with _active_runs_lock:
-        return _active_runs.pop(key, None)
+        mirror_task = _active_run_mirror_tasks.pop(key, None)
+        handle = _active_runs.pop(key, None)
+
+    if mirror_task:
+        # Cancel and drain the heartbeat task BEFORE deleting the record,
+        # otherwise an in-flight upsert can land after the delete and
+        # resurrect the flag until it goes stale.
+        mirror_task.cancel()
+        try:
+            await mirror_task
+        except asyncio.CancelledError:
+            pass
+        await asyncio.to_thread(clear_active_run, key[1], key[2])
+
+    return handle
 
 
 async def get_run(key: RunKey) -> Optional[RunHandle]:
@@ -234,10 +276,37 @@ def override_result_cost(serialized: dict[str, Any], stream_log: Any) -> dict[st
 
     Must be called AFTER `stream_log.finalize(message)` so the recomputed
     values are available.
+
+    Numa Standard Model (Option A, contract §4): the per-token pricing tables
+    don't know the opaque model, so the Anthropic recompute returns the SDK's
+    own (wrong) value. Instead, the in-container proxy captured the relay's TRUE
+    per-request `usage.cost` and summed it for the conversation. When that
+    accumulator is populated (i.e. the standard-model relay path ran in this
+    MicroVM), it is the authoritative cost basis — we override `total_cost_usd`
+    with it so the trace carries the real USD figure for credit metering. The
+    accumulator stays None on Anthropic turns, so their behaviour is unchanged.
     """
     if serialized.get("type") != "result":
         return serialized
     sdk_value = serialized.get("total_cost_usd")
+
+    # Standard-model true cost from the relay (via the in-container proxy).
+    try:
+        from numa_workspace_agent.bedrock_mantle_proxy import get_accumulated_cost
+
+        standard_cost = get_accumulated_cost()
+    except Exception:
+        standard_cost = None
+    if standard_cost is not None:
+        if "sdk_reported_cost_usd" not in serialized:
+            serialized["sdk_reported_cost_usd"] = sdk_value
+        serialized["total_cost_usd"] = standard_cost
+        # F-B: also correct the stream-log so the later COST / STREAM_COMPLETE
+        # log lines emit the real relay cost, not the SDK's Anthropic-rate
+        # estimate (recalculate_anthropic_cost can't price the opaque model).
+        stream_log.total_cost_usd = standard_cost
+        return serialized
+
     recomputed = getattr(stream_log, "total_cost_usd", None)
     if recomputed is None:
         return serialized
@@ -541,6 +610,18 @@ async def stream_claude_sdk(
     Yields:
         SSE formatted events as bytes (SDK message types serialized)
     """
+    # Per-request reset of the Standard Model cost accumulator so this message's
+    # result.total_cost_usd is its OWN upstream cost (the per-message badge), not
+    # the conversation running total — which the frontend sums separately for the
+    # header total. No-op on Anthropic turns. (Without this, every badge showed
+    # the cumulative sum, and the header double-counted it.)
+    try:
+        from numa_workspace_agent.bedrock_mantle_proxy import reset_accumulated_cost
+
+        reset_accumulated_cost()
+    except Exception:
+        pass
+
     paths = get_workspace_paths()
     trace_path = paths["trace_file"]
     session_id: Optional[str] = None
@@ -755,6 +836,9 @@ async def stream_claude_sdk(
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
         request_id=request_id,
+        approval_mode=approval_mode,
+        numa_tool_approval_mode=numa_tool_approval_mode,
+        integration_approval_modes=integration_approval_modes,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
         user_profile=user_profile,
@@ -1076,462 +1160,6 @@ async def stream_claude_sdk(
                 # Yield to caller (SSE format for streaming)
                 yield format_sse_event(serialized)
 
-                # Emit tool_approval SSE event for integration tools that need user approval.
-                # This event is yielded AFTER the tool_use event but BEFORE the tool executes,
-                # giving the frontend time to show an approval card while the tool polls DynamoDB.
-                #
-                # The approval_mode controls whether approval is required:
-                # - 'always': every integration tool call needs manual approval (default)
-                # - 'non_destructive': auto-approve read-only actions and draft actions,
-                #   require approval for writes/deletes or unknown actions (fail-closed)
-                # - 'never': auto-approve all integration tool calls
-                APPROVAL_REQUIRED_TOOLS = (
-                    "run_action",
-                    "proxy_request",
-                    "numa_ops_tool",
-                    "numa_tool",
-                    "connectors",
-                )
-                # Numa tool write operations that require approval
-                _NUMA_TOOL_WRITE_OPS: dict[str, set[str]] = {
-                    "agents": {"create", "update", "duplicate"},
-                    "memories": {"add", "update"},
-                    "knowledgeBases": {"upload"},
-                }
-                _NUMA_TOOL_SAFE_OPS: dict[str, set[str]] = {
-                    "agents": {"list", "get"},
-                    "memories": {"list"},
-                    "knowledgeBases": {"query", "list", "download", "download_folder"},
-                }
-                _nt_modes = numa_tool_approval_mode or {}
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, ToolUseBlock):
-                            logger.info(
-                                "ToolUseBlock seen",
-                                _name="TOOL_USE_BLOCK_NAME",
-                                tool_name=block.name,
-                                matches_approval=any(
-                                    t in block.name for t in APPROVAL_REQUIRED_TOOLS
-                                ),
-                            )
-                        if isinstance(block, ToolUseBlock) and any(
-                            t in block.name for t in APPROVAL_REQUIRED_TOOLS
-                        ):
-                            logger.info(
-                                "AssistantMessage approval check",
-                                _name="AM_APPROVAL_CHECK",
-                                tool_name=block.name,
-                                block_id=block.id,
-                                parent_tool_use_id=getattr(
-                                    message, "parent_tool_use_id", None
-                                ),
-                            )
-                            tool_input = (
-                                block.input if isinstance(block.input, dict) else {}
-                            )
-
-                            # ── Branch: Numa tool vs Ops / Connectors / Integration tool ──
-                            # All compute _approval_key and auto_approved,
-                            # then share the common approval event emission below.
-                            auto_approved = False
-                            _props_preview_override: dict[str, Any] | None = None
-
-                            if (
-                                "numa_tool" in block.name
-                                and "numa_ops_tool" not in block.name
-                            ):
-                                # ── Numa tool approval (agents/memories/KB) ──
-                                _nt_name = tool_input.get("name", "")
-                                _nt_operation = tool_input.get("params", {}).get(
-                                    "operation", ""
-                                )
-                                # Map tool names to category keys
-                                _nt_category = {
-                                    "agents": "agents",
-                                    "memories": "memories",
-                                    "numa_files": "knowledgeBases",
-                                    "knowledge_base": "knowledgeBases",
-                                }.get(_nt_name, "")
-                                if not _nt_category:
-                                    continue
-
-                                _write_ops = _NUMA_TOOL_WRITE_OPS.get(
-                                    _nt_category, set()
-                                )
-                                _safe_ops = _NUMA_TOOL_SAFE_OPS.get(_nt_category, set())
-                                _is_write = _nt_operation in _write_ops
-                                _is_safe = _nt_operation in _safe_ops
-
-                                # Look up per-category mode
-                                _cat_mode = _nt_modes.get(_nt_category, "never")
-
-                                if _cat_mode == "never":
-                                    auto_approved = True
-                                elif _cat_mode == "non_destructive":
-                                    auto_approved = _is_safe
-                                else:  # "always"
-                                    auto_approved = False
-
-                                # Skip if this is a safe op and auto-approved
-                                if auto_approved and not _is_write:
-                                    continue
-
-                                _approval_key = f"numa_{_nt_category}_{_nt_operation}"
-
-                                # Build structured props preview
-                                _nt_params = tool_input.get("params", {})
-                                _props_preview_dict: dict[str, Any] = {}
-                                if _nt_category == "agents":
-                                    _props_preview_dict = {
-                                        "title": _nt_params.get("title", ""),
-                                        "operation": _nt_operation,
-                                        "visibility": _nt_params.get(
-                                            "visibility", "personal"
-                                        ),
-                                        "systemPrompt": (
-                                            _nt_params.get("systemPrompt", "") or ""
-                                        )[:200],
-                                    }
-                                    if _nt_operation in ("update", "duplicate"):
-                                        _props_preview_dict["agent_id"] = (
-                                            _nt_params.get("agent_id", "")
-                                        )
-                                elif _nt_category == "memories":
-                                    _props_preview_dict = {
-                                        "content": (
-                                            _nt_params.get("content", "") or ""
-                                        )[:200],
-                                        "operation": _nt_operation,
-                                        "scope": _nt_params.get("scope", "general"),
-                                    }
-                                    if _nt_operation == "update":
-                                        _props_preview_dict["memory_id"] = (
-                                            _nt_params.get("memory_id", "")
-                                        )
-                                elif _nt_category == "knowledgeBases":
-                                    _props_preview_dict = {
-                                        "operation": _nt_operation,
-                                        "kb_id": _nt_params.get("kb_id", ""),
-                                        "file_path": _nt_params.get("file_path", ""),
-                                    }
-                                _props_preview_override = _props_preview_dict
-
-                                logger.info(
-                                    "Numa tool approval decision",
-                                    _name="APPROVAL_DECISION",
-                                    phase="numa_tool",
-                                    tool_name=block.name,
-                                    numa_tool_name=_nt_name,
-                                    category=_nt_category,
-                                    operation=_nt_operation,
-                                    action_key=_approval_key,
-                                    category_mode=_cat_mode,
-                                    auto_approved=auto_approved,
-                                )
-
-                            elif "numa_ops_tool" in block.name:
-                                # ── Ops tool approval ──
-                                operation = tool_input.get("operation", "")
-                                _approval_key = f"ops-{operation.replace('_', '-')}"
-
-                                # Safe ops: list_*, get_*, search_*
-                                _ops_safe = operation.startswith(
-                                    ("list_", "get_", "search_")
-                                )
-
-                                _ops_mode = _nt_modes.get("ops", "never")
-                                if _ops_mode == "never":
-                                    auto_approved = True
-                                elif _ops_mode == "non_destructive":
-                                    auto_approved = _ops_safe
-                                # else "always" → auto_approved stays False
-
-                                logger.info(
-                                    "Ops tool approval decision",
-                                    _name="APPROVAL_DECISION",
-                                    phase="ops",
-                                    tool_name=block.name,
-                                    operation=operation,
-                                    action_key=_approval_key,
-                                    ops_mode=_ops_mode,
-                                    auto_approved=auto_approved,
-                                )
-                            elif "connectors" in block.name:
-                                # ── Connectors tool approval ──
-                                from numa_workspace_agent.mcp_tools.connect import (
-                                    is_safe_connector_operation,
-                                )
-
-                                operation = tool_input.get("name", "")
-                                _params_dict = (
-                                    tool_input.get("params", {})
-                                    if isinstance(tool_input.get("params"), dict)
-                                    else {}
-                                )
-                                connector = _params_dict.get("connector", "")
-                                _approval_key = (
-                                    f"connector-{connector}-{operation}"
-                                    if connector
-                                    else f"connector-{operation}"
-                                )
-
-                                _connector_safe = is_safe_connector_operation(operation)
-                                # `request` is the catch-all authenticated-HTTP op
-                                # used by services with no dedicated handler (e.g.
-                                # native Gmail). Without method-aware inference
-                                # every Gmail read prompts for approval. Mirror
-                                # the Pipedream proxy_request rule: GET/HEAD are
-                                # read-only and safe under non_destructive.
-                                if operation == "request" and not _connector_safe:
-                                    # Mirror connect_tools.handle_connect_request:
-                                    # an omitted method defaults to GET in the
-                                    # handler, so treat the empty case as GET
-                                    # here too. Otherwise the LLM's read calls
-                                    # that rely on the default fall through to
-                                    # "requires approval".
-                                    _http_method = (
-                                        str(_params_dict.get("method", "")).upper()
-                                        or "GET"
-                                    )
-                                    if _http_method in ("GET", "HEAD"):
-                                        _connector_safe = True
-                                _category_conn_mode = _nt_modes.get(
-                                    "connectors", "non_destructive"
-                                )
-                                # TASK-127: per-integration user override beats
-                                # the category-level setting for this connector
-                                # only. Slug ↔ connector name match (native
-                                # connectors share the same identifier across
-                                # the chat payload and the connector tool).
-                                _per_int_conn_mode = (
-                                    (integration_approval_modes or {}).get(connector)
-                                    if connector
-                                    else None
-                                )
-                                _conn_mode = _per_int_conn_mode or _category_conn_mode
-
-                                if _conn_mode == "never":
-                                    auto_approved = True
-                                elif _conn_mode == "non_destructive":
-                                    auto_approved = _connector_safe
-                                # else "always" → auto_approved stays False
-
-                                logger.info(
-                                    "Connectors tool approval decision",
-                                    _name="APPROVAL_DECISION",
-                                    phase="connectors",
-                                    tool_name=block.name,
-                                    operation=operation,
-                                    connector=connector,
-                                    action_key=_approval_key,
-                                    connector_mode=_conn_mode,
-                                    category_mode=_category_conn_mode,
-                                    per_integration_override=_per_int_conn_mode,
-                                    auto_approved=auto_approved,
-                                )
-                            else:
-                                # ── Integration tool approval ──
-                                # Only show approval if the integration is actually enabled.
-                                # run_action has action_key like "google_drive-get-current-user";
-                                # proxy_request has integration_slug directly.
-                                action_key = tool_input.get("action_key", "")
-                                integration_slug = tool_input.get(
-                                    "integration_slug"
-                                ) or (action_key.split("-")[0] if action_key else "")
-                                _enabled_pipedream_slugs = {
-                                    it.get("slug")
-                                    for it in (enabled_integrations or [])
-                                    if isinstance(it, dict)
-                                    and it.get("method") == "pipedream"
-                                }
-                                if integration_slug and (
-                                    not _enabled_pipedream_slugs
-                                    or integration_slug not in _enabled_pipedream_slugs
-                                ):
-                                    continue
-
-                                # Compute the approval key early — needed for both
-                                # schema lookup and the request ID map.
-                                _approval_key = (
-                                    action_key
-                                    or f"{integration_slug}-{tool_input.get('method', 'request')}"
-                                )
-
-                                # TASK-127: per-integration user override beats
-                                # the resolved category approval_mode for this
-                                # slug only. Falls through to the regular
-                                # approval_mode (and its schema-driven logic)
-                                # when there's no override for the slug.
-                                _per_int_int_mode = (
-                                    (integration_approval_modes or {}).get(
-                                        integration_slug
-                                    )
-                                    if integration_slug
-                                    else None
-                                )
-                                effective_int_mode = _per_int_int_mode or approval_mode
-
-                                # Determine if this tool call should be auto-approved
-                                # based on the effective approval_mode.
-                                schema_found = False
-                                if effective_int_mode == "never":
-                                    auto_approved = True
-                                elif effective_int_mode == "non_destructive":
-                                    # Read annotations from the action schema file on
-                                    # disk (not from tool input — Claude doesn't send
-                                    # annotations).  Schema path:
-                                    #   /workdir/tools/integrations/{slug}/{action_key}.json
-                                    schema_annotations = {}
-                                    try:
-                                        schema_path = (
-                                            Path("/workdir/tools/integrations")
-                                            / integration_slug
-                                            / f"{_approval_key}.json"
-                                        )
-                                        schema_found = schema_path.exists()
-                                        if schema_found:
-                                            schema_data = json.loads(
-                                                schema_path.read_text(encoding="utf-8")
-                                            )
-                                            schema_annotations = schema_data.get(
-                                                "annotations", {}
-                                            )
-                                    except Exception as exc:
-                                        logger.debug(
-                                            "Could not read action schema for approval check",
-                                            action_key=_approval_key,
-                                            error=str(exc),
-                                        )
-                                    # proxy_request with no schema file: infer
-                                    # safety from HTTP method. GET/HEAD are read-only.
-                                    if not schema_found and not action_key:
-                                        http_method = tool_input.get(
-                                            "method", ""
-                                        ).upper()
-                                        if http_method in ("GET", "HEAD"):
-                                            schema_annotations = {
-                                                "readOnlyHint": True,
-                                                "destructiveHint": False,
-                                            }
-                                    # Auto-approve read-only actions and draft
-                                    # actions that are explicitly non-destructive.
-                                    # Drafts are saved locally and must be sent
-                                    # separately by the user, so they're safe.
-                                    # Missing annotations default to requiring
-                                    # approval (fail-closed).
-                                    if isinstance(schema_annotations, dict):
-                                        read_only = schema_annotations.get(
-                                            "readOnlyHint", False
-                                        )
-                                        is_draft = "draft" in _approval_key.lower()
-                                        non_destructive = not schema_annotations.get(
-                                            "destructiveHint", True
-                                        )
-                                        auto_approved = bool(
-                                            read_only or (is_draft and non_destructive)
-                                        )
-                                    else:
-                                        auto_approved = False
-
-                                logger.info(
-                                    "Integration tool approval decision",
-                                    _name="APPROVAL_DECISION",
-                                    phase="integrations",
-                                    tool_name=block.name,
-                                    action_key=_approval_key,
-                                    integration_slug=integration_slug,
-                                    approval_mode=effective_int_mode,
-                                    category_mode=approval_mode,
-                                    per_integration_override=_per_int_int_mode,
-                                    auto_approved=auto_approved,
-                                    schema_found=schema_found,
-                                )
-
-                            # ── Common: emit approval event (ops + integrations + numa_tool) ──
-
-                            # Set NUMA_APPROVAL_MODE env var so the tools Lambda
-                            # knows whether to skip DynamoDB polling.
-                            os.environ["NUMA_APPROVAL_MODE"] = (
-                                "auto" if auto_approved else "manual"
-                            )
-
-                            # Generate a per-tool-call approval ID and store in
-                            # NUMA_REQUEST_ID_MAP (JSON dict of action_key -> list of
-                            # {"id", "mode"} entries). Each parallel tool pops its own
-                            # entry in FIFO order, so both the ID *and* the approval
-                            # mode survive a mixed-mode parallel batch — the single
-                            # NUMA_APPROVAL_MODE global below is only a fail-closed
-                            # default; the popper pins the real per-call mode.
-                            approval_id = str(uuid_mod.uuid4())
-                            try:
-                                _id_map = json.loads(
-                                    os.environ.get("NUMA_REQUEST_ID_MAP", "{}")
-                                )
-                            except (json.JSONDecodeError, TypeError):
-                                _id_map = {}
-                            _id_map.setdefault(_approval_key, []).append(
-                                {
-                                    "id": approval_id,
-                                    "mode": "auto" if auto_approved else "manual",
-                                }
-                            )
-                            os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
-
-                            # Use structured props preview for numa_tool, else existing logic
-                            _event_props = (
-                                _props_preview_override
-                                if _props_preview_override is not None
-                                else tool_input.get(
-                                    "props", tool_input.get("upstream_url", "")
-                                )
-                            )
-
-                            # Determine approval category for frontend label rendering
-                            _approval_category = (
-                                "numa_tool"
-                                if _props_preview_override is not None
-                                else "integration"
-                            )
-
-                            approval_event = {
-                                "type": "tool_approval",
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                                "created_at": int(time.time()),
-                                "tool_use_id": block.id,
-                                "tool_name": block.name,
-                                "action_key": _approval_key,
-                                "description": tool_input.get("description", ""),
-                                "props_preview": _event_props,
-                                "request_id": approval_id,
-                                "auto_approved": auto_approved,
-                                "approval_category": _approval_category,
-                                "parent_tool_use_id": getattr(
-                                    message, "parent_tool_use_id", None
-                                ),
-                            }
-                            logger.info(
-                                "AssistantMessage approval event emitting",
-                                _name="AM_APPROVAL_EMIT",
-                                tool_use_id=block.id,
-                                tool_name=block.name,
-                                action_key=approval_event["action_key"],
-                                request_id=approval_id,
-                                parent_tool_use_id=approval_event.get(
-                                    "parent_tool_use_id"
-                                ),
-                                auto_approved=auto_approved,
-                            )
-                            with trace_path.open("a", encoding="utf-8") as f:
-                                f.write(json.dumps(approval_event) + "\n")
-                            yield format_sse_event(approval_event)
-
-                            # Yield large SSE comment to force-flush the tool_approval
-                            # through AgentCore's transport buffer. The buffer holds
-                            # data until enough accumulates; 128KB of padding ensures
-                            # any reasonable buffer is filled and flushed.
-                            yield b": " + b"x" * 131072 + b"\n\n"
-
             # If we exited loop due to stop, emit a terminal event for the frontend/trace
             if stop_reason:
                 stop_event_payload = {
@@ -1588,6 +1216,9 @@ async def stream_claude_sdk(
                 enabled_integrations=enabled_integrations,
                 available_integrations=available_integrations,
                 request_id=request_id,
+                approval_mode=approval_mode,
+                numa_tool_approval_mode=numa_tool_approval_mode,
+                integration_approval_modes=integration_approval_modes,
                 email_signature=email_signature,
                 agent_type_config=agent_type_config,
                 user_profile=user_profile,
@@ -1829,6 +1460,15 @@ async def run_claude_sdk(
             "error": "..."  # only present when status == "error"
         }
     """
+    # Per-request reset of the Standard Model cost accumulator (see
+    # stream_claude_sdk) so this run's result.total_cost_usd is its own cost.
+    try:
+        from numa_workspace_agent.bedrock_mantle_proxy import reset_accumulated_cost
+
+        reset_accumulated_cost()
+    except Exception:
+        pass
+
     paths = get_workspace_paths()
     # Allow pipeline orchestrators to isolate SDK session state per step
     effective_system_dir = system_dir or paths["system_dir"]
@@ -1890,10 +1530,6 @@ async def run_claude_sdk(
         accessible_kbs=accessible_kbs,
     )
 
-    # 3b. Default approval mode env var — overridden per tool call in the
-    # message loop below (same as the streaming path in stream_claude_sdk).
-    os.environ["NUMA_APPROVAL_MODE"] = "manual"
-
     # 4. Create SDK options (with quota fallback pre-check)
     # Precedence: request override > agent_type_config.default_model > DEFAULT_MODEL.
     # The type-config consultation is also done inside create_agent_options, but
@@ -1925,6 +1561,9 @@ async def run_claude_sdk(
         enabled_integrations=enabled_integrations,
         available_integrations=available_integrations,
         request_id=request_id,
+        approval_mode=approval_mode,
+        numa_tool_approval_mode=numa_tool_approval_mode,
+        integration_approval_modes=integration_approval_modes,
         email_signature=email_signature,
         agent_type_config=agent_type_config,
         user_profile=user_profile,
@@ -2019,253 +1658,6 @@ async def run_claude_sdk(
                                     block.content,
                                     block.is_error,
                                 )
-
-                # Per-tool-call approval mode for integration, ops, and connector tools.
-                # Identical to stream_claude_sdk: checks approval_mode,
-                # sets NUMA_APPROVAL_MODE env var, and generates
-                # NUMA_REQUEST_ID_MAP entries. No SSE events in non-streaming mode.
-                APPROVAL_REQUIRED_TOOLS = (
-                    "run_action",
-                    "proxy_request",
-                    "numa_ops_tool",
-                    "numa_tool",
-                    "connectors",
-                )
-                _NUMA_TOOL_WRITE_OPS_SYNC: dict[str, set[str]] = {
-                    "agents": {"create", "update", "duplicate"},
-                    "memories": {"add", "update"},
-                    "knowledgeBases": {"upload"},
-                }
-                _NUMA_TOOL_SAFE_OPS_SYNC: dict[str, set[str]] = {
-                    "agents": {"list", "get"},
-                    "memories": {"list"},
-                    "knowledgeBases": {"query", "list", "download", "download_folder"},
-                }
-                _nt_modes_sync = numa_tool_approval_mode or {}
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, ToolUseBlock) and any(
-                            t in block.name for t in APPROVAL_REQUIRED_TOOLS
-                        ):
-                            tool_input = (
-                                block.input if isinstance(block.input, dict) else {}
-                            )
-
-                            # ── Branch: Numa tool vs Ops / Connectors / Integration tool ──
-                            auto_approved = False
-
-                            if (
-                                "numa_tool" in block.name
-                                and "numa_ops_tool" not in block.name
-                            ):
-                                _nt_name = tool_input.get("name", "")
-                                _nt_operation = tool_input.get("params", {}).get(
-                                    "operation", ""
-                                )
-                                _nt_category = {
-                                    "agents": "agents",
-                                    "memories": "memories",
-                                    "numa_files": "knowledgeBases",
-                                    "knowledge_base": "knowledgeBases",
-                                }.get(_nt_name, "")
-                                if not _nt_category:
-                                    continue
-                                _write_ops = _NUMA_TOOL_WRITE_OPS_SYNC.get(
-                                    _nt_category, set()
-                                )
-                                _safe_ops = _NUMA_TOOL_SAFE_OPS_SYNC.get(
-                                    _nt_category, set()
-                                )
-                                _is_safe = _nt_operation in _safe_ops
-                                _cat_mode = _nt_modes_sync.get(_nt_category, "never")
-                                if _cat_mode == "never":
-                                    auto_approved = True
-                                elif _cat_mode == "non_destructive":
-                                    auto_approved = _is_safe
-                                if auto_approved and _nt_operation not in _write_ops:
-                                    continue
-                                _approval_key = f"numa_{_nt_category}_{_nt_operation}"
-
-                            elif "numa_ops_tool" in block.name:
-                                # ── Ops tool approval ──
-                                operation = tool_input.get("operation", "")
-                                _approval_key = f"ops-{operation.replace('_', '-')}"
-                                _ops_safe = operation.startswith(
-                                    ("list_", "get_", "search_")
-                                )
-                                _ops_mode = _nt_modes_sync.get("ops", "never")
-                                if _ops_mode == "never":
-                                    auto_approved = True
-                                elif _ops_mode == "non_destructive":
-                                    auto_approved = _ops_safe
-                            elif "connectors" in block.name:
-                                # ── Connectors tool approval ──
-                                from numa_workspace_agent.mcp_tools.connect import (
-                                    is_safe_connector_operation,
-                                )
-
-                                operation = tool_input.get("name", "")
-                                _params_dict = (
-                                    tool_input.get("params", {})
-                                    if isinstance(tool_input.get("params"), dict)
-                                    else {}
-                                )
-                                connector = _params_dict.get("connector", "")
-                                _approval_key = (
-                                    f"connector-{connector}-{operation}"
-                                    if connector
-                                    else f"connector-{operation}"
-                                )
-
-                                _connector_safe = is_safe_connector_operation(operation)
-                                # Mirror the async path: `connectors.request` with
-                                # an HTTP method of GET/HEAD is read-only and
-                                # qualifies for auto-approval under non_destructive.
-                                if operation == "request" and not _connector_safe:
-                                    # Mirror connect_tools.handle_connect_request:
-                                    # an omitted method defaults to GET in the
-                                    # handler, so treat the empty case as GET
-                                    # here too. Otherwise the LLM's read calls
-                                    # that rely on the default fall through to
-                                    # "requires approval".
-                                    _http_method = (
-                                        str(_params_dict.get("method", "")).upper()
-                                        or "GET"
-                                    )
-                                    if _http_method in ("GET", "HEAD"):
-                                        _connector_safe = True
-                                _category_conn_mode_sync = _nt_modes_sync.get(
-                                    "connectors", "non_destructive"
-                                )
-                                # TASK-127: per-integration user override.
-                                _per_int_conn_mode_sync = (
-                                    (integration_approval_modes or {}).get(connector)
-                                    if connector
-                                    else None
-                                )
-                                _conn_mode_sync = (
-                                    _per_int_conn_mode_sync or _category_conn_mode_sync
-                                )
-
-                                if _conn_mode_sync == "never":
-                                    auto_approved = True
-                                elif _conn_mode_sync == "non_destructive":
-                                    auto_approved = _connector_safe
-                            else:
-                                # ── Integration tool approval ──
-                                action_key = tool_input.get("action_key", "")
-                                integration_slug = tool_input.get(
-                                    "integration_slug"
-                                ) or (action_key.split("-")[0] if action_key else "")
-                                _enabled_pipedream_slugs = {
-                                    it.get("slug")
-                                    for it in (enabled_integrations or [])
-                                    if isinstance(it, dict)
-                                    and it.get("method") == "pipedream"
-                                }
-                                if integration_slug and (
-                                    not _enabled_pipedream_slugs
-                                    or integration_slug not in _enabled_pipedream_slugs
-                                ):
-                                    continue
-
-                                _approval_key = (
-                                    action_key
-                                    or f"{integration_slug}-{tool_input.get('method', 'request')}"
-                                )
-
-                                # TASK-127: per-integration override beats the
-                                # resolved category mode for this slug.
-                                _per_int_int_mode_sync = (
-                                    (integration_approval_modes or {}).get(
-                                        integration_slug
-                                    )
-                                    if integration_slug
-                                    else None
-                                )
-                                effective_int_mode_sync = (
-                                    _per_int_int_mode_sync or approval_mode
-                                )
-
-                                schema_found = False
-                                if effective_int_mode_sync == "never":
-                                    auto_approved = True
-                                elif effective_int_mode_sync == "non_destructive":
-                                    schema_annotations = {}
-                                    try:
-                                        schema_path = (
-                                            Path("/workdir/tools/integrations")
-                                            / integration_slug
-                                            / f"{_approval_key}.json"
-                                        )
-                                        schema_found = schema_path.exists()
-                                        if schema_found:
-                                            schema_data = json.loads(
-                                                schema_path.read_text(encoding="utf-8")
-                                            )
-                                            schema_annotations = schema_data.get(
-                                                "annotations", {}
-                                            )
-                                    except Exception as exc:
-                                        logger.debug(
-                                            "Could not read action schema for approval check",
-                                            action_key=_approval_key,
-                                            error=str(exc),
-                                        )
-                                    # proxy_request with no schema file: infer
-                                    # safety from HTTP method. GET/HEAD are read-only.
-                                    if not schema_found and not action_key:
-                                        http_method = tool_input.get(
-                                            "method", ""
-                                        ).upper()
-                                        if http_method in ("GET", "HEAD"):
-                                            schema_annotations = {
-                                                "readOnlyHint": True,
-                                                "destructiveHint": False,
-                                            }
-                                    if isinstance(schema_annotations, dict):
-                                        read_only = schema_annotations.get(
-                                            "readOnlyHint", False
-                                        )
-                                        is_draft = "draft" in _approval_key.lower()
-                                        non_destructive = not schema_annotations.get(
-                                            "destructiveHint", True
-                                        )
-                                        auto_approved = bool(
-                                            read_only or (is_draft and non_destructive)
-                                        )
-                                    else:
-                                        auto_approved = False
-
-                            # ── Common: set env vars and approval ID ──
-                            os.environ["NUMA_APPROVAL_MODE"] = (
-                                "auto" if auto_approved else "manual"
-                            )
-
-                            approval_id = str(uuid_mod.uuid4())
-                            try:
-                                _id_map = json.loads(
-                                    os.environ.get("NUMA_REQUEST_ID_MAP", "{}")
-                                )
-                            except (json.JSONDecodeError, TypeError):
-                                _id_map = {}
-                            _id_map.setdefault(_approval_key, []).append(
-                                {
-                                    "id": approval_id,
-                                    "mode": "auto" if auto_approved else "manual",
-                                }
-                            )
-                            os.environ["NUMA_REQUEST_ID_MAP"] = json.dumps(_id_map)
-
-                            logger.info(
-                                "Non-streaming approval check",
-                                _name="SYNC_APPROVAL_CHECK",
-                                tool_name=block.name,
-                                action_key=_approval_key,
-                                auto_approved=auto_approved,
-                                approval_mode=approval_mode,
-                                request_id=approval_id,
-                            )
 
                 # Serialize and write to trace
                 serialized = serialize_message(message)
@@ -2365,6 +1757,9 @@ async def run_claude_sdk(
                 enabled_integrations=enabled_integrations,
                 available_integrations=available_integrations,
                 request_id=request_id,
+                approval_mode=approval_mode,
+                numa_tool_approval_mode=numa_tool_approval_mode,
+                integration_approval_modes=integration_approval_modes,
                 email_signature=email_signature,
                 agent_type_config=agent_type_config,
                 user_profile=user_profile,

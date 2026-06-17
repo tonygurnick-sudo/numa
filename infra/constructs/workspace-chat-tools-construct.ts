@@ -133,7 +133,17 @@ export class WorkspaceChatToolsConstruct extends Construct {
       resources: [
         // Nova models for summarization (Nova 1 and Nova 2)
         'arn:aws:bedrock:*::foundation-model/amazon.nova-*',
-        // Cross-region inference profiles (for global.amazon.nova-2-lite-v1:0)
+        // Claude models for the `numa vision view` tool (VISION_MODEL_ID = Haiku
+        // 4.5) and any future Anthropic-backed tool helper. A cross-region
+        // inference profile (global.anthropic.claude-*) needs InvokeModel on BOTH
+        // the profile (below) AND the underlying foundation model (here).
+        'arn:aws:bedrock:*::foundation-model/anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/us.anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/global.anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/apac.anthropic.claude-*',
+        'arn:aws:bedrock:*::foundation-model/au.anthropic.claude-*',
+        // Cross-region inference profiles (for global.amazon.nova-2-lite-v1:0
+        // and global.anthropic.claude-haiku-4-5)
         `arn:aws:bedrock:${props.region}:${callerIdentity.accountId}:inference-profile/*`,
       ],
     });
@@ -187,12 +197,13 @@ export class WorkspaceChatToolsConstruct extends Construct {
     });
 
     // DynamoDB permission for agent management
-    // Allows listing, getting, creating, updating, patching, and duplicating agents.
+    // Allows listing, getting, creating, updating, patching, duplicating, and deleting agents.
     // UpdateItem is required by patch_agent_prompt for targeted system_prompt edits.
+    // DeleteItem is required by delete_agent.
     policyStatements.push({
       sid: 'DynamoDBAgentManagement',
       effect: 'Allow',
-      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
+      actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:UpdateItem', 'dynamodb:DeleteItem', 'dynamodb:Query'],
       resources: [
         // Workspace agents table
         `arn:aws:dynamodb:${props.region}:${callerIdentity.accountId}:table/numa-${props.clientName}-agents`,
@@ -205,13 +216,17 @@ export class WorkspaceChatToolsConstruct extends Construct {
       ],
     });
 
-    // S3 permission for outputs bucket (workspace files for extract_content tool)
+    // S3 permission for outputs bucket (workspace files for extract_content +
+    // docs-convert tools). s3:ListBucket (scoped to the BUCKET arn, not /*) is
+    // required so GetObject on a missing key returns 404 not 403, and for the
+    // PPTX/DOCX → PDF visual-QA convert path that reads the workspace prefix.
+    // Mirrors the data-bucket grant above.
     if (props.outputsBucketArn) {
       policyStatements.push({
         sid: 'S3OutputsAccess',
         effect: 'Allow',
-        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-        resources: [`${props.outputsBucketArn}/*`],
+        actions: ['s3:GetObject', 's3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
+        resources: [props.outputsBucketArn, `${props.outputsBucketArn}/*`],
       });
     }
 

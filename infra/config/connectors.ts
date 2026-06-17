@@ -57,6 +57,9 @@ export const NATIVE_CONNECTORS = [
   // Rental / field service
   'rentman',
 
+  // Developer tools
+  'gitlab',
+
   // Username/password (per-user Basic auth + admin-level account API key)
   'proworkflow',
   'betterimpact',

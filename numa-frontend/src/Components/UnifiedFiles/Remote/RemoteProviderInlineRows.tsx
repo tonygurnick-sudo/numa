@@ -16,7 +16,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Form, InputGroup, Spinner } from 'react-bootstrap';
+import { Button, Form, Spinner } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useToast } from '../../../Providers/ToastContext';
@@ -391,7 +391,6 @@ function SynergyInlineRows({
   // expanded at once and there's no single "current job", so search is scoped
   // per expanded job: each gets its own input + (when a query is active) a flat
   // results list that replaces that job's folder children. Parity-gated.
-  const [jobSearchInput, setJobSearchInput] = useState<Map<string, string>>(new Map());
   const [jobSearchQuery, setJobSearchQuery] = useState<Map<string, string>>(new Map());
   const [jobSearchResults, setJobSearchResults] = useState<Map<string, SynergyFile[]>>(new Map());
   const [jobSearchLoading, setJobSearchLoading] = useState<Set<string>>(new Set());
@@ -644,19 +643,16 @@ function SynergyInlineRows({
     }
   }, [jobsNextPage, jobsLoadingMore, showToast, t]);
 
-  // Per-job inline search handlers.
-  const setJobInput = useCallback((jobId: string, value: string) => {
-    setJobSearchInput((prev) => new Map(prev).set(jobId, value));
-  }, []);
-
+  // Per-job inline search handlers. The search row owns its input + debounce
+  // and calls runJobSearch(jobId, query) directly.
   const runJobSearch = useCallback(
-    async (jobId: string) => {
-      const query = (jobSearchInput.get(jobId) ?? '').trim();
-      if (!query) return;
-      setJobSearchQuery((prev) => new Map(prev).set(jobId, query));
+    async (jobId: string, query: string) => {
+      const q = query.trim();
+      if (!q) return;
+      setJobSearchQuery((prev) => new Map(prev).set(jobId, q));
       setJobSearchLoading((prev) => new Set(prev).add(jobId));
       try {
-        const res = await SynergyDataConnectorService.searchFiles(numaGetRef.current, jobId, query);
+        const res = await SynergyDataConnectorService.searchFiles(numaGetRef.current, jobId, q);
         setJobSearchResults((prev) => new Map(prev).set(jobId, res.items ?? []));
       } catch (err) {
         setJobSearchResults((prev) => new Map(prev).set(jobId, []));
@@ -672,11 +668,10 @@ function SynergyInlineRows({
         });
       }
     },
-    [jobSearchInput, showToast, t]
+    [showToast, t]
   );
 
   const clearJobSearch = useCallback((jobId: string) => {
-    setJobSearchInput((prev) => new Map(prev).set(jobId, ''));
     setJobSearchQuery((prev) => {
       const next = new Map(prev);
       next.delete(jobId);
@@ -1087,13 +1082,10 @@ function SynergyInlineRows({
               <SynergyJobSearchRow
                 key={`syn-jobsearch:${job.job_id}`}
                 depth={baseDepth + 1}
-                value={jobSearchInput.get(job.job_id) ?? ''}
-                hasQuery={!!activeJobQuery}
+                jobName={job.name}
                 loading={jobSearching}
-                placeholder={t('synergy.searchInJob', 'Search files in this job (name or contents)')}
-                clearLabel={t('synergy.clearSearch', 'Clear search')}
-                onChange={(v) => setJobInput(job.job_id, v)}
-                onSubmit={() => void runJobSearch(job.job_id)}
+                resultCount={activeJobQuery ? jobResults.length : null}
+                onSearch={(q) => void runJobSearch(job.job_id, q)}
                 onClear={() => clearJobSearch(job.job_id)}
               />
             )}
@@ -1163,56 +1155,95 @@ function SynergyInlineRows({
 // ---------------------------------------------------------------------------
 
 /** Per-job inline search input, rendered as a finder-row under an expanded job. */
+/**
+ * Per-job search row, rendered inline under an expanded job and aligned to the
+ * folder/file rows (chevron-spacer + search icon + an input that fills the name
+ * column). Debounced live search: typing fires the search ~400ms after you
+ * stop, shows a "Searching…" hint from the first keystroke, then the count of
+ * files in the current result window. `loading`/`resultCount` are owned by the
+ * parent (which does the fetch); this row owns the input + debounce.
+ */
 function SynergyJobSearchRow({
   depth,
-  value,
-  hasQuery,
+  jobName,
   loading,
-  placeholder,
-  clearLabel,
-  onChange,
-  onSubmit,
+  resultCount,
+  onSearch,
   onClear,
 }: {
   depth: number;
-  value: string;
-  hasQuery: boolean;
+  jobName: string;
   loading: boolean;
-  placeholder: string;
-  clearLabel: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
+  /** Result count for the active query, or null when no search is active. */
+  resultCount: number | null;
+  onSearch: (query: string) => void;
   onClear: () => void;
 }): React.JSX.Element {
+  const { t } = useTranslation('files');
+  const [value, setValue] = useState('');
+  const [pending, setPending] = useState(false);
+  const onSearchRef = useRef(onSearch);
+  onSearchRef.current = onSearch;
+  const onClearRef = useRef(onClear);
+  onClearRef.current = onClear;
+
+  useEffect(() => {
+    const q = value.trim();
+    if (!q) {
+      setPending(false);
+      onClearRef.current();
+      return;
+    }
+    setPending(true);
+    const id = setTimeout(() => {
+      onSearchRef.current(q);
+      setPending(false);
+    }, 400);
+    return () => clearTimeout(id);
+  }, [value]);
+
+  const active = value.trim().length > 0;
+  const searching = active && (pending || loading);
+  const placeholder = t('synergy.searchInJobNamed', 'Click here to search for files in {{job}}', { job: jobName });
+
   return (
     <div className={`finder-row finder-grid-6 finder-row--depth-${Math.min(depth, DEPTH_CAP)}`}>
       <div className="finder-row__name-content">
         <span className="finder-chevron-spacer" />
-        <Form
+        <i className="bi bi-search finder-icon finder-icon--file" aria-hidden />
+        <Form.Control
+          type="search"
+          size="sm"
           className="flex-grow-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSubmit();
-          }}
-        >
-          <InputGroup size="sm">
-            <Form.Control
-              type="search"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder={placeholder}
-              aria-label={placeholder}
-            />
-            {hasQuery && (
-              <Button variant="outline-secondary" onClick={onClear} title={clearLabel} aria-label={clearLabel}>
-                <i className="bi bi-x-lg" aria-hidden="true" />
-              </Button>
-            )}
-            <Button variant="primary" type="submit" disabled={!value.trim() || loading}>
-              {loading ? <Spinner animation="border" size="sm" /> : <i className="bi bi-search" aria-hidden="true" />}
-            </Button>
-          </InputGroup>
-        </Form>
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={placeholder}
+          aria-label={placeholder}
+        />
+        {active && (
+          <span className="text-muted small ms-2 text-nowrap d-flex align-items-center gap-1">
+            {searching ? (
+              <>
+                <Spinner animation="border" size="sm" />
+                {t('synergy.searching', 'Searching…')}
+              </>
+            ) : resultCount != null ? (
+              t('synergy.resultCount', { count: resultCount, defaultValue: '{{count}} files' })
+            ) : null}
+          </span>
+        )}
+        {value && (
+          <Button
+            variant="link"
+            size="sm"
+            className="text-secondary p-0 ms-2"
+            onClick={() => setValue('')}
+            title={t('synergy.clearSearch', 'Clear search')}
+            aria-label={t('synergy.clearSearch', 'Clear search')}
+          >
+            <i className="bi bi-x-lg" aria-hidden="true" />
+          </Button>
+        )}
       </div>
       <div className="finder-row__meta finder-row__meta--type" />
       <div className="finder-row__meta d-none d-lg-block" />

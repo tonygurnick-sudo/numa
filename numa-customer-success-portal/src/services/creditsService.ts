@@ -81,6 +81,9 @@ export const DEFAULT_CREDIT_CONFIG: Required<CreditConfig> = {
   marginsByTier: { low: 1.1, medium: 1.25, high: 1.4, very_high: 1.6 },
   // New-client starter plan: 2000 credits/mo (≈ NZD $1,015). Portal edits override per client.
   monthlyAllocations: Array.from({ length: 12 }, () => 2000),
+  // Numa Voice per-minute USD anchors (provisional — confirm with Asa). Mirrors
+  // lib/credit-pricing/voice_pricing.py defaults; the non-LLM cost of a call.
+  voiceRates: { telephonyPerMin: 0.04, transcribePerMin: 0.024, contactLensPerMin: 0.015 },
 };
 
 export class CreditsService {

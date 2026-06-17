@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Cloud,
   Code2,
-  Cpu,
   Download,
   Expand,
   Eye,
@@ -41,8 +40,7 @@ import { connectorSlugForPipedream, pipedreamSlugForConnector } from '../Integra
 import { WorkspaceChatFilesExpandedModal } from './WorkspaceChatFilesExpandedModal';
 import { IntegrationAccountButton } from '../Integrations/IntegrationAccountSelector';
 import { getFileIconClass, getFileIconColorClass, formatFileSize } from '../../utils/fileUtils';
-import { WORKSPACE_MODEL_OPTIONS } from '../../types/workspaceChatTypes';
-import type { WorkspaceChatFileInfo, WorkspaceChatModelId } from '../../types/workspaceChatTypes';
+import type { WorkspaceChatFileInfo } from '../../types/workspaceChatTypes';
 import { getVariantExtension, type OutputFileGroup } from '../../utils/outputFileGroups';
 import { getFlag } from '../../utils/featureFlags';
 import { useShowChatCost } from '../../hooks/useShowChatCost';
@@ -148,11 +146,6 @@ export interface WorkspaceChatSettingsPanelProps {
 
   // Control disabled state (during streaming)
   isDisabled: boolean;
-
-  // Model selector (optional; controlled by config)
-  showModelSelector?: boolean;
-  selectedModelId?: WorkspaceChatModelId;
-  setSelectedModelId?: Dispatch<SetStateAction<WorkspaceChatModelId>>;
 }
 
 /**
@@ -203,9 +196,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
   selectedAccountsByApp,
   setSelectedAccountsByApp,
   isDisabled,
-  showModelSelector = false,
-  selectedModelId,
-  setSelectedModelId,
 }) => {
   const { t } = useTranslation('chat');
 
@@ -216,7 +206,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
     tools: true,
     integrations: true,
     connectors: true,
-    model: true,
     developer: true,
     chatUploads: true,
     outputFiles: true,
@@ -1175,55 +1164,6 @@ export const WorkspaceChatSettingsPanel: React.FC<WorkspaceChatSettingsPanelProp
                     </div>
                   </>
                 )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {showModelSelector && selectedModelId && setSelectedModelId && (
-          <div className="workspace-settings-card workspace-settings-model-card">
-            <button
-              type="button"
-              className="workspace-settings-card-header workspace-settings-card-header--collapsible"
-              onClick={() => toggleSection('model')}
-              aria-expanded={!collapsedSections.model}
-            >
-              <div className="workspace-settings-card-title">
-                <Cpu size={16} />
-                <span>{t('workspaceSettings.model')}</span>
-              </div>
-              <div className="workspace-settings-card-header-right">
-                {collapsedSections.model && (
-                  <span className="workspace-settings-collapsed-summary">
-                    {WORKSPACE_MODEL_OPTIONS.find((m) => m.id === selectedModelId)?.label ?? selectedModelId}
-                  </span>
-                )}
-                {collapsedSections.model ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-              </div>
-            </button>
-            {!collapsedSections.model && (
-              <div className="workspace-settings-card-body">
-                <div className="workspace-settings-list workspace-settings-model-list">
-                  {WORKSPACE_MODEL_OPTIONS.map((model) => {
-                    const isActive = selectedModelId === model.id;
-                    return (
-                      <button
-                        key={model.id}
-                        type="button"
-                        className={`workspace-settings-model-item ${isActive ? 'is-active' : ''}`}
-                        onClick={() => setSelectedModelId(model.id)}
-                        disabled={isDisabled}
-                        aria-pressed={isActive}
-                      >
-                        <span className="workspace-settings-model-main">
-                          <span className="workspace-settings-model-name">{model.label}</span>
-                          <span className="workspace-settings-model-description">{model.description}</span>
-                        </span>
-                        {isActive && <Check size={14} />}
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
             )}
           </div>

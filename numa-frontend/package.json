@@ -35,6 +35,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@jvmr/pptx-to-html": "^1.0.0",
     "@mdxeditor/editor": "^3.19.3",
+    "@numa/cli": "workspace:*",
     "@pipedream/sdk": "2.0.4",
     "@popperjs/core": "^2.11.8",
     "@smithy/core": "^3.5.3",

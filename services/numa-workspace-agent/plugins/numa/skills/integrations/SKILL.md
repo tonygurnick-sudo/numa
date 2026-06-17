@@ -7,13 +7,13 @@ description: Execute actions, search data, and make API calls to connected exter
 
 Execute actions, search data, and make API calls to connected external applications through Pipedream integrations.
 
-## Available MCP Tools
+## Available Commands
 
-| Tool                                 | Purpose                                                      | Approval                         |
-| ------------------------------------ | ------------------------------------------------------------ | -------------------------------- |
-| `mcp__integrations__run_action`      | Execute an integration action (search, create, update, etc.) | May require approval (see below) |
-| `mcp__integrations__configure_props` | Resolve dynamic dropdown properties before running actions   | No                               |
-| `mcp__integrations__proxy_request`   | Make raw authenticated API requests to connected apps        | May require approval (see below) |
+| Command                                     | Purpose                                                      | Approval                         |
+| ------------------------------------------- | ------------------------------------------------------------ | -------------------------------- |
+| `numa integrations pipedream-call`          | Execute an integration action (search, create, update, etc.) | May require approval (see below) |
+| `numa integrations pipedream-props-options` | Resolve dynamic dropdown properties before running actions   | No                               |
+| `numa integrations request`                 | Make raw authenticated API requests to connected apps        | May require approval (see below) |
 
 ---
 
@@ -47,22 +47,19 @@ Shows: required vs optional parameters, types, descriptions, dynamic properties 
 
 ---
 
-## run_action
+## pipedream-call
 
 ```
-mcp__integrations__run_action(
-    action_key="app_slug-action-name",
-    props='{"appName":{"authProvisionId":"auto"},"param1":"value1"}',
-    description="Human-readable description for user approval"
-)
+Bash("numa integrations pipedream-call <app_slug> <action_key> --props '{\"appName\":{\"authProvisionId\":\"auto\"},\"param1\":\"value1\"}' -m 'Human-readable description for user approval'")
 ```
 
-| Parameter     | Type        | Required | Description                                  |
-| ------------- | ----------- | -------- | -------------------------------------------- |
-| `action_key`  | string      | Yes      | Full action identifier from schema           |
-| `props`       | JSON string | Yes      | Auth object + action parameters              |
-| `description` | string      | Yes      | Clear description shown to user for approval |
-| `stash_id`    | string      | No       | Use `"NEW"` for file download operations     |
+| Parameter    | Type        | Required | Description                                                                         |
+| ------------ | ----------- | -------- | ----------------------------------------------------------------------------------- |
+| `app_slug`   | string      | Yes      | The integration app slug                                                            |
+| `action_key` | string      | Yes      | Full action identifier from schema                                                  |
+| `--props`    | JSON string | Yes      | Auth object + action parameters                                                     |
+| `-m`         | string      | Yes      | Clear description shown to user for approval                                        |
+| `--stash-id` | string      | No       | CLI flag (NOT a prop). Use `--stash-id NEW` for the first file in a download/upload |
 
 ### Props Structure
 
@@ -78,50 +75,42 @@ The auth key matches the app slug in camelCase: `google_drive` → `googleDrive`
 
 ```
 # After reading schema for the action:
-mcp__integrations__run_action(
-    action_key="google_drive-find-file",
-    props='{"googleDrive":{"authProvisionId":"auto"},"nameSearchTerm":"Q4 report"}',
-    description="Search Google Drive for files named 'Q4 report'"
-)
+Bash("numa integrations pipedream-call google_drive google_drive-find-file --props '{\"googleDrive\":{\"authProvisionId\":\"auto\"},\"nameSearchTerm\":\"Q4 report\"}' -m 'Search Google Drive for files named Q4 report'")
 ```
 
 ---
 
-## configure_props
+## pipedream-props-options
 
 Resolve dynamic dropdown options for parameters marked `"remoteOptions": true` in the schema.
 
 ```
-mcp__integrations__configure_props(
-    action_key="app_slug-action-name",
-    prop_name="propertyName",
-    configured_props='{"appName":{"authProvisionId":"auto"}}'
-)
+Bash("numa integrations pipedream-props-options <app_slug> <action_key> <prop_name> --configured '{\"appName\":{\"authProvisionId\":\"auto\"}}' -m 'Resolve dynamic options'")
 ```
 
-Returns a list of `{"label": "...", "value": "..."}` options. Use the `value` (not the label) in your `run_action` call.
+Returns a list of `{"label": "...", "value": "..."}` options. Use the `value` (not the label) in your `pipedream-call` invocation.
 
-Include any parent dependencies in `configured_props` if the schema indicates them (e.g., a folder list may depend on which drive is selected).
+Include any parent dependencies in `--configured` if the schema indicates them (e.g., a folder list may depend on which drive is selected).
 
 ---
 
-## proxy_request
+## request
 
 Make raw authenticated HTTP requests when no pre-built action exists. Pipedream injects the user's OAuth token automatically.
 
 ```
-mcp__integrations__proxy_request(
-    method="GET|POST|PUT|DELETE",
-    upstream_url="https://api.service.com/v1/endpoint",
-    description="Human-readable description for approval",
-    integration_slug="app_slug",
-    body={"key": "value"}  # Optional: JSON body for POST/PUT
-)
+Bash("numa integrations request <app_slug> <METHOD> '<url>' -m 'Human-readable description for approval'")
+```
+
+For POST/PUT with a body:
+
+```
+Bash("numa integrations request <app_slug> POST '<url>' --body '{\"key\":\"value\"}' -m 'Description'")
 ```
 
 **When to use:** APIs not covered by actions, advanced queries with OData filters, bulk operations, or new API features before Pipedream adds them.
 
-**NEVER use `proxy_request` for files — uploads OR downloads.** It forwards a JSON body and decodes responses as text, not binary. Uploading a file through it overwrites the file with a tiny JSON blob (this has corrupted a customer document); downloading binary through it mangles the bytes. Always use the integration's upload / update / download **action** for any file. The proxy now rejects obvious upload URLs, but the rule applies to all binary in both directions.
+**NEVER use `request` for files — uploads OR downloads.** It forwards a JSON body and decodes responses as text, not binary. Uploading a file through it overwrites the file with a tiny JSON blob (this has corrupted a customer document); downloading binary through it mangles the bytes. Always use the integration's upload / update / download **action** for any file. The proxy now rejects obvious upload URLs, but the rule applies to all binary in both directions.
 
 ---
 
@@ -142,7 +131,7 @@ When an action requires a file:
 When downloading files from integrations:
 
 1. In props, specify `"filePath": "/tmp/filename.ext"` (Pipedream convention — use `/tmp/` prefix)
-2. Include `stash_id="NEW"` in the `run_action` call
+2. Include `--stash-id NEW` in the command. This is a CLI flag — pass it as `--stash-id NEW`, NOT as a `stash_id` value inside the `--props` JSON
 3. The file is automatically saved to `/workdir/tmp/integrations-results/`
 4. Read it from there: `Read /workdir/tmp/integrations-results/filename.ext`
 5. **If the user asked for the file** (download, save, "give me X"), copy it into `/workdir/outputs/` so it appears in their Files page:
@@ -171,13 +160,13 @@ Workspaces configure one of three integration-approval modes:
 
 You do NOT have direct visibility into which mode is active. Tool results will tell you: a completed call was approved (either by the user clicking or by auto-approve), a `denied` status means the user rejected it, and a `timeout` status means a card was shown but not responded to. Handle these per the Error Handling table.
 
-Do NOT assume approvals are pending, in flight, or timing out when you have no tool result saying so. When a user asks why something was slow, diagnose from observable signals (tool durations, context size, file re-reads, retries) — never from guessed approval state. The `description` parameter is still always required because approval may apply; write it as if the user will read it.
+Do NOT assume approvals are pending, in flight, or timing out when you have no tool result saying so. When a user asks why something was slow, diagnose from observable signals (tool durations, context size, file re-reads, retries) — never from guessed approval state. The `-m` parameter is still always required because approval may apply; write it as if the user will read it.
 
 ---
 
 ## Writing Descriptions for Approval
 
-The `description` parameter is shown to users before they approve (when approval applies).
+The `-m` parameter is shown to users before they approve (when approval applies).
 
 **Read operations** — brief is fine:
 
@@ -224,18 +213,10 @@ Read /workdir/tools/integrations/{app_slug}/_index.json
 Read /workdir/tools/integrations/{app_slug}/{app_slug}-{action-name}.json
 
 # 3. Resolve dynamic props if schema shows "remoteOptions": true
-mcp__integrations__configure_props(
-    action_key="app_slug-action-name",
-    prop_name="dynamicField",
-    configured_props='{"appName":{"authProvisionId":"auto"}}'
-)
+Bash("numa integrations pipedream-props-options <app_slug> <action_key> <dynamicField> --configured '{\"appName\":{\"authProvisionId\":\"auto\"}}' -m 'Resolve dynamic field options'")
 
 # 4. Execute the action with correct params from schema
-mcp__integrations__run_action(
-    action_key="app_slug-action-name",
-    props='{"appName":{"authProvisionId":"auto"},"field":"resolvedValue"}',
-    description="Clear description of what this does"
-)
+Bash("numa integrations pipedream-call <app_slug> <action_key> --props '{\"appName\":{\"authProvisionId\":\"auto\"},\"field\":\"resolvedValue\"}' -m 'Clear description of what this does'")
 
 # 5. Read and summarize the result
 Read /workdir/tmp/integrations-results/result-{timestamp}.json
@@ -247,8 +228,18 @@ Read /workdir/tmp/integrations-results/result-{timestamp}.json
 
 1. **Schema first, always** — read `_index.json` then the action schema before calling anything
 2. **Check parameter names** — they vary across integrations, never assume
-3. **Resolve dynamic props** — if a schema field has `"remoteOptions": true`, call `configure_props` first
+3. **Resolve dynamic props** — if a schema field has `"remoteOptions": true`, call `pipedream-props-options` first
 4. **Verify files exist** before upload operations
 5. **Use descriptive approvals** — full content for writes, brief for reads
 6. **Summarize large results** — don't dump raw JSON to the user
-7. **Prefer built-in actions** over `proxy_request`
+7. **Prefer built-in actions over `request`** — for a simple single call the curated action is cheaper and less error-prone than a hand-built raw REST request (raw REST cost +82% for identical output in one bench). Reserve `request` for bulk/paginated pulls and capabilities no action covers.
+8. **"Update X" means update — never duplicate.** When revising an existing record (a draft, a calendar event, a CRM note), modify or replace the original; don't create a second copy. If there's no in-place update action, delete-and-recreate.
+9. **No unresolved placeholders in external write-backs.** A bracketed placeholder (`[Company]`, `[NAME]`) is fine in a _draft document the user will review_, but must NEVER be written to an external system as live data — a Gmail draft subject-lined `[Company]`, a CRM field set to `[TBD]`. Before any external write, confirm every field holds a real value; if one is missing, ask or hold the write — don't ship the placeholder.
+
+## Helper Scripts
+
+- **`decode_attachment.py`** — decode a Gmail/Graph base64 attachment to a file in one step (handles URL-safe and standard base64; can auto-find the field in a saved action result). Read-only at `/app/plugins/numa/skills/integrations/helpers/`.
+  ```bash
+  python3 /app/plugins/numa/skills/integrations/helpers/decode_attachment.py \
+    --json /workdir/tmp/integrations-results/<id>.json --out /workdir/tmp/file.pdf
+  ```
