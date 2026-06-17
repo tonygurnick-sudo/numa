@@ -80,6 +80,8 @@ print("Created: /workdir/outputs/new_document.docx")
 
 ### Adding Tables
 
+> **For anything beyond a trivial table, use the `docx_table.py` helper** (see [Helper Scripts](#helper-scripts)) rather than the hand-rolled pattern below — it pads ragged rows so a column is never left blank, handles multi-line cells, and styles the header for you. The manual pattern below is for reference and fine-grained control.
+
 ```python
 from docx import Document
 
@@ -686,8 +688,18 @@ Always use full paths and verify files exist before processing.
 ## Helper Scripts
 
 - **`build_styled_doc.py`** — branded DOCX from a JSON spec with a diacritic-safe font (macrons survive), purple headings, and image/table helpers. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+
   ```bash
   python3 /app/plugins/numa/skills/docx-handling/helpers/build_styled_doc.py --spec @/workdir/tmp/doc.json
+  ```
+
+- **`docx_table.py`** — robust, styled table from `--headers` + `--rows` (JSON, inline or `@file`). **Use this for any non-trivial table instead of hand-rolling `add_table` + row-fill code** — it pads short rows and truncates long ones so a column is never silently left blank, renders multi-line cells (newlines), and styles the header (bold + purple). Append to a doc you're already editing with `--into`, or write a fresh one-table doc with `--out`. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+  ```bash
+  # append a table (under a heading) to a report you're building
+  python3 /app/plugins/numa/skills/docx-handling/helpers/docx_table.py \
+    --into /workdir/outputs/report.docx --heading "Risk register" \
+    --headers '["Risk","Likelihood","Impact","Mitigation"]' \
+    --rows @/workdir/tmp/rows.json
   ```
 
 Generic starting point — copy into `/workdir/chat-workflows/` and adapt for a user's recurring document job.

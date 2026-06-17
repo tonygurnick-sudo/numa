@@ -11,7 +11,7 @@ Read, write, and analyze spreadsheet files using pandas, openpyxl, and XlsxWrite
 
 ## Before you touch a workbook — critical rules
 
-These four rules prevent the most damaging spreadsheet failures — the ones that put wrong numbers into board-level deliverables. Read them before any non-trivial spreadsheet work.
+These five rules prevent the most damaging spreadsheet failures — the ones that put wrong numbers into board-level deliverables. Read them before any non-trivial spreadsheet work.
 
 1. **Enumerate ALL sheets before processing.** Workbooks are usually multi-tab (one sheet per month / region / entity). Never assume the first sheet is the whole story. List every sheet and decide which are in scope _before_ you aggregate anything:
 
@@ -27,7 +27,17 @@ These four rules prevent the most damaging spreadsheet failures — the ones tha
 
 3. **Additive sheets only.** Don't modify the user's source tabs. Add your analysis / scenario / summary as **new** sheets and say so explicitly ("I added a `Scenario B` sheet — your original tabs are untouched"). The source of truth stays intact.
 
-4. **Plain CSV doesn't need this skill.** For a simple flat CSV, the standard-library `csv` module or `pandas.read_csv` is fine. Reserve the openpyxl / XlsxWriter machinery for `.xlsx` with multiple sheets, formulas, or formatting.
+4. **Reconcile the same total across sheets before you build on it.** When a workbook reports one quantity at different cuts (revenue by product _and_ by region, headcount by team _and_ by location), those totals are supposed to match — but a softened, reclassified, or eliminated line can make them disagree on purpose. Before you put any total into a deck, report, or headline metric, compare the cross-sheet totals and **surface both figures plus the gap** if they differ — don't silently take the first or "source of truth" sheet. A deliverable whose slides imply two different revenue totals is a board-level red flag.
+
+   ```python
+   product_total = pd.read_excel(path, sheet_name='Revenue by Product').iloc[-1]['Total']
+   region_total  = pd.read_excel(path, sheet_name='Revenue by Region').iloc[-1]['Total']
+   if round(product_total) != round(region_total):
+       print(f"RECONCILE: product ${product_total:,.0f} vs region ${region_total:,.0f} "
+             f"— gap ${abs(product_total - region_total):,.0f}; show both, don't pick one silently")
+   ```
+
+5. **Plain CSV doesn't need this skill.** For a simple flat CSV, the standard-library `csv` module or `pandas.read_csv` is fine. Reserve the openpyxl / XlsxWriter machinery for `.xlsx` with multiple sheets, formulas, or formatting.
 
 ---
 
