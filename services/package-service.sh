@@ -58,39 +58,56 @@ cleanup_cli_tgz() {
 trap cleanup_cli_tgz EXIT
 
 if [ "$SERVICE_NAME" = "numa-workspace-agent" ]; then
-    echo ""
-    echo "=== Building @numa/cli for MicroVM install ==="
-    CLI_WORKSPACE_DIR="$REPO_ROOT/numa-cli"
-    CLI_PROD_DIR="$REPO_ROOT/numa-cli/packages/cli"
-    if [ ! -d "$CLI_PROD_DIR" ]; then
-        echo "Error: $CLI_PROD_DIR not found — was numa-cli moved?"
-        exit 1
+    # Dockerfile references the file as numa-cli.tgz (version-agnostic) so the
+    # COPY directive doesn't need to track @numa/cli's version bumps.
+    CLI_TGZ="$SERVICE_DIR/numa-cli.tgz"
+    if [ -f "$CLI_TGZ" ]; then
+        # ── CI path ──────────────────────────────────────────────────────
+        # numa-cli.tgz is built once by the `numa-cli-package` pipeline job
+        # (node:lts, with the yarn workspace installed) and pulled in here as
+        # an artifact. The image-build host (docker:24) has NO Node toolchain,
+        # so we must never build the CLI here — we just consume the tarball.
+        # No cleanup trap: leave the artifact in place (it's gitignored).
+        echo ""
+        echo "=== Using prebuilt numa-cli.tgz (CI artifact) ==="
+        echo "Found: $CLI_TGZ ($(ls -lh "$CLI_TGZ" | awk '{print $5}'))"
+    else
+        # ── Local-dev path ───────────────────────────────────────────────
+        # Build @numa/cli from source and pack it. Requires a Node toolchain
+        # and an installed numa-cli workspace on the host.
+        echo ""
+        echo "=== Building @numa/cli for MicroVM install ==="
+        CLI_WORKSPACE_DIR="$REPO_ROOT/numa-cli"
+        CLI_PROD_DIR="$REPO_ROOT/numa-cli/packages/cli"
+        if [ ! -d "$CLI_PROD_DIR" ]; then
+            echo "Error: $CLI_PROD_DIR not found — was numa-cli moved?"
+            exit 1
+        fi
+        # Build the prod CLI (and its workspace deps) deterministically.
+        # Uses yarn (workspace-aware) at numa-cli/ root, which builds @numa/cli
+        # and any local deps it has. @numa/cli-dev is built too but we don't
+        # pack it — the tgz only carries @numa/cli's `files` glob (dist/).
+        ( cd "$CLI_WORKSPACE_DIR" && yarn build )
+        # `npm pack` honours the package.json `files` field, so only `dist/`
+        # plus the manifest ship in the tarball (no src/, no tests, no
+        # cli-dev). Output filename: numa-cli-<version>.tgz (npm drops the @
+        # scope from filenames).
+        ( cd "$CLI_PROD_DIR" && npm pack --pack-destination "$SERVICE_DIR" >/dev/null )
+        # The tgz name embeds @numa/cli's version. Resolve it via package.json
+        # rather than wildcard-globbing so we fail loudly if the version
+        # encoding ever changes.
+        CLI_VERSION=$(node -p "require('$CLI_PROD_DIR/package.json').version")
+        CLI_TGZ_BUILT="$SERVICE_DIR/numa-cli-${CLI_VERSION}.tgz"
+        if [ ! -f "$CLI_TGZ_BUILT" ]; then
+            echo "Error: expected $CLI_TGZ_BUILT to exist after npm pack"
+            exit 1
+        fi
+        mv "$CLI_TGZ_BUILT" "$CLI_TGZ"
+        # Only register cleanup for a tgz WE built, so a locally-built tarball
+        # doesn't linger in the working tree after the build.
+        CLI_TGZ_STAGED="$CLI_TGZ"
+        echo "Staged: $CLI_TGZ ($(ls -lh "$CLI_TGZ" | awk '{print $5}'))"
     fi
-    # Build the prod CLI (and its workspace deps) deterministically.
-    # Uses yarn (workspace-aware) at numa-cli/ root, which builds @numa/cli
-    # and any local deps it has. @numa/cli-dev is built too but we don't
-    # pack it — the tgz only carries @numa/cli's `files` glob (dist/).
-    ( cd "$CLI_WORKSPACE_DIR" && yarn build )
-    # `npm pack` honours the package.json `files` field, so only `dist/`
-    # plus the manifest ship in the tarball (no src/, no tests, no
-    # cli-dev). Output filename: numa-cli-<version>.tgz (npm drops the @
-    # scope from filenames).
-    ( cd "$CLI_PROD_DIR" && npm pack --pack-destination "$SERVICE_DIR" >/dev/null )
-    # The tgz name embeds @numa/cli's version. Resolve it via package.json
-    # rather than wildcard-globbing so we fail loudly if the version
-    # encoding ever changes.
-    CLI_VERSION=$(node -p "require('$CLI_PROD_DIR/package.json').version")
-    CLI_TGZ_STAGED="$SERVICE_DIR/numa-cli-${CLI_VERSION}.tgz"
-    if [ ! -f "$CLI_TGZ_STAGED" ]; then
-        echo "Error: expected $CLI_TGZ_STAGED to exist after npm pack"
-        exit 1
-    fi
-    # Dockerfile references the file as numa-cli.tgz (version-agnostic).
-    # Rename so the COPY directive doesn't need to track @numa/cli's
-    # version bumps.
-    mv "$CLI_TGZ_STAGED" "$SERVICE_DIR/numa-cli.tgz"
-    CLI_TGZ_STAGED="$SERVICE_DIR/numa-cli.tgz"
-    echo "Staged: $CLI_TGZ_STAGED ($(ls -lh "$CLI_TGZ_STAGED" | awk '{print $5}'))"
 fi
 
 # Build the Docker image using buildx for cross-platform support

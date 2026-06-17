@@ -290,6 +290,42 @@ install-common-dependencies:
   rules:
     - !reference [.rules, if-deployable]
 
+# Build the @numa/cli production tarball once, here, where the Node toolchain
+# and the yarn workspace exist. The workspace-agent image build runs on a
+# Node-less docker:24 host and just consumes this artifact — so the CLI is
+# never (and can't be) built during the Docker image build. The tarball is
+# architecture-independent (tsc → dist/), so there's no reason to build it
+# inside the emulated ARM64 image. Doubles as the CLI's build check in CI.
+numa-cli-package:
+  stage: setup
+  image: node:lts
+  interruptible: true
+  cache:
+    - key:
+        files:
+          - yarn.lock
+      fallback_keys:
+        - yarn-cache-$CI_DEFAULT_BRANCH
+      paths:
+        - .yarn/cache/
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+  script:
+    - !reference [.yarn, install]
+    - corepack enable
+    # Build @numa/cli (and its workspace deps); pack ONLY @numa/cli — the
+    # @numa/cli-dev addon (bypass flags) must never ship into a MicroVM.
+    - (cd numa-cli && yarn build)
+    - (cd numa-cli/packages/cli && npm pack --pack-destination "$CI_PROJECT_DIR/services/numa-workspace-agent")
+    # Dockerfile COPYs a version-agnostic name; rename off the version glob.
+    - mv services/numa-workspace-agent/numa-cli-*.tgz services/numa-workspace-agent/numa-cli.tgz
+  artifacts:
+    paths:
+      - services/numa-workspace-agent/numa-cli.tgz
+    expire_in: 7 days
+  rules:
+    - !reference [.rules, if-deployable]
+
 .node-job-cdktf-get-before-script: &node-job-cdktf-get-before-script
   before_script:
     # Install curl, jq, skopeo, and AWS CLI for Terraform local-exec provisioners (e.g., workspace-agent ECR push)
@@ -530,6 +566,12 @@ workspace-agent-package:
     - aws # Runs on AWS workers with Docker
   rules:
     - !reference [.rules, if-deployable]
+  # Pull in ONLY the prebuilt numa-cli.tgz (from numa-cli-package). Without
+  # this, the job would default-download every earlier-stage artifact —
+  # including the large node_modules it never uses. package-service.sh detects
+  # the staged tarball and skips the (Node-requiring) CLI build on this host.
+  dependencies:
+    - numa-cli-package
   variables:
     DOCKER_TLS_CERTDIR: '/certs'
     # BuildKit cache: reuse system packages, Node.js, Pandoc, Python deps between builds.
