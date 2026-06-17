@@ -20,6 +20,7 @@ Security:
 - Conversation isolation via conversation_id in S3 paths (except chat-workflows/)
 """
 
+import hashlib
 import json
 import os
 import re
@@ -499,6 +500,28 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
         )
         raise ValueError(f"Failed to upload converted document: {str(e)}") from e
 
+    # Presign a GET on the converted output so the in-workspace CLI can pull the
+    # bytes down into the local /workdir. This Lambda ran the conversion, so the
+    # file only exists in S3 — without this, the agent gets an output_path that
+    # isn't on local disk until the next cold sync, and same-turn use (render the
+    # PDF, read it, re-convert) fails. Mirrors how `files download` and connector
+    # downloads hand bytes back to the workspace.
+    download_sha256 = hashlib.sha256(converted_content).hexdigest()
+    presigned_url = None
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": OUTPUTS_BUCKET_NAME, "Key": output_s3_key},
+            ExpiresIn=900,
+        )
+    except Exception as e:
+        # Non-fatal: the file is still in S3 and arrives at the post-turn sync.
+        logger.warning(
+            "Failed to presign converted output",
+            error=str(e),
+            output_s3_key=output_s3_key,
+        )
+
     # Return the output path in workspace format
     output_rel_path = output_s3_key.replace(
         f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", ""
@@ -513,4 +536,6 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
         "format": output_format,
         "mode": mode,
         "size": len(converted_content),
+        "presigned_url": presigned_url,
+        "download_sha256": download_sha256,
     }

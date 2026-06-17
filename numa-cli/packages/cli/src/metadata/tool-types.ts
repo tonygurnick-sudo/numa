@@ -465,6 +465,14 @@ export interface ConvertDocumentResult {
   mode: 'markdown' | 'file';
   /** Bytes of the converted file. */
   size: number;
+  /**
+   * Presigned GET for the converted file. The conversion runs server-side, so
+   * the bytes only exist in S3 — the in-workspace CLI uses this to materialise
+   * the file at `output_path` under `/workdir` for same-turn use.
+   */
+  presigned_url?: string;
+  /** sha256 of the converted bytes, for end-to-end verification of the pull. */
+  download_sha256?: string;
 }
 
 // ─── Vision (view_image) ────────────────────────────────────────────────────

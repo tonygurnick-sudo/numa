@@ -34,7 +34,8 @@ import { getValidTokens } from '../../auth/tokens.js';
 import { activeProfile } from '../../context/store.js';
 import { resolveScopingContext, type ScopingContext } from '../../context/resolve.js';
 import { invokeTool, type ToolInvokeRequest } from '../../api/tools.js';
-import type { ParamsForTool, ToolName } from '../../metadata/tool-types.js';
+import { atomicDownload, IntegrityError } from '../../api/integrity.js';
+import type { ConvertDocumentResult, ParamsForTool, ToolName } from '../../metadata/tool-types.js';
 import { fail, info } from '../../output/pretty.js';
 import { emitResult, prettyOrSpill } from '../../output/emit.js';
 import { requireUserMessage, type StandardOptions } from '../../output/cli-args.js';
@@ -298,7 +299,7 @@ function createDocsConvertCommand(): Command {
           ...(options.title ? { title: options.title } : {}),
         };
 
-        const { accessToken, request } = await buildDocsRequest(
+        const { accessToken, request, scope } = await buildDocsRequest(
           account,
           'convert_document',
           params,
@@ -308,6 +309,37 @@ function createDocsConvertCommand(): Command {
 
         const res = await invokeTool(account, accessToken, request);
         if (res.status === 'error') fail(`docs convert failed: ${res.error ?? '<no message>'}`);
+
+        // The conversion runs server-side, so the converted file only exists in
+        // S3. In-workspace, pull it down to the returned /workdir path (validated
+        // to stay under /workdir so a bad server value can't escape) so the agent
+        // can use it the SAME turn — render, read, re-convert. Mirrors how
+        // `files download` / connector downloads land bytes in the workspace.
+        const convResult = res.result as ConvertDocumentResult | undefined;
+        const outPath = convResult?.output_path;
+        if (
+          scope.source === 'workspace-env' &&
+          convResult?.presigned_url &&
+          typeof outPath === 'string' &&
+          outPath.startsWith('/workdir/')
+        ) {
+          try {
+            const written = await atomicDownload(convResult.presigned_url, outPath, {
+              ...(convResult.download_sha256 ? { expectedSha256: convResult.download_sha256 } : {}),
+              ...(typeof convResult.size === 'number' && convResult.size > 0 ? { expectedSize: convResult.size } : {}),
+            });
+            if (process.env['NUMA_DEBUG']) info(`materialised ${written} bytes → ${outPath}`);
+          } catch (e) {
+            if (e instanceof IntegrityError) fail(`docs convert: converted file failed integrity check: ${e.message}`);
+            // Non-integrity failure: the file is still in S3 and arrives at the
+            // post-turn sync — warn but still emit the result JSON.
+            process.stderr.write(
+              `numa: warning — could not materialise converted file locally: ${
+                e instanceof Error ? e.message : String(e)
+              }\n`
+            );
+          }
+        }
 
         emitResult({
           tool: 'convert_document',
