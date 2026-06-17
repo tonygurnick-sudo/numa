@@ -83,8 +83,14 @@ async function invalidPipedreamActionKey(
     if (body.tool !== 'pipedream_run_action') return null;
     const actionKey = (body.params?.action_key as string | undefined) ?? '';
     if (!actionKey) return null;
-    const dash = actionKey.indexOf('-');
-    const appSlug = dash > 0 ? actionKey.slice(0, dash) : actionKey;
+    // Custom tools are keyed "~/{slug}-{action}" — strip the private-registry
+    // prefix before deriving the app slug so we fetch the real catalogue
+    // ("pipedrive"), not "~/pipedrive" (no such app → empty list → this check
+    // would only ever pass by the fail-open path). The membership test below
+    // still uses the original key, which the catalogue includes verbatim.
+    const slugSource = actionKey.replace(/^~\//, '');
+    const dash = slugSource.indexOf('-');
+    const appSlug = dash > 0 ? slugSource.slice(0, dash) : slugSource;
     const res = await invokeChatTools({
       clientName: CLIENT_NAME,
       tool: 'pipedream_list_actions',
