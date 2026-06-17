@@ -251,7 +251,7 @@ def get_skill_hints(user_message: str, context: AssistantContext) -> list[str]:
             "integrations",
         ),
         (
-            r"\b(google[\s-]*drive|slack|gmail|hubspot|salesforce|jira|notion|asana|trello|github|outlook|teams|xero|apollo|pipedrive|linkedin|google[\s-]*sheets|google[\s-]*calendar|google[\s-]*docs|google[\s-]*forms|google[\s-]*analytics|sharepoint|onenote|whatsapp|mailchimp|freshdesk|rentman|podio|telegram|zoom|smartsheet|box|microsoft[\s-]*excel|microsoft[\s-]*outlook|microsoft[\s-]*teams)\b",
+            r"\b(google[\s-]*drive|slack|gmail|hubspot|salesforce|jira|notion|asana|trello|github|gitlab|outlook|teams|xero|apollo|pipedrive|linkedin|google[\s-]*sheets|google[\s-]*calendar|google[\s-]*docs|google[\s-]*forms|google[\s-]*analytics|sharepoint|onenote|whatsapp|mailchimp|freshdesk|rentman|podio|telegram|zoom|smartsheet|box|microsoft[\s-]*excel|microsoft[\s-]*outlook|microsoft[\s-]*teams)\b",
             "integrations",
         ),
     ]

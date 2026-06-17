@@ -842,7 +842,8 @@
       "greentreeUserHint": "Your own Greentree username and password. The API runs with exactly your Greentree permissions.",
       "gohighlevelTokenHint": "Private Integration Token (pit-…) from HighLevel → Settings → Private Integrations. Scopes are chosen when the integration is created — a 401/403 usually means a missing scope.",
       "rentmanTokenHint": "Workspace API token from Rentman → Configuration → Account → Integrations → API → Show token. The token carries full workspace API access.",
-      "betterimpactKeyHint": "Username + password generated when an admin creates an API key in Better Impact. Key access is module-scoped — missing modules return empty data."
+      "betterimpactKeyHint": "Username + password generated when an admin creates an API key in Better Impact. Key access is module-scoped — missing modules return empty data.",
+      "gitlabTokenHint": "Personal Access Token from GitLab → User Settings → Access Tokens (or a Project/Group token). Give it the api or read_api scope. The token carries exactly your GitLab permissions — a 401 means it is wrong/expired, a 403 means it lacks the scope."
     },
     "apiKeyWizard": {
       "title": "Configure {{connector}}",
