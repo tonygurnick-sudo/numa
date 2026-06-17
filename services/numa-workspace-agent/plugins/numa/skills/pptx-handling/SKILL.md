@@ -59,7 +59,10 @@ Write the script to `/workdir/tmp/`, then run with Bash. To iterate, Edit the fi
 Write(file_path="/workdir/tmp/create_deck.js", content="""
 const pptxgen = require("pptxgenjs");
 let pres = new pptxgen();
-pres.layout = "LAYOUT_16x9";
+// LAYOUT_WIDE = 13.333 x 7.5 in (modern 16:9 — the standard). Do NOT use
+// LAYOUT_16x9: that's the old 10 x 5.625 in canvas, which leaves content
+// cramped and prone to falling off the bottom of the slide.
+pres.layout = "LAYOUT_WIDE";
 
 let slide = pres.addSlide();
 slide.addText("Hello World!", { x: 0.5, y: 0.5, fontSize: 36, color: "363636" });
@@ -155,6 +158,9 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 - 0.5" minimum margins from slide edges
 - 0.3-0.5" between content blocks
 - Leave breathing room — don't fill every inch
+- **Footers and bottom shapes need a safe zone.** A shape's `top + height` must stay above the slide's bottom edge. On a 7.5" slide put a footer at `y ≈ 6.9"`, `height ≤ 0.4"`. Never place a shape whose bottom (or right) runs past the slide — that's the #1 cause of "text falling off screen".
+- **Fit embedded images to the available area.** A full dashboard/chart PNG is often taller than the slide. Compute the available height (`slideH − top − bottom margin`) and scale the image to it, preserving aspect ratio — don't drop a 5.5"-tall image onto a slide at `y=1"`. In PptxGenJS use `sizing: { type: "contain", w, h }`.
+- **Don't over-stuff a slide.** If a title + cards + a table won't fit with ≥0.5" margins, split across slides or cut content. Six panels plus a table on one slide will overflow.
 
 ### Avoid (Common Mistakes)
 
@@ -169,6 +175,16 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 ## Visual QA Pipeline (Required)
 
 Your first render is almost never correct. Always verify output visually.
+
+### Step 0: Programmatic bounds check (always — works without the converter)
+
+Before rendering images, validate geometry with the helper. It flags every shape that falls off the slide and any sub-12pt text, and it runs **in-container**, so it catches overflow even when the PPTX→PDF convert below is unavailable:
+
+```bash
+python3 /app/plugins/numa/skills/pptx-handling/helpers/slide_check.py /workdir/outputs/presentation.pptx
+```
+
+Fix every OFF-SLIDE finding (scale images to fit, move shapes into the safe area, split over-stuffed slides) and bump fonts to ≥12pt, then re-run until it exits 0. This deterministically catches the "compressed / falling off screen" failures a human-eyeball pass misses.
 
 ### Convert to Images
 
@@ -280,9 +296,10 @@ All pre-installed in the workspace:
 Read-only at `/app/plugins/numa/skills/pptx-handling/helpers/`. Generic — adapt via `/workdir/chat-workflows/` for a bespoke look.
 
 - **`constants.js`** — the valid PptxGenJS shape names (stop guessing `ROUNDED_RECT` — it's `roundRect`), the Numa palette, and a `shape()` normaliser. `require()` it from your generator script.
-- **`starter_deck.js`** — build a branded deck from a JSON spec: title / section / content / chart / table / stat masters in the Numa palette. The fast path for a standard deck — skips the shape-constant and layout churn.
+- **`starter_deck.js`** — build a branded deck from a JSON spec: title / section / content / chart / table / stat masters in the Numa palette. The fast path for a standard deck — it uses the correct 13.333×7.5" wide canvas, fits images to the slide (`sizing: contain`), and keeps content in-bounds, so it sidesteps the off-slide / overflow failures entirely. **Prefer it; only hand-roll for genuinely custom layouts** (and then run `slide_check.py`).
   ```bash
   NODE_PATH=/app/node_packages/node_modules node \
     /app/plugins/numa/skills/pptx-handling/helpers/starter_deck.js --spec @/workdir/tmp/deck.json
   ```
+- **`slide_check.py`** — validate a finished deck: flags any shape that falls off the slide and any sub-12pt text, exits 1 if so. Runs in-container (no converter needed), so it's the always-on first step of Visual QA. `python3 /app/plugins/numa/skills/pptx-handling/helpers/slide_check.py /workdir/outputs/deck.pptx`
 - Charts go in as pre-rendered PNGs: **`make_chart.py`** (`/app/plugins/numa/skills/data-analysis/helpers/make_chart.py`) → reference the PNG in a `"chart"` slide. Verify the deck embedded them with **`verify_artifact.py`** (`/app/plugins/numa/skills/pdf-handling/helpers/verify_artifact.py --expect-images N`).
