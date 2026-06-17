@@ -26,6 +26,14 @@ doc.save('/workdir/outputs/result.docx')
 
 ---
 
+## Editing strategy & text fidelity
+
+**Iterate in place — don't regenerate.** When revising a document across turns, load it and edit the specific paragraphs/cells with python-docx (or `Edit` the generator script's _data_, not re-emit the whole script). Do NOT re-run a giant build-from-scratch script every turn — one bench re-ran a ~700-line generator on every edit, which dominated its cost and steadily lost fidelity. Build once; after that, open the real `.docx` and change only what needs changing.
+
+**Preserve diacritics and Unicode exactly.** Names and te reo Māori / accented text must survive verbatim — "Te Whetū" stays "Te Whetū", never "Te Whetu" or a `□` box glyph. python-docx writes Unicode correctly; the failure shows up at render time when the chosen font lacks the glyph. Use a font with full Latin Extended-A coverage (Calibri, Arial, or DejaVu Sans — all installed) and never strip or ASCII-fold accents to "simplify". If you convert the DOCX to PDF, confirm the macrons survived in the output (see pdf-handling for UTF-8 font setup).
+
+---
+
 ## Understanding Word Document Structure
 
 Before working with DOCX files, understand their architecture:
@@ -44,6 +52,8 @@ Before working with DOCX files, understand their architecture:
 ---
 
 ## Creating DOCX Files
+
+> **For a branded document, load the `visual-design` skill first** for the Numa colour/font tokens and report recipe — or to match a user's own brand (it resolves whose brand applies). `build_styled_doc.py` (Helper Scripts) already applies the Numa look with a diacritic-safe font.
 
 ### Basic Document Creation
 
@@ -71,6 +81,8 @@ print("Created: /workdir/outputs/new_document.docx")
 ```
 
 ### Adding Tables
+
+> **For anything beyond a trivial table, use the `docx_table.py` helper** (see [Helper Scripts](#helper-scripts)) rather than the hand-rolled pattern below — it pads ragged rows so a column is never left blank, handles multi-line cells, and styles the header for you. The manual pattern below is for reference and fine-grained control.
 
 ```python
 from docx import Document
@@ -605,7 +617,7 @@ numa docs convert /workdir/outputs/report.md --format docx -m "Converting markdo
 
 ## Document Conversion (PDF ↔ DOCX)
 
-Use the `numa docs convert` CLI for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion.
+Use the `numa docs convert` CLI for all document conversions. This delegates to a Lambda with LibreOffice for high-quality conversion. The mode is **auto-detected from the file type** — pass `--format`, not `--mode`: Office/PDF inputs (`.docx`/`.pdf`/…) use direct LibreOffice conversion, text/markdown inputs (`.md`/`.txt`) go through Pandoc.
 
 > `convert_document` accepts legacy Word binary formats (`.doc`, `.dot`) and the modern template variant (`.dotx`) in addition to `.docx` — same call.
 
@@ -672,3 +684,24 @@ pandoc /workdir/tmp/extracted_scanned_document.txt -o /workdir/outputs/document.
 - **Working files**: `/workdir/outputs/`
 
 Always use full paths and verify files exist before processing.
+
+---
+
+## Helper Scripts
+
+- **`build_styled_doc.py`** — branded DOCX from a JSON spec with a diacritic-safe font (macrons survive), purple headings, and image/table helpers. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+
+  ```bash
+  python3 /app/plugins/numa/skills/docx-handling/helpers/build_styled_doc.py --spec @/workdir/tmp/doc.json
+  ```
+
+- **`docx_table.py`** — robust, styled table from `--headers` + `--rows` (JSON, inline or `@file`). **Use this for any non-trivial table instead of hand-rolling `add_table` + row-fill code** — it pads short rows and truncates long ones so a column is never silently left blank, renders multi-line cells (newlines), and styles the header (bold + purple). Append to a doc you're already editing with `--into`, or write a fresh one-table doc with `--out`. Read-only at `/app/plugins/numa/skills/docx-handling/helpers/`.
+  ```bash
+  # append a table (under a heading) to a report you're building
+  python3 /app/plugins/numa/skills/docx-handling/helpers/docx_table.py \
+    --into /workdir/outputs/report.docx --heading "Risk register" \
+    --headers '["Risk","Likelihood","Impact","Mitigation"]' \
+    --rows @/workdir/tmp/rows.json
+  ```
+
+Generic starting point — copy into `/workdir/chat-workflows/` and adapt for a user's recurring document job.

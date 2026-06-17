@@ -7,7 +7,7 @@ index.ts`. These tests guard against drift between the two lists.
 
 import unittest
 
-from tools.convert_document import VALID_INPUT_FORMATS
+from tools.convert_document import VALID_INPUT_FORMATS, _resolve_mode
 
 
 class TestValidInputFormats(unittest.TestCase):
@@ -53,6 +53,50 @@ class TestValidInputFormats(unittest.TestCase):
             "rtf",
         ):
             self.assertIn(fmt, VALID_INPUT_FORMATS, f"Lost support for .{fmt}")
+
+
+class TestResolveMode(unittest.TestCase):
+    """`_resolve_mode` auto-routes binary inputs to direct ('file') conversion.
+
+    Regression guard for the "convert the .pptx I just made to PDF" failure:
+    markdown mode utf-8-decodes the file as text and dies on binary Office formats
+    with a cryptic ``'utf-8' codec can't decode`` error.
+    """
+
+    def test_office_binaries_force_file_mode(self):
+        """A binary Office/PDF input is routed to 'file' even when 'markdown' is asked."""
+        for path in (
+            "/workdir/outputs/deck.pptx",
+            "/workdir/outputs/report.docx",
+            "/workdir/uploads/data.xlsx",
+            "/workdir/outputs/paper.pdf",
+            "/workdir/outputs/slides.odp",
+            "/workdir/outputs/legacy.ppt",
+        ):
+            self.assertEqual(
+                _resolve_mode(path, "markdown"),
+                "file",
+                f"{path} should route to file mode",
+            )
+
+    def test_extension_is_case_insensitive(self):
+        self.assertEqual(
+            _resolve_mode("/workdir/outputs/DECK.PPTX", "markdown"), "file"
+        )
+
+    def test_text_inputs_keep_requested_markdown(self):
+        """Plain text/markdown inputs stay in markdown mode (Pandoc path)."""
+        for path in (
+            "/workdir/outputs/notes.md",
+            "/workdir/outputs/readme.txt",
+            "/workdir/outputs/doc.markdown",
+            "/workdir/outputs/no_extension",
+        ):
+            self.assertEqual(_resolve_mode(path, "markdown"), "markdown")
+
+    def test_explicit_file_mode_is_preserved(self):
+        """An explicit file-mode request is never downgraded, even for text."""
+        self.assertEqual(_resolve_mode("/workdir/outputs/notes.md", "file"), "file")
 
 
 if __name__ == "__main__":

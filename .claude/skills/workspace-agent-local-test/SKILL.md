@@ -288,6 +288,100 @@ curl -s -X POST http://localhost:8080/invocations \
 docker stop workspace-test
 ```
 
+## Testing Integrations (numa CLI path)
+
+Driving Pipedream integrations (Gmail, Xero, Outlook, …) through the agent locally needs three things the default test sub doesn't have: **(1) a real Cognito sub that actually has Pipedream connections, (2) a valid Cognito id_token, and (3) the integration's approval set to auto-approve so writes don't stall.** (First made to work 2026-06-16 — pre-CLI benches drove integrations via the old MCP layer, so this path was untested locally.)
+
+### How integration auth works (and why it breaks without a token)
+
+A `numa integrations …` call inside the container runs in **workspace-IAM mode**: the CLI invokes `{client}_numa-cli-api` via `lambda:Invoke` and authenticates with `NUMA_IDENTITY_TOKEN`. The agent sets that from the chat request's **`Authorization: Bearer <id_token>`** header (`main.py` → `os.environ["NUMA_IDENTITY_TOKEN"]`; `NUMA_ACCOUNT` = `CLIENT_NAME`, set automatically). With no token, every integration call fails: `NUMA_AUTH_MODE=workspace-iam but NUMA_IDENTITY_TOKEN is unset` (`numa-cli .../api/client.ts:186`).
+
+`bench_drive.py` sends it when you pass `--id-token-file=<path>` (or set the `BENCH_ID_TOKEN` env var).
+
+### Step 1 — get a fresh id_token
+
+The numa CLI caches tokens at `~/.config/numa/tokens-<client>.json` (from `numa login`). The `idToken` expires hourly; the `refreshToken` lasts ~30 days. The nd-labs app client has a **secret**, so refreshing needs a `SECRET_HASH`:
+
+```bash
+python3 <<'PY'
+import json, base64, hmac, hashlib, boto3
+d=json.load(open('/Users/nathandouglas/.config/numa/tokens-nd-labs.json'))
+pool='us-east-1_3tm2uaPJx'; cid='22n77de22vjrct7tma3hdij5u6'   # nd-labs pool + app client
+idp=boto3.Session(profile_name='q-demo').client('cognito-idp', region_name='us-east-1')
+secret=idp.describe_user_pool_client(UserPoolId=pool, ClientId=cid)['UserPoolClient']['ClientSecret']
+sh=base64.b64encode(hmac.new(secret.encode(), (d['sub']+cid).encode(), hashlib.sha256).digest()).decode()
+r=idp.initiate_auth(ClientId=cid, AuthFlow='REFRESH_TOKEN_AUTH',
+      AuthParameters={'REFRESH_TOKEN': d['refreshToken'], 'SECRET_HASH': sh})
+open('/tmp/_idt.txt','w').write(r['AuthenticationResult']['IdToken']); print('saved /tmp/_idt.txt')
+PY
+```
+
+`SECRET_HASH` keys on the **sub** for nd-labs (try `d['sub']`/`d['username']`/`d['email']` if one fails). If the refresh token is also dead, do a fresh `numa login nd-labs` (needs the password).
+
+### Step 2 — pick a sub with connections, and the CORRECT slug
+
+Integrations connect per **`external_user_id` = `{client}_{sub}`**. Nathan's real nd-labs sub (Xero, Outlook, Drive, Notion, Asana, Pipedrive connected): **`f4088468-1051-7091-5229-8f49cc9cf34a`** (`nathan@arcanum.ai`).
+
+⚠️ **`--enable=` takes the Pipedream app `name_slug`, NOT a friendly alias.** `xero` does NOT resolve — the slug is **`xero_accounting_api`** ("Integration X is not connected" = wrong slug). List what's actually connected + the exact slugs:
+
+```bash
+python3 <<'PY'
+import json, urllib.request, urllib.parse, re
+env={}
+for line in open('/Users/nathandouglas/arcanum/numa/.env'):
+    m=re.match(r'\s*(?:export\s+)?([A-Z_]+)\s*=\s*"?([^"\n]*)"?', line)
+    if m: env[m.group(1)]=m.group(2).strip()
+data=urllib.parse.urlencode({'grant_type':'client_credentials','client_id':env['PIPEDREAM_CLIENT_ID'],'client_secret':env['PIPEDREAM_CLIENT_SECRET']}).encode()
+tok=json.load(urllib.request.urlopen(urllib.request.Request('https://api.pipedream.com/v1/oauth/token', data=data)))['access_token']
+ext='nd-labs_f4088468-1051-7091-5229-8f49cc9cf34a'
+url=f"https://api.pipedream.com/v1/connect/{env['PROJECT_ID']}/accounts?external_user_id={urllib.parse.quote(ext)}"
+for a in json.load(urllib.request.urlopen(urllib.request.Request(url, headers={'Authorization':f"Bearer {tok}",'X-PD-Environment':'production'}))).get('data',[]):
+    print(a['app']['name_slug'], '| healthy:', a.get('healthy'))
+PY
+```
+
+### Step 3 — auto-approve writes (or they stall ~180s)
+
+Integration **writes** hit the HITL approval gate; `bench_drive` has no approver, so a write under `non_destructive`/`always` times out at ~180s with `is_error: true`. Set the user's approval to `never` for the test and **restore after** (Nathan's default is `non_destructive`):
+
+```bash
+SUB=f4088468-1051-7091-5229-8f49cc9cf34a
+aws --profile q-demo dynamodb update-item --table-name numa-nd-labs-chat-settings --region us-east-1 \
+  --key "{\"user_id\":{\"S\":\"$SUB\"}}" --update-expression "SET approvalMode = :n" \
+  --expression-attribute-values '{":n":{"S":"never"}}'      # ... run test ... then restore to non_destructive
+```
+
+The container **must** carry `CHAT_SETTINGS_TABLE_NAME` or it silently ignores DDB and behaves as `non_destructive` (writes time out regardless — see the ⚠️ in the env section). Verify: `docker exec workspace-test python3 -c "from numa_workspace_agent.agent_config import fetch_user_approval_mode, clear_user_settings_cache; clear_user_settings_cache(); print(fetch_user_approval_mode('$SUB'))"` → should print `never`.
+
+### Step 4 — drive it, and read the raw result
+
+```bash
+cd dev-notes/research/model-benchmarks/_tools
+python3 bench_drive.py turn t-test anthropic.claude-haiku-4-5-20251001-v1:0 "<prompt>" \
+  --user-sub=f4088468-1051-7091-5229-8f49cc9cf34a --user-email=nathan@arcanum.ai \
+  --enable=xero_accounting_api --id-token-file=/tmp/_idt.txt
+```
+
+The CLI spills each integration result to a file — inspect the **exact Pipedream envelope** (`os[]` observations, `ret`, `Warnings`, errors):
+
+```bash
+docker exec workspace-test bash -lc 'cat /workdir/tmp/numa-cli/numa-pipedream_run_action-*.json' | python3 -m json.tool | head -80
+```
+
+A failed upstream call (e.g. Xero `400 ValidationException`) lands in `result.os[]` as a `{"k":"error","err":{...}}` observation — which the T-14 scan in `pipedream_integration.py` turns into `status: "action_error"`.
+
+### Gotchas
+
+| Symptom                                         | Cause / fix                                                                                                                                                                          |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NUMA_IDENTITY_TOKEN is unset` / CLI auth fails | No id_token sent — pass `--id-token-file=` (Step 1).                                                                                                                                 |
+| `Integration 'X' is not connected` (but it is)  | Wrong slug — use the Pipedream `name_slug` (`xero_accounting_api`, not `xero`). List accounts (Step 2).                                                                              |
+| Write times out ~180s, `is_error: true`         | Approval not `never`, or `CHAT_SETTINGS_TABLE_NAME` missing from the container env.                                                                                                  |
+| id_token rejected                               | Expired (1h TTL) — refresh (Step 1).                                                                                                                                                 |
+| Real-account safety                             | Writes are real — use a sandbox org. A bad value may still create a DRAFT (Xero strips a bad account code with a `Warning`; the hard `ValidationException` only fires on AUTHORISE). |
+
+---
+
 ## Request Payload Reference
 
 The `/invocations` endpoint accepts these fields (mimicking what the proxy Lambda sends):

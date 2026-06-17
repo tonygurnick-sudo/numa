@@ -62,9 +62,27 @@ function createVisionViewCommand(): Command {
     const tokens = await getValidTokens(account);
     const scope = resolveScopingContext(account);
 
+    // The CLI runs IN the workspace container and can read /workdir directly.
+    // Ship small images inline (base64) so the server-side tool doesn't depend
+    // on the post-turn S3 sync — essential for agent-GENERATED images (charts/
+    // slides just rendered) that aren't in S3 yet. Cap at 4 MB so the encoded
+    // payload stays under the Lambda sync-invoke 6 MB limit; larger files fall
+    // back to the server's S3 read.
+    let imageB64: string | undefined;
+    try {
+      const { statSync, readFileSync } = await import('node:fs');
+      const st = statSync(options.filePath);
+      if (st.isFile() && st.size <= 4 * 1024 * 1024) {
+        imageB64 = readFileSync(options.filePath).toString('base64');
+      }
+    } catch {
+      // Not locally readable (e.g. an S3-only path) — server falls back to S3.
+    }
+
     const params: ParamsForTool<'view_image'> = {
       file_path: options.filePath,
       ...(options.prompt ? { prompt: options.prompt } : {}),
+      ...(imageB64 ? { image_b64: imageB64 } : {}),
     };
 
     const request: ToolInvokeRequest<'view_image'> = {

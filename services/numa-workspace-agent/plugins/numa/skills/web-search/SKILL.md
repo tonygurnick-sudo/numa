@@ -45,6 +45,11 @@ numa web fetch "https://example.com/page" --json -m "Fetching full content from 
 
 This two-step approach is more efficient than fetching every result.
 
+## Reliability & verification
+
+- **A failed or rate-limited search is not "nothing found".** If `search` errors or comes back throttled, retry once; if it still fails, say the search is rate-limited and either fall back to what you already know (flagging it as unverified) or ask the user to retry shortly. Don't silently conclude there are no results.
+- **Verify facts against the fetched page, not the snippet.** Search snippets are short and sometimes stale or misleading. Before stating a specific figure, date, or claim, `fetch` the source and confirm it there, then cite the URL you actually read.
+
 ## Examples
 
 ```bash

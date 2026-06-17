@@ -1,0 +1,148 @@
+/* numa-palette.css — the Numa brand palette as drop-in CSS.
+ *
+ * GENERIC HELPER (render skill). Inline this (or copy the :root block) into a
+ * rendered HTML widget / dashboard so colours, type, and components are
+ * on-brand without reinventing them each conversation. Source of truth:
+ * dev-notes/notes/asknuma-design-palette.md.
+ *
+ * Usage: paste the contents into a <style> tag in your render HTML, then use
+ * the CSS variables and the .numa-* component classes.
+ */
+
+:root {
+  --color-primary: #9949ac; /* Numa purple — buttons, headings, accents */
+  --color-primary-hover: #7d3490; /* darken 10% */
+  --color-lavender: #dfbde7; /* tints, badges, pill highlights */
+  --color-teal: #1f4b5e; /* secondary accent, dark sections */
+  --color-charcoal: #1f1f1f; /* dark backgrounds, footers */
+  --color-body: #323232; /* body text */
+  --color-warm-white: #f7f5f1; /* card/section backgrounds */
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-success: #22c55e;
+  --color-error: #ef4444;
+
+  --font-head: 'Figtree', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --radius: 8px;
+  --radius-card: 12px;
+  --gap: 16px;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--color-body);
+  margin: 0;
+  padding: 12px;
+  line-height: 1.5;
+}
+
+h1,
+h2 {
+  font-family: var(--font-head);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+h3,
+h4 {
+  font-family: var(--font-head);
+  color: var(--color-black);
+  font-weight: 600;
+}
+
+/* Cards */
+.numa-card {
+  background: var(--color-white);
+  border: 1px solid #ececec;
+  border-radius: var(--radius-card);
+  padding: 16px 18px;
+}
+.numa-card--muted {
+  background: var(--color-warm-white);
+  border-color: var(--color-lavender);
+}
+
+/* Buttons */
+.numa-btn {
+  display: inline-block;
+  background: var(--color-primary);
+  color: var(--color-white);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+}
+.numa-btn:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+.numa-btn--ghost {
+  background: transparent;
+  color: var(--color-charcoal);
+  border: 1.5px solid var(--color-charcoal);
+}
+
+/* Pills / badges */
+.numa-pill {
+  display: inline-block;
+  background: var(--color-lavender);
+  color: var(--color-primary);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Stat callout */
+.numa-stat {
+  text-align: center;
+}
+.numa-stat__value {
+  font-family: var(--font-head);
+  color: var(--color-primary);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1;
+}
+.numa-stat__label {
+  color: var(--color-body);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* Tables */
+.numa-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.numa-table th {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 10px 12px;
+  text-align: left;
+}
+.numa-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.numa-table tr:nth-child(even) td {
+  background: var(--color-warm-white);
+}
+
+/* Status text colours */
+.numa-success {
+  color: var(--color-success);
+}
+.numa-error {
+  color: var(--color-error);
+}
+
+/* Simple responsive grid for dashboards */
+.numa-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--gap);
+}

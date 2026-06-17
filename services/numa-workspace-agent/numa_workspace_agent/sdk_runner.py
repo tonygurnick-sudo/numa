@@ -301,6 +301,10 @@ def override_result_cost(serialized: dict[str, Any], stream_log: Any) -> dict[st
         if "sdk_reported_cost_usd" not in serialized:
             serialized["sdk_reported_cost_usd"] = sdk_value
         serialized["total_cost_usd"] = standard_cost
+        # F-B: also correct the stream-log so the later COST / STREAM_COMPLETE
+        # log lines emit the real relay cost, not the SDK's Anthropic-rate
+        # estimate (recalculate_anthropic_cost can't price the opaque model).
+        stream_log.total_cost_usd = standard_cost
         return serialized
 
     recomputed = getattr(stream_log, "total_cost_usd", None)

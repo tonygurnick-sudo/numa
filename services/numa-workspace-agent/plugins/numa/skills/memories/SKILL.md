@@ -1,11 +1,11 @@
 ---
 name: memories
-description: Manage user memories - list, add, and update persistent memories that help personalise AI responses across conversations. Use for listing existing memories, updating them, or detailed memory management. For quick adds, use the tool directly without loading this skill.
+description: Manage user memories - list, add, update, and delete persistent memories that help personalise AI responses across conversations. Use for listing existing memories, updating or deleting them, or detailed memory management. For quick adds, use the tool directly without loading this skill.
 ---
 
 # Memory Management Skill
 
-List, add, and update the user's persistent memories. Memories are facts, preferences, and operational details that persist across conversations and help personalise responses.
+List, add, update, and delete the user's persistent memories. Memories are facts, preferences, and operational details that persist across conversations and help personalise responses.
 
 ## Quick Reference
 
@@ -24,6 +24,9 @@ Bash("numa memory add 'Jira Cloud ID: abc123-def456' --scope 'integration:jira' 
 
 # Update a memory
 Bash("numa memory update mem_abc123 'Prefers concise bullet-point responses' -m 'Update preference'")
+
+# Delete a memory (list first to get the id)
+Bash("numa memory delete mem_abc123 -m 'Delete memory'")
 ```
 
 ## Operations
@@ -33,6 +36,7 @@ Bash("numa memory update mem_abc123 'Prefers concise bullet-point responses' -m 
 | `list`    | List memories (optionally filtered by scope) |
 | `add`     | Add a new memory                             |
 | `update`  | Update an existing memory's content          |
+| `delete`  | Delete a memory by id                        |
 
 ---
 
@@ -136,6 +140,32 @@ Bash("numa memory update mem_abc123def456 'Prefers concise bullet-point response
 
 ---
 
+## Delete Operation
+
+Delete an existing memory by its ID. Use this when the user clearly wants you to forget something you're storing — **don't deflect to the Profile page; you can do this.**
+
+### Parameters
+
+| Parameter   | Required | Description                                    |
+| ----------- | -------- | ---------------------------------------------- |
+| `memory_id` | Yes      | Memory ID to delete — get it from `list` first |
+
+### Examples
+
+```
+# Find the memory's ID, then delete it
+Bash("numa memory list --json -m 'List memories to find the one to remove'")
+Bash("numa memory delete mem_abc123def456 -m 'Forget the old reporting cadence'")
+```
+
+### Notes
+
+- Delete by **ID only** — there is no delete-by-content, so always `list` first to resolve the ID
+- Destructive and irreversible: the command confirms before removing. If there's any ambiguity about which memory, confirm with the user in chat first
+- Returns the remaining memory count on success
+
+---
+
 ## Scope Reference
 
 | Scope                | When to use                                  | Example                     |
@@ -149,6 +179,10 @@ Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `s
 ---
 
 ## Behavioral Rules
+
+### Retrieve before you produce
+
+Before generating a user-facing deliverable (email, doc, message, summary), list the relevant memories first — preferences, sign-off, tone, names, operational details — and apply them. This matters most when the **output format changes mid-conversation**: if you saved that the user signs off as "Priya — PMM", carry that into the Slack message too, not just the email you first saved it from. A saved preference you don't retrieve is a preference you've effectively forgotten.
 
 ### Always Confirm First
 
@@ -181,10 +215,11 @@ Only run the add/update command **after the user confirms**.
 
 - If a memory on the same topic already exists, **update** it rather than adding a duplicate
 - List memories first to check for existing ones on the same topic
+- **Merged vs separate is a judgment call.** Closely-related facts can live in one memory (retrieved together) or as separate memories (finer update granularity) — both pass hygiene. Prefer separate when the facts will change independently, merged when they're always used together.
 
 ### Deleting Memories
 
-You cannot delete memories. If the user wants to delete a memory, direct them to manage it from their **Profile page in Settings**.
+You **can** delete memories — use the **Delete Operation** above (`numa memory delete <id>`; `list` first to get the ID, and the command confirms before removing). Don't tell the user to use the Profile page for this.
 
 ---
 
@@ -209,6 +244,9 @@ Bash("numa memory list --json -m 'List all memories'")
 
 # 2. If updating, find the memory ID from the list, then:
 Bash("numa memory update mem_abc123 'Updated preference text' -m 'Update preference'")
+
+# 3. If deleting, find the memory ID from the list, then:
+Bash("numa memory delete mem_abc123 -m 'Delete memory'")
 ```
 
 ### Save Integration Details

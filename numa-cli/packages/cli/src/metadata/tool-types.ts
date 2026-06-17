@@ -438,9 +438,10 @@ export interface TranscribeResult {
 }
 
 /**
- * Two conversion modes — pick based on input:
- *   - `markdown`: input is markdown/text → output via Pandoc + LibreOffice
- *   - `file`: direct file conversion (e.g. DOCX↔PDF) via LibreOffice
+ * Two conversion modes, auto-detected from the input extension server-side:
+ *   - `file`: binary Office/PDF inputs (`.pptx`/`.docx`/`.xlsx`/`.pdf`/…) →
+ *     direct LibreOffice conversion. Forced for these formats regardless of input.
+ *   - `markdown`: text/markdown inputs (`.md`/`.txt`) → Pandoc + LibreOffice.
  *
  * Source: `workspace-chat-tools/tools/convert_document.py:handle_convert_document`.
  */
@@ -448,7 +449,7 @@ export interface ConvertDocumentParams extends HitlParams {
   /** Workspace path, e.g. `/workdir/outputs/draft.md` or `/workdir/uploads/x.docx`. */
   file_path: string;
   format: 'pdf' | 'docx';
-  /** Default `'markdown'`. */
+  /** Optional override — auto-detected from the input extension when omitted. */
   mode?: 'markdown' | 'file';
   /** Optional document title (affects rendering metadata + filename). */
   title?: string;
@@ -464,6 +465,14 @@ export interface ConvertDocumentResult {
   mode: 'markdown' | 'file';
   /** Bytes of the converted file. */
   size: number;
+  /**
+   * Presigned GET for the converted file. The conversion runs server-side, so
+   * the bytes only exist in S3 — the in-workspace CLI uses this to materialise
+   * the file at `output_path` under `/workdir` for same-turn use.
+   */
+  presigned_url?: string;
+  /** sha256 of the converted bytes, for end-to-end verification of the pull. */
+  download_sha256?: string;
 }
 
 // ─── Vision (view_image) ────────────────────────────────────────────────────
@@ -490,6 +499,13 @@ export interface ViewImageParams extends HitlParams {
    * defaults server-side to a full description.
    */
   prompt?: string;
+  /**
+   * Optional base64-encoded image bytes. The CLI populates this for files it
+   * can read locally in the workspace container, so the server-side tool can
+   * describe agent-GENERATED images that haven't synced to S3 yet. When absent,
+   * the server reads the file from the conversation's workspace S3 prefix.
+   */
+  image_b64?: string;
 }
 
 export interface ViewImageResult {

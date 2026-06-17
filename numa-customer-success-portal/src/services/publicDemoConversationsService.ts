@@ -2,6 +2,7 @@ import { GetObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/clien
 import { CloudWatchLogsClient, GetQueryResultsCommand, StartQueryCommand } from '@aws-sdk/client-cloudwatch-logs';
 import { awsCredentialsService } from '@/services/awsCredentialsService';
 import { withPRM } from '@/utils/prmUtils';
+import { compactAssistantRuns, parseTraceLine } from '@/utils/traceParsing';
 import type { Client } from '@/types';
 import type {
   ConversationDetail,
@@ -87,104 +88,6 @@ export async function listPublicDemoConversations(client: Client): Promise<Conve
   } while (continuationToken);
 
   return Array.from(found.values()).sort((a, b) => b.lastModified.localeCompare(a.lastModified));
-}
-
-/**
- * Shorten tool-call parameter objects into a single-line summary suitable for
- * inline display. Strips long fields and collapses to "k1=v1, k2=v2" form.
- */
-function summariseToolParams(input: unknown): string {
-  if (input == null) return '';
-  if (typeof input !== 'object') return String(input).slice(0, 120);
-  const entries = Object.entries(input as Record<string, unknown>);
-  const parts: string[] = [];
-  for (const [k, v] of entries) {
-    let val: string;
-    if (v == null) {
-      val = 'null';
-    } else if (typeof v === 'string') {
-      val = v.length > 60 ? `${v.slice(0, 57)}…` : v;
-      val = `"${val}"`;
-    } else if (typeof v === 'number' || typeof v === 'boolean') {
-      val = String(v);
-    } else {
-      val = Array.isArray(v) ? `[${v.length}]` : '{…}';
-    }
-    parts.push(`${k}=${val}`);
-    if (parts.join(', ').length > 200) break;
-  }
-  return parts.join(', ');
-}
-
-/**
- * Parse a single trace.jsonl line into one of three surfaced event kinds.
- * Returns null for events we intentionally drop (thinking, stream deltas,
- * system init, tool results).
- */
-function parseTraceLine(line: string): ParsedTraceEvent | null {
-  let ev: unknown;
-  try {
-    ev = JSON.parse(line);
-  } catch {
-    return null;
-  }
-  if (!ev || typeof ev !== 'object') return null;
-  const event = ev as Record<string, unknown>;
-  const type = event.type;
-  const timestamp = typeof event.timestamp === 'string' ? event.timestamp : '';
-
-  // User turns: {type: "user", message: {role: "user", content: [{type:"text"|"tool_result", ...}]}}
-  if (type === 'user') {
-    const message = event.message as { role?: string; content?: unknown } | undefined;
-    if (message?.role !== 'user' || !Array.isArray(message.content)) return null;
-    const textParts: string[] = [];
-    for (const part of message.content) {
-      if (part && typeof part === 'object' && (part as Record<string, unknown>).type === 'text') {
-        const t = (part as Record<string, unknown>).text;
-        if (typeof t === 'string') textParts.push(t);
-      }
-    }
-    if (textParts.length === 0) return null; // tool_result — skip
-    return { kind: 'user', timestamp, text: textParts.join('\n') };
-  }
-
-  // Assistant turns: {type: "assistant", message: {role: "assistant", content: [{type:"text"|"tool_use"|"thinking", ...}]}}
-  if (type === 'assistant') {
-    const message = event.message as { role?: string; content?: unknown } | undefined;
-    if (message?.role !== 'assistant' || !Array.isArray(message.content)) return null;
-    // Assistant events may contain multiple content blocks — emit the first
-    // surfaced one per line (callers compact adjacent text events downstream).
-    for (const part of message.content) {
-      if (!part || typeof part !== 'object') continue;
-      const p = part as Record<string, unknown>;
-      if (p.type === 'text' && typeof p.text === 'string' && p.text.trim().length > 0) {
-        return { kind: 'assistant', timestamp, text: p.text };
-      }
-      if (p.type === 'tool_use') {
-        const toolName = typeof p.name === 'string' ? p.name : 'tool';
-        const paramsSummary = summariseToolParams(p.input);
-        return { kind: 'tool_call', timestamp, toolName, paramsSummary };
-      }
-      // thinking / other — drop
-    }
-    return null;
-  }
-
-  return null;
-}
-
-/** Compact adjacent assistant text events into a single message per turn. */
-function compactAssistantRuns(events: ParsedTraceEvent[]): ParsedTraceEvent[] {
-  const out: ParsedTraceEvent[] = [];
-  for (const ev of events) {
-    const prev = out[out.length - 1];
-    if (prev && prev.kind === 'assistant' && ev.kind === 'assistant') {
-      out[out.length - 1] = { ...prev, text: `${prev.text}\n${ev.text}` };
-      continue;
-    }
-    out.push(ev);
-  }
-  return out;
 }
 
 export async function fetchConversationTrace(client: Client, conversationId: string): Promise<ConversationDetail> {

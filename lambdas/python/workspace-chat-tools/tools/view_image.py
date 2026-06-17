@@ -23,6 +23,7 @@ Returns: {"description": <str>}. The dispatcher wraps this in the standard
 {status, result, error} envelope.
 """
 
+import base64
 import os
 from pathlib import Path
 from typing import Any, Dict
@@ -108,26 +109,44 @@ def handle_view_image(params: Dict[str, Any]) -> Dict[str, Any]:
         )
     image_format = EXT_TO_IMAGE_FORMAT[ext]
 
-    # Build the S3 key the same way transcribe / convert_document do.
-    rel_path = file_path
-    if file_path.startswith(WORKSPACE_ROOT + "/"):
-        rel_path = file_path[len(WORKSPACE_ROOT) + 1 :]
-    image_s3_key = f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{rel_path}"
-
-    s3_client = prm_client("s3", region=REGION)
-
-    # Read the image bytes from the workspace prefix.
-    try:
-        response = s3_client.get_object(Bucket=OUTPUTS_BUCKET_NAME, Key=image_s3_key)
-        image_bytes = response["Body"].read()
-    except ClientError as e:
-        logger.warning(
-            "Image not found in workspace S3",
-            file_path=file_path,
-            s3_key=image_s3_key,
-            error=str(e),
+    # Prefer inline bytes sent by the CLI. The numa CLI runs IN the workspace
+    # container and can read /workdir directly, so it ships small images as
+    # base64 in the request. This is essential for agent-GENERATED images
+    # (charts/slides the model just rendered and wants to QA mid-turn): those
+    # files don't reach S3 until the post-turn sync, so the S3 read below 404s
+    # for them. Fall back to S3 for files the CLI couldn't read locally or that
+    # exceed the inline-payload cap.
+    image_b64 = params.get("image_b64") or ""
+    if image_b64:
+        try:
+            image_bytes = base64.b64decode(image_b64)
+        except Exception as e:
+            raise ValueError(f"Invalid inline image data: {e}") from e
+    else:
+        # Build the S3 key the same way transcribe / convert_document do.
+        rel_path = file_path
+        if file_path.startswith(WORKSPACE_ROOT + "/"):
+            rel_path = file_path[len(WORKSPACE_ROOT) + 1 :]
+        image_s3_key = (
+            f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{rel_path}"
         )
-        raise ValueError(f"Image not found in workspace: {file_path}") from e
+
+        s3_client = prm_client("s3", region=REGION)
+
+        # Read the image bytes from the workspace prefix.
+        try:
+            response = s3_client.get_object(
+                Bucket=OUTPUTS_BUCKET_NAME, Key=image_s3_key
+            )
+            image_bytes = response["Body"].read()
+        except ClientError as e:
+            logger.warning(
+                "Image not found in workspace S3",
+                file_path=file_path,
+                s3_key=image_s3_key,
+                error=str(e),
+            )
+            raise ValueError(f"Image not found in workspace: {file_path}") from e
 
     if len(image_bytes) > MAX_IMAGE_BYTES:
         raise ValueError(

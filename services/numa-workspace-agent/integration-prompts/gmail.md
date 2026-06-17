@@ -97,6 +97,11 @@ Uses Gmail's standard search operators in the `q` parameter:
 - `newer_than:7d` — within last 7 days
 - `subject:"quarterly report"` — subject contains phrase
 - Combine with spaces: `from:alice has:attachment newer_than:30d`
+- **`from:` matches the email address, not the display name.** `from:alice@example.com` works; `from:"Alice Smith"` (a display name) usually won't. If you only know a person's name, search the **subject**/body for it or list recent senders and resolve the address first — don't assume `from:Name` finds their mail.
+
+## Drafts — "update" means replace, not duplicate
+
+There is no in-place draft-edit action. When the user asks you to "update" or "revise" a draft, do NOT create a second draft — find the existing draft, delete it (`proxy_request` `DELETE` on `/gmail/v1/users/me/drafts/{id}`), then create the corrected one. Leaving two drafts behind ("update her draft" → two copies) is a defect. Same rule for any "update X" on an external record: replace or truly update, never append a duplicate. And a draft is a draft — don't send it unless the user said to send.
 
 ## Labels
 

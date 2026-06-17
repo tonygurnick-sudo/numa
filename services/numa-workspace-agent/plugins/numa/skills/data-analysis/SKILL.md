@@ -31,6 +31,34 @@ Is your file > 50MB?
 
 ---
 
+## Analytic correctness — before you report a number
+
+Speed is worthless if the number is wrong. These rules close the failure family where confidently-wrong aggregates ended up in board-level deliverables. Apply them to ANY analysis that ends in a reported figure.
+
+1. **Structural check first — never aggregate blind.** Before any SUM/GROUP BY, enumerate the data's shape: row count, columns, dtypes, and — critically — for every status/category column, list its distinct values and decide how each is treated.
+
+   ```python
+   print(len(df), "rows"); print(df.dtypes)
+   for col in ['status', 'type', 'currency', 'is_refund']:   # any column that gates what counts
+       if col in df.columns:
+           print(col, df[col].value_counts(dropna=False).to_dict())
+   ```
+
+   The classic failure: ignoring a `status` column, counting refunded/cancelled/pending rows as completed, and reporting a fabricated "26–35% finance undercount" **as fact**. Default to terminal-success states (`completed`/`paid`/`settled`), net out refunds, and state which states you included.
+
+2. **Signed values are signed for a reason.** Never `ABS()`, drop, or "clean away" negatives without confirming what they mean. Refunds, credits, and reversals are negative on purpose — summing their absolute value turns refunds into revenue and picks the wrong top customer. If the sign is ambiguous, ask or state your assumption.
+
+3. **Sanity-check the first aggregation against source rows.** Before building on top of an aggregate, spot-check 2–3 of its rows against the raw records and confirm they tie out. A wrong top-10 (5 of 10 IDs wrong in one bench) flowed straight into the final summary because nobody checked row one.
+
+4. **Deliverables re-query; they don't re-emit chat memory.** When you write a summary doc, report, or Notion page, recompute every figure from the source/db **at write time** — do not paste numbers you mentioned earlier in the chat. Numbers drift across a long conversation, and a stale figure quoted from memory becomes a permanent error in the artifact.
+
+5. **Carry every anomaly into the deliverable.** If you found overwork, a name mismatch, a duplicate, and a missing record while exploring, the output covers all four — not the two that were easiest to write up. Enumerate the categories of anomaly and account for each.
+6. **Recompute annotations after you restructure.** If you reframe a chart or table (change the baseline, regroup, re-period), recompute every callout and label — a "12% YoY" annotation left over from the previous framing (actual 6.7%) is a lie on the final chart.
+7. **Format numbers for humans.** Present a ratio of `1.07` as "107%", put separators and a symbol on money (`$1,234,567`), and round sensibly. Raw machine values in a deliverable read as sloppy or wrong.
+8. **Apply the methodology you state.** If you print a caveat or rule (a footnote, "slots under 15 min count as buffer"), make the numbers actually follow it — don't show a methodology note the calculation ignored.
+
+---
+
 ## SQLite Conversion Pattern (Core Workflow)
 
 ### Step 1: Load and Convert to SQLite
@@ -96,6 +124,24 @@ result = pd.read_sql_query('''
 
 print(result)
 ```
+
+### Step 4: On handoff, ship a schema + query cheat-sheet
+
+Never hand back a bare `.db`. Emit a short companion file so the user — or the next session — can actually use it: tables, columns, row counts, and a few ready-to-run example queries.
+
+```python
+import sqlite3
+conn = sqlite3.connect('/workdir/outputs/analysis.db')
+lines = ["# analysis.db — schema & query cheat-sheet\n"]
+for (tbl,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+    n = conn.execute(f"SELECT COUNT(*) FROM '{tbl}'").fetchone()[0]
+    lines.append(f"\n## {tbl} ({n:,} rows)")
+    for _cid, name, ctype, *_ in conn.execute(f"PRAGMA table_info('{tbl}')"):
+        lines.append(f"- `{name}` {ctype or ''}")
+open('/workdir/outputs/analysis-schema.md', 'w').write("\n".join(lines))
+```
+
+And **always index** the columns you filter/group on (Step 2) before handoff — never hand over a large unindexed database (one bench shipped 402 MB unindexed, unusable without a full scan per query).
 
 ---
 
@@ -362,6 +408,8 @@ Use Numa's purple (`#8e50a7`) as the primary color. HTML dashboards are responsi
 ## Basic Chart Visualization with matplotlib
 
 Create charts using Numa's purple color scheme. **Only use this for actual data charts** — see format selection guidance above.
+
+> **For on-brand charts, load the `visual-design` skill.** Easiest: run the `make_chart.py` helper below (already Numa-styled; `--palette @/workdir/tmp/brand.json` to match a user's brand). For a custom plot, call `numa_theme.apply_matplotlib()` first (it sets brand fonts, colours, and clean axes in one call). Colour encodes meaning — group by category, don't rainbow.
 
 ### Setup and Colors
 
@@ -653,3 +701,20 @@ conn.close()
 - **Input files**: `/workdir/uploads/`
 - **Database**: `/workdir/outputs/analysis.db`
 - **Charts/exports**: `/workdir/outputs/`
+
+---
+
+## Helper Scripts
+
+Generic, ready-to-run helpers ship with this skill at `/app/plugins/numa/skills/data-analysis/helpers/` (read-only). Run them as-is, or copy one into `/workdir/chat-workflows/` and adapt it when a user has a recurring job.
+
+- **`make_chart.py`** — matplotlib chart → static PNG with the Numa palette, automatic dual-axis for multi-magnitude series, and every category plotted (including zeros). Use for any chart that must _embed_ in a deck, PDF, or chat (never draw chart bars as text/shapes).
+  ```bash
+  python3 /app/plugins/numa/skills/data-analysis/helpers/make_chart.py --type bar \
+    --out /workdir/outputs/rev.png --title "Revenue" --ylabel NZD \
+    --data '{"labels":["Q1","Q2","Q3"],"series":{"Revenue":[120000,140000,155000]}}'
+  ```
+- **`csv_to_sqlite.py`** — load a large CSV/Excel → indexed SQLite + a schema & query cheat-sheet in one step (never hand over a bare unindexed db).
+  ```bash
+  python3 /app/plugins/numa/skills/data-analysis/helpers/csv_to_sqlite.py /workdir/uploads/big.csv
+  ```

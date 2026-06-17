@@ -1,0 +1,99 @@
+/* tokens.css — Numa brand design tokens for HTML artifacts (dashboards,
+   reports, styled pages). Paste into a <style> tag, or copy the :root block.
+
+   This is the DEFAULT brand. If the user has their own brand (chat / memory /
+   a file you're editing), swap these values for theirs — see the visual-design
+   skill's "Whose design system?" precedence rules. You can regenerate this
+   block for a user's brand with:
+       python3 numa_theme.py --palette /workdir/tmp/brand.json --emit-css
+
+   Brand fonts: Figtree (display) + Inter (body) are free on Google Fonts. Add
+   to the <head> of an HTML artifact:
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+*/
+
+:root {
+  /* Colours */
+  --color-primary: #9949ac; /* Numa purple — headings, CTAs, active */
+  --color-primary-light: #dfbde7; /* hover tints, badges, pills */
+  --color-primary-dark: #7d3490; /* purple hover/pressed */
+  --color-teal: #1f4b5e; /* secondary accent, dark sections */
+  --color-charcoal: #1f1f1f; /* dark backgrounds, footers, sidebars */
+  --color-charcoal-light: #323232; /* body text — NOT pure black */
+  --color-warm-bg: #f7f5f1; /* section/card backgrounds */
+  --color-white: #ffffff;
+  --color-black: #000000; /* h3/h4 on light bg, hairline borders */
+  --color-success: #22c55e;
+  --color-error: #ef4444;
+
+  /* Typography */
+  --font-display: 'Figtree', system-ui, sans-serif; /* H1/H2 */
+  --font-body: 'Inter', system-ui, sans-serif; /* body, UI, labels */
+
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 40px;
+  --space-2xl: 64px;
+  --space-3xl: 96px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+/* Sensible defaults that make the tokens do work immediately. */
+body {
+  font-family: var(--font-body);
+  color: var(--color-charcoal-light);
+  background: var(--color-white);
+  line-height: 1.5;
+  margin: 0;
+}
+h1,
+h2 {
+  font-family: var(--font-display);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+h3,
+h4 {
+  font-family: var(--font-body);
+  color: var(--color-black);
+  font-weight: 600;
+}
+
+/* Card — clean, light border + soft shadow, generous padding. */
+.numa-card {
+  background: var(--color-white);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Pill button — rounded, friendly, purple. */
+.numa-btn {
+  background: var(--color-primary);
+  color: var(--color-white);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-pill);
+  padding: 12px 24px;
+  font: 600 14px var(--font-body);
+  cursor: pointer;
+}
+.numa-btn--ghost {
+  background: transparent;
+  color: var(--color-charcoal);
+  border: 1.5px solid var(--color-charcoal);
+}

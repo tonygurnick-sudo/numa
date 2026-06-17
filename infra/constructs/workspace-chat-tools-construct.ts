@@ -216,13 +216,17 @@ export class WorkspaceChatToolsConstruct extends Construct {
       ],
     });
 
-    // S3 permission for outputs bucket (workspace files for extract_content tool)
+    // S3 permission for outputs bucket (workspace files for extract_content +
+    // docs-convert tools). s3:ListBucket (scoped to the BUCKET arn, not /*) is
+    // required so GetObject on a missing key returns 404 not 403, and for the
+    // PPTX/DOCX → PDF visual-QA convert path that reads the workspace prefix.
+    // Mirrors the data-bucket grant above.
     if (props.outputsBucketArn) {
       policyStatements.push({
         sid: 'S3OutputsAccess',
         effect: 'Allow',
-        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-        resources: [`${props.outputsBucketArn}/*`],
+        actions: ['s3:GetObject', 's3:ListBucket', 's3:PutObject', 's3:DeleteObject'],
+        resources: [props.outputsBucketArn, `${props.outputsBucketArn}/*`],
       });
     }
 

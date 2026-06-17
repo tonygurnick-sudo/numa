@@ -46,7 +46,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-dejavu-core \
     # PDF manipulation CLI
     qpdf \
+    # fontconfig so we can register the brand fonts below (fc-cache)
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
+
+# Brand fonts (OFL, ~0.9 MB): Figtree (display) + Inter (body), so on-brand
+# matplotlib charts and WeasyPrint PDFs render in the real brand fonts. HTML
+# artifacts load these from Google Fonts; this is the in-container copy so
+# server-side renders match. DejaVu (above) stays the ultimate glyph fallback.
+RUN mkdir -p /usr/share/fonts/truetype/brand \
+    && curl -fsSL -o /usr/share/fonts/truetype/brand/Figtree.ttf \
+       "https://github.com/google/fonts/raw/main/ofl/figtree/Figtree%5Bwght%5D.ttf" \
+    && curl -fsSL -o /usr/share/fonts/truetype/brand/Inter.ttf \
+       "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf" \
+    && fc-cache -f \
+    && rm -rf /root/.cache/matplotlib
 
 # Node.js 20 LTS for PptxGenJS presentation creation
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

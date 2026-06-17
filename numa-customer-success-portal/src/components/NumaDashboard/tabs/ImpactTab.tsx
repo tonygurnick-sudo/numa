@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
+import { Alert } from 'react-bootstrap';
 import { emailOrSub, fmtN, fmtSpan, fmtUSD, isAggregate, sumByKeyInWindow, sumDailyInWindow } from '../shared';
 import { useCurrency } from '../currencyContext';
+import { RowDownloadMenu } from '../RowDownloadMenu';
+import { fetchAgentDefinitionExport, type AgentExportFormat } from '@/services/agentDefinitionService';
+import { FileExportService } from '@/utils/fileExport';
 import type { WindowState } from '../shared';
+import type { ClientAccountRef } from '@/types/clientAccount';
 import type { DashboardView } from '@/types/fleetAnalytics';
 
 interface Props {
@@ -30,6 +35,23 @@ export function ImpactTab({ data, window }: Props) {
   const [sub, setSub] = useState<SubTab>('agents');
   const agg = isAggregate(data) ? data : null;
   const subToEmail = !agg ? data.users?.sub_to_email : undefined;
+
+  // Per-client account ref for agent-definition downloads (assume-role into the
+  // client account). Aggregate views don't map to one client → downloads off.
+  const clientRef: ClientAccountRef | null = useMemo(() => {
+    if (isAggregate(data)) return null;
+    const accountId = data.client_config?.client_account_id;
+    const region = data.client_config?.region;
+    if (!accountId || !region) return null;
+    return { clientName: data.client, accountId, region };
+  }, [data]);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
+
+  const downloadAgent = async (agentId: string, format: AgentExportFormat) => {
+    if (!clientRef) return;
+    const file = await fetchAgentDefinitionExport(clientRef, agentId, format);
+    FileExportService.downloadFile(file);
+  };
 
   // Build agent map from data.agents (workspace + personal) so we know
   // estimated_time_saved_minutes per agent. Aggregate view doesn't include
@@ -165,6 +187,11 @@ export function ImpactTab({ data, window }: Props) {
               Cost filtered to window · runs/time-saved are snapshot-window (×10m/run default where unset)
             </div>
           </div>
+          {downloadError && (
+            <Alert variant="warning" dismissible onClose={() => setDownloadError(null)} className="mx-3 mt-2 mb-0 py-2">
+              {downloadError}
+            </Alert>
+          )}
           <table className="nd-table">
             <thead>
               <tr>
@@ -176,12 +203,13 @@ export function ImpactTab({ data, window }: Props) {
                 <th className="nd-num">Cost (window)</th>
                 <th className="nd-num">Min / run</th>
                 <th className="nd-num">Total saved</th>
+                <th className="nd-dl-col" aria-label="Download" />
               </tr>
             </thead>
             <tbody>
               {perAgent.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="nd-empty">
+                  <td colSpan={9} className="nd-empty">
                     No agent activity
                   </td>
                 </tr>
@@ -204,6 +232,27 @@ export function ImpactTab({ data, window }: Props) {
                   </td>
                   <td className="nd-num">
                     {r.totalMinutes ? `${Math.floor(r.totalMinutes / 60)}h ${r.totalMinutes % 60}m` : '—'}
+                  </td>
+                  <td className="nd-dl-col">
+                    <RowDownloadMenu
+                      title="Download agent definition"
+                      disabledReason={clientRef ? undefined : 'Select a single client to download agent definitions'}
+                      onError={setDownloadError}
+                      options={[
+                        {
+                          key: 'json',
+                          label: 'Definition (.json)',
+                          sublabel: 'Full agent record + schedules',
+                          run: () => downloadAgent(r.agent_id, 'json'),
+                        },
+                        {
+                          key: 'md',
+                          label: 'Readable (.md)',
+                          sublabel: 'System prompt, tools, model, schedules',
+                          run: () => downloadAgent(r.agent_id, 'md'),
+                        },
+                      ]}
+                    />
                   </td>
                 </tr>
               ))}

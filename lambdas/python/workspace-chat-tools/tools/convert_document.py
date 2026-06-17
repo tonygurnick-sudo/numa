@@ -20,6 +20,7 @@ Security:
 - Conversation isolation via conversation_id in S3 paths (except chat-workflows/)
 """
 
+import hashlib
 import json
 import os
 import re
@@ -188,6 +189,27 @@ def _get_output_s3_key(
     return f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/{output_rel_path}"
 
 
+def _resolve_mode(file_path: str, requested_mode: str) -> str:
+    """Resolve the conversion mode, treating the input extension as authoritative.
+
+    ``markdown`` mode reads the file and ``.decode("utf-8")``s its bytes as text —
+    which corrupts or crashes on any binary format (a ``.pptx``/``.docx``/``.xlsx``
+    is a zip; a ``.pdf`` is binary). There is *no* valid case for markdown-decoding
+    those, so whenever the input is a LibreOffice-convertible binary
+    (``VALID_INPUT_FORMATS``) we force ``file`` mode regardless of what was
+    requested. Plain text/markdown inputs (``.md``/``.markdown``/``.txt``, or no
+    extension) keep the requested (default ``markdown``) mode.
+
+    This kills the classic "convert the .pptx you just made to PDF" failure, where
+    the default ``markdown`` mode produced a cryptic ``'utf-8' codec can't decode``
+    error that the agent then misread as a missing-file / S3-sync problem.
+    """
+    ext = Path(file_path).suffix.lower().lstrip(".")
+    if ext in VALID_INPUT_FORMATS:
+        return "file"
+    return requested_mode
+
+
 def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Handle convert_document tool invocation.
@@ -243,6 +265,20 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
 
     if not conversation_id:
         raise ValueError("Missing conversation context: conversation_id not provided")
+
+    # Auto-route the mode from the input extension. Binary/Office/PDF inputs must
+    # use direct LibreOffice conversion ("file"); markdown mode would utf-8-decode
+    # their bytes and fail with a cryptic error. The model no longer has to know to
+    # pass --mode file for a .pptx/.docx/.xlsx.
+    requested_mode = mode
+    mode = _resolve_mode(file_path, mode)
+    if mode != requested_mode:
+        logger.info(
+            "Auto-routed conversion mode from input extension",
+            file_path=file_path,
+            requested_mode=requested_mode,
+            resolved_mode=mode,
+        )
 
     # For file mode, validate input format and conversion makes sense
     if mode == "file":
@@ -318,6 +354,22 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
                 "Read input markdown from S3",
                 content_length=len(markdown_content),
             )
+        except UnicodeDecodeError as e:
+            # The file was found in S3 but isn't UTF-8 text — almost certainly a
+            # binary file reaching the markdown path (auto-routing should have
+            # caught a known extension; this covers mislabelled / extensionless
+            # binaries). Give the agent an actionable message, not "0xd1".
+            logger.error(
+                "Input file is not UTF-8 text — binary file in markdown mode",
+                input_s3_key=input_s3_key,
+            )
+            name = Path(file_path).name
+            raise ValueError(
+                f"'{name}' isn't text — it looks like a binary file, so it can't be "
+                f"read as markdown. Office/PDF files convert with mode='file' "
+                f"(direct LibreOffice), e.g. `numa docs convert {name} "
+                f"--format {output_format} --mode file`."
+            ) from e
         except Exception as e:
             logger.error(
                 "Failed to read input file from S3",
@@ -448,6 +500,28 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
         )
         raise ValueError(f"Failed to upload converted document: {str(e)}") from e
 
+    # Presign a GET on the converted output so the in-workspace CLI can pull the
+    # bytes down into the local /workdir. This Lambda ran the conversion, so the
+    # file only exists in S3 — without this, the agent gets an output_path that
+    # isn't on local disk until the next cold sync, and same-turn use (render the
+    # PDF, read it, re-convert) fails. Mirrors how `files download` and connector
+    # downloads hand bytes back to the workspace.
+    download_sha256 = hashlib.sha256(converted_content).hexdigest()
+    presigned_url = None
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": OUTPUTS_BUCKET_NAME, "Key": output_s3_key},
+            ExpiresIn=900,
+        )
+    except Exception as e:
+        # Non-fatal: the file is still in S3 and arrives at the post-turn sync.
+        logger.warning(
+            "Failed to presign converted output",
+            error=str(e),
+            output_s3_key=output_s3_key,
+        )
+
     # Return the output path in workspace format
     output_rel_path = output_s3_key.replace(
         f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", ""
@@ -462,4 +536,6 @@ def handle_convert_document(params: Dict[str, Any]) -> Dict[str, Any]:
         "format": output_format,
         "mode": mode,
         "size": len(converted_content),
+        "presigned_url": presigned_url,
+        "download_sha256": download_sha256,
     }

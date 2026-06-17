@@ -42,6 +42,7 @@ the model blank on deliverable turns.
 import asyncio
 import json
 import os
+import re
 import threading
 import uuid
 from contextlib import asynccontextmanager
@@ -87,6 +88,154 @@ _OPAQUE_UPSTREAM_ERROR = (
     "The Standard model is temporarily unavailable — switch to Premium or "
     "try again shortly."
 )
+
+# ── Output guard ───────────────────────────────────────────────────────────
+# The Standard model (a non-Anthropic upstream) has two bad-output failure
+# modes we must intercept before they reach the user:
+#
+#  1. DSML tool-call leak — DeepSeek occasionally emits its native
+#     ``<｜DSML｜tool_calls><｜DSML｜invoke name="...">`` markup INSIDE the
+#     reasoning channel instead of as a parsed tool_call. The turn then has no
+#     real text + no tool_use, so the H2 reasoning-salvage promotes the raw
+#     markup to a visible answer (and the action never runs). We detect the
+#     markup in the salvage buffer and emit a clean fallback instead.
+#  2. CJK refusal — for politically-censored topics the model's CCP alignment
+#     emits a canned Chinese refusal as its actual TEXT answer (prompt-steering
+#     can't stop hard alignment). We hold the start of the text stream, detect
+#     the refusal, and substitute a neutral English decline.
+#
+# Both also POISON the conversation (the model parrots its own prior bad turn).
+# The live substitutions above stop new poison from ever being recorded; the
+# history scrub in ``_anthropic_to_openai_messages`` is the backstop for
+# conversations already poisoned before this guard shipped.
+
+# Shown in place of a suppressed Chinese refusal. Numa is a business assistant —
+# the right move on a censored topic is a clean English decline, not a Chinese
+# refusal and not a contortion to answer it.
+_CJK_DECLINE = "I can't help with that one — happy to keep going on your work, though."
+
+# Shown in place of a suppressed DSML tool-call leak (the malformed call is lost
+# either way; this keeps the user out of the raw markup until the Phase-2 retry
+# / parse-to-tool_use lands).
+_DSML_FALLBACK = (
+    "Sorry — I hit a snag running that step. Could you ask me to try again?"
+)
+
+# DeepSeek's native special-token delimiter is the FULL-WIDTH vertical bar
+# (U+FF5C), NOT the ASCII pipe. It has essentially zero legitimate reason to
+# appear in English text, which makes it a high-precision leak signal.
+_DSML_BAR = "｜"
+# Open from the first ``<｜DSML｜`` (or a bare ``｜DSML｜`` / ``｜tool_calls``) run
+# to end-of-text — the leak is always a trailing run.
+_DSML_RE = re.compile(r"<?｜(?:DSML|tool_calls|invoke).*", re.S)
+
+# DeepSeek's canonical censorship fingerprint ("...haven't yet learned how to
+# answer this question"). Unambiguous — used as a high-confidence signal that
+# bypasses the ratio check (and is the only signal the conservative history
+# scrub trusts, so it never drops legitimate Chinese work).
+_CENSORSHIP_FINGERPRINT = "我还没学习如何回答这个问题"
+
+# CJK codepoint ranges: ideographs + kana + CJK/fullwidth punctuation. We count
+# the punctuation too, else a Chinese sentence (heavy on 。，！？) reads as
+# low-ratio.
+_CJK_RANGES = (
+    (0x4E00, 0x9FFF),  # CJK Unified Ideographs (the bulk of Chinese)
+    (0x3400, 0x4DBF),  # CJK Ext A
+    (0xF900, 0xFAFF),  # CJK Compatibility Ideographs
+    (0x20000, 0x2FA1F),  # CJK Ext B–F
+    (0x3040, 0x30FF),  # Hiragana / Katakana (same alignment family)
+    (0x3000, 0x303F),  # CJK punctuation
+    (0xFF00, 0xFFEF),  # Halfwidth/Fullwidth forms
+)
+
+# Hold this many non-whitespace chars of the text stream before deciding
+# clean-vs-refusal. A canned refusal is 100% CJK from char 1 (caught even
+# sooner via the ratio short-circuit); clean English waits ~a few words then
+# flushes. Standard tier only — Premium/Expert never hit this path.
+_TEXT_HOLD_CHARS = 24
+
+
+def _looks_like_dsml(text: str) -> bool:
+    """Detect DeepSeek's native DSML tool-call markup leaking into a channel.
+
+    Keyed on the full-width bar U+FF5C (a tokenizer artifact, not ASCII ``|``)
+    plus a DSML/invoke/tool_calls literal so a lone bar can't false-positive.
+    """
+    if _DSML_BAR not in text:
+        return False
+    return "DSML" in text or "invoke name" in text or "tool_calls" in text
+
+
+def _scrub_dsml(text: str) -> str:
+    """Strip a leaked DSML tool-call run from text before it re-enters history."""
+    if _DSML_BAR not in text:
+        return text
+    return _DSML_RE.sub("", text).rstrip()
+
+
+def _cjk_ratio(text: str) -> tuple[float, int]:
+    """(fraction of non-whitespace chars that are CJK, absolute CJK count)."""
+    cjk = 0
+    nonspace = 0
+    for ch in text:
+        if ch.isspace():
+            continue
+        nonspace += 1
+        o = ord(ch)
+        if any(lo <= o <= hi for lo, hi in _CJK_RANGES):
+            cjk += 1
+    return (cjk / nonspace if nonspace else 0.0), cjk
+
+
+def _is_cjk_refusal(text: str, user_is_cjk: bool) -> bool:
+    """Flag an assistant text block as a Chinese refusal we should suppress.
+
+    The censorship fingerprint always flags (it's never legitimate). The
+    ratio path is gated on the user NOT writing CJK, so genuine Chinese
+    conversations are never clobbered.
+    """
+    if _CENSORSHIP_FINGERPRINT in text:
+        return True
+    if user_is_cjk:
+        return False
+    ratio, count = _cjk_ratio(text)
+    return count >= 8 and ratio >= 0.30
+
+
+def _block_text(content: Any) -> str:
+    """Pull plain text out of an OpenAI/Anthropic message content value."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            b.get("text", "")
+            for b in content
+            if isinstance(b, dict) and (b.get("type") == "text" or "text" in b)
+        )
+    return ""
+
+
+def _user_writes_cjk(request_body: dict) -> bool:
+    """True if the user's most recent turn is itself substantially CJK — then a
+    CJK reply is legitimate work and must NOT be suppressed."""
+    for msg in reversed(request_body.get("messages") or []):
+        if msg.get("role") != "user":
+            continue
+        ratio, count = _cjk_ratio(_block_text(msg.get("content")))
+        return count >= 4 and ratio >= 0.15
+    return False
+
+
+def _scrub_assistant_text(text: str) -> str:
+    """Backstop: neutralize a poisoned assistant turn before re-sending it
+    upstream, so a leak recorded before this guard shipped doesn't get parroted.
+    Conservative — only the unambiguous censorship fingerprint and DSML markup
+    are removed, so legitimate Chinese assistant turns are left intact."""
+    cleaned = _scrub_dsml(text)
+    if _CENSORSHIP_FINGERPRINT in cleaned:
+        return ""
+    return cleaned
+
 
 # Singleton state. uvicorn runs in a dedicated daemon thread to decouple its
 # event loop from the workspace agent's main event loop — running it as an
@@ -424,7 +573,16 @@ def _anthropic_to_openai_messages(
                     }
                 )
             elif "text" in block:
-                text_parts_blocks.append({"type": "text", "text": block["text"]})
+                # Backstop against poisoning: strip leaked DSML markup / a canned
+                # Chinese refusal from a PRIOR assistant turn before re-sending it
+                # upstream, so one bad turn can't prime the model to repeat it.
+                # Conservative + assistant-only — never touches user text or
+                # legitimate Chinese work.
+                text = block["text"]
+                if role == "assistant":
+                    text = _scrub_assistant_text(text)
+                if text:
+                    text_parts_blocks.append({"type": "text", "text": text})
             else:
                 other_blocks.append(block)
 
@@ -686,63 +844,211 @@ async def _stream_response(request_body: dict, model: str):
     active_tools: dict[int, dict] = {}
     stop_reason = "end_turn"
 
+    # ── Output guard: hold the start of the text stream until we can classify
+    # it (clean vs CJK refusal), then either flush-and-stream-live or substitute
+    # an English decline. `user_is_cjk` keeps legitimate Chinese work flowing.
+    user_is_cjk = _user_writes_cjk(request_body)
+    text_prefix: list[str] = []
+    text_decided = False
+    cjk_blocked = False
+    # Set once DSML markup appears in the reasoning channel — we stop streaming
+    # thinking from that point so the leaked markup doesn't show in the (collapsed)
+    # thinking UI either; the salvage guard replaces the answer.
+    reasoning_tainted = False
+
+    async def _emit_decided_text(buffered: str) -> AsyncIterator[str]:
+        """Classify the held text prefix and emit it. Clean → close any open
+        thinking block, open a live text block, flush the prefix (the block stays
+        open for subsequent live deltas). CJK refusal → emit a self-contained
+        English-decline text block and swallow the rest of the turn's text."""
+        nonlocal block_index, thinking_block_started, text_block_started
+        nonlocal text_chars, cjk_blocked, text_decided, stop_reason
+        text_decided = True
+        if thinking_block_started:
+            yield _sse(
+                "content_block_stop",
+                {"type": "content_block_stop", "index": block_index},
+            )
+            block_index += 1
+            thinking_block_started = False
+        text_chars += len(buffered)
+        if _is_cjk_refusal(buffered, user_is_cjk):
+            cjk_blocked = True
+            stop_reason = "end_turn"
+            logger.warning(
+                "Suppressed CJK refusal — substituted English decline",
+                _name="STANDARD_PROXY_CJK_BLOCKED",
+                cjk_ratio=round(_cjk_ratio(buffered)[0], 3),
+                sample=buffered[:80],
+            )
+            yield _sse(
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": block_index,
+                    "content_block": {"type": "text", "text": ""},
+                },
+            )
+            yield _sse(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": block_index,
+                    "delta": {"type": "text_delta", "text": _CJK_DECLINE},
+                },
+            )
+            yield _sse(
+                "content_block_stop",
+                {"type": "content_block_stop", "index": block_index},
+            )
+            block_index += 1
+        else:
+            text_block_started = True
+            yield _sse(
+                "content_block_start",
+                {
+                    "type": "content_block_start",
+                    "index": block_index,
+                    "content_block": {"type": "text", "text": ""},
+                },
+            )
+            yield _sse(
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": block_index,
+                    "delta": {"type": "text_delta", "text": buffered},
+                },
+            )
+
     # ── H1: open the upstream stream with one retry on the signature error ──
     # We must resolve the FIRST chunk before emitting any content blocks so a
     # pre-stream failure is retryable. Buffer the first chunk, then iterate.
-    chunk_iter: AsyncIterator[dict] | None = None
-    first_chunk: dict | None = None
-    last_error: _RelayError | None = None
-    for attempt in range(2):
-        try:
-            candidate = _relay_stream_chunks(request_body)
-            first_chunk = await candidate.__anext__()
-            chunk_iter = candidate
-            break
-        except StopAsyncIteration:
-            # Empty stream (no chunks, clean close) — treat as a finished turn.
-            chunk_iter = None
-            first_chunk = None
-            last_error = None
-            break
-        except _RelayError as e:
-            last_error = e
-            if attempt == 0 and _is_missing_signature_error(e.body):
-                logger.warning(
-                    "Retrying relay after missing-signature error (H1)",
-                    _name="STANDARD_PROXY_SIGNATURE_RETRY",
-                    status=e.status,
+    async def _open_upstream() -> (
+        "tuple[dict | None, AsyncIterator[dict] | None, _RelayError | None]"
+    ):
+        chunk_iter: AsyncIterator[dict] | None = None
+        first_chunk: dict | None = None
+        last_error: _RelayError | None = None
+        for attempt in range(2):
+            try:
+                candidate = _relay_stream_chunks(request_body)
+                first_chunk = await candidate.__anext__()
+                chunk_iter = candidate
+                break
+            except StopAsyncIteration:
+                # Empty stream (no chunks, clean close) — finished turn.
+                chunk_iter = None
+                first_chunk = None
+                last_error = None
+                break
+            except _RelayError as e:
+                last_error = e
+                # P-05: retry the first attempt on the transient upstream classes
+                # — H1 missing-signature, any 5xx, and an empty-body 400 (the
+                # peer-closed / Cloudflare-disconnect signature). One retry only.
+                is_sig = _is_missing_signature_error(e.body)
+                empty_body = not (e.body or "").strip()
+                transient = (
+                    is_sig or e.status >= 500 or (e.status == 400 and empty_body)
                 )
-                continue
-            break
-        except Exception as e:  # transport-level failure
-            logger.error(
-                "Relay transport error",
-                _name="STANDARD_PROXY_RELAY_ERROR",
-                error=str(e),
-            )
-            last_error = _RelayError(0, str(e))
-            break
+                if attempt == 0 and transient:
+                    logger.warning(
+                        "Retrying relay after transient upstream error",
+                        _name=(
+                            "STANDARD_PROXY_SIGNATURE_RETRY"
+                            if is_sig
+                            else "STANDARD_PROXY_TRANSIENT_RETRY"
+                        ),
+                        status=e.status,
+                        empty_body=empty_body,
+                    )
+                    continue
+                break
+            except Exception as e:  # transport-level failure
+                last_error = _RelayError(0, str(e))
+                if attempt == 0:
+                    logger.warning(
+                        "Retrying relay after transport error",
+                        _name="STANDARD_PROXY_TRANSIENT_RETRY",
+                        error=str(e) or "<empty>",
+                        error_type=type(e).__name__,
+                    )
+                    continue
+                logger.error(
+                    "Relay transport error (no retry left)",
+                    _name="STANDARD_PROXY_RELAY_ERROR",
+                    error=str(e) or "<empty>",
+                    error_type=type(e).__name__,
+                )
+                break
+        return first_chunk, chunk_iter, last_error
 
-    if last_error is not None and first_chunk is None:
-        # Never started emitting content — surface an opaque, user-safe error.
-        yield _sse(
-            "error",
-            {
-                "type": "error",
-                "error": {"type": "api_error", "message": _OPAQUE_UPSTREAM_ERROR},
-            },
-        )
-        return
-
-    async def _all_chunks() -> AsyncIterator[dict]:
+    async def _raw_chunks(
+        first_chunk: dict | None, chunk_iter: AsyncIterator[dict] | None
+    ) -> AsyncIterator[dict]:
         if first_chunk is not None:
             yield first_chunk
         if chunk_iter is not None:
             async for c in chunk_iter:
                 yield c
 
+    open_failed = False
+
+    async def _classified_chunks() -> AsyncIterator[dict]:
+        """Yield the turn's chunks, re-rolling the upstream ONCE if the first
+        attempt is a CJK refusal. The refusal is stochastic for benign prompts
+        (a retry returns the real answer) and deterministic for censored topics
+        (the retry refuses again → the main loop substitutes the English
+        decline). Turns with reasoning or a tool call are accepted immediately
+        — they aren't the pure-text refusal we re-roll."""
+        nonlocal open_failed
+        for cjk_attempt in range(2):
+            first_chunk, chunk_iter, last_error = await _open_upstream()
+            if last_error is not None and first_chunk is None:
+                open_failed = True
+                return
+            src = _raw_chunks(first_chunk, chunk_iter)
+            buffered: list[dict] = []
+            text_acc: list[str] = []
+            verdict: str | None = None
+            async for c in src:
+                buffered.append(c)
+                delta = (c.get("choices") or [{}])[0].get("delta") or {}
+                if (
+                    delta.get("tool_calls")
+                    or delta.get("reasoning_content")
+                    or delta.get("reasoning")
+                ):
+                    verdict = "accept"  # not a pure-text refusal
+                    break
+                piece = delta.get("content")
+                if piece:
+                    text_acc.append(piece)
+                joined = "".join(text_acc)
+                finish = (c.get("choices") or [{}])[0].get("finish_reason")
+                refusal = _is_cjk_refusal(joined, user_is_cjk)
+                nonspace = sum(1 for ch in joined if not ch.isspace())
+                if refusal or nonspace >= _TEXT_HOLD_CHARS or finish:
+                    verdict = "retry" if (refusal and cjk_attempt == 0) else "accept"
+                    break
+            if verdict == "retry":
+                logger.warning(
+                    "CJK refusal on first attempt — re-rolling the upstream once",
+                    _name="STANDARD_PROXY_CJK_RETRY",
+                    sample="".join(text_acc)[:80],
+                )
+                await src.aclose()
+                continue
+            # accept: replay what we buffered to classify, then stream the rest.
+            for c in buffered:
+                yield c
+            async for c in src:
+                yield c
+            return
+
     try:
-        async for chunk in _all_chunks():
+        async for chunk in _classified_chunks():
             usage = chunk.get("usage")
             if usage:
                 input_tokens = usage.get("prompt_tokens", 0) or 0
@@ -780,58 +1086,74 @@ async def _stream_response(request_body: dict, model: str):
             # `reasoning`; accept `reasoning_content` too for provider parity.
             reasoning = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning:
-                if not thinking_block_started:
-                    yield _sse(
-                        "content_block_start",
-                        {
-                            "type": "content_block_start",
-                            "index": block_index,
-                            "content_block": {"type": "thinking", "thinking": ""},
-                        },
-                    )
-                    thinking_block_started = True
                 thinking_chars += len(reasoning)
                 reasoning_buffer.append(reasoning)
-                yield _sse(
-                    "content_block_delta",
-                    {
-                        "type": "content_block_delta",
-                        "index": block_index,
-                        "delta": {"type": "thinking_delta", "thinking": reasoning},
-                    },
-                )
+                # Once DSML markup appears, stop streaming thinking — cap the
+                # visible leak to whatever preceded the marker. We keep buffering
+                # into reasoning_buffer so the salvage guard still sees the whole
+                # turn and replaces the answer with a clean fallback.
+                if not reasoning_tainted and _DSML_BAR in reasoning:
+                    reasoning_tainted = True
+                if not reasoning_tainted:
+                    if not thinking_block_started:
+                        yield _sse(
+                            "content_block_start",
+                            {
+                                "type": "content_block_start",
+                                "index": block_index,
+                                "content_block": {"type": "thinking", "thinking": ""},
+                            },
+                        )
+                        thinking_block_started = True
+                    yield _sse(
+                        "content_block_delta",
+                        {
+                            "type": "content_block_delta",
+                            "index": block_index,
+                            "delta": {"type": "thinking_delta", "thinking": reasoning},
+                        },
+                    )
 
             text_delta = delta.get("content")
             if text_delta:
-                if thinking_block_started and not text_block_started:
+                if cjk_blocked:
+                    # Refusal already substituted — swallow the model's remaining
+                    # text (still count chars so the turn isn't seen as empty).
+                    text_chars += len(text_delta)
+                elif text_decided:
+                    # Classified clean — stream live into the open text block.
+                    text_chars += len(text_delta)
                     yield _sse(
-                        "content_block_stop",
-                        {"type": "content_block_stop", "index": block_index},
-                    )
-                    block_index += 1
-                    thinking_block_started = False
-                if not text_block_started:
-                    yield _sse(
-                        "content_block_start",
+                        "content_block_delta",
                         {
-                            "type": "content_block_start",
+                            "type": "content_block_delta",
                             "index": block_index,
-                            "content_block": {"type": "text", "text": ""},
+                            "delta": {"type": "text_delta", "text": text_delta},
                         },
                     )
-                    text_block_started = True
-                text_chars += len(text_delta)
-                yield _sse(
-                    "content_block_delta",
-                    {
-                        "type": "content_block_delta",
-                        "index": block_index,
-                        "delta": {"type": "text_delta", "text": text_delta},
-                    },
-                )
+                else:
+                    # Buffering phase: hold the opening of the answer until we can
+                    # classify it (clean vs CJK refusal). The ratio short-circuit
+                    # decides a refusal almost immediately; clean English flushes
+                    # after ~a few words.
+                    text_prefix.append(text_delta)
+                    buffered = "".join(text_prefix)
+                    nonspace = sum(1 for c in buffered if not c.isspace())
+                    if (
+                        _is_cjk_refusal(buffered, user_is_cjk)
+                        or nonspace >= _TEXT_HOLD_CHARS
+                        or finish_reason
+                    ):
+                        async for ev in _emit_decided_text(buffered):
+                            yield ev
 
             tool_calls = delta.get("tool_calls") or []
             if tool_calls:
+                # Flush any held text preamble before the tool call so a short
+                # "let me check…" sentence isn't stranded in the buffer.
+                if text_prefix and not text_decided:
+                    async for ev in _emit_decided_text("".join(text_prefix)):
+                        yield ev
                 if thinking_block_started:
                     yield _sse(
                         "content_block_stop",
@@ -888,26 +1210,58 @@ async def _stream_response(request_body: dict, model: str):
                             },
                         )
 
-        # ── H2: reasoning-channel salvage ──────────────────────────────────
-        # If the turn emitted thinking but ZERO text and made no tool call, the
-        # user would see a blank (billed) turn — the answer is stranded in the
-        # reasoning channel. Close the thinking block and promote the buffered
-        # reasoning tail into a visible text block. We keep the whole buffer
-        # (the upstream's reasoning IS the answer in this failure mode, bench 14).
-        salvaged = False
-        if (
-            thinking_block_started
-            and text_chars == 0
-            and not active_tools
-            and reasoning_buffer
-        ):
+        if open_failed:
+            # The upstream never produced a first chunk (transient failure, no
+            # retry left) — surface an opaque, user-safe error.
             yield _sse(
-                "content_block_stop",
-                {"type": "content_block_stop", "index": block_index},
+                "error",
+                {
+                    "type": "error",
+                    "error": {"type": "api_error", "message": _OPAQUE_UPSTREAM_ERROR},
+                },
             )
-            block_index += 1
-            thinking_block_started = False
-            salvaged_text = "".join(reasoning_buffer).strip()
+            return
+
+        # Flush any text still held in the buffer that never reached the decision
+        # threshold (a short answer, or finish_reason arriving in a content-less
+        # chunk). Classify and emit it the same way as the mid-stream path.
+        if text_prefix and not text_decided:
+            async for ev in _emit_decided_text("".join(text_prefix)):
+                yield ev
+
+        # ── H2: reasoning-channel salvage (+ DSML-leak guard) ──────────────
+        # If the turn emitted thinking but ZERO text and made no tool call, the
+        # answer is stranded in the reasoning channel — close the thinking block
+        # and promote the buffered reasoning tail into a visible text block
+        # (bench 14). EXCEPT when that buffer is a leaked DSML tool-call
+        # (`<｜DSML｜…｜>`): surfacing it would show the user raw markup while the
+        # action never ran — emit a clean fallback instead.
+        salvaged = False
+        dsml_suppressed = False
+        salvage_candidate = "".join(reasoning_buffer).strip()
+        if text_chars == 0 and not active_tools and reasoning_buffer:
+            # Close the thinking block if one was opened (clean reasoning that
+            # streamed before any taint). A turn tainted from the first delta
+            # never opened one — still salvage so the user doesn't see a blank.
+            if thinking_block_started:
+                yield _sse(
+                    "content_block_stop",
+                    {"type": "content_block_stop", "index": block_index},
+                )
+                block_index += 1
+                thinking_block_started = False
+            if reasoning_tainted or _looks_like_dsml(salvage_candidate):
+                dsml_suppressed = True
+                stop_reason = "end_turn"
+                logger.warning(
+                    "Suppressed DSML tool-call leak in reasoning salvage",
+                    _name="STANDARD_PROXY_DSML_LEAK",
+                    sample=salvage_candidate[:160],
+                )
+                salvaged_text = _DSML_FALLBACK
+            else:
+                salvaged_text = salvage_candidate
+                salvaged = True
             yield _sse(
                 "content_block_start",
                 {
@@ -929,7 +1283,6 @@ async def _stream_response(request_body: dict, model: str):
                 {"type": "content_block_stop", "index": block_index},
             )
             block_index += 1
-            salvaged = True
 
         # Close any still-open content blocks.
         if thinking_block_started:
@@ -985,6 +1338,8 @@ async def _stream_response(request_body: dict, model: str):
             thinking_chars=thinking_chars,
             text_chars=text_chars,
             reasoning_salvaged=salvaged,
+            dsml_suppressed=dsml_suppressed,
+            cjk_blocked=cjk_blocked,
         )
 
     except Exception as e:

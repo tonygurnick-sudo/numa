@@ -482,6 +482,69 @@ def _audit_pipedream_action(
         )
 
 
+def _extract_pipedream_errors(result: Any) -> list[str]:
+    """T-14: surface upstream errors that Pipedream buries inside a 200 result.
+
+    A failed upstream call (Xero 400, HubSpot 401/429) does NOT make Pipedream's
+    ``/actions/run`` return non-200 — the error is captured in the action's
+    observation stream as ``os: [{"k": "error", "err": {"message": ...}}]``.
+    Without inspecting it the model sees ``status: success`` and reports a write
+    that never happened. Ported from the V1 chat agent's proven os[]-inspection
+    (numa-chat-agent .../pipedream/router.py::_extract_error_messages).
+    """
+    messages: list[str] = []
+    try:
+        os_events = result.get("os") if isinstance(result, dict) else None
+        if isinstance(os_events, list):
+            for evt in os_events:
+                if not isinstance(evt, dict):
+                    continue
+                if str(evt.get("k") or "").lower() != "error":
+                    continue
+                err = evt.get("err")
+                if isinstance(err, dict):
+                    msg = err.get("message")
+                    if isinstance(msg, str) and msg.strip():
+                        messages.append(msg.strip())
+    except Exception:  # noqa: BLE001 — error-detection must never break the result
+        return messages
+    return messages
+
+
+def _validate_action_key(
+    action_key: str, external_user_id: str
+) -> tuple[bool, list[str]]:
+    """T-09: check an action key exists BEFORE the HITL approval gate.
+
+    A hallucinated key (e.g. ``gmail-list-messages`` when the real action is
+    ``gmail-find-email``) otherwise passes the approval gate and only fails
+    ~180s later. Validating against the app's action catalogue first gives the
+    model a fast, correct error with the real keys instead.
+
+    Fails OPEN — if the catalogue can't be fetched (relay hiccup, empty list),
+    returns ``(True, [])`` so a transient lookup failure never blocks a
+    legitimate action. Returns ``(is_valid, available_keys)``.
+    """
+    try:
+        dash = action_key.find("-")
+        app_slug = action_key[:dash] if dash > 0 else action_key
+        data = _invoke_relay(
+            operation="list_actions",
+            external_user_id=external_user_id,
+            parameters={"app_slug": app_slug},
+        )
+        actions = data.get("actions") if isinstance(data, dict) else None
+        if not isinstance(actions, list) or not actions:
+            return True, []  # nothing to validate against → fail open
+        keys = [a.get("key") for a in actions if isinstance(a, dict)]
+        keys = [k for k in keys if isinstance(k, str)]
+        if action_key in keys:
+            return True, keys
+        return False, keys
+    except Exception:  # noqa: BLE001 — never block a real action on a lookup failure
+        return True, []
+
+
 def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     """Execute a Pipedream integration action with human-in-the-loop approval.
 
@@ -523,6 +586,26 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
     is_auto_approved = params.get("auto_approved", False)
 
     if not is_auto_approved:
+        # T-09: validate the action key before the approval gate, so a
+        # hallucinated key (valid format, wrong name) fails fast with the real
+        # options instead of burning the ~180s approval timeout.
+        valid, available = _validate_action_key(action_key, external_user_id)
+        if not valid:
+            suggestions = ", ".join(available[:20])
+            return {
+                "status": "invalid_action_key",
+                "message": (
+                    f"'{action_key}' is not a valid action for this integration. "
+                    "Read the action index (_index.json) and use an exact key"
+                    + (
+                        f". Available actions include: {suggestions}"
+                        if suggestions
+                        else "."
+                    )
+                ),
+                "action_key": action_key,
+            }
+
         # Create approval request (use request_id as deterministic approval_id)
         approval_id = create_approval_request(
             user_sub=user_sub,
@@ -606,6 +689,28 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
             parameters=relay_params,
         )
         _audit_pipedream_action(user_sub, action_key, description, is_auto_approved)
+        # T-14: a Pipedream 200 can still carry an upstream error in os[] (Xero
+        # account-code mismatch, HubSpot 401/429, etc.). Surface it loudly so the
+        # model doesn't report success on a write that never happened.
+        upstream_errors = _extract_pipedream_errors(result)
+        if upstream_errors:
+            joined = "; ".join(upstream_errors)
+            logger.warning(
+                "Pipedream action returned an upstream error inside a 200 result",
+                action_key=action_key,
+                error_excerpt=joined[:300],
+            )
+            return {
+                "status": "action_error",
+                "approval_id": approval_id,
+                "error": joined,
+                "message": (
+                    "The action ran but the upstream service returned an error — it "
+                    "did NOT succeed. Do not report this as done; surface the error "
+                    f"to the user or fix it. Details: {joined}"
+                ),
+                "result": result,
+            }
         return {
             "status": "success",
             "approval_id": approval_id,
