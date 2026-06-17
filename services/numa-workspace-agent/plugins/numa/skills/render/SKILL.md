@@ -104,6 +104,8 @@ An `openLink(url)` function is also available for opening external URLs safely.
 
 ## Design System
 
+> **Brand styling:** load the `visual-design` skill for the Numa colour/font tokens — or to match a user's own brand if they have one (it resolves whose brand applies). Use its palette for colours here. The flat / seamless / compact rules below are specific to in-chat rendering — keep them.
+
 ### Philosophy
 
 - **Seamless**: The visual should feel like a natural extension of the chat, not a separate webpage

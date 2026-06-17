@@ -53,6 +53,8 @@ Before working with DOCX files, understand their architecture:
 
 ## Creating DOCX Files
 
+> **For a branded document, load the `visual-design` skill first** for the Numa colour/font tokens and report recipe — or to match a user's own brand (it resolves whose brand applies). `build_styled_doc.py` (Helper Scripts) already applies the Numa look with a diacritic-safe font.
+
 ### Basic Document Creation
 
 ```python

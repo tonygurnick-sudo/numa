@@ -40,7 +40,9 @@ matplotlib.use("Agg")  # headless — no display in the container
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
-# Numa palette (dev-notes/notes/asknuma-design-palette.md) — purple-led, cycled.
+# Numa palette — purple-led, cycled. Source of truth: the visual-design skill's
+# helpers/numa_theme.py (CHART_COLORS). Kept in sync here to avoid a cross-skill
+# import; override per-call with --palette for a user's brand.
 NUMA_COLORS = ["#9949AC", "#1F4B5E", "#DFBDE7", "#22C55E", "#323232", "#EF4444"]
 TEXT = "#323232"
 
@@ -50,6 +52,18 @@ def _load_data(raw: str) -> dict:
         with open(raw[1:], encoding="utf-8") as f:
             return json.load(f)
     return json.loads(raw)
+
+
+def _load_palette(raw: str) -> list:
+    """Chart colours: a bare JSON list (`["#0A2540","#00B894"]`) or a brand.json
+    with a `chart_colors` key (inline or @file). Falls back to the Numa palette.
+    Lets a chart match a user's brand — see the visual-design skill."""
+    if not raw:
+        return NUMA_COLORS
+    data = _load_data(raw)
+    if isinstance(data, dict):
+        data = data.get("chart_colors")
+    return list(data) if isinstance(data, list) and data else NUMA_COLORS
 
 
 def _thousands(x, _pos):
@@ -96,8 +110,14 @@ def main() -> int:
     p.add_argument("--width", type=float, default=9.0)
     p.add_argument("--height", type=float, default=5.0)
     p.add_argument("--dpi", type=int, default=150)
+    p.add_argument(
+        "--palette",
+        default="",
+        help="brand chart colours: JSON list or @brand.json (overrides Numa)",
+    )
     args = p.parse_args()
 
+    palette = _load_palette(args.palette)
     spec = _load_data(args.data)
     labels = spec.get("labels", [])
     fig, ax = plt.subplots(figsize=(args.width, args.height), dpi=args.dpi)
@@ -109,7 +129,7 @@ def main() -> int:
             labels=labels,
             autopct="%1.1f%%",
             startangle=90,
-            colors=NUMA_COLORS,
+            colors=palette,
             textprops={"color": TEXT},
         )
         ax.axis("equal")
@@ -129,7 +149,7 @@ def main() -> int:
 
         for i, name in enumerate(names):
             vals = series[name]
-            color = NUMA_COLORS[i % len(NUMA_COLORS)]
+            color = palette[i % len(palette)]
             target = ax2 if (secondary and name == secondary) else ax
             if args.type == "line":
                 target.plot(x, vals, marker="o", label=name, color=color, linewidth=2)

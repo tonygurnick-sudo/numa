@@ -256,6 +256,8 @@ pdftoppm -jpeg -r 120 /workdir/uploads/document.pdf /workdir/outputs/page
 
 ## Creating PDFs
 
+> **For a branded report, load the `visual-design` skill first** — build the HTML with its `tokens.css` (or a user's own brand, which it resolves) and render via WeasyPrint below. It owns colours / fonts / the report recipe; this skill owns the PDF mechanics. Note its "fonts per medium" rule: brand web-fonts may not be installed for WeasyPrint — use an installed fallback (Calibri / DejaVu Sans) or verify they rendered.
+
 ### Primary: WeasyPrint (HTML-to-PDF)
 
 WeasyPrint converts HTML+CSS to PDF with excellent results. Best for styled reports, letters, and documents.

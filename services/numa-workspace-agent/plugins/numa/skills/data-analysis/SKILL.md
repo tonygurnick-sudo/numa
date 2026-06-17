@@ -409,6 +409,8 @@ Use Numa's purple (`#8e50a7`) as the primary color. HTML dashboards are responsi
 
 Create charts using Numa's purple color scheme. **Only use this for actual data charts** — see format selection guidance above.
 
+> **For on-brand charts, load the `visual-design` skill.** Easiest: run the `make_chart.py` helper below (already Numa-styled; `--palette @/workdir/tmp/brand.json` to match a user's brand). For a custom plot, call `numa_theme.apply_matplotlib()` first (it sets brand fonts, colours, and clean axes in one call). Colour encodes meaning — group by category, don't rainbow.
+
 ### Setup and Colors
 
 ```python

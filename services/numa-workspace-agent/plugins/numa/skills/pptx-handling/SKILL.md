@@ -100,6 +100,8 @@ prs.save("/workdir/outputs/filled_presentation.pptx")
 
 **Don't create boring slides.** Plain bullets on a white background won't impress anyone.
 
+> **Load the `visual-design` skill first** for the brand colour/font tokens (or to match a user's own brand — it resolves whose brand applies). Pull slide accents and chart colours from its `numa_theme` so embedded charts match the deck. For a Numa-branded deck, its tokens are the default; the palette guidance below is for a distinctive topic-specific look when no brand applies.
+
 ### Before Starting
 
 - **Pick a bold, content-informed colour palette**: The palette should feel designed for THIS topic.

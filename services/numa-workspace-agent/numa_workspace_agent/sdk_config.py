@@ -30,6 +30,7 @@ from numa_workspace_agent.prompts import (
     ANTI_FABRICATION_ADDENDUM,
     LANGUAGE_STEER,
     VIEW_IMAGE_USAGE,
+    VISUAL_DESIGN_ADDENDUM,
     build_workspace_system_prompt,
 )
 
@@ -1144,13 +1145,16 @@ def create_agent_options(
         # 1h prompt-cache toggle so the CLI doesn't send Bedrock cache controls.
         env.pop("ENABLE_PROMPT_CACHING_1H_BEDROCK", None)
 
-        # Model-conditional capabilities: append the anti-fabrication addendum +
-        # the vision-tool advertisement. The `numa vision` command is permitted
+        # Model-conditional capabilities: append the anti-fabrication addendum,
+        # the vision-tool advertisement, the language steer, and the visual-design
+        # mandate (the Standard model needs to be pushed to load the design skill;
+        # Claude reaches for it on its own). The `numa vision` command is permitted
         # by the unrestricted numa-chat policy already; the gate here is purely
         # whether the prompt advertises it.
         system_prompt = (
             f"{system_prompt}\n\n"
             f"{ANTI_FABRICATION_ADDENDUM}\n\n{VIEW_IMAGE_USAGE}\n\n{LANGUAGE_STEER}"
+            f"\n\n{VISUAL_DESIGN_ADDENDUM}"
         )
 
         import structlog
