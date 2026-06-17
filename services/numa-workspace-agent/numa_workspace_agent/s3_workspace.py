@@ -254,6 +254,73 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
     return checksums
 
 
+def workspace_is_dirty(previous: dict[str, FileChecksum]) -> bool:
+    """Cheap stat-only check: has any in-scope file appeared, changed (size or
+    mtime), or disappeared since ``previous``? No hashing — used to gate an eager
+    pre-tool sync so the common "nothing changed" path is a handful of ``stat()``
+    calls, not a full MD5 pass over the workspace.
+
+    Mirrors get_local_checksums' file scope (chat-workflows, uploads, outputs,
+    root-level files + AI-created dirs, the trace file). The authoritative
+    post-turn sync still hashes, so anything this misses — e.g. an edit that
+    preserves BOTH size and mtime, which is vanishingly rare — is caught then.
+    The cost of a miss is only a slightly-late eager sync, never lost data.
+    """
+    paths = get_workspace_paths()
+    root = paths["root"]
+    seen: set[str] = set()
+
+    def _changed(rel_path: str, fp: Path) -> bool:
+        seen.add(rel_path)
+        prev = previous.get(rel_path)
+        if prev is None:
+            return True  # new file
+        try:
+            st = fp.stat()
+        except OSError:
+            return True  # unreadable now → treat as changed
+        return st.st_size != prev["size"] or st.st_mtime != prev["mtime"]
+
+    # chat-workflows (global) + uploads + outputs (per-conversation)
+    for dir_key in ("workflows", "uploads", "outputs"):
+        scan_dir = paths[dir_key]
+        if scan_dir.exists():
+            for fp in scan_dir.rglob("*"):
+                if fp.is_file() and _changed(str(fp.relative_to(root)), fp):
+                    return True
+
+    # root-level files + AI-created non-protected dirs
+    protected = {
+        ".system",
+        "chat-workflows",
+        "uploads",
+        "outputs",
+        "tools",
+        "numa-codebase",
+    }
+    try:
+        for item in root.iterdir():
+            if item.name in protected or item.name.startswith("."):
+                continue
+            if item.is_file():
+                if _changed(item.name, item):
+                    return True
+            elif item.is_dir():
+                for fp in item.rglob("*"):
+                    if fp.is_file() and _changed(str(fp.relative_to(root)), fp):
+                        return True
+    except PermissionError:
+        pass
+
+    # trace file (synced as _system/trace.jsonl)
+    trace_file = paths["trace_file"]
+    if trace_file.exists() and _changed("_system/trace.jsonl", trace_file):
+        return True
+
+    # A previously-synced file that's now gone locally is also a change.
+    return any(rel_path not in seen for rel_path in previous)
+
+
 def is_cold_start() -> bool:
     """
     Check if this is a cold start (no active conversation set).

@@ -12,6 +12,7 @@ from numa_workspace_agent.hooks.security import (
     security_hook,
 )
 from numa_workspace_agent.hooks.workflow_guard import workflow_guard_hook
+from numa_workspace_agent.hooks.workspace_sync import workspace_sync_hook
 
 __all__ = [
     "security_hook",
@@ -20,6 +21,7 @@ __all__ = [
     "image_resize_hook",
     "param_aliases_hook",
     "workflow_guard_hook",
+    "workspace_sync_hook",
     "numa_call_counter_reset_hook",
     "numa_call_limit_notice_hook",
 ]

@@ -25,6 +25,7 @@ from numa_workspace_agent.hooks import (
     param_aliases_hook,
     security_hook,
     workflow_guard_hook,
+    workspace_sync_hook,
 )
 from numa_workspace_agent.prompts import (
     ANTI_FABRICATION_ADDENDUM,
@@ -1219,8 +1220,10 @@ def create_agent_options(
         # Python hooks for security (can be disabled for closed pipelines).
         # Order matters in PreToolUse: security_hook denies first to avoid
         # wasted work; numa_call_counter_reset_hook resets the per-command CLI
-        # call budget; workflow_guard_hook validates saved-workflow writes;
-        # param_aliases_hook + image_resize_hook may rewrite tool input;
+        # call budget; workspace_sync_hook flushes a just-generated file to S3
+        # before a file-path numa command (docs convert/extract, integrations,
+        # …) reads it server-side; workflow_guard_hook validates saved-workflow
+        # writes; param_aliases_hook + image_resize_hook may rewrite tool input;
         # audit_hook logs the rewritten path for forensics.
         "hooks": (
             {
@@ -1229,6 +1232,7 @@ def create_agent_options(
                         hooks=[
                             security_hook,
                             numa_call_counter_reset_hook,
+                            workspace_sync_hook,
                             workflow_guard_hook,
                             param_aliases_hook,
                             image_resize_hook,
@@ -1249,6 +1253,7 @@ def create_agent_options(
                     HookMatcher(
                         hooks=[
                             numa_call_counter_reset_hook,
+                            workspace_sync_hook,
                             workflow_guard_hook,
                             param_aliases_hook,
                             image_resize_hook,
