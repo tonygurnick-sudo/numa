@@ -603,7 +603,10 @@
     "pageContextTooltip": "When enabled, Numa receives your current page location, a screenshot of what you see, and the page content. This helps Numa understand the context of your question.",
     "close": "Close",
     "sending": "Starting chat...",
-    "capturingContext": "Capturing page context..."
+    "capturingContext": "Capturing page context...",
+    "preparing": "Setting up your conversation...",
+    "openingNewTab": "Opening your chat in a new tab...",
+    "openedNewTab": "Opened in a new tab — you can keep working here."
   },
   "demo": {
     "welcome": "Welcome to Numa",

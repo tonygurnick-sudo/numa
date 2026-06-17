@@ -100,10 +100,23 @@ they have already provided:
    confirm it worked before suggesting the next.
 4. **Escalate** — if you cannot resolve the issue (bug, outage, account or
    billing problem, admin-only change, or anything requiring Arcanum), help
-   the user email **{SUPPORT_EMAIL}**. Draft the email for them: a clear
-   subject line, what they were doing, what happened, what you already
-   tried, and the key details from `numa-environment.md`. Remind them they
-   can attach an exported chat conversation to help the team investigate.
+   the user reach the Arcanum customer success team at **{SUPPORT_EMAIL}**.
+   Always compose the full email first: a clear subject line, what they were
+   doing, what happened, what they already tried, and the key details from
+   `numa-environment.md` (client, version, page, relevant feature flags).
+   Remind them they can attach an exported chat conversation to help the
+   team investigate.
+
+   **Offer to send it for them.** If a Gmail or Outlook integration is
+   connected in this conversation (it will be listed in your available
+   integrations), offer to send the email on the user's behalf rather than
+   making them copy it out. Confirm they are happy for you to send it from
+   their connected mailbox, then send it to {SUPPORT_EMAIL} using the email
+   integration — they will see an approval prompt in the chat before
+   anything is sent. If no email integration is connected, or the send does
+   not go through, don't burden the user with the details: simply present
+   the finished email (subject + body) for them to copy and send manually.
+   Never claim an email was sent unless the send actually succeeded.
 
 ## Style
 
@@ -157,20 +170,30 @@ NUMA_SUPPORT = AgentTypeConfig(
         "Grep",
         "Write",
         "TodoWrite",
-        # Numa platform access via the CLI — KB search (numa files) and web
-        # search (numa web); categories enforced server-side by Phase 5.
+        # Numa platform access via the CLI — KB search (numa files), web
+        # search (numa web), and email-only integrations (numa integrations)
+        # for sending escalation emails to customer success on the user's
+        # behalf. Categories enforced server-side by the Phase-5 allow-list
+        # below; integration scope (Gmail/Outlook only) is enforced by the
+        # support frontend, which is the only thing that enables integrations
+        # on support conversations.
         "Bash(numa:*)",
     ],
-    # MCP layer is gone on this branch — the numa CLI replaced it.
+    # MCP layer is gone on this branch — the numa CLI replaced it. Email
+    # escalation now runs through `numa integrations` (was the Pipedream
+    # integrations MCP), gated by the in-chat approval prompt.
     enable_scripts_mcp=False,
     enable_integrations_mcp=False,
     enable_numa_mcp=False,
     enable_connect_mcp=False,
     enable_vault_mcp=False,
-    # Phase-5 server-side CLI allow-list: support only ever needs KB search
-    # + web search. Setting this also forces acceptEdits permission mode
-    # (see sdk_config._allow_bypass), keeping the no-code-execution intent.
-    allowed_cli_commands=["files", "web"],
+    # Phase-5 server-side CLI allow-list: KB search (files), web search (web),
+    # and email escalation (integrations — scoped to the user's connected
+    # Gmail/Outlook by the frontend passthrough). Setting this also forces
+    # acceptEdits permission mode (see sdk_config._allow_bypass), keeping the
+    # no-code-execution intent — the integration send still surfaces the
+    # in-chat approval prompt before anything leaves the user's mailbox.
+    allowed_cli_commands=["files", "web", "integrations"],
     # Reference docs for KB search + web search
     enabled_numa_tools=["knowledge_search", "web_search"],
     tools_source_dirs=["numa"],
@@ -179,8 +202,12 @@ NUMA_SUPPORT = AgentTypeConfig(
     # folders the request enables so support answers come from support docs.
     default_kbs=[{"id": "numa-support", "name": "Numa Support"}],
     restrict_kbs=True,
-    # No integrations in support conversations
-    restrict_integrations=True,
+    # Integrations are NOT restricted to a fixed default set: the support
+    # frontend passes through ONLY the user's connected email integration(s)
+    # (Gmail / Outlook), so the agent advertises email sending only when the
+    # user actually has it connected. Non-Pipedream clients send none →
+    # nothing is wired, which keeps the agent locked down by default.
+    restrict_integrations=False,
     max_turns=50,
     max_thinking_tokens=10000,
     thinking={"type": "adaptive"},

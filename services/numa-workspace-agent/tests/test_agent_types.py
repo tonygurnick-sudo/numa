@@ -241,19 +241,23 @@ class TestNumaSupportType:
 
     def test_no_mcp_surface(self):
         # The MCP layer is gone on this branch — the numa CLI replaced it.
+        # Email escalation now runs through `numa integrations`, not the
+        # Pipedream integrations MCP.
         config = get_agent_type_config("numa-chat-support")
         assert config.enable_numa_mcp is False
-        assert config.enable_scripts_mcp is False
         assert config.enable_integrations_mcp is False
+        assert config.enable_scripts_mcp is False
         assert config.enable_connect_mcp is False
         assert config.enable_vault_mcp is False
         assert not any(t.startswith("mcp__") for t in config.allowed_tools)
 
     def test_cli_categories_scoped_to_support(self):
-        # Phase-5 server-side allow-list: KB search + web search only. No
-        # agents / memory / ops / integrations from a support conversation.
+        # Phase-5 server-side allow-list: KB search (files), web search (web),
+        # and email escalation (integrations — scoped to the user's connected
+        # Gmail/Outlook by the frontend). No agents / memory / ops from a
+        # support conversation.
         config = get_agent_type_config("numa-chat-support")
-        assert config.allowed_cli_commands == ["files", "web"]
+        assert config.allowed_cli_commands == ["files", "web", "integrations"]
 
     def test_bash_is_numa_cli_only(self):
         # Bash exists purely as the numa-CLI transport: the allowlist admits
@@ -271,9 +275,20 @@ class TestNumaSupportType:
         assert config.restrict_kbs is True
         assert config.default_kbs == [{"id": "numa-support", "name": "Numa Support"}]
 
-    def test_no_integrations(self):
+    def test_integrations_not_restricted(self):
+        # Not restricted to a fixed default set: the frontend passes through
+        # only the user's connected email integration(s), so email sending is
+        # advertised only when the user actually has it connected.
         config = get_agent_type_config("numa-chat-support")
-        assert config.restrict_integrations is True
+        assert config.restrict_integrations is False
+        assert not config.default_integrations
+
+    def test_escalation_prompt_offers_to_send_email(self):
+        config = get_agent_type_config("numa-chat-support")
+        prompt = config.system_prompt_builder(
+            identity_override=config.identity_override
+        )
+        assert "Offer to send it for them" in prompt
 
     def test_tool_docs_resolve_in_tool_file_map(self):
         config = get_agent_type_config("numa-chat-support")
@@ -429,9 +444,10 @@ class TestCliAllowlist:
         from numa_workspace_agent.agent_types import all_agent_configs
 
         # Types may opt INTO a restriction explicitly (numa-chat-support
-        # scopes itself to KB + web search); this test guards against the
-        # Phase-5 Nolia default leaking onto everything else.
-        explicitly_restricted = {"numa-chat-support": ["files", "web"]}
+        # scopes itself to KB search, web search, and email escalation via
+        # integrations); this test guards against the Phase-5 Nolia default
+        # leaking onto everything else.
+        explicitly_restricted = {"numa-chat-support": ["files", "web", "integrations"]}
 
         for cfg in all_agent_configs():
             if cfg.type_id.startswith("nolia"):

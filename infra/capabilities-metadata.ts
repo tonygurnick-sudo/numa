@@ -207,7 +207,14 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     title: 'Multi-Factor Authentication',
     description: 'Require TOTP-based multi-factor authentication for all users.',
     icon: 'bi-shield-lock',
-    system_only: false,
+    // System-managed, like SSO_ENABLED: MFA on/off is an infra/deploy-time decision
+    // driven by clientConfig.mfa (set in the CS portal), not toggleable by a customer
+    // admin here. This previously rendered a live toggle — disabling it wrote a
+    // capability setting but did NOT reconfigure the Cognito pool or un-enrol users,
+    // so Cognito kept issuing MFA challenges. system_only renders a locked "Enabled"
+    // badge (the row is only listed for clients where MFA is actually deployed) and
+    // removes the toggle.
+    system_only: true,
     dev_only: false,
     enabled: false,
     dependencies: [],

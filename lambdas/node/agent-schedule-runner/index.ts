@@ -426,6 +426,17 @@ type RunnerEvent = {
   type?: string;
   scheduleId?: string;
   runId?: string;
+  // Deferred-finalize payload (type === 'FINALIZE_TIMED_OUT_RUN'). When the
+  // sync agent invocation hits the 14-min client abort, the MicroVM keeps
+  // running (often finishing minutes later and writing status.json). The
+  // timed-out invocation hands these to a fresh self-invocation that polls
+  // status.json and finalizes the run with the real outcome.
+  finalize?: {
+    conversationId: string;
+    prompt: string;
+    startedAt: number;
+    attempt: number;
+  };
   event?: {
     source?: string;
     // Gmail-specific payload (source === 'gmail').
@@ -754,6 +765,13 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
   // network, etc.) and SHOULD propagate so EventBridge Scheduler retries
   // and the DLQ catches it. Swallowing here used to hide those silently.
   const event = parseRunnerEvent(rawEvent);
+  // Deferred finalization of a timed-out sync invocation. Branch BEFORE the
+  // active-status check below — the schedule may legitimately be paused (by
+  // the user, or by a cap) while a previously-started run is still finishing.
+  if (event?.type === 'FINALIZE_TIMED_OUT_RUN') {
+    await finalizeTimedOutRun(event);
+    return;
+  }
   if (!event?.scheduleId) {
     throw new Error('Missing scheduleId for scheduled run');
   }
@@ -991,6 +1009,211 @@ const handleSchedulerEvent = async (rawEvent: RunnerEvent | unknown): Promise<vo
     runId: event.runId,
     voiceCall,
   });
+};
+
+// Deferred finalization of timed-out sync invocations. The runner's sync call
+// aborts at 14 min (Lambda hard cap is 15), but the AgentCore MicroVM is NOT
+// cancelled by the client disconnect — it keeps executing for up to ~30 min
+// and writes /workdir/outputs/status.json (synced to S3) when it finishes.
+// Wall-clock cap is measured from the ORIGINAL run start, so it bounds the
+// total time a run can stay "in flight", not just this invocation.
+const FINALIZE_POLL_INTERVAL_MS = 30_000;
+const FINALIZE_MAX_WALL_MS = 40 * 60_000;
+const FINALIZE_POLL_BUDGET_MS = 12 * 60_000; // per-invocation budget, inside the 15-min Lambda cap
+const FINALIZE_MAX_ATTEMPTS = 3;
+
+// Exported for unit testing. The error shape is verified empirically against
+// the bundled undici: AbortSignal.timeout() firing during fetch() rejects with
+// a DOMException { name: 'TimeoutError', message: 'The operation was aborted
+// due to timeout' } — the same message recorded on the customer's failed runs.
+export const isSyncInvocationTimeout = (err: unknown): boolean => {
+  const e = err as { name?: string; message?: string } | null;
+  // undici rejects with a DOMException named 'TimeoutError' when
+  // AbortSignal.timeout() fires; match the message too for safety.
+  return e?.name === 'TimeoutError' || (e?.message ?? '').includes('aborted due to timeout');
+};
+
+const finalizeTimedOutRun = async (event: RunnerEvent): Promise<void> => {
+  const { scheduleId, runId, finalize } = event;
+  if (!scheduleId || !runId || !finalize?.conversationId || !finalize.startedAt) {
+    console.error('[SCHEDULE_RUNNER] FINALIZE_TIMED_OUT_RUN missing required fields — dropping', event);
+    return;
+  }
+  const schedule = await getSchedule(scheduleId);
+  if (!schedule) {
+    console.warn('[SCHEDULE_RUNNER] Schedule not found for deferred finalization', scheduleId);
+    return;
+  }
+  const { conversationId, prompt, startedAt, attempt } = finalize;
+  const scheduleName = schedule.label || schedule.agent_title || schedule.agent_id || 'Unknown Schedule';
+  const agentMeta = schedule.agent_snapshot;
+
+  console.info('[SCHEDULE_RUNNER] Polling for completion of timed-out run', {
+    scheduleId,
+    runId,
+    attempt,
+    elapsedMs: Date.now() - startedAt,
+  });
+
+  const invocationStart = Date.now();
+  let agentStatus: AgentStatus | null = null;
+  for (;;) {
+    agentStatus = await readWorkspaceStatus(schedule.user_id, conversationId);
+    if (agentStatus) break;
+    if (Date.now() - startedAt >= FINALIZE_MAX_WALL_MS) break;
+    if (Date.now() - invocationStart >= FINALIZE_POLL_BUDGET_MS) {
+      if (attempt < FINALIZE_MAX_ATTEMPTS) {
+        await invokeRunnerAsync({ ...event, finalize: { ...finalize, attempt: attempt + 1 } });
+        console.info('[SCHEDULE_RUNNER] Poll budget exhausted — chained next finalization attempt', {
+          scheduleId,
+          runId,
+          nextAttempt: attempt + 1,
+        });
+        return;
+      }
+      break;
+    }
+    await sleep(FINALIZE_POLL_INTERVAL_MS);
+  }
+
+  if (!agentStatus) {
+    // The agent never reported back within the wall-clock cap — finalize as
+    // failed exactly like the old immediate path did, auto-pause guard included.
+    const errorMessage =
+      'Scheduled run exceeded the 14-minute sync window and no completion report appeared within ' +
+      `${Math.round(FINALIZE_MAX_WALL_MS / 60_000)} minutes — the agent run was abandoned or is still incomplete.`;
+    console.warn('[SCHEDULE_RUNNER] Deferred finalization gave up — marking run failed', {
+      scheduleId,
+      runId,
+      attempt,
+      elapsedMs: Date.now() - startedAt,
+    });
+    const runLogKey = await writeRunLogToS3({
+      schedule,
+      runId,
+      conversationId,
+      userId: schedule.user_id,
+      agentMeta,
+      prompt,
+      assistantText: '',
+      error: errorMessage,
+      startedAt,
+      completedAt: Date.now(),
+    });
+    await markScheduleStatus(schedule.user_id, scheduleId, 'failed', errorMessage, conversationId, runLogKey);
+    try {
+      await NotificationService.notifyScheduleFailed(
+        schedule.user_id,
+        scheduleId,
+        'agent',
+        scheduleName,
+        errorMessage,
+        { runId }
+      );
+      await dispatchScheduleRunEmail({
+        schedule,
+        status: 'failed',
+        scheduleName,
+        summary: errorMessage,
+        runStartedAtMs: startedAt,
+      });
+      await maybeAutoPauseAfterFailure(schedule);
+    } catch (err) {
+      // Status is already marked — don't let notification noise trigger an
+      // async retry that would double-count total_runs.
+      console.error('[SCHEDULE_RUNNER] Post-mark notification failed during deferred finalization', err);
+    }
+    return;
+  }
+
+  // The run finished after the sync abort — finalize with the agent's real
+  // self-reported outcome. The full transcript lives in the conversation
+  // trace; the status.json summary stands in for the assistant text here.
+  const completedAt = Date.now();
+  const effectiveStatus = agentStatus.status;
+  const notificationMessage = agentStatus.summary;
+  console.info('[SCHEDULE_RUNNER] Timed-out run completed after abort — finalizing with agent outcome', {
+    scheduleId,
+    runId,
+    attempt,
+    agentStatus: effectiveStatus,
+    elapsedMs: completedAt - startedAt,
+  });
+
+  const runLogKey = await writeRunLogToS3({
+    schedule,
+    runId,
+    conversationId,
+    userId: schedule.user_id,
+    agentMeta,
+    prompt,
+    assistantText: notificationMessage,
+    agentStatus,
+    startedAt,
+    completedAt,
+  });
+  await markScheduleStatus(
+    schedule.user_id,
+    scheduleId,
+    effectiveStatus,
+    effectiveStatus !== 'success' ? notificationMessage : null,
+    conversationId,
+    runLogKey
+  );
+
+  try {
+    await appendMessage({
+      conversationId,
+      userId: schedule.user_id,
+      role: 'assistant',
+      content: notificationMessage,
+      timestamp: completedAt,
+      agentMeta,
+      isScheduledRun: true,
+      scheduleId,
+    });
+    await updateConversationMeta(conversationId, schedule.user_id, notificationMessage);
+
+    const notifExtra = { runId };
+    if (effectiveStatus === 'failed') {
+      await maybeAutoPauseAfterFailure(schedule);
+      await NotificationService.notifyScheduleFailed(
+        schedule.user_id,
+        scheduleId,
+        'agent',
+        scheduleName,
+        notificationMessage,
+        notifExtra
+      );
+    } else if (effectiveStatus === 'partial') {
+      await NotificationService.notifySchedulePartial(
+        schedule.user_id,
+        scheduleId,
+        'agent',
+        scheduleName,
+        notificationMessage,
+        notifExtra
+      );
+    } else {
+      await NotificationService.notifyScheduleCompleted(
+        schedule.user_id,
+        scheduleId,
+        'agent',
+        scheduleName,
+        notificationMessage,
+        notifExtra
+      );
+    }
+    await dispatchScheduleRunEmail({
+      schedule,
+      status: effectiveStatus,
+      scheduleName,
+      summary: notificationMessage,
+      runStartedAtMs: startedAt,
+    });
+  } catch (err) {
+    console.error('[SCHEDULE_RUNNER] Post-mark persistence/notification failed during deferred finalization', err);
+  }
 };
 
 const getSchedule = async (scheduleId: string): Promise<ScheduleRecord | null> => {
@@ -1601,6 +1824,43 @@ const executeRun = async ({
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Agent invocation failed';
+    // The 14-min sync abort is NOT a run failure — the MicroVM keeps executing
+    // and usually finishes minutes later (writing status.json). Hand off to a
+    // deferred finalizer instead of recording a failure the agent may yet
+    // contradict. Ad-hoc runs keep the old behaviour: the caller is waiting
+    // on this HTTP response and there is no run log to finalize later.
+    if (!adHoc && isSyncInvocationTimeout(err)) {
+      try {
+        await invokeRunnerAsync({
+          type: 'FINALIZE_TIMED_OUT_RUN',
+          scheduleId: schedule.schedule_id,
+          runId,
+          finalize: {
+            conversationId: runConversationId,
+            prompt: runPrompt,
+            startedAt: now,
+            attempt: 1,
+          },
+        });
+        console.info('[SCHEDULE_RUNNER] Sync invocation timed out — deferred finalization dispatched', {
+          scheduleId: schedule.schedule_id,
+          runId,
+        });
+        return {
+          runId,
+          conversationId: runConversationId,
+          assistantMessage: '',
+          triggeredBySchedule: Boolean(triggeredBySchedule),
+        };
+      } catch (dispatchErr) {
+        // Self-invoke failed — fall through to the immediate-failure path so
+        // the run never ends up in limbo with no recorded outcome.
+        console.error(
+          '[SCHEDULE_RUNNER] Failed to dispatch deferred finalization — falling back to immediate failure',
+          dispatchErr
+        );
+      }
+    }
     if (!adHoc) {
       const runLogKey = await writeRunLogToS3({
         schedule,
@@ -2571,7 +2831,10 @@ const invokeWorkspaceAgent = async ({
       'x-schedule-runner-sub': auth.sub,
     },
     body: JSON.stringify(requestBody),
-    signal: AbortSignal.timeout(840_000), // 14 min — just under the 15 min Lambda timeout
+    // 14 min — just under the 15 min Lambda cap. This abort does NOT stop the
+    // agent: the MicroVM keeps running. executeRun's catch detects this
+    // specific timeout and defers to finalizeTimedOutRun instead of failing.
+    signal: AbortSignal.timeout(840_000),
     dispatcher: workspaceAgentDispatcher,
   });
 
