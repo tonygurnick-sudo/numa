@@ -3005,7 +3005,12 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
                 cache_creation_input_tokens?: number;
               };
             };
-            usage?: { output_tokens?: number };
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_read_input_tokens?: number;
+              cache_creation_input_tokens?: number;
+            };
           };
         }
       ).event;
@@ -3028,8 +3033,20 @@ export function parseRawTraceToMessages(traceContent: string): WorkspaceChatMess
             pendingSnapshotCacheCreationTokens = usage.cache_creation_input_tokens;
         }
       } else if (streamEvent?.type === 'message_delta') {
-        if (typeof streamEvent.usage?.output_tokens === 'number') {
-          pendingSnapshotOutputTokens = streamEvent.usage.output_tokens;
+        // OpenAI-style upstreams (the Numa Standard Model) report real usage
+        // only at stream end via message_delta — their message_start usage is 0.
+        // Read input/cache here too, not just output (mirrors the live handler),
+        // so a replayed Standard-model turn restores its real context snapshot
+        // instead of failing the snapshot check and falling back to the SDK's
+        // cumulative usage (summed across every turn → an inflated, ~100% donut).
+        const usage = streamEvent.usage;
+        if (usage) {
+          if (typeof usage.output_tokens === 'number') pendingSnapshotOutputTokens = usage.output_tokens;
+          if (typeof usage.input_tokens === 'number') pendingSnapshotInputTokens = usage.input_tokens;
+          if (typeof usage.cache_read_input_tokens === 'number')
+            pendingSnapshotCacheReadTokens = usage.cache_read_input_tokens;
+          if (typeof usage.cache_creation_input_tokens === 'number')
+            pendingSnapshotCacheCreationTokens = usage.cache_creation_input_tokens;
         }
       }
       continue;
