@@ -1234,7 +1234,7 @@
         "emailSourceLabel": "Email Source",
         "emailSourceClaim": "Use email address claim (standard)",
         "emailSourceUpn": "Use UPN (User Principal Name) as email",
-        "emailSourceHelp": "Select UPN if your organisation's User Principal Name is the same as the user's email address. Common with Azure AD/Entra ID."
+        "emailSourceHelp": "Select UPN if the user's email arrives in the SAML NameID rather than a separate email attribute. Required for Google Workspace's default SAML app, and common with Azure AD/Entra ID. Using the email claim when the IdP only sends NameID causes a 'Deletion of username alias attribute is not allowed' login error."
       },
       "step4": {
         "title": "Test & Enable",
