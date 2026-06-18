@@ -23,6 +23,8 @@ File uploads work with `/workdir/` paths — the system auto-converts them to pr
 
 Use `configure_props` to resolve the `conversation` parameter (channel ID).
 
+**Multiple files in ONE message:** the stock `slack-upload-file` posts a separate message per file. To attach several files to a single message, use the custom action **`slack-upload-files`** — pass `fileUrls` (array of `/workdir/` paths or URLs), `filenames` (array, same order — drives how each renders), `initialComment` (the message text), and optionally `threadTs`. All files land in one message via Slack's native `files.completeUploadExternal`.
+
 ### Emoji Reactions
 
 Emoji reaction names must be **without colons**: use `"icon_emoji": "thumbsup"` not `":thumbsup:"` (causes `invalid_name` error). In message text, emojis still use colons: `:rocket:`.

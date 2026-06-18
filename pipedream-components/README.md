@@ -115,6 +115,7 @@ Numa integrations page like any user account.
 
 ## Published components
 
-| Component            | Key (Connect)          | Version | Environments            | Published  | Notes                                                                                            |
-| -------------------- | ---------------------- | ------- | ----------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
-| Pipedrive — Add File | `~/pipedrive-add-file` | 0.0.1   | development, production | 2026-06-12 | Fills missing upload action; built for TAB NZ (see `dev-notes/tasks/tab-pipedrive-file-upload/`) |
+| Component                          | Key (Connect)          | Version | Environments            | Published  | Notes                                                                                                                                                                                                                                                              |
+| ---------------------------------- | ---------------------- | ------- | ----------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Pipedrive — Add File               | `~/pipedrive-add-file` | 0.0.1   | development, production | 2026-06-12 | Fills missing upload action; built for TAB NZ (see `dev-notes/tasks/tab-pipedrive-file-upload/`)                                                                                                                                                                   |
+| Slack — Upload Files (one message) | `~/slack-upload-files` | 0.0.2   | development, production | 2026-06-19 | Post ONE Slack message with multiple file attachments (native `files.completeUploadExternal`). The stock `slack-upload-file` posts one message per file; this carries `fileUrls[]` + `filenames[]` + `initialComment`. Built for claude-engineer MR notifications. |
