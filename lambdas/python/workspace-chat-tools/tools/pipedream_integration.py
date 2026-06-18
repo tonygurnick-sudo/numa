@@ -436,8 +436,11 @@ def _audit_pipedream_action(
     if not VAULT_AUDIT_LOG_TABLE_NAME or not user_sub or not action_key:
         return
 
-    dash_index = action_key.find("-")
-    app_slug = action_key[:dash_index] if dash_index > 0 else action_key
+    # Strip the "~/" custom-tool prefix so a custom action audits under the same
+    # app slug as public ones (e.g. "pipedrive", not "~/pipedrive").
+    slug_source = action_key[2:] if action_key.startswith("~/") else action_key
+    dash_index = slug_source.find("-")
+    app_slug = slug_source[:dash_index] if dash_index > 0 else slug_source
 
     key = (user_sub, app_slug)
     now = time.time()
@@ -526,8 +529,12 @@ def _validate_action_key(
     legitimate action. Returns ``(is_valid, available_keys)``.
     """
     try:
-        dash = action_key.find("-")
-        app_slug = action_key[:dash] if dash > 0 else action_key
+        # Custom tools are keyed "~/{slug}-{action}" — strip the private-registry
+        # prefix so we fetch the real catalogue ("pipedrive"), not "~/pipedrive"
+        # (no such app → empty list → validation would only pass by fail-open).
+        slug_source = action_key[2:] if action_key.startswith("~/") else action_key
+        dash = slug_source.find("-")
+        app_slug = slug_source[:dash] if dash > 0 else slug_source
         data = _invoke_relay(
             operation="list_actions",
             external_user_id=external_user_id,

@@ -880,6 +880,11 @@ class PipedreamOperations:
 
         Paginates through results to get all actions with their configurable_props.
 
+        Fetches the default (public-registry) listing plus the workspace's
+        privately published custom tools (``registry=private``) — Pipedream
+        excludes custom tools from the default listing, so without the second
+        fetch keys like ``~/pipedrive-add-file`` are undiscoverable.
+
         Args:
             app_slug: The app slug (e.g., "google_drive")
 
@@ -891,20 +896,22 @@ class PipedreamOperations:
         project_id = credentials["project_id"]
         environment = credentials["environment"]
 
-        all_actions: List[Dict[str, Any]] = []
-        after_cursor: Optional[str] = None
-        limit = 100
+        def _fetch_all_pages(registry: Optional[str]) -> List[Dict[str, Any]]:
+            collected: List[Dict[str, Any]] = []
+            after_cursor: Optional[str] = None
+            limit = 100
 
-        while True:
-            params: Dict[str, Any] = {
-                "app": app_slug,
-                "component_type": "action",
-                "limit": limit,
-            }
-            if after_cursor:
-                params["after"] = after_cursor
+            while True:
+                params: Dict[str, Any] = {
+                    "app": app_slug,
+                    "component_type": "action",
+                    "limit": limit,
+                }
+                if registry:
+                    params["registry"] = registry
+                if after_cursor:
+                    params["after"] = after_cursor
 
-            try:
                 response = requests.get(
                     f"https://api.pipedream.com/v1/connect/{project_id}/components",
                     headers={
@@ -916,31 +923,68 @@ class PipedreamOperations:
                 )
                 response.raise_for_status()
                 data = response.json()
-            except Exception as e:
-                logger.error(
-                    "Failed to list actions",
-                    error=str(e),
-                    app_slug=app_slug,
-                    exc_info=True,
-                )
-                raise Exception(
-                    f"Failed to list actions for {app_slug}: {str(e)}"
-                ) from e
 
-            actions = data.get("data", [])
-            all_actions.extend(actions)
+                collected.extend(data.get("data", []))
 
-            page_info = data.get("page_info", {})
-            if page_info.get("count", 0) < limit:
-                break
-            after_cursor = page_info.get("end_cursor")
-            if not after_cursor:
-                break
+                page_info = data.get("page_info", {})
+                if page_info.get("count", 0) < limit:
+                    break
+                after_cursor = page_info.get("end_cursor")
+                if not after_cursor:
+                    break
+
+            return collected
+
+        try:
+            all_actions = _fetch_all_pages(None)
+        except Exception as e:
+            logger.error(
+                "Failed to list actions",
+                error=str(e),
+                app_slug=app_slug,
+                exc_info=True,
+            )
+            raise Exception(f"Failed to list actions for {app_slug}: {str(e)}") from e
+
+        # The registry param is undocumented — if Pipedream changes it, custom
+        # tools drop out but the public listing must keep working.
+        try:
+            private_actions = _fetch_all_pages("private")
+        except Exception as e:
+            logger.warning(
+                "Failed to list private-registry actions",
+                error=str(e),
+                app_slug=app_slug,
+            )
+            private_actions = []
+
+        seen_keys = {a.get("key") for a in all_actions}
+        all_actions.extend(a for a in private_actions if a.get("key") not in seen_keys)
+
+        # Hide Pipedream's private-component "~/" namespace from callers: present
+        # custom tools under their bare key (e.g. "pipedrive-add-file") so the
+        # agent treats them identically to public actions and can't fumble the
+        # "~/" vs filename-sanitized "~_" forms. run_action / configure_props
+        # re-add "~/" at the Pipedream boundary. Guard the (theoretical) case
+        # where a public action already owns the bare key — keep "~/" there to
+        # preserve disambiguation.
+        public_keys = {
+            a.get("key")
+            for a in all_actions
+            if not str(a.get("key", "")).startswith("~/")
+        }
+        for action in all_actions:
+            key = action.get("key", "")
+            if isinstance(key, str) and key.startswith("~/"):
+                bare = key[2:]
+                if bare and bare not in public_keys:
+                    action["key"] = bare
 
         logger.info(
             "Listed actions",
             app_slug=app_slug,
             count=len(all_actions),
+            private_count=len(private_actions),
         )
         return all_actions
 
@@ -1321,6 +1365,45 @@ class PipedreamOperations:
         )
         return all_triggers
 
+    def _post_action_with_namespace_fallback(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        body: Dict[str, Any],
+        timeout: int,
+    ) -> Dict[str, Any]:
+        """POST to a Pipedream actions endpoint, retrying under the private-
+        component ``~/`` namespace if the bare id is not found.
+
+        We hide Pipedream's ``~/`` custom-tool prefix from callers (see
+        ``list_actions``) so the agent treats custom tools like any public
+        action. Pipedream currently resolves a bare custom key (e.g.
+        ``pipedrive-add-file``) to its private component directly, so the first
+        call normally succeeds. This retry is a safety net: if that undocumented
+        bare-key resolution ever regresses to a 404, fall back to the explicit
+        ``~/`` id. Keys already carrying ``~/`` (a stale cached index mid-
+        rollout) also succeed first try since that is Pipedream's real id.
+        """
+        response = requests.post(url, headers=headers, json=body, timeout=timeout)
+        action_id = body.get("id")
+        if (
+            response.status_code == 404
+            and isinstance(action_id, str)
+            and not action_id.startswith("~/")
+        ):
+            logger.info(
+                "Retrying action under private-component namespace",
+                action_key=action_id,
+            )
+            response = requests.post(
+                url,
+                headers=headers,
+                json={**body, "id": f"~/{action_id}"},
+                timeout=timeout,
+            )
+        response.raise_for_status()
+        return response.json()
+
     def run_action(
         self,
         external_user_id: str,
@@ -1374,18 +1457,16 @@ class PipedreamOperations:
                 has_stash_id=bool(stash_id),
             )
 
-            response = requests.post(
+            result = self._post_action_with_namespace_fallback(
                 f"https://api.pipedream.com/v1/connect/{project_id}/actions/run",
-                headers={
+                {
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "x-pd-environment": environment,
                 },
-                json=body,
+                body,
                 timeout=60,
             )
-            response.raise_for_status()
-            result = response.json()
 
             logger.info(
                 "Action completed",
@@ -1448,18 +1529,16 @@ class PipedreamOperations:
         }
 
         try:
-            response = requests.post(
+            result = self._post_action_with_namespace_fallback(
                 f"https://api.pipedream.com/v1/connect/{project_id}/components/configure",
-                headers={
+                {
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "x-pd-environment": environment,
                 },
-                json=body,
+                body,
                 timeout=30,
             )
-            response.raise_for_status()
-            result = response.json()
 
             logger.info(
                 "Configure props completed",
@@ -1965,9 +2044,15 @@ class PipedreamOperations:
         if cached and cached[1] > now:
             return cached[0]
 
+        # Custom tools are keyed "~/{app_slug}-{action}" — strip the private-
+        # registry prefix so app-slug derivation works for them; list_actions
+        # includes registry=private results, and the schema match below still
+        # uses the full key.
+        lookup_key = action_key[2:] if action_key.startswith("~/") else action_key
+
         # Extract app_slug from action_key (e.g., "jira-create-issue" -> "jira")
         # Handle compound slugs like "microsoft_outlook_calendar-list-events"
-        parts = action_key.split("-")
+        parts = lookup_key.split("-")
         if not parts:
             return None
 
