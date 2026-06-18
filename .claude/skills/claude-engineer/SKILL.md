@@ -22,15 +22,29 @@ rails (deploy authority + resource guard below).
 
 ## Identity & workspace
 
-- **Worktree:** `/Users/nathandouglas/arcanum/numa-worktrees/claude-engineer` — a
-  persistent git worktree off the `numa` repo. It is kept **warm** (node_modules,
-  `cdktf.out`, packaged lambda zips, image tars) so incremental deploys are ~5-10
-  min instead of a 30-60 min cold run.
+- **Worktree:** a persistent git worktree off the `numa` repo (Nathan's lives at
+  `/Users/nathandouglas/arcanum/numa-worktrees/claude-engineer`; each engineer has
+  their own — the scripts derive the repo root from their own location, nothing is
+  path-hard-coded). Kept **warm** (node_modules, `cdktf.out`, packaged lambda zips,
+  image tars) so incremental deploys are ~5-10 min, not a 30-60 min cold run.
 - **Branches:** one per ticket — `claude-engineer/<DISPLAY-ID>` (e.g.
   `claude-engineer/TASK-151`), always cut from latest `dev`.
 - **A worktree is not a separate repo.** It shares the one `.git`/branch set. You
   don't "push a worktree" — you `git push -u origin <branch>` and open an MR
   `source: claude-engineer/<id>` → `target: dev`, exactly like any feature branch.
+
+## Per-engineer setup (this skill is team-wide — make it yours)
+
+`arcanum-demo-sydney` is **Nathan's** dev stack and appears below as the example.
+**Each engineer uses their own dev stack** — it is not a shared target. Before
+your first run:
+
+- **Dev stack:** wherever you see `arcanum-demo-sydney`, substitute yours. The E2E
+  URL follows from it: `https://<your-dev-stack>.numa.arcanum.ai`.
+- **Deploy allowlist:** add your dev stack to `DEV_CLIENTS` in `scripts/deploy.sh`
+  (the default-deny autonomous-deploy allowlist — only listed dev stacks deploy).
+- **Ops identity:** export `OPS_STAFF_SUB` / `OPS_STAFF_EMAIL` / `OPS_STAFF_NAME`
+  so board comments and stage-moves are attributed to you (defaults to Nathan).
 
 ## The flow
 
@@ -45,9 +59,10 @@ rails (deploy authority + resource guard below).
 4. **Test locally first.** Prefer the local Docker container loop
    (`workspace-agent-local-test` skill) over a deploy — it's minutes, not 30.
    Only deploy when the change is genuinely infra/integration/cross-service.
-5. **Deploy (guarded).** `scripts/deploy.sh numa-arcanum-demo-sydney --package`.
-   The script enforces the deploy-authority boundary and resource guard.
-6. **E2E test in Chrome.** Open `https://arcanum-demo-sydney.numa.arcanum.ai`,
+5. **Deploy (guarded).** `scripts/deploy.sh numa-<your-dev-stack> --package`
+   (Nathan: `numa-arcanum-demo-sydney`). Enforces the deploy-authority boundary
+   and resource guard.
+6. **E2E test in Chrome.** Open `https://<your-dev-stack>.numa.arcanum.ai`,
    exercise the change, and **capture screenshots** (humans need visual proof).
    Use `save_to_disk` on the screenshots so they can be attached to the MR/ticket.
 7. **Open the MR.** Push the branch; `glab mr create --source-branch

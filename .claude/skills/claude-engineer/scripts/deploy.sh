@@ -40,9 +40,13 @@ done
 # ============================================================================
 # Deploy-authority policy (DEFAULT-DENY). This is the safety core — do not relax.
 # ============================================================================
-# Dev/demo stacks: autonomous. Add a new dev stack here only when it is genuinely
-# a throwaway dev/demo instance (devInstance:true), never a customer.
+# Dev/demo stacks: autonomous. Each engineer adds their OWN dev stack here
+# (arcanum-demo-sydney is Nathan's). Add one only when it is genuinely a throwaway
+# dev/demo instance (devInstance:true), never a customer. Override/extend without
+# editing this file via CLAUDE_ENGINEER_DEV_STACKS="a b c" (space-separated).
 DEV_CLIENTS=("arcanum-demo-sydney" "nd-labs" "arcanum-demo-greg")
+# shellcheck disable=SC2206
+[ -n "${CLAUDE_ENGINEER_DEV_STACKS:-}" ] && DEV_CLIENTS+=(${CLAUDE_ENGINEER_DEV_STACKS})
 # Customer-facing SHARED stacks: changes hit ALL customers immediately, so they
 # require explicit human permission AND must be backwards compatible.
 GATED_STACKS=("q-apps-deployer-stack" "pipedream-proxy")

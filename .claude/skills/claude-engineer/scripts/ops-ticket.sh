@@ -23,8 +23,11 @@ set -uo pipefail
 PROFILE="arcanum-prod-numa-demo"; REGION="us-east-1"
 OPS_TABLE="hq-ops"; OPS_FN="hq_ops-api"
 BOARD_ID="81f2560d-617a-46a4-83dc-7608a6dafc37"
-STAFF_SUB="54888428-d011-70f6-e4be-d8baf30500c3"
-STAFF_EMAIL="nathan@arcanum.ai"; STAFF_NAME="Nathan Douglas"
+# Ops identity for comments / stage-moves. Defaults to Nathan; each engineer
+# should export OPS_STAFF_SUB / OPS_STAFF_EMAIL / OPS_STAFF_NAME to their own so
+# the board reflects who actually did the work.
+STAFF_SUB="${OPS_STAFF_SUB:-54888428-d011-70f6-e4be-d8baf30500c3}"
+STAFF_EMAIL="${OPS_STAFF_EMAIL:-nathan@arcanum.ai}"; STAFF_NAME="${OPS_STAFF_NAME:-Nathan Douglas}"
 
 declare -A STAGES=(
   [todo]="a5e99e77-3ec1-4c1f-8406-d056d2f395a3"
