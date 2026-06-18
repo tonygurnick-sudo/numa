@@ -12,6 +12,7 @@ import * as OpsService from '../../../Services/OpsService';
 import { RichTextEditor } from '../Shared/RichTextEditor';
 import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
+import ProjectProgressBar from './ProjectProgressBar';
 import type { Project, Ticket } from '../../../types/ops';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -74,6 +75,12 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
     if (!projectId) return [];
     return tickets.filter((tk) => tk.projectId === projectId);
   }, [tickets, projectId]);
+
+  // Completion across the project's tickets (completed | ended = done)
+  const doneCount = useMemo(
+    () => projectTickets.filter((tk) => tk.statusType === 'completed' || tk.statusType === 'ended').length,
+    [projectTickets]
+  );
 
   // ── Board visibility description ──────────────────────────────────────
 
@@ -594,6 +601,12 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                   )}
                 </div>
               </div>
+
+              {projectTickets.length > 0 && (
+                <div style={{ maxWidth: 280, marginBottom: 14 }}>
+                  <ProjectProgressBar done={doneCount} total={projectTickets.length} variant="detail" />
+                </div>
+              )}
 
               {projectTickets.length === 0 ? (
                 <div style={{ fontSize: 'var(--ops-font-sm, 0.8rem)', color: '#9ca3af' }}>

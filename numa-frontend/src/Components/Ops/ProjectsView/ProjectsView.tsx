@@ -3,7 +3,11 @@ import { Button, Form } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
 import { useOps } from '../OpsContext';
 import { ProjectDetailView } from './ProjectDetailView';
+import ProjectProgressBar from './ProjectProgressBar';
 import type { Project } from '../../../types/ops';
+
+/** Completion stats for a project, derived from its tickets. */
+type ProjectStats = { total: number; done: number };
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -37,15 +41,17 @@ export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX
     );
   }, [projects, boardFilter, boardViewMode, selectedBoardId, accessibleTeamIds]);
 
-  // Ticket counts per project
-  const ticketCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+  // Ticket totals + completion per project (completed | ended = done)
+  const projectStats = useMemo(() => {
+    const stats = new Map<string, ProjectStats>();
     for (const ticket of tickets) {
-      if (ticket.projectId) {
-        counts.set(ticket.projectId, (counts.get(ticket.projectId) ?? 0) + 1);
-      }
+      if (!ticket.projectId) continue;
+      const s = stats.get(ticket.projectId) ?? { total: 0, done: 0 };
+      s.total += 1;
+      if (ticket.statusType === 'completed' || ticket.statusType === 'ended') s.done += 1;
+      stats.set(ticket.projectId, s);
     }
-    return counts;
+    return stats;
   }, [tickets]);
 
   // ── Detail / Create view ──────────────────────────────────────────────
@@ -144,7 +150,7 @@ export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX
           <ProjectCard
             key={project.id}
             project={project}
-            ticketCount={ticketCounts.get(project.id) ?? 0}
+            stats={projectStats.get(project.id) ?? { total: 0, done: 0 }}
             onClick={() => setActiveProjectId(project.id)}
           />
         ))}
@@ -157,13 +163,15 @@ export function ProjectsView({ initialProjectId }: ProjectsViewProps): React.JSX
 
 interface ProjectCardProps {
   project: Project;
-  ticketCount: number;
+  stats: ProjectStats;
   onClick: () => void;
 }
 
-function ProjectCard({ project, ticketCount, onClick }: ProjectCardProps): React.JSX.Element {
+function ProjectCard({ project, stats, onClick }: ProjectCardProps): React.JSX.Element {
   const { t } = useTranslation('ops');
   const [hovered, setHovered] = useState(false);
+
+  const { total: ticketCount, done: doneCount } = stats;
 
   const summary = project.description || (project.goals ? project.goals.replace(/<[^>]*>/g, '') : '');
 
@@ -260,12 +268,18 @@ function ProjectCard({ project, ticketCount, onClick }: ProjectCardProps): React
           </div>
         )}
 
+        {ticketCount > 0 && (
+          <div style={{ marginTop: 'auto', paddingTop: 10 }}>
+            <ProjectProgressBar done={doneCount} total={ticketCount} variant="card" />
+          </div>
+        )}
+
         <div
           style={{
             fontSize: 'var(--ops-font-xs, 0.7rem)',
             color: '#9ca3af',
-            marginTop: 'auto',
-            paddingTop: 10,
+            marginTop: ticketCount > 0 ? 8 : 'auto',
+            paddingTop: ticketCount > 0 ? 0 : 10,
             display: 'flex',
             alignItems: 'center',
             gap: 8,
@@ -284,6 +298,12 @@ function ProjectCard({ project, ticketCount, onClick }: ProjectCardProps): React
                 <i className="bi bi-ticket-perforated me-1" style={{ fontSize: '0.65rem' }} />
                 {t('projects.ticketCount', { count: ticketCount })}
               </span>
+              {doneCount > 0 && (
+                <>
+                  <span style={{ color: '#d1d5db' }}>&middot;</span>
+                  <span>{t('projects.ticketsDone', { count: doneCount })}</span>
+                </>
+              )}
             </>
           )}
         </div>
