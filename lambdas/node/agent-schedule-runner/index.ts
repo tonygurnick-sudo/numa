@@ -6,6 +6,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import {
   DynamoDBDocumentClient,
+  BatchGetCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
@@ -44,6 +45,16 @@ const SCHEDULE_RUNNER_SECRET = process.env.SCHEDULE_RUNNER_SECRET ?? '';
 const OUTPUTS_BUCKET = process.env.OUTPUTS_BUCKET_NAME ?? '';
 const WORKSPACE_AGENTS_TABLE = process.env.WORKSPACE_AGENTS_TABLE_NAME ?? '';
 const USER_AGENTS_TABLE = process.env.USER_AGENTS_TABLE_NAME ?? '';
+// Credit ledger (FEAT-243 self-optimisation cost feedback). The ledger table
+// exists and is metered for ALL clients, so its presence is NOT the gate — the
+// cost-feedback line is gated on SHOW_CREDITS (the in-app credits view flag) so
+// we never surface credit figures to clients whose admins keep credits hidden.
+// Read-only batch GetItem on CONV#<id>/META rows.
+const CREDITS_TABLE_NAME = process.env.CREDITS_TABLE_NAME ?? '';
+// Mirrors clientConfig.showCredits → SHOW_CREDITS env (default false; emitted
+// explicitly upstream). Gates only the credit figure in the REFLECT preamble,
+// not the self-optimisation prompting itself.
+const SHOW_CREDITS = (process.env.SHOW_CREDITS ?? '').toLowerCase() === 'true';
 const CLIENT_NAME = process.env.CLIENT_NAME ?? '';
 const EMAIL_SENDER_LAMBDA_ARN = process.env.EMAIL_SENDER_LAMBDA_ARN ?? '';
 const USER_POOL_ID = process.env.USER_POOL_ID ?? '';
@@ -420,6 +431,13 @@ type ScheduleRecord = {
    * the user gets one ping per cap event, not one per skipped invocation.
    */
   last_quota_blocked_month?: string;
+  /**
+   * FEAT-243 — rolling list of the last ~10 run conversation IDs, newest last.
+   * Used to BatchGet credit-ledger META rows so the next run's preamble can
+   * show "recent runs averaged N credits" cost feedback. Telemetry-grade;
+   * last-writer-wins under concurrent fires is acceptable.
+   */
+  recent_run_conversation_ids?: string[];
 };
 
 type RunnerEvent = {
@@ -532,6 +550,10 @@ type AgentStatus = {
   // Optional — the Numa Voice post-call agent writes the CRM customer id it
   // created/updated so the hand-off notification can deep-link to that customer.
   customerId?: string;
+  // Optional (FEAT-243) — workflows/memories the agent created or updated this
+  // run as part of REFLECT & COMPOUND. One string per item; "memory: ..." for
+  // saved memories. Empty/absent when nothing was worth saving (the common case).
+  optimised?: string[];
 };
 
 /**
@@ -539,8 +561,18 @@ type AgentStatus = {
  *
  * Tells the agent it's running autonomously and MUST write a status.json file
  * summarising the outcome — regardless of whether the task succeeded or failed.
+ *
+ * FEAT-243 — also carries the REFLECT & COMPOUND contract: the agent considers
+ * (mandatory) whether anything was deterministic enough to script, or durable
+ * enough to remember, so the schedule gets cheaper and more reliable over time.
+ * Acting on it is optional — judgment is never scripted. `agentId` scopes saved
+ * memories to this agent; `costFeedback` (when present) is the dynamic
+ * "recent runs averaged N credits" line read from the credit ledger.
  */
-const SCHEDULED_RUN_PREAMBLE = `<scheduled-run>
+export const buildScheduledRunPreamble = (agentId?: string | null, costFeedback?: string | null): string => {
+  const memoryScope = agentId ? `agent:${agentId}` : 'general';
+  const costLine = costFeedback ? `\n${costFeedback}\n` : '';
+  return `<scheduled-run>
 You are running as a SCHEDULED AGENT — not in an interactive chat session.
 
 Key behaviour differences:
@@ -555,12 +587,13 @@ After completing your work — whether successful, partially successful, or fail
 
 Write the file to: /workdir/outputs/status.json
 
-The file must contain valid JSON with exactly these fields:
+The file must contain valid JSON with these fields:
 - "status" (string): one of "success", "partial", or "failed"
 - "summary" (string): one sentence describing what you accomplished or why you failed
 - "artifacts" (array of strings): filenames of any files you created (empty array if none)
 - "errors" (array of strings): any error messages encountered (empty array if none)
 - "warnings" (array of strings): non-fatal issues or assumptions you made (empty array if none)
+- "optimised" (array of strings, OPTIONAL): workflows or memories you saved/updated this run (see REFLECT & COMPOUND below); omit or use [] when nothing qualified
 
 Success example:
 {
@@ -568,7 +601,8 @@ Success example:
   "summary": "Generated daily progress report with 15 KPIs from the sales dashboard",
   "artifacts": ["report.pdf", "summary.csv"],
   "errors": [],
-  "warnings": ["Could not access marketing API — used cached data from yesterday"]
+  "warnings": ["Could not access marketing API — used cached data from yesterday"],
+  "optimised": []
 }
 
 Failure example:
@@ -582,9 +616,31 @@ Failure example:
 
 This status report is used to notify the user of the outcome. Be honest and specific in your summary.
 Even if the task failed entirely, you MUST still write status.json with status "failed" and an explanation.
+
+REFLECT & COMPOUND (after writing status.json):
+This schedule runs repeatedly — you can make the next run better than this one.
+Considering the two questions below is mandatory on every run. Acting on them is NOT — on many runs the right answer is to save nothing, and that's fine.
+${costLine}
+1) SCRIPT — was anything in this run deterministic mechanics?
+- Worth scripting: steps that are identical run-over-run — fixed data pulls, file/format transformations, rendering with fixed parameters, posting results to a fixed destination.
+- If a saved workflow for this schedule already exists, prefer repairing or extending it over writing a new one. If it has gone stale, fix or retire it.
+- NEVER script judgment: reading, weighing, or interpreting; choosing what matters; writing prose; deciding what to escalate; handling unusual input. That thinking is the job — keep doing it fresh each run. Scripts are accelerators, not contracts: verify their output every run and deviate without hesitation when inputs look unusual or the task has drifted. Never trade correctness for speed or lower cost.
+- Save to /workdir/agent-workflows/<kebab-name>.py if that directory exists, otherwise /workdir/chat-workflows/<schedule-slug>/<kebab-name>.py. Load the saved-workflows skill for the header format. Parameterise dates/IDs — never hardcode this run's values. Scripts must fail loudly so a future run can't silently ship wrong output. The rhythm once a workflow exists: run script → verify output → handle exceptions with fresh thinking.
+
+2) REMEMBER — did this run teach you something durable?
+- Your saved memories for this agent are already provided in your context above (the User Memories section) — apply them this run so you don't re-learn the same things. That is the payoff of remembering: each run starts smarter than the last.
+- Worth remembering: integration gotchas (IDs, formats, quirks you had to work out), data-source facts, recurring exceptions and how you handled them, owner preferences evident from the task.
+- Save with: numa memory add "<short factual note>" --scope ${memoryScope} -m "remembering for next run" -y
+- No user is present, so the usual confirm-first rule doesn't apply. Apply this bar instead: would the next run be slower or wrong without it? Keep each memory short and factual; update or delete a stale one rather than piling up near-duplicates.
+
+When you create or update a workflow or memory, record it in the OPTIONAL "optimised" field of status.json — one string per item, e.g.:
+  "optimised": ["agent-workflows/fetch-pipeline-data.py (created — pulls this week's closed-won deals; summary writing deliberately NOT scripted)", "memory: the CRM export mislabels the 'owner' column as 'rep'"]
+
+IMPORTANT: Always reflect before finishing. Scripting and remembering make you more efficient and save the user money on every future run — but don't script things that require reasoning, and don't force it when this run genuinely had nothing worth keeping.
 </scheduled-run>
 
 `;
+};
 
 const isApiEvent = (event: unknown): event is APIGatewayProxyEventV2 => {
   const requestContext = (event as { requestContext?: { http?: { method?: unknown } } })?.requestContext;
@@ -1717,6 +1773,13 @@ const executeRun = async ({
   const runConversationId = adHoc ? schedule.conversation_id : buildRunConversationId(schedule.schedule_id, runId);
   const conversationName = adHoc ? undefined : buildConversationName(scheduleName, now);
 
+  // FEAT-243 — rolling window of recent run conversations (newest last), computed
+  // once so the success and failure paths persist the same list via
+  // markScheduleStatus. Only scheduled (non-adHoc) runs compound. Capped at 10.
+  const recentRunConversationIds = !adHoc
+    ? [...(schedule.recent_run_conversation_ids ?? []), runConversationId].slice(-10)
+    : undefined;
+
   // Notify schedule started and create job record
   if (!adHoc) {
     await NotificationService.notifyScheduleStarted(schedule.user_id, schedule.schedule_id, 'agent', scheduleName);
@@ -1775,6 +1838,9 @@ const executeRun = async ({
   }
 
   let assistantText: string;
+  // FEAT-243 — recent-run cost stats, read pre-invocation; reused by the
+  // [SELF_OPTIMISE] telemetry log on the success path.
+  let costInfo: CostFeedback | null = null;
   try {
     // Refresh agent snapshot from DynamoDB so scheduled runs use the latest
     // agent config (integrations, KBs, tools) rather than the frozen snapshot
@@ -1814,6 +1880,11 @@ const executeRun = async ({
       mergedAutoToolsEnabled: mergedRunConfig?.autoToolsEnabled,
     });
 
+    // FEAT-243 — pull recent-run cost stats from the ledger (HQ only; self-gates
+    // to null elsewhere) for the REFLECT & COMPOUND cost-feedback line and the
+    // [SELF_OPTIMISE] telemetry below. Scheduled runs only.
+    costInfo = !adHoc ? await fetchScheduleCostFeedback(schedule) : null;
+
     assistantText = await invokeWorkspaceAgent({
       prompt: apiPrompt,
       conversationId: runConversationId,
@@ -1821,6 +1892,7 @@ const executeRun = async ({
       agentSnapshot: effectiveSnapshot,
       auth,
       scheduledRun: !adHoc,
+      costFeedback: costInfo?.line ?? null,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Agent invocation failed';
@@ -1880,7 +1952,8 @@ const executeRun = async ({
         'failed',
         errorMessage,
         runConversationId,
-        runLogKey
+        runLogKey,
+        recentRunConversationIds
       );
       await NotificationService.notifyScheduleFailed(
         schedule.user_id,
@@ -1969,9 +2042,31 @@ const executeRun = async ({
         effectiveStatus,
         effectiveStatus !== 'success' ? notificationMessage : null,
         runConversationId,
-        runLogKey
+        runLogKey,
+        recentRunConversationIds
       );
       statusMarked = true;
+
+      // FEAT-243 — self-optimisation telemetry. Pairs this run's optimised[]
+      // (workflows/memories saved) with the PRE-invocation cost stats (runs
+      // ≤ N-1); credit-debit meters this run async, so its own cost lands in
+      // the next run's stats. The compounding trend is reconstructed offline
+      // (measure-trend.py) by joining these lines with the ledger.
+      const optimised = agentStatus?.optimised ?? [];
+      console.info('[SELF_OPTIMISE]', {
+        _name: 'SELF_OPTIMISE',
+        clientName: CLIENT_NAME,
+        scheduleId: schedule.schedule_id,
+        runId,
+        agentId: schedule.agent_id,
+        conversationId: runConversationId,
+        status: effectiveStatus,
+        optimised,
+        optimisedCount: optimised.length,
+        priorAvgCredits: costInfo?.avgCredits ?? null,
+        priorLastRunCredits: costInfo?.lastCredits ?? null,
+        meteredRunCount: costInfo?.meteredRunCount ?? 0,
+      });
 
       // FEAT-105 round-2 — auto-pause if this run pushed us past the consecutive-fail threshold.
       if (effectiveStatus === 'failed') {
@@ -2187,13 +2282,80 @@ const classifyTypedError = (message: string): { kind: string; resource?: string;
   return null;
 };
 
+/**
+ * FEAT-243 — recent-run cost stats from the credit ledger. `line` is folded into
+ * the REFLECT & COMPOUND preamble; the numeric fields feed the [SELF_OPTIMISE]
+ * telemetry log so the compounding trend is measurable offline.
+ */
+type CostFeedback = {
+  line: string;
+  avgCredits: number;
+  lastCredits: number | null;
+  meteredRunCount: number;
+};
+
+/**
+ * Read recent runs' credit charges from the ledger so the next run's
+ * REFLECT & COMPOUND preamble can show a cost target ("recent runs averaged N
+ * credits"). Gated on SHOW_CREDITS so the figure only reaches clients whose
+ * admins have the credits view enabled (metering itself runs everywhere).
+ * Also returns null when the schedule has no recorded run conversations yet, or
+ * when no ledger rows are found (metering not caught up). Never throws — cost
+ * feedback must not fail a run.
+ */
+const fetchScheduleCostFeedback = async (schedule: ScheduleRecord): Promise<CostFeedback | null> => {
+  if (!SHOW_CREDITS || !CREDITS_TABLE_NAME) return null;
+  const convIds = schedule.recent_run_conversation_ids;
+  if (!convIds || convIds.length === 0) return null;
+
+  try {
+    const ids = convIds.slice(-10); // newest last
+    const keys = ids.map((id) => ({ PK: `CONV#${id}`, SK: 'META' }));
+    const resp = await dynamo.send(new BatchGetCommand({ RequestItems: { [CREDITS_TABLE_NAME]: { Keys: keys } } }));
+    const rows = resp.Responses?.[CREDITS_TABLE_NAME] ?? [];
+    if (rows.length === 0) return null;
+
+    const creditsById = new Map<string, number>();
+    for (const row of rows) {
+      const pk = typeof row.PK === 'string' ? row.PK : '';
+      const id = pk.startsWith('CONV#') ? pk.slice('CONV#'.length) : '';
+      const credits = Number(row.creditsCharged);
+      if (id && Number.isFinite(credits)) creditsById.set(id, credits);
+    }
+    if (creditsById.size === 0) return null;
+
+    const values = [...creditsById.values()];
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    let lastCredits: number | null = null;
+    for (let i = ids.length - 1; i >= 0; i--) {
+      const c = creditsById.get(ids[i]);
+      if (c != null) {
+        lastCredits = c;
+        break;
+      }
+    }
+
+    const fmt = (n: number): string => (Math.round(n * 10) / 10).toString();
+    const n = creditsById.size;
+    const lastPart = lastCredits != null ? `last run: ${fmt(lastCredits)}, ` : '';
+    const line = `COST CONTEXT: recent runs of this schedule averaged ${fmt(avg)} credits (${lastPart}over ${n} metered run${n === 1 ? '' : 's'}). If deterministic steps are still being redone by hand each run, a saved workflow is how this number comes down — but never trade correctness for credits.`;
+    return { line, avgCredits: avg, lastCredits, meteredRunCount: n };
+  } catch (err) {
+    console.warn('[SELF_OPTIMISE] cost feedback lookup failed (non-fatal)', err);
+    return null;
+  }
+};
+
 const markScheduleStatus = async (
   userId: string,
   scheduleId: string,
   status: string,
   error: string | null,
   runConversationId?: string | null,
-  runLogKey?: string | null
+  runLogKey?: string | null,
+  // FEAT-243 — rolling list of recent run conversation IDs (newest last,
+  // pre-trimmed by the caller). Whole-list SET; null/empty skips the write.
+  recentConversationIds?: string[] | null
 ): Promise<void> => {
   const updateExpressions = ['last_run_epoch = :ts', 'last_status = :status', 'last_error = :err'];
   const expressionAttributeValues: Record<string, unknown> = {
@@ -2247,6 +2409,12 @@ const markScheduleStatus = async (
   if (runConversationId) {
     updateExpressions.push('last_run_conversation_id = :conversationId');
     expressionAttributeValues[':conversationId'] = runConversationId;
+  }
+
+  // FEAT-243 — persist the rolling conv-id list for next run's cost feedback.
+  if (recentConversationIds && recentConversationIds.length > 0) {
+    updateExpressions.push('recent_run_conversation_ids = :recentConvIds');
+    expressionAttributeValues[':recentConvIds'] = recentConversationIds;
   }
 
   if (runLogKey) {
@@ -2710,6 +2878,8 @@ const readWorkspaceStatus = async (userId: string, conversationId: string): Prom
         errors: Array.isArray(parsed.errors) ? parsed.errors.map(String) : [],
         warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
         ...(typeof customerId === 'string' && customerId ? { customerId } : {}),
+        // FEAT-243 — optional; lenient parse (absent on legacy/non-reflecting runs).
+        optimised: Array.isArray(parsed.optimised) ? parsed.optimised.map(String).slice(0, 10) : [],
       };
     } catch (err: unknown) {
       const errorName = err instanceof Error ? (err as { name?: string }).name : undefined;
@@ -2756,6 +2926,7 @@ const invokeWorkspaceAgent = async ({
   agentSnapshot,
   auth,
   scheduledRun,
+  costFeedback,
 }: {
   prompt: string;
   conversationId: string;
@@ -2763,15 +2934,21 @@ const invokeWorkspaceAgent = async ({
   agentSnapshot?: AgentSnapshot;
   auth: AuthContext;
   scheduledRun?: boolean;
+  // FEAT-243 — dynamic "recent runs averaged N credits" line, computed by the
+  // caller from the credit ledger. Folded into the REFLECT & COMPOUND preamble.
+  costFeedback?: string | null;
 }): Promise<string> => {
   if (!WORKSPACE_AGENT_PROXY_URL || !SCHEDULE_RUNNER_SECRET) {
     throw new Error('Workspace agent invocation unavailable');
   }
 
   // For scheduled runs, prepend instructions so the agent knows to complete
-  // autonomously and write a structured status report when finished.
-  // V2 handles the agent's system prompt natively via agentId — we only add the scheduled-run context.
-  const prompt = scheduledRun ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}` : runPrompt;
+  // autonomously, write a structured status report, and reflect on what to
+  // script/remember (FEAT-243). V2 handles the agent's system prompt natively
+  // via agentId — we only add the scheduled-run context.
+  const prompt = scheduledRun
+    ? `${buildScheduledRunPreamble(agentSnapshot?.agentId, costFeedback)}${runPrompt}`
+    : runPrompt;
 
   // FEAT-143 — build the unified integrations payload server-side. Resolves
   // per-slug method (native vs Pipedream) from the user's live auth state +

@@ -767,7 +767,10 @@ Bash("numa memory add \"Jira Cloud ID: abc123-def456\" --scope integration:jira 
 - For listing, updating, or complex memory management, load the `memories` skill first
 - DO proactively suggest saving memories when the user says "remember this", "keep this in mind for next time", or semantically similar — but always confirm first
 - DO suggest saving useful operational details when working with integrations (e.g., Jira cloud ID, Slack channel IDs, preferred project boards) to save time on future requests
-- DO NOT add memories for every interaction — only when the user signals persistence or when integration details would clearly save time
+- DO offer to save a memory when the user **corrects you or re-states something you should already have known** ("no, always use the AU entity", "like I told you last time…") — that correction is exactly what memories prevent next time
+- DO offer one when the user supplies the **same context, IDs, or preferences a second time**, or when you **discover an integration gotcha the hard way** (a pagination quirk, a required format, a magic ID) — capture it so the next run doesn't re-learn it
+- **Scope choice:** when working as a specific agent, scope agent-specific facts with `--scope agent:<id>` (the agent's id is in your agent context); keep user-wide preferences on the default `general` scope so they apply everywhere
+- DO NOT add memories for every interaction — only when the user signals persistence, corrects you, or an operational detail would clearly save time
 - DO NOT update or add memories about the user's profile (name, job title, etc.) — direct them to the Profile page for that
 - To delete a memory, direct the user to manage it from their Profile page in Settings
 - Keep memories concise and factual (max 300 characters)
@@ -1613,96 +1616,130 @@ def _build_saved_workflows_context() -> str:
     """Build the dynamic ``## Saved Workflows`` section.
 
     Saved workflows are reusable scripts the agent has written to
-    ``/workdir/chat-workflows/`` in past conversations; they persist at the
-    user level and sync into every future conversation. This injects their
-    name + description (read from the local synced folder — no S3 round-trip)
-    so the agent rediscovers them, plus a short note on the capability so it
-    starts saving useful recurring jobs. Returned text is plain (no ``{}``
+    ``/workdir/chat-workflows/`` (user-level) — or, for agent conversations with
+    FEAT-243 on, ``/workdir/agent-workflows/`` (per-(user,agent)). They persist
+    and sync into every future conversation, so this injects their name +
+    description (read from the synced local folders — no S3 round-trip) plus
+    active "save this" triggers. The deep authoring how-to lives in the
+    ``saved-workflows`` skill, not here. Returned text is plain (no ``{}``
     format placeholders) — append it AFTER ``str.format`` runs.
     """
-    from numa_workspace_agent.saved_workflows import list_saved_workflows
+    from numa_workspace_agent.saved_workflows import (
+        list_agent_workflows,
+        list_saved_workflows,
+    )
+    from numa_workspace_agent.workspace import get_agent_workflows_scope
 
     try:
         workflows = list_saved_workflows()
     except Exception:  # noqa: BLE001 — never let prompt assembly fail on this
         workflows = []
+    try:
+        agent_workflows = list_agent_workflows()
+    except Exception:  # noqa: BLE001
+        agent_workflows = []
+    agent_scope = get_agent_workflows_scope()
 
-    lines = [
-        "## Saved Workflows",
-        "",
-        "This is **your** library of reusable workflows for **this specific user** — "
-        "scripts saved under `/workdir/chat-workflows/` that persist across every "
-        "conversation you have with them (everything else in the workspace is wiped "
-        "between chats). It's the main way you get tuned to one person over time: when "
-        "you work out how to do a recurring job they care about, save it here so next "
-        "time it's a single step. Grow this library as you learn what they like done.",
-        "",
-    ]
-
-    if workflows:
-        lines.append("Your saved workflows for this user:")
-        lines.append("")
-        lines.append("| File | What it does / when to use it | Needs |")
-        lines.append("| --- | --- | --- |")
-        for wf in workflows:
+    def _table(items: list) -> list[str]:
+        rows = [
+            "| File | What it does / when to use it | Needs |",
+            "| --- | --- | --- |",
+        ]
+        for wf in items:
             fname = (wf.get("path") or "").replace("|", "\\|")
             title = (wf.get("title") or "").replace("|", "\\|").replace("\n", " ")
             desc = (wf.get("description") or "").replace("|", "\\|").replace("\n", " ")
             needs = ", ".join(wf.get("required_integrations") or []) or "—"
-            lines.append(f"| `{fname}` — **{title}** | {desc} | {needs} |")
+            rows.append(f"| `{fname}` — **{title}** | {desc} | {needs} |")
+        return rows
+
+    lines = [
+        "## Saved Workflows",
+        "",
+        "Reusable scripts saved under `/workdir/chat-workflows/` that persist across "
+        "every conversation with this user (everything else in the workspace is wiped "
+        "between chats). This is how you get tuned to one person over time: when you work "
+        "out a recurring job, save it so next time it's a single step. Workflows capture "
+        "**mechanics only** — data pulls, transforms, rendering, delivery — never "
+        "judgment, interpretation, or prose; that stays live thinking.",
+        "",
+    ]
+
+    # Agent-scoped library first (FEAT-243), when this is an agent conversation.
+    if agent_scope:
+        if agent_workflows:
+            lines.append(
+                "**This agent's workflows** (in `/workdir/agent-workflows/`, shared across "
+                "this user's runs of this agent) — prefer these for this agent's recurring "
+                "jobs; run with `python3 /workdir/agent-workflows/<file>`:"
+            )
+            lines.append("")
+            lines.extend(_table(agent_workflows))
+        else:
+            lines.append(
+                "This agent has its own workflow library at `/workdir/agent-workflows/` "
+                "(empty so far). Save jobs specific to **this agent** there; save jobs "
+                "useful across all your work with this user to `/workdir/chat-workflows/`."
+            )
+        lines.append("")
+
+    if workflows:
+        lines.append("Your saved workflows for this user (`/workdir/chat-workflows/`):")
+        lines.append("")
+        lines.extend(_table(workflows))
         lines.append("")
         lines.append(
             "Run one with `python3 /workdir/chat-workflows/<file>` (or `bash` for shell "
-            "workflows) — read it first if you need to adapt it to the current request. "
-            "If a workflow lists required integrations, check they're enabled before "
-            "running it."
+            "workflows) — read it first if you need to adapt it. If a workflow lists "
+            "required integrations, check they're enabled before running it."
         )
-    else:
-        lines.append(
-            "You have no saved workflows for this user yet. When you complete a useful, "
-            "repeatable job, consider saving it here for next time."
-        )
+    elif not agent_scope:
+        lines.append("You have no saved workflows for this user yet.")
 
-    lines.append("")
-    lines.append(
-        "To save a new workflow, `Write` an executable script (Python by default, Bash "
-        "works too) to `/workdir/chat-workflows/<kebab-name>.py`. It MUST start with this "
-        "header (a write without it is rejected) — set `created` on first save, bump "
-        "`updated` whenever you change it, and list any integrations it depends on:"
+    # Active save triggers — don't wait to be asked.
+    lines += [
+        "",
+        "**Watch for save moments — act on them, don't wait to be asked:**",
+        "- **Second time:** the request resembles something you've done for this user "
+        "before (or nearly matches a saved workflow) → save or update a workflow as part "
+        "of finishing the job, and say so in one line.",
+        "- **Maintenance loop:** they ask you to update or refresh something you made "
+        "before (a dashboard, report, document) → script the refresh path so next time "
+        "it's one step.",
+        "- **Real effort:** you just wrote substantial working code (~40+ lines) for a "
+        "task that could plausibly recur → offer to save it as a workflow.",
+        '- **Calendar smell:** the ask mentions "weekly", "every month", "month-end", '
+        '"each quarter" → save a workflow now and suggest scheduling it as an agent so it '
+        "runs automatically.",
+    ]
+
+    # Slimmed how-to + skill pointer (deep guidance lives in the skill).
+    save_target = (
+        "/workdir/agent-workflows/<kebab-name>.py (this agent) or "
+        "/workdir/chat-workflows/<kebab-name>.py (all your work with this user)"
+        if agent_scope
+        else "/workdir/chat-workflows/<kebab-name>.py"
     )
-    lines.append("")
-    lines.append("```python")
-    lines.append("#!/usr/bin/env python3")
-    lines.append("# --- numa-workflow ---")
-    lines.append("# title: Weekly Finance Summary")
-    lines.append("# description: Pull this week's transactions and render a summary.")
-    lines.append("#   Use when the user asks for their weekly finance update.")
-    lines.append("# created: <YYYY-MM-DD>")
-    lines.append("# updated: <YYYY-MM-DD>")
-    lines.append("# required_integrations: gmail        # optional; omit if none")
-    lines.append("# --- end ---")
-    lines.append("import json, subprocess")
-    lines.append("")
-    lines.append("def numa(*args):")
-    lines.append(
-        '    """Run a numa CLI command from Python and parse its JSON output."""'
-    )
-    lines.append(
-        '    p = subprocess.run(["numa", *args, "--json"], capture_output=True, text=True)'
-    )
-    lines.append("    p.check_returncode()")
-    lines.append('    return json.loads(p.stdout or "{}")')
-    lines.append("")
-    lines.append(
-        'hits = numa("files", "search", "transactions this week", "--all", "-m", "weekly finance")'
-    )
-    lines.append("# ...process in Python, then e.g. numa render the result...")
-    lines.append("```")
-    lines.append(
-        "You can call any `numa` command from a workflow this way (it's on PATH). Never "
-        "hardcode secrets — integration credentials are injected at runtime outside the "
-        "workspace, so just call the integration via `numa` and they're applied for you."
-    )
+    lines += [
+        "",
+        f"To save one, `Write` an executable script (Python or Bash) to `{save_target}` "
+        "starting with the required header (a write without it is rejected):",
+        "",
+        "```python",
+        "# --- numa-workflow ---",
+        "# title: <human-readable title>",
+        "# description: <what it does + when to use it>",
+        "# created: <YYYY-MM-DD>   # bump `updated` on every change",
+        "# updated: <YYYY-MM-DD>",
+        "# required_integrations: <comma-separated slugs; omit if none>",
+        "# --- end ---",
+        "```",
+        "",
+        "For the full pattern — calling `numa` from a script, parameterising dates/IDs, "
+        "verify-after-run, reusing other skills' scripts, retiring stale workflows — load "
+        "the **saved-workflows** skill. Never hardcode secrets; integration credentials "
+        "are injected at runtime outside the workspace.",
+    ]
 
     return "\n".join(lines)
 

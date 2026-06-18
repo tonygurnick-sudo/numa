@@ -8,6 +8,8 @@ allowed-tools: Read, Write, Edit, Bash, Glob, Grep
 
 Scheduled agents let users configure recurring (or one-time) automated runs of their AI agents. A schedule defines which agent to run, a prompt, a cron expression, and a timezone. At the scheduled time, EventBridge triggers a Lambda that invokes the workspace agent in sync mode, stores results in S3, and sends notifications.
 
+> **Self-optimisation (FEAT-243):** the `SCHEDULED_RUN_PREAMBLE` is built by `buildScheduledRunPreamble(agentId, costFeedback)` and carries the REFLECT & COMPOUND contract — after each run the agent considers (mandatory) whether to script deterministic steps as a saved workflow or save a durable memory, and records what it saved in `status.json`'s optional `optimised[]`. Cost feedback ("recent runs averaged N credits", gated on `SHOW_CREDITS`) and a `[SELF_OPTIMISE]` telemetry log live in the runner. See `documentation/self-optimising-numa.md` before changing the preamble.
+
 ## Quick Reference
 
 ### End-to-End Flow

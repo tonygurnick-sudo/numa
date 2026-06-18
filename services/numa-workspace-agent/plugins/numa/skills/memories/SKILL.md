@@ -196,6 +196,15 @@ Examples of good confirmation:
 
 Only run the add/update command **after the user confirms**.
 
+### Exception — autonomous (scheduled / agent) runs
+
+When you're running as a scheduled agent, **no user is present to confirm**, so
+the confirm-first rule doesn't apply — saving silently is correct. Apply a higher
+bar instead: _would the next run be slower or wrong without this memory?_ If yes,
+save it (scope it to the agent: `--scope agent:<id>`); if it's marginal, skip it.
+Keep each one short and factual, and update or delete a stale one rather than
+letting near-duplicates pile up toward the 50-memory cap.
+
 ### When to Suggest Adding Memories
 
 **DO suggest adding memories when:**
@@ -203,6 +212,8 @@ Only run the add/update command **after the user confirms**.
 - The user explicitly says "remember this", "keep this in mind", "save this for next time", or semantically similar
 - Working with integrations and discovering useful operational details (cloud IDs, channel IDs, project boards, preferred settings)
 - The user shares a persistent preference about how they like to work
+- The user **corrects you or re-states something you should already have known** ("no, always use the AU entity", "like I told you last time…") — that correction is exactly what a memory prevents next time
+- The user supplies the **same context, IDs, or preferences a second time**, or you **hit an integration gotcha the hard way** (a pagination quirk, a required format, a magic ID) — capture it so the next run doesn't re-learn it
 
 **DO NOT suggest adding memories when:**
 

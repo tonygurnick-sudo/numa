@@ -6,6 +6,7 @@ Session is tied to conversation - each conversation gets its own MicroVM contain
 """
 
 import json
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,42 @@ from .atomic_io import atomic_write_text
 from .sdk_config import LOCAL_ROOT
 
 logger = structlog.get_logger()
+
+# FEAT-243 — agent-scoped saved-workflow library. The active agent_id for this
+# request is captured once at request entry (MicroVMs are conversation-pinned,
+# so it's constant for the container's life) and read by the S3 sync layer +
+# prompt builder, avoiding threading agent_id through every sync signature.
+_active_agent_id: Optional[str] = None
+
+
+def set_active_agent_id(agent_id: Optional[str]) -> None:
+    """Record the agent_id for the current request (None for agent-less chat).
+
+    Called at request entry, before any S3 sync, so the agent-workflows scope is
+    available to ``get_agent_workflows_scope()`` for the whole request.
+    """
+    global _active_agent_id
+    _active_agent_id = agent_id or None
+
+
+def get_active_agent_id() -> Optional[str]:
+    """The agent_id captured for the current request, or None."""
+    return _active_agent_id
+
+
+def agent_workflows_enabled() -> bool:
+    """FEAT-243 feature gate (AGENT_WORKFLOWS_ENABLED env, default off)."""
+    return os.environ.get("AGENT_WORKFLOWS_ENABLED", "").lower() == "true"
+
+
+def get_agent_workflows_scope() -> Optional[str]:
+    """The agent_id to scope the agent-workflow library under, or None when the
+    feature is off OR this isn't an agent conversation. When None, the
+    agent-workflows directory is neither created nor synced — callers fall back
+    to the user-level chat-workflows library."""
+    if not agent_workflows_enabled():
+        return None
+    return get_active_agent_id()
 
 
 class WorkspacePaths(TypedDict):
@@ -30,7 +67,12 @@ class WorkspacePaths(TypedDict):
     claude_dir: Path  # /workdir/.system/.claude - CLI settings
     trace_file: Path  # /workdir/.system/trace.jsonl - current conversation trace
     conv_meta: Path  # /workdir/.system/current_conv.json - active conversation tracking
-    workflows: Path  # /workdir/chat-workflows - persistent workflows (GLOBAL)
+    workflows: (
+        Path  # /workdir/chat-workflows - persistent workflows (GLOBAL, user-level)
+    )
+    agent_workflows: (
+        Path  # /workdir/agent-workflows - per-(user,agent) workflows (FEAT-243)
+    )
     uploads: Path  # /workdir/uploads - conversation uploads
     outputs: Path  # /workdir/outputs - conversation output files
     agent_files: Path  # /workdir/agent-files - agent reference files (per-conversation)
@@ -65,6 +107,7 @@ def get_workspace_paths() -> WorkspacePaths:
         trace_file=system_dir / "trace.jsonl",
         conv_meta=system_dir / "current_conv.json",
         workflows=root / "chat-workflows",
+        agent_workflows=root / "agent-workflows",
         uploads=root / "uploads",
         outputs=root / "outputs",
         agent_files=root / "agent-files",
@@ -88,6 +131,11 @@ def ensure_directories() -> WorkspacePaths:
     paths["workflows"].mkdir(parents=True, exist_ok=True)
     paths["uploads"].mkdir(parents=True, exist_ok=True)
     paths["outputs"].mkdir(parents=True, exist_ok=True)
+    # agent-workflows/ — created ONLY for agent conversations with FEAT-243 on.
+    # Its mere existence is the signal (to the agent + scheduled-run preamble)
+    # that an agent-scoped library is available, so don't create it otherwise.
+    if get_agent_workflows_scope():
+        paths["agent_workflows"].mkdir(parents=True, exist_ok=True)
 
     logger.debug("Ensured workspace directories")
     return paths
@@ -223,10 +271,12 @@ def clear_conversation_files() -> int:
             logger.warning("Failed to delete trace", error=str(e))
 
     # Clear root-level files and non-protected directories
-    # Protected: .system, chat-workflows, uploads, outputs, agent-files, tools
+    # Protected: .system, chat-workflows, agent-workflows, uploads, outputs,
+    # agent-files, tools
     protected_dirs = {
         ".system",
         "chat-workflows",
+        "agent-workflows",
         "uploads",
         "outputs",
         "agent-files",

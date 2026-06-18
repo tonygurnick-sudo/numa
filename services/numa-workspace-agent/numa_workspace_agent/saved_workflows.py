@@ -43,6 +43,10 @@ from pathlib import Path
 from typing import Optional, TypedDict
 
 WORKFLOWS_DIR = Path("/workdir/chat-workflows")
+# FEAT-243 — agent-scoped library (per-user-per-agent). Same format/validation
+# as the user-level library; only the directory + S3 prefix differ. Present
+# only for agent conversations with the feature enabled.
+AGENT_WORKFLOWS_DIR = Path("/workdir/agent-workflows")
 
 _FENCE_START = "--- numa-workflow ---"
 _FENCE_END = "--- end ---"
@@ -156,17 +160,17 @@ def validate_workflow_content(text: str) -> tuple[bool, Optional[str]]:
     return True, None
 
 
-def list_saved_workflows(max_workflows: int = 20) -> list[WorkflowHeader]:
-    """Read parsed headers of all valid saved workflows on local disk.
+def _list_workflows(base_dir: Path, max_workflows: int = 20) -> list[WorkflowHeader]:
+    """Read parsed headers of all valid saved workflows under ``base_dir``.
 
     Best-effort: unreadable/malformed files are skipped (they just don't appear
     in the prompt). No S3 round-trip — reads the synced local folder.
     """
-    if not WORKFLOWS_DIR.exists():
+    if not base_dir.exists():
         return []
     out: list[WorkflowHeader] = []
     try:
-        files = sorted(WORKFLOWS_DIR.rglob("*"))
+        files = sorted(base_dir.rglob("*"))
     except OSError:
         return []
     for path in files:
@@ -180,11 +184,24 @@ def list_saved_workflows(max_workflows: int = 20) -> list[WorkflowHeader]:
             continue
         if header is None:
             continue
-        header["path"] = str(path.relative_to(WORKFLOWS_DIR))
+        header["path"] = str(path.relative_to(base_dir))
         out.append(header)
         if len(out) >= max_workflows:
             break
     return out
+
+
+def list_saved_workflows(max_workflows: int = 20) -> list[WorkflowHeader]:
+    """User-level saved workflows (``/workdir/chat-workflows``)."""
+    return _list_workflows(WORKFLOWS_DIR, max_workflows)
+
+
+def list_agent_workflows(max_workflows: int = 20) -> list[WorkflowHeader]:
+    """Agent-scoped saved workflows (``/workdir/agent-workflows``, FEAT-243).
+
+    Empty unless this is an agent conversation with the feature enabled (the
+    directory only exists then)."""
+    return _list_workflows(AGENT_WORKFLOWS_DIR, max_workflows)
 
 
 # ── Secret heuristics (warn-only) ─────────────────────────────────────────────

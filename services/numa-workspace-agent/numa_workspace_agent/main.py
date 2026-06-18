@@ -90,6 +90,7 @@ from .workspace import (
     get_active_conversation,
     get_workspace_files,
     get_workspace_paths,
+    set_active_agent_id,
     set_active_conversation,
 )
 
@@ -1563,6 +1564,10 @@ async def invocations(request: Request):
     user_sub = _extract_user_sub(request, payload_headers)
     conversation_id = body.get("conversationId") or str(uuid.uuid4())
     user_email = body.get("userEmail", "unknown")
+    # FEAT-243 — capture the agent scope for this request before any S3 sync, so
+    # the agent-workflows library (per-user-per-agent) is synced + injected.
+    # MicroVMs are conversation-pinned, so this is stable for the container life.
+    set_active_agent_id(body.get("agentId"))
 
     # Pull the raw Cognito JWT (already signature-verified by the proxy). Downstream
     # tools that hit identity-aware AWS services — currently Q Business via
