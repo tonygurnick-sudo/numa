@@ -961,6 +961,25 @@ class PipedreamOperations:
         seen_keys = {a.get("key") for a in all_actions}
         all_actions.extend(a for a in private_actions if a.get("key") not in seen_keys)
 
+        # Hide Pipedream's private-component "~/" namespace from callers: present
+        # custom tools under their bare key (e.g. "pipedrive-add-file") so the
+        # agent treats them identically to public actions and can't fumble the
+        # "~/" vs filename-sanitized "~_" forms. run_action / configure_props
+        # re-add "~/" at the Pipedream boundary. Guard the (theoretical) case
+        # where a public action already owns the bare key — keep "~/" there to
+        # preserve disambiguation.
+        public_keys = {
+            a.get("key")
+            for a in all_actions
+            if not str(a.get("key", "")).startswith("~/")
+        }
+        for action in all_actions:
+            key = action.get("key", "")
+            if isinstance(key, str) and key.startswith("~/"):
+                bare = key[2:]
+                if bare and bare not in public_keys:
+                    action["key"] = bare
+
         logger.info(
             "Listed actions",
             app_slug=app_slug,
@@ -1346,6 +1365,45 @@ class PipedreamOperations:
         )
         return all_triggers
 
+    def _post_action_with_namespace_fallback(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        body: Dict[str, Any],
+        timeout: int,
+    ) -> Dict[str, Any]:
+        """POST to a Pipedream actions endpoint, retrying under the private-
+        component ``~/`` namespace if the bare id is not found.
+
+        We hide Pipedream's ``~/`` custom-tool prefix from callers (see
+        ``list_actions``) so the agent treats custom tools like any public
+        action. Pipedream currently resolves a bare custom key (e.g.
+        ``pipedrive-add-file``) to its private component directly, so the first
+        call normally succeeds. This retry is a safety net: if that undocumented
+        bare-key resolution ever regresses to a 404, fall back to the explicit
+        ``~/`` id. Keys already carrying ``~/`` (a stale cached index mid-
+        rollout) also succeed first try since that is Pipedream's real id.
+        """
+        response = requests.post(url, headers=headers, json=body, timeout=timeout)
+        action_id = body.get("id")
+        if (
+            response.status_code == 404
+            and isinstance(action_id, str)
+            and not action_id.startswith("~/")
+        ):
+            logger.info(
+                "Retrying action under private-component namespace",
+                action_key=action_id,
+            )
+            response = requests.post(
+                url,
+                headers=headers,
+                json={**body, "id": f"~/{action_id}"},
+                timeout=timeout,
+            )
+        response.raise_for_status()
+        return response.json()
+
     def run_action(
         self,
         external_user_id: str,
@@ -1399,18 +1457,16 @@ class PipedreamOperations:
                 has_stash_id=bool(stash_id),
             )
 
-            response = requests.post(
+            result = self._post_action_with_namespace_fallback(
                 f"https://api.pipedream.com/v1/connect/{project_id}/actions/run",
-                headers={
+                {
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "x-pd-environment": environment,
                 },
-                json=body,
+                body,
                 timeout=60,
             )
-            response.raise_for_status()
-            result = response.json()
 
             logger.info(
                 "Action completed",
@@ -1473,18 +1529,16 @@ class PipedreamOperations:
         }
 
         try:
-            response = requests.post(
+            result = self._post_action_with_namespace_fallback(
                 f"https://api.pipedream.com/v1/connect/{project_id}/components/configure",
-                headers={
+                {
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "x-pd-environment": environment,
                 },
-                json=body,
+                body,
                 timeout=30,
             )
-            response.raise_for_status()
-            result = response.json()
 
             logger.info(
                 "Configure props completed",

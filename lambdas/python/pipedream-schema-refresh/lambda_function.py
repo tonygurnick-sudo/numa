@@ -129,6 +129,21 @@ def _list_actions(
     seen_keys = {a.get("key") for a in all_actions}
     all_actions.extend(a for a in private_actions if a.get("key") not in seen_keys)
 
+    # Hide Pipedream's private-component "~/" namespace from the agent-facing
+    # cache: present custom tools under their bare key (e.g. "pipedrive-add-file")
+    # so the workspace index shows them like any public action. The proxy's
+    # run_action / configure_props re-add "~/" at the Pipedream boundary. Guard
+    # the (theoretical) public-key collision — keep "~/" there to disambiguate.
+    public_keys = {
+        a.get("key") for a in all_actions if not str(a.get("key", "")).startswith("~/")
+    }
+    for action in all_actions:
+        key = action.get("key", "")
+        if isinstance(key, str) and key.startswith("~/"):
+            bare = key[2:]
+            if bare and bare not in public_keys:
+                action["key"] = bare
+
     return all_actions
 
 
