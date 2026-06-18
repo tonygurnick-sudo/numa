@@ -21,8 +21,12 @@ workflow:
     - if: $CI_COMMIT_BRANCH == "dev"
     - if: $CI_PIPELINE_SOURCE == "web"
 
-services:
-  - docker:dind
+# docker:dind is intentionally NOT a global service. Only the few jobs that
+# actually run `docker` declare it locally (the *-package image builds and
+# .build-deployment-container-base). A global sidecar made every lint/test/
+# package matrix job (~120 on main) spawn an unused dind container, overloading
+# the runners' Docker daemon and producing `context deadline exceeded` system
+# failures. See documentation/gitlab-runners/hotfix-log.md.
 
 variables:
   PYTHON_VER: 3.13
@@ -131,6 +135,7 @@ pre-commit:
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
         - lambdas/node/numa-app-inbox-api
+        - lambdas/node/numa-cli-api
         - lambdas/node/numa-quota-report-daily
         - lambdas/node/oauth-auth-handler
         - lambdas/node/numa-ops-api
@@ -674,6 +679,8 @@ synergy-text-crawler-package:
   stage: image-build
   timeout: 30 minutes # Docker build + ECR push — P90 is ~12min
   image: registry.gitlab.com/arcanumai/ci/all-inclusive # don't need a lot of this, but it gets us started
+  services:
+    - docker:dind # builds + pushes the deploy image; was relying on the former global service
   tags:
     - aws # need to use our AWS workers as TLS docker doesn't seem to work on hosted runners
   environment:
