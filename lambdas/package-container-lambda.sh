@@ -46,17 +46,22 @@ echo "Git hash: $GIT_HASH"
 echo ""
 echo "=== Setting up Docker buildx for ARM64 ==="
 
-docker buildx rm arm64builder 2>/dev/null || true
+# Unique builder name per worktree: other worktrees also run buildx and would
+# otherwise rm/recreate a shared 'arm64builder', killing each other's in-flight
+# builds. Namespacing by repo root keeps concurrent builds isolated.
+BUILDER_NAME="arm64builder-$(basename "$REPO_ROOT")"
+
+docker buildx rm "$BUILDER_NAME" 2>/dev/null || true
 
 if [ -d "/certs/client" ]; then
     echo "Detected TLS-enabled Docker-in-Docker environment"
     docker context rm dind-context 2>/dev/null || true
     docker context create dind-context \
         --docker "host=tcp://docker:2376,ca=/certs/client/ca.pem,cert=/certs/client/cert.pem,key=/certs/client/key.pem"
-    docker buildx create --name arm64builder --driver docker-container dind-context --use
+    docker buildx create --name "$BUILDER_NAME" --driver docker-container dind-context --use
 else
     echo "Using default Docker context"
-    docker buildx create --name arm64builder --driver docker-container --use
+    docker buildx create --name "$BUILDER_NAME" --driver docker-container --use
 fi
 
 docker buildx inspect --bootstrap

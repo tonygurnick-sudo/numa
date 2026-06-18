@@ -4,7 +4,9 @@ set -o errexit -o nounset -o pipefail -o xtrace
 
 SCRIPT_DIRECTORY=$(dirname "${BASH_SOURCE:-$0}" | xargs realpath)
 declare -r SCRIPT_DIRECTORY
-GIT_DIR="${SCRIPT_DIRECTORY}"/../.git
+# Resolve the real git common dir so this works in both normal clones and
+# git worktrees (where the worktree's own `.git` is a file, not a directory).
+GIT_DIR=$(git -C "${SCRIPT_DIRECTORY}" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
 
 if ! test -d "${GIT_DIR}"; then
     echo ".git directory is not accessible"
