@@ -145,6 +145,7 @@ pre-commit:
         - lambdas/node/numa-search-api
         - lambdas/node/numa-users-api
         - lambdas/node/numa-voice-admin
+        - lambdas/node/numa-voice-analytics
         - lambdas/node/numa-voice-router
         - lambdas/node/openapi-docs-server
         - lambdas/node/pipedream-event-receiver
@@ -208,6 +209,7 @@ pre-commit:
         - lambdas/python/numa-dr-export
         - lambdas/python/numa-kb-manager
         - lambdas/python/numa-recent-jobs
+        - lambdas/python/numa-voice-credit-debit
         - lambdas/python/numa-voice-intake
         - lambdas/python/numa-voice-processor
         - lambdas/python/oauth-files-api
