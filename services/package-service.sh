@@ -100,8 +100,11 @@ fi
 echo ""
 echo "=== Setting up Docker buildx for ARM64 ==="
 
-# Remove any existing builder (avoids state ambiguity in CI)
-docker buildx rm arm64builder 2>/dev/null || true
+# Unique builder name per worktree/checkout so concurrent builds in other
+# worktrees don't rm/recreate a shared 'arm64builder' and kill each other's
+# in-flight build. Also removes any existing one (avoids CI state ambiguity).
+BUILDER_NAME="arm64builder-$(basename "$REPO_ROOT")"
+docker buildx rm "$BUILDER_NAME" 2>/dev/null || true
 
 # Check if we're in a DinD environment with TLS (GitLab CI)
 if [ -d "/certs/client" ]; then
@@ -113,12 +116,12 @@ if [ -d "/certs/client" ]; then
         --docker "host=tcp://docker:2376,ca=/certs/client/ca.pem,cert=/certs/client/cert.pem,key=/certs/client/key.pem"
 
     # Create buildx builder using the TLS-configured context
-    docker buildx create --name arm64builder --driver docker-container dind-context --use
+    docker buildx create --name "$BUILDER_NAME" --driver docker-container dind-context --use
 else
     echo "Using default Docker context"
 
     # Create buildx builder with default context (local development)
-    docker buildx create --name arm64builder --driver docker-container --use
+    docker buildx create --name "$BUILDER_NAME" --driver docker-container --use
 fi
 
 # Bootstrap the builder (ensures QEMU is available)
