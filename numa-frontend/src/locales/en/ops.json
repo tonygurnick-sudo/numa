@@ -76,6 +76,9 @@
     "moreTickets": "+{{count}} more tickets",
     "ticketCount": "{{count}} tickets",
     "ticketCount_one": "{{count}} ticket",
+    "ticketsDone": "{{count}} done",
+    "progressComplete": "{{percent}}% complete",
+    "progressDetail": "{{done}}/{{total}} done · {{percent}}%",
     "createTicket": "New Ticket",
     "selectBoard": "Select a board...",
     "openProject": "Open project"
