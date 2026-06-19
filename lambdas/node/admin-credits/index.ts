@@ -85,6 +85,16 @@ async function isBillingAdmin(event: { headers?: Record<string, string | undefin
 // Admin tab edits these; the debit Lambda reads the CONFIG row at meter time. AWS token rates are
 // deliberately NOT editable (billing facts, not policy knobs).
 const TIERS = ['low', 'medium', 'high', 'very_high'] as const;
+// Ordinal rank for the value-tier ratchet — mirrors lib/credit-pricing tiers.py TIER_RANK. Used by
+// the per-agent stats endpoint to pick a run-set's dominant (highest) tier. Unknown/empty ranks 0.
+const TIER_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, very_high: 4 };
+// The higher-complexity of two tiers (unknown ranks lowest); result is always a valid tier.
+function maxTier(a: string | null, b: string | null): string {
+  const ra = TIER_RANK[a || ''] || 0;
+  const rb = TIER_RANK[b || ''] || 0;
+  const winner = ra >= rb ? a : b;
+  return winner && (TIERS as readonly string[]).includes(winner) ? winner : 'low';
+}
 const CONTEXTS = ['chat', 'agent'] as const;
 const DEFAULT_CONFIG = {
   creditUsd: 0.3, // ~NZD $0.50/credit @ FX 1.69 — the NZD-anchored default
@@ -350,6 +360,122 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       items.sort((a, b) => String(b.lastTs ?? '').localeCompare(String(a.lastTs ?? '')));
       const totalCredits = items.reduce((sum, r) => sum + Number(r.creditsCharged ?? 0), 0);
       return { statusCode: 200, headers: HEADERS, body: JSON.stringify({ month, totalCredits, items }) };
+    }
+
+    // GET /credits/agent-stats?agentId=<id>&months=<N> -> per-agent credit analytics for the agent
+    // card's Credits section (FEAT-246). Queries the sparse GSI3 (AGENT#<agentId>) over the last N
+    // calendar months. ACCESS MODEL: a normal caller always sees their OWN usage of the agent
+    // (scope:'own', rows filtered to the caller's sub); a BILLING ADMIN additionally gets the
+    // all-users aggregate + a per-user breakdown (scope:'all', byUser populated). PRIVACY FENCE: this
+    // returns credits + value tier ONLY — never consumptionCostUsd / token / margin telemetry (those
+    // stay internal on the META row). Historical rows metered before the GSI3 keys shipped have no
+    // GSI3 keys (no v1 backfill), so a long-lived agent's numbers start from the change going forward.
+    if (method === 'GET' && /\/credits\/agent-stats\/?$/.test(path)) {
+      const sub = callerSub(event);
+      if (!sub) {
+        return { statusCode: 401, headers: HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
+      }
+      const agentId = event.queryStringParameters?.agentId;
+      if (!agentId) {
+        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Missing agentId' }) };
+      }
+      // Window: N calendar months back from the current NZ month (default 6, clamped 1..24).
+      const monthsParam = Number(event.queryStringParameters?.months);
+      const months = Number.isFinite(monthsParam) ? Math.min(24, Math.max(1, Math.floor(monthsParam))) : 6;
+      const billingAdmin = await isBillingAdmin(event);
+
+      // All META rows for this agent (sparse GSI3). Sorted by GSI3SK = TS#<lastTs>, so we read newest
+      // first and stop paginating once we fall out of the window.
+      const cutoff = ((): string => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - (months - 1));
+        return `${d.toLocaleDateString('en-CA', { timeZone: 'Pacific/Auckland' }).slice(0, 7)}-01`;
+      })();
+      type LedgerRow = Record<string, unknown>;
+      const rows: LedgerRow[] = [];
+      let lastKey: Record<string, unknown> | undefined;
+      do {
+        const page = await ddb.send(
+          new QueryCommand({
+            TableName: TABLE_NAME,
+            IndexName: 'GSI3',
+            KeyConditionExpression: 'GSI3PK = :pk',
+            ExpressionAttributeValues: { ':pk': `AGENT#${agentId}` },
+            ScanIndexForward: false, // newest lastTs first
+            ExclusiveStartKey: lastKey,
+          })
+        );
+        for (const it of page.Items ?? []) rows.push(it as LedgerRow);
+        lastKey = page.LastEvaluatedKey as Record<string, unknown> | undefined;
+      } while (lastKey);
+
+      // Keep only rows inside the window (by `month`, defensive against any missing lastTs).
+      const windowMonth = cutoff.slice(0, 7);
+      const inWindow = rows.filter((r) => String(r.month ?? '') >= windowMonth);
+
+      // Per-month + dominant-tier aggregation over a row set. Credits + run count + tier ONLY.
+      type AgentStatAggregate = {
+        monthly: { month: string; credits: number; runCount: number }[];
+        dominantTier: string;
+        totalCredits: number;
+        runCount: number;
+      };
+      const aggregate = (set: LedgerRow[]): AgentStatAggregate => {
+        const byMonth = new Map<string, { credits: number; runCount: number }>();
+        let dominant = '';
+        let totalCredits = 0;
+        for (const r of set) {
+          const m = String(r.month ?? '');
+          if (!m) continue;
+          const credits = Number(r.creditsCharged ?? 0);
+          totalCredits += credits;
+          const cur = byMonth.get(m) ?? { credits: 0, runCount: 0 };
+          cur.credits += credits;
+          cur.runCount += 1;
+          byMonth.set(m, cur);
+          dominant = maxTier(dominant || null, typeof r.dominantTier === 'string' ? r.dominantTier : null);
+        }
+        const monthly = Array.from(byMonth.entries())
+          .map(([month, v]) => ({ month, credits: v.credits, runCount: v.runCount }))
+          .sort((a, b) => a.month.localeCompare(b.month)); // oldest -> newest for the chart
+        return {
+          monthly,
+          dominantTier: dominant || 'unclassified',
+          totalCredits,
+          runCount: set.length,
+        };
+      };
+
+      // Caller's OWN usage of the agent (always returned).
+      const ownRows = inWindow.filter((r) => r.userSub === sub);
+      const own = aggregate(ownRows);
+
+      const body: Record<string, unknown> = {
+        agentId,
+        months,
+        scope: billingAdmin ? 'all' : 'own',
+        own,
+      };
+
+      if (billingAdmin) {
+        // All-users aggregate + a per-user breakdown (credits + run count per sub; tier omitted per
+        // user to keep the payload lean — the dominant tier is an agent-level signal).
+        body.all = aggregate(inWindow);
+        const userMap = new Map<string, { credits: number; runCount: number }>();
+        for (const r of inWindow) {
+          const us = String(r.userSub ?? '');
+          if (!us) continue;
+          const cur = userMap.get(us) ?? { credits: 0, runCount: 0 };
+          cur.credits += Number(r.creditsCharged ?? 0);
+          cur.runCount += 1;
+          userMap.set(us, cur);
+        }
+        body.byUser = Array.from(userMap.entries())
+          .map(([userSub, v]) => ({ userSub, credits: v.credits, runCount: v.runCount }))
+          .sort((a, b) => b.credits - a.credits); // top spenders first
+      }
+
+      return { statusCode: 200, headers: HEADERS, body: JSON.stringify(body) };
     }
 
     // POST /credits/topup -> RETIRED. Pricing config, allocations, and top-ups are now authored in

@@ -87,6 +87,30 @@ export type ConversationValue = {
   creditsCharged: number;
 };
 
+// ── Per-agent credit analytics (FEAT-246) ───────────────────────────────────────────────────────
+// Per-month credits + run count for the agent card's credits-over-time chart.
+export type AgentStatMonth = { month: string; credits: number; runCount: number };
+// An aggregate over a set of runs: monthly series + the dominant (highest) value tier + totals.
+export type AgentStatAggregate = {
+  monthly: AgentStatMonth[];
+  dominantTier: string;
+  totalCredits: number;
+  runCount: number;
+};
+// One row of the per-user breakdown (billing-admin scope only). Credits + run count; no cost/tokens.
+export type AgentStatUser = { userSub: string; credits: number; runCount: number };
+// Per-agent stats response. `scope` is 'own' for a normal caller (only `own` populated) and 'all' for
+// a billing admin (adds the all-users `all` aggregate + the `byUser` breakdown). Credits + tier ONLY
+// — never cost/token telemetry (privacy fence). `own` is always the caller's own usage of the agent.
+export type AgentStats = {
+  agentId: string;
+  months: number;
+  scope: 'own' | 'all';
+  own: AgentStatAggregate;
+  all?: AgentStatAggregate;
+  byUser?: AgentStatUser[];
+};
+
 // Billing-admin roster (who may see credit data). Membership lives server-side in the credit ledger,
 // not a Cognito group — only an existing billing-admin (or the portal) can grant it.
 export type BillingAdmin = { sub: string; email: string | null; grantedBy: string | null; grantedAt: string | null };
@@ -183,6 +207,31 @@ export const AdminCreditsService = {
     } catch {
       return unrated;
     }
+  },
+
+  // Per-agent credit analytics for the agent card's Credits section (FEAT-246). Returns the caller's
+  // OWN usage of the agent (scope:'own'); for a billing admin the server also returns the all-users
+  // aggregate + per-user breakdown (scope:'all'). Credits + value tier only — no cost/token figures.
+  async getAgentStats(agentId: string, months = 6, numaGet?: NumaGet): Promise<AgentStats> {
+    const empty = (): AgentStatAggregate => ({
+      monthly: [],
+      dominantTier: 'unclassified',
+      totalCredits: 0,
+      runCount: 0,
+    });
+    const norm = (j: Partial<AgentStats>): AgentStats => ({
+      agentId: j?.agentId ?? agentId,
+      months: Number(j?.months ?? months),
+      scope: j?.scope === 'all' ? 'all' : 'own',
+      own: j?.own ?? empty(),
+      all: j?.all,
+      byUser: Array.isArray(j?.byUser) ? j.byUser : undefined,
+    });
+    const qs = `?agentId=${encodeURIComponent(agentId)}&months=${encodeURIComponent(String(months))}`;
+    if (numaGet) return norm((await numaGet(`/api/credits/agent-stats${qs}`)) as Partial<AgentStats>);
+    const resp = await fetch(`${API()}/credits/agent-stats${qs}`, { headers: { 'Content-Type': 'application/json' } });
+    if (!resp.ok) return norm({ agentId, months });
+    return norm((await resp.json()) as Partial<AgentStats>);
   },
 
   // The caller's billing-admin status + the roster. Any admin may read (so a locked-out admin sees

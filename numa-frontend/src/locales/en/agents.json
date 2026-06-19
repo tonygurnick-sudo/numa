@@ -19,6 +19,17 @@
     "collapseAria": "Collapse agent details",
     "expandAria": "Expand agent details",
     "noDescription": "No description provided.",
+    "credits": {
+      "title": "Credits",
+      "loading": "Loading usage…",
+      "error": "Could not load credit usage.",
+      "empty": "No credit usage recorded yet.",
+      "scopeOwn": "Your usage",
+      "scopeAll": "All users",
+      "total": "{{credits}} credits",
+      "creditsLabel": "Credits",
+      "topUsers": "Top users"
+    },
     "labels": {
       "tools": "TOOLS",
       "knowledgeBases": "FOLDERS",
