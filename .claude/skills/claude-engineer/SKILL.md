@@ -21,6 +21,14 @@ deploy to a dev stack → prove it works in a browser → open an MR with eviden
 move the ticket to Review. You run **fully autonomously**, but inside hard safety
 rails (deploy authority + resource guard below).
 
+**Autonomy means autonomy — don't stop to ask mid-flow.** Once you're on a ticket,
+drive it to completion without pausing for permission on routine engineering
+calls (how to test, whether to repackage, which resource to target, how to word
+the MR). Make the call, state what you did, keep moving. Surface a question only
+for a genuine fork the human alone can resolve (ambiguous requirements, a
+customer-facing/irreversible action, a deploy-authority boundary). Treat status
+pings as "keep going," not "wait for me."
+
 ## Identity & workspace
 
 - **Worktree:** a persistent git worktree off the `numa` repo (Nathan's lives at
@@ -83,6 +91,33 @@ git reset --hard origin/dev && git checkout -b claude-engineer-<id>`. (First
 5. **Deploy (guarded), only if needed.** `scripts/deploy.sh numa-<your-dev-stack>
 --package` (Nathan: `numa-arcanum-demo-sydney`). Enforces the deploy-authority
    boundary and resource guard. Frontend-only changes don't need this.
+   - **Package only what you changed.** `--package` rebuilds _everything_ (~84
+     lambdas + service + frontend) — minutes of waste for a one-service change.
+     For a workspace-agent change, build just the service:
+     `( cd services && ./package-service.sh numa-workspace-agent )`, then deploy
+     without `--package`. Reach for a full `--package` only when warm artifacts
+     are genuinely stale/broken and it's affecting you (see gotcha #9).
+   - **Service-only change → TARGETED apply, not a whole-stack deploy** (gotcha
+     #9). A full `cdktf deploy` from a warm worktree redeploys _every_ drifted
+     artifact (slow, and it can roll other lambdas/frontend back to an older
+     branch's code). Instead, after building the service image, synth and apply
+     only the agent runtime + its image push from the **worktree** stack dir:
+     ```bash
+     cd infra/cdktf.out/prod/stacks/numa-<stack>          # in the worktree
+     export TF_PLUGIN_CACHE_DIR=<worktree>/.tf-plugin-cache
+     # resolve the addresses (hash suffix varies per stack):
+     #   grep aws_bedrockagentcore_agent_runtime / workspace-chat-agent_push-image in cdk.tf.json
+     AWS_REGION=us-east-1 terraform apply -auto-approve -input=false \
+       -target=null_resource.workspace-chat-agent_push-image_<hash> \
+       -target=aws_bedrockagentcore_agent_runtime.workspace-chat-agent_agentcore-runtime_<hash>
+     ```
+     The runtime `depends_on` the push, so targeting it re-pushes the image and
+     bumps the runtime to the new content-hash tag. Confirm with
+     `aws bedrock-agentcore-control get-agent-runtime … --query agentRuntimeArtifact.containerConfiguration.containerUri`.
+   - **⚠️ Run the WORKTREE's `deploy.sh`, and confirm `REPO_ROOT`** (gotcha #8).
+     `deploy.sh` now prints `ℹ️ deploy REPO_ROOT=…` — it MUST be the worktree.
+     If it shows the main repo, you'll package the fix in the worktree but deploy
+     the main repo's STALE image (the exact BUG-376 mis-ship).
 6. **E2E test in a browser + capture screenshots.** Exercise the change and grab
    PNGs — humans need visual proof. **Playwright (`playwright-cli`) is the reliable
    capturer** (`screenshot --filename=…` writes real files); the claude-in-chrome
@@ -150,8 +185,22 @@ false`. Body = MR link + ticket + dot points. Capture the returned `ts`.
    URLs — the action sets the filename itself, so the messy query string is fine),
    `filenames[]`, `initialComment`, `threadTs: <header ts>`. One reply, all images.
 
-`scripts/slack-notify.sh` wraps this. Gotchas baked in from the build:
+`scripts/slack-notify.sh` wraps this. Invocation:
+`slack-notify.sh --client <logged-in-client> --aws-profile <profile> --to
+C02CFP4SZHP --alias "Claude Engineer" --icon ":claude-code:" --message '<mrkdwn>'
+[img1.png …]`. Gotchas baked in from the build:
 
+- **`--client` is REQUIRED** (it presigns images from `numa-<client>-outputs` and
+  drives the `numa` CLI's Pipedream Slack call under that profile). Use a client
+  you're logged into (`ls ~/.config/numa/tokens-*.json`) whose Slack is connected
+  — e.g. `nd-labs`. Omit it and the script aborts with `--client required`.
+- **No backticks in `--message`.** The header text flows through shell/CLI layers
+  that will try to evaluate `` `…` `` as a command substitution (you'll see
+  `command not found: docs` / `parse error near '()'`). Use plain words or
+  `*bold*` for emphasis; for code, drop the backticks.
+- **No images is fine** — header-only post (the script exits cleanly at
+  `no files — header only`). Backend fixes have no screenshots; post the
+  before/after evidence as dot-points in the header instead.
 - **`~/slack-upload-files` is a custom Pipedream component** (published dev+prod;
   source in `pipedream-components/slack/`). It does Slack's native 3-step external
   upload _inside the action_, so it **bypasses the raw-proxy media guard** (which
@@ -215,6 +264,38 @@ is so you recognise the symptoms if something regresses.
 7. **Memory pressure can crash Docker Desktop itself.** The cascade is real
    (cache corruption → hung apply → stale lock → Docker down). The resource guard
    exists because the failure modes compound.
+8. **`deploy.sh` deployed the WRONG TREE — packaged the worktree, shipped the main
+   repo.** `REPO_ROOT` was derived from the script's own path, so invoking the
+   **main-repo** copy of `deploy.sh` made `cdktf deploy` run against
+   `/…/numa` (main repo) and push _its_ stale `image.tar`, while the fixed
+   worktree build sat undeployed. The runtime updated — to the wrong image — and
+   the repro kept failing with the original bug. **Tell:** the apply shows a huge
+   diff (it's reconciling the stack to the main repo's whole artifact set) and
+   the deployed image's content-hash tag ≠ your worktree `image.tar` hash
+   (`shasum -a256 …/numa-workspace-agent/image.tar | cut -c1-12`). Fixed:
+   `deploy.sh` now derives `REPO_ROOT` from `git -C "$PWD" rev-parse
+--show-toplevel` and prints it. Always confirm the `ℹ️ deploy REPO_ROOT=` line
+   is your worktree. To verify a service deploy landed, compare the runtime's
+   `containerUri` tag (`aws bedrock-agentcore-control get-agent-runtime`) against
+   your local tar hash — and confirm the running image actually contains your
+   change (`docker run --rm <img> grep <marker> /app/...`).
+9. **Whole-stack deploy from a warm worktree redeploys STALE drifted artifacts.**
+   The worktree's lambda zips / frontend build are whatever was last packaged
+   (often a previous ticket's branch), so a full `cdktf deploy` diffs them against
+   the live stack and rolls them in — a slow 600+ resource apply that can revert
+   other lambdas to older code. Surgical packaging alone doesn't help (you'd then
+   deploy stale _unchanged_ artifacts). Fix: for a service-only change, do the
+   **targeted apply** in step 5 (only the runtime + image push). Only do a full
+   `--package` + whole-stack deploy when you actually want to reconcile the stack
+   to dev HEAD.
+10. **`resource-guard` false-positived on a monitoring command.** `pgrep -f
+"cdktf deploy"` also matched a _watcher_ whose own command line contained that
+    string (e.g. `grep -E "…cdktf deploy…"` or `while kill -0 $PID`), so the guard
+    blocked a real deploy that wasn't actually competing. Fixed: the guard now
+    excludes grep/pgrep/tail/sed/awk/`kill -0`/`--filter-pattern`/itself and its
+    own PID tree. Still — **keep the literal strings `cdktf deploy` / `terraform
+apply` out of your monitoring/watcher commands** (match a PID or a logfile
+    marker instead).
 
 **Stale state lock recovery** (from a killed/hung apply): from the stack dir
 `infra/cdktf.out/prod/stacks/<stack>` run `terraform force-unlock --force <id>`

@@ -18,17 +18,25 @@ set -uo pipefail
 
 fail=0
 
-if pgrep -f "terraform apply" >/dev/null 2>&1; then
-  echo "❌ A 'terraform apply' is already running:"
-  pgrep -fl "terraform apply" | sed 's/^/    /'
-  fail=1
-fi
+# A naive `pgrep -f "cdktf deploy"` also matches MONITORING commands that merely
+# mention the string — e.g. a watcher running `grep -E "...cdktf deploy..."` or
+# `while kill -0 $PID`. That self-match once blocked a real deploy (BUG-376
+# post-mortem). So exclude this guard's own PID tree and anything that looks like
+# a monitor (grep/pgrep/tail/sed/awk/kill -0/CloudWatch --filter-pattern/the
+# guard script itself) before deciding a heavy op is truly in flight.
+heavy_running() {  # $1 = pgrep pattern, $2 = human label
+  local hits
+  hits="$(pgrep -fl "$1" 2>/dev/null \
+    | grep -vE "\b(grep|pgrep|tail|sed|awk)\b|kill -0|--filter-pattern|resource-guard|[b]ug376" \
+    | grep -vE "^$$ |^$PPID " || true)"
+  [ -z "$hits" ] && return 1
+  echo "❌ A '$2' is already running:"
+  echo "$hits" | sed 's/^/    /'
+  return 0
+}
 
-if pgrep -f "cdktf deploy" >/dev/null 2>&1; then
-  echo "❌ A 'cdktf deploy' is already running:"
-  pgrep -fl "cdktf deploy" | sed 's/^/    /'
-  fail=1
-fi
+heavy_running "terraform.* apply" "terraform apply" && fail=1
+heavy_running "cdktf.* deploy"    "cdktf deploy"    && fail=1
 
 if docker info >/dev/null 2>&1; then
   # buildkit containers linger idle after a build; only block on an ACTIVE one

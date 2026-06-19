@@ -20,8 +20,16 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# skill lives at <repo>/.claude/skills/claude-engineer/scripts -> 4 levels up
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+# REPO_ROOT must be the tree we are DEPLOYING (where the freshly-packaged
+# artifacts live), NOT where this script happens to live. The claude-engineer
+# flow packages in the worktree but may invoke the MAIN repo's copy of this
+# script; deriving REPO_ROOT from $SCRIPT_DIR then made `cdktf deploy` run
+# against the main repo and push its STALE image.tar — the wrong build shipped
+# while the fixed worktree build sat undeployed (BUG-376 post-mortem). Derive it
+# from the current working dir's git worktree instead, with the old script-
+# relative path as a fallback for non-git contexts.
+REPO_ROOT="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null || (cd "$SCRIPT_DIR/../../../.." && pwd))"
+echo "ℹ️  deploy REPO_ROOT=$REPO_ROOT"
 
 STACK="${1:?usage: deploy.sh <cdktf-stack> [--package] [--i-have-permission] [--parallelism N]}"
 shift || true
