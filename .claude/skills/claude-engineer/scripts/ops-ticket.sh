@@ -29,14 +29,19 @@ BOARD_ID="81f2560d-617a-46a4-83dc-7608a6dafc37"
 STAFF_SUB="${OPS_STAFF_SUB:-54888428-d011-70f6-e4be-d8baf30500c3}"
 STAFF_EMAIL="${OPS_STAFF_EMAIL:-nathan@arcanum.ai}"; STAFF_NAME="${OPS_STAFF_NAME:-Nathan Douglas}"
 
-declare -A STAGES=(
-  [todo]="a5e99e77-3ec1-4c1f-8406-d056d2f395a3"
-  [blocked]="70db7c9e-e1c4-414f-b791-4bc7a8f32ba5"
-  [in-progress]="f837ddd7-bd62-406a-848f-b6679853fffe"
-  [merge-request]="7c025f8a-cf04-42e4-a694-d5b8ef0b49f2"
-  [review]="753fb749-fbaf-44aa-bcf9-1e214953d125"
-  [done]="a4c9f394-b60c-4d88-aada-80395c808a18"
-)
+# NOTE: macOS ships bash 3.2 (no associative arrays / `declare -A`). Use a plain
+# function so the script runs under /usr/bin/env bash without a 4+ requirement.
+stage_id() {  # $1=stage key -> Dev Team stage UUID
+  case "$1" in
+    todo)          echo "a5e99e77-3ec1-4c1f-8406-d056d2f395a3" ;;
+    blocked)       echo "70db7c9e-e1c4-414f-b791-4bc7a8f32ba5" ;;
+    in-progress)   echo "f837ddd7-bd62-406a-848f-b6679853fffe" ;;
+    merge-request) echo "7c025f8a-cf04-42e4-a694-d5b8ef0b49f2" ;;
+    review)        echo "753fb749-fbaf-44aa-bcf9-1e214953d125" ;;
+    done)          echo "a4c9f394-b60c-4d88-aada-80395c808a18" ;;
+    *) return 1 ;;
+  esac
+}
 
 displayid() {  # extract TASK-151 from a share URL or accept a bare id
   local in="$1"
@@ -53,6 +58,14 @@ query_gsi3() {  # $1=displayId -> raw DynamoDB Items JSON
 
 resolve_uuid() {  # $1=displayId -> ticket UUID
   query_gsi3 "$1" | python3 -c 'import json,sys; i=json.load(sys.stdin)["Items"]; print(i[0]["id"]["S"]) if i else sys.exit("ticket not found")'
+}
+
+resolve_ticket() {  # $1=displayId -> "uuid boardId" (board from PK = TEAM#{boardId})
+  query_gsi3 "$1" | python3 -c '
+import json,sys
+i=json.load(sys.stdin)["Items"]
+if not i: sys.exit("ticket not found")
+t=i[0]; print(t["id"]["S"], t["PK"]["S"].split("#",1)[1])'
 }
 
 invoke_ops() {  # $1=method $2=path $3=body(json string) -> response payload
@@ -98,16 +111,19 @@ print(t.get("description","(no description)"))
     ;;
   comment)
     uuid="$(resolve_uuid "$(displayid "${1:?need ticket}")")"; html="${2:?need HTML body}"
-    body=$(python3 -c 'import json,sys; print(json.dumps({"body":sys.argv[1]}))' "$html")
+    # NB: the comment field is `content` (HTML/RichText), not `body`.
+    body=$(python3 -c 'import json,sys; print(json.dumps({"content":sys.argv[1]}))' "$html")
     echo "Posting comment to ticket $uuid ..."
     invoke_ops POST "/api/ops/tickets/$uuid/comments" "$body"
     ;;
   move-stage)
-    uuid="$(resolve_uuid "$(displayid "${1:?need ticket}")")"; key="${2:?need stage name}"
-    stage="${STAGES[$key]:?unknown stage '$key' (todo|blocked|in-progress|merge-request|review|done)}"
-    body=$(python3 -c 'import json,sys; print(json.dumps({"stageId":sys.argv[1]}))' "$stage")
+    read -r uuid board < <(resolve_ticket "$(displayid "${1:?need ticket}")")
+    key="${2:?need stage name}"
+    stage="$(stage_id "$key")" || { echo "unknown stage '$key' (todo|blocked|in-progress|merge-request|review|done)"; exit 2; }
+    # NB: move-stage is PUT (not PATCH) and REQUIRES boardId alongside stageId.
+    body=$(python3 -c 'import json,sys; print(json.dumps({"boardId":sys.argv[1],"stageId":sys.argv[2]}))' "$board" "$stage")
     echo "Moving ticket $uuid -> $key ($stage) ..."
-    invoke_ops PATCH "/api/ops/tickets/$uuid" "$body"
+    invoke_ops PUT "/api/ops/tickets/$uuid" "$body"
     ;;
   *) echo "unknown command: $cmd (get|comment|move-stage)"; exit 2 ;;
 esac
