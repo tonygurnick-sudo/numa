@@ -2628,6 +2628,15 @@ async def _handle_sync(
         agent_type=agent_type_config.type_id,
     )
 
+    # Record the active conversation before the SDK runs. The interactive path
+    # (_handle_chat) does this; sync/scheduled runs must too, or the eager
+    # pre-tool workspace->S3 sync hook (hooks/workspace_sync.py) reads a null
+    # get_active_conversation() and silently no-ops — leaving agent-generated
+    # files un-synced until the post-turn sync, so integration file uploads
+    # (e.g. Slack attach) 404 on a file the agent just created. (BUG-376)
+    if not get_active_conversation():
+        set_active_conversation(conversation_id)
+
     # Extract the same parameters as _handle_chat for SDK options
     feature_flags = body.get("featureFlags", {})
     timezone = body.get("timezone")
@@ -2961,6 +2970,16 @@ async def _handle_fire_and_forget(
         prompt_length=len(prompt),
         agent_type=agent_type_config.type_id,
     )
+
+    # Record the active conversation before the background SDK run starts. The
+    # interactive path (_handle_chat) does this; fire-and-forget (scheduled
+    # agents, V2 apps) must too, or the eager pre-tool workspace->S3 sync hook
+    # (hooks/workspace_sync.py) reads a null get_active_conversation() and
+    # silently no-ops — leaving agent-generated files un-synced until the
+    # post-turn sync, so integration file uploads (e.g. Slack attach) 404 on a
+    # file the agent just created. (BUG-376)
+    if not get_active_conversation():
+        set_active_conversation(conversation_id)
 
     # Extract the same parameters as _handle_chat
     feature_flags = body.get("featureFlags", {})
