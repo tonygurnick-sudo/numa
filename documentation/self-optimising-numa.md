@@ -50,7 +50,7 @@ that's mostly script execution plus a little live judgment, never all-script.
 ### Scheduled agents (the biggest prize)
 
 `lambdas/node/agent-schedule-runner/index.ts` builds a per-run preamble
-(`buildScheduledRunPreamble(agentId, costFeedback)`) that, after the status
+(`buildScheduledRunPreamble(agentId)`) that, after the status
 report, asks two **mandatory-to-consider, optional-to-act** questions:
 
 - **SCRIPT** — was anything deterministic? If so, save/update a workflow (to
@@ -63,16 +63,16 @@ report, asks two **mandatory-to-consider, optional-to-act** questions:
 
 The agent records what it saved in an optional `optimised: []` field of
 `status.json`. The runner parses it (`readWorkspaceStatus`) and emits a
-`[SELF_OPTIMISE]` structured log pairing `optimised[]` with the prior runs' cost
-stats.
+`[SELF_OPTIMISE]` structured log with `optimised[]` + status. The credits/run
+trend is reconstructed offline (`measure-trend.py`) by joining those log lines'
+`conversationId` with the credit ledger.
 
-**Cost feedback.** When the client has the credits view on (`SHOW_CREDITS`), the
-preamble carries a live line — "recent runs of this schedule averaged N credits"
-— read from the credit ledger (`fetchScheduleCostFeedback`, a BatchGet over the
-schedule's rolling `recent_run_conversation_ids`). Metering runs for every client;
-the **figure** is gated on `SHOW_CREDITS` so we never surface credit numbers to a
-client whose admin keeps credits hidden. The script/remember prompting itself is
-unconditional.
+> **Note — no in-prompt cost feedback.** An earlier version injected a "recent
+> runs averaged N credits" line into the preamble. It was removed: the agent has
+> no reference frame for what's a good/bad credit number or how it's trending, so
+> it was noise. Per-agent credit visibility belongs in a UI for the human (see
+> the per-agent credit-analytics follow-up in the task spec), not in the agent's
+> prompt. The script/remember prompting stands on its own.
 
 ### Chat (active, not passive)
 
@@ -83,7 +83,7 @@ maintenance-loop, real-effort (~40+ lines), calendar-smell. The proactive
 skill: corrections, repeated context, integration gotchas — with scope guidance
 (`agent:<id>` for agent-specific facts, `general` for user-wide).
 
-### Agent-scoped workflow library (FEAT-243, flag-gated)
+### Agent-scoped workflow library (FEAT-243)
 
 Per-user-per-agent: `/workdir/agent-workflows/` ↔ S3
 `numa-chat/workspace/{user_sub}/agents/{agent_id}/chat-workflows/`. Active
@@ -98,23 +98,23 @@ publish/promotion flow (see Part 2), not a shared writable prefix.
 
 Saved workflows, the write-guard (`hooks/workflow_guard.py`), the prompt
 injection, and agent-scoped memories all already existed. FEAT-243 adds the
-reflection contract, the active triggers, the `saved-workflows` skill, cost
-feedback, and the agent-scoped library on top.
+reflection contract, the active triggers, the `saved-workflows` skill, the
+consolidated Self-Optimisation prompt section, and the agent-scoped library on top.
 
 ---
 
 ## Key files
 
-| Concern                                                                      | File                                                                                                                                                        |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Scheduled reflect/remember preamble, `optimised[]`, cost feedback, telemetry | `lambdas/node/agent-schedule-runner/index.ts`                                                                                                               |
-| Runner env/IAM, `SHOW_CREDITS` gating                                        | `infra/constructs/app-agnostic-api-gateway-lambda-collection.ts`, `infra/constructs/workspace-chat-agent-construct.ts`, `infra/stacks/numa-client-stack.ts` |
-| Chat triggers + agent-workflow table                                         | `services/numa-workspace-agent/numa_workspace_agent/prompts.py`                                                                                             |
-| Workflow libraries (list/format/validate)                                    | `…/numa_workspace_agent/saved_workflows.py`                                                                                                                 |
-| Agent scope + dirs                                                           | `…/numa_workspace_agent/workspace.py`                                                                                                                       |
-| S3 sync routing                                                              | `…/numa_workspace_agent/s3_workspace.py`                                                                                                                    |
-| Write guard (both libraries)                                                 | `…/numa_workspace_agent/hooks/workflow_guard.py`                                                                                                            |
-| Authoring guidance                                                           | `…/plugins/numa/skills/saved-workflows/SKILL.md`, `…/skills/memories/SKILL.md`                                                                              |
+| Concern                                                                         | File                                                                                                                                                        |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scheduled reflect/remember preamble, `optimised[]`, `[SELF_OPTIMISE]` telemetry | `lambdas/node/agent-schedule-runner/index.ts`                                                                                                               |
+| Agent-workflows infra (S3/sync), runner construct                               | `infra/constructs/workspace-chat-agent-construct.ts`, `infra/constructs/app-agnostic-api-gateway-lambda-collection.ts`, `infra/stacks/numa-client-stack.ts` |
+| Chat triggers + agent-workflow table                                            | `services/numa-workspace-agent/numa_workspace_agent/prompts.py`                                                                                             |
+| Workflow libraries (list/format/validate)                                       | `…/numa_workspace_agent/saved_workflows.py`                                                                                                                 |
+| Agent scope + dirs                                                              | `…/numa_workspace_agent/workspace.py`                                                                                                                       |
+| S3 sync routing                                                                 | `…/numa_workspace_agent/s3_workspace.py`                                                                                                                    |
+| Write guard (both libraries)                                                    | `…/numa_workspace_agent/hooks/workflow_guard.py`                                                                                                            |
+| Authoring guidance                                                              | `…/plugins/numa/skills/saved-workflows/SKILL.md`, `…/skills/memories/SKILL.md`                                                                              |
 
 ---
 

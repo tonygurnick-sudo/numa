@@ -743,8 +743,6 @@ export class NumaClientStack extends TerraformStack {
       extApiDocBucketArn: core.extApiDocBucket.bucket.arn,
       capabilitiesTableName: core.capabilitiesTable.name,
       creditLedgerTableName: core.creditLedgerTable.name,
-      // FEAT-243 — gates the schedule runner's credit-figure cost feedback.
-      showCredits: clientConfig.showCredits ?? false,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
       // Synergy KB crawl Step Function — the data-connectors "Sync now" route
       // StartExecutions it. Empty strings when the crawler is disabled.

@@ -2080,11 +2080,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         // Agent tables for refreshing stale snapshots before each scheduled run
         WORKSPACE_AGENTS_TABLE_NAME: props.workspaceAgentsTableName,
         USER_AGENTS_TABLE_NAME: props.userAgentsTableName,
-        // FEAT-243 — self-optimisation cost feedback. The ledger is metered for
-        // ALL clients; SHOW_CREDITS gates whether the runner injects the credit
-        // figure into the REFLECT & COMPOUND preamble (read-only access below).
-        CREDITS_TABLE_NAME: props.creditLedgerTableName,
-        SHOW_CREDITS: String(props.showCredits ?? false),
         // FEAT-143 — unified integrations payload needs admin preferred_method,
         // user native connector state, and the pipedream relay arn to resolve
         // per-slug method at run time. Mirrors workspace-agent-construct wiring.
@@ -2161,13 +2156,6 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
             `arn:aws:dynamodb:*:*:table/${props.chatHistoryTableName}`,
             `arn:aws:dynamodb:*:*:table/${props.chatHistoryTableName}/index/*`,
           ],
-        },
-        // FEAT-243 — read-only credit-ledger access for the cost-feedback line.
-        // Direct/batch GetItem on CONV#<id>/META rows only; no index access.
-        {
-          effect: 'Allow',
-          actions: ['dynamodb:GetItem', 'dynamodb:BatchGetItem'],
-          resources: [`arn:aws:dynamodb:*:*:table/${props.creditLedgerTableName}`],
         },
         {
           effect: 'Allow',
@@ -3089,12 +3077,6 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   chatHistoryTableName: string;
   /** Per-client credit ledger table name (Numa Credit System / SPK-015). */
   creditLedgerTableName: string;
-  /**
-   * clientConfig.showCredits — gates whether the schedule runner injects the
-   * credit figure into the REFLECT & COMPOUND cost-feedback line (FEAT-243).
-   * Metering runs regardless; this only controls surfacing the number.
-   */
-  showCredits?: boolean;
   agentSchedulesTableName: string;
   notificationsTableName: string;
   clientName: string;

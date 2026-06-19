@@ -43,12 +43,11 @@ describe('buildScheduledRunPreamble (FEAT-243 REFLECT & COMPOUND)', () => {
     expect(p).not.toContain('agent:');
   });
 
-  it('includes the cost-feedback line only when provided', () => {
-    const costLine =
-      'COST CONTEXT: recent runs of this schedule averaged 4 credits (last run: 3, over 5 metered runs).';
-    const withCost = buildScheduledRunPreamble('agt_123', costLine);
-    const withoutCost = buildScheduledRunPreamble('agt_123', null);
-    expect(withCost).toContain(costLine);
-    expect(withoutCost).not.toContain('COST CONTEXT');
+  it('does not inject credit/cost figures into the preamble', () => {
+    // FEAT-243: cost feedback was removed — the agent has no reference frame for
+    // a "good" credit number, so credits live in the UI/ledger, not the prompt.
+    const p = buildScheduledRunPreamble('agt_123');
+    expect(p).not.toContain('COST CONTEXT');
+    expect(p).not.toContain('credits');
   });
 });
