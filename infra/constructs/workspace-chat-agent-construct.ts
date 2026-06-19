@@ -108,13 +108,6 @@ export interface WorkspaceChatAgentConstructProps {
   /** Whether live credit metering is enabled (agent emits usage events). Default OFF. */
   creditMeteringEnabled?: boolean;
   /**
-   * FEAT-243 — agent-scoped saved-workflow library. When on, the container
-   * syncs `/workdir/agent-workflows/` to `{user_sub}/agents/{agent_id}/...`
-   * and injects an agent-specific workflow table. Off by default; ships dark
-   * and is enabled per-client (hq, nd-labs first).
-   */
-  agentWorkflowsEnabled?: boolean;
-  /**
    * Centralized numa-email-sender Lambda ARN (deployer account). V2 app
    * pipeline orchestrators send run-completion emails through it (FEAT-174).
    * The sender validates callers via STS proof — the client side only needs
@@ -826,8 +819,6 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         }),
         // Live credit metering (Numa Credit System / SPK-015) — OFF by default.
         CREDIT_METERING_ENABLED: props.creditMeteringEnabled ? 'true' : 'false',
-        // FEAT-243 — agent-scoped workflow library. OFF by default (ships dark).
-        AGENT_WORKFLOWS_ENABLED: props.agentWorkflowsEnabled ? 'true' : 'false',
         ...(props.creditDebitLambdaName && {
           CREDIT_DEBIT_LAMBDA_NAME: props.creditDebitLambdaName,
         }),

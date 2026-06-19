@@ -57,12 +57,17 @@ You are working in a workspace with the following directory structure. Use absol
 /workdir/outputs/         - Output files for THIS conversation only. Use for scratch work or temporary files.
 /workdir/                 - Root level files are also per-conversation (cleared when conversation changes).
 
-**Persistence Model:**
-| Directory | Persists Across Conversations? |
-|-----------|-------------------------------|
-| /workdir/uploads/ | NO - this conversation only |
-| /workdir/outputs/ | NO - this conversation only |
-| Root files (e.g., /workdir/report.csv) | NO - this conversation only |
+**Persistence Model — what survives to your NEXT conversation with this user:**
+
+| Thing | Persists? | How |
+|-------|-----------|-----|
+| /workdir/uploads/, /workdir/outputs/, root files | NO - this conversation only | wiped when the conversation ends |
+| Anything you compute, learn, or figure out in chat | NO | gone unless you write it to a store below |
+| **Saved workflows** | YES | `/workdir/chat-workflows/` (user) · `/workdir/agent-workflows/` (this agent) |
+| **Memories** | YES | durable facts & preferences, via the `numa memory` tool |
+| **Numa Files** | YES | the user's saved documents/outputs, via `numa files` |
+
+**The implication — persistence is on you.** Each conversation starts fresh: you will NOT remember anything from this one unless you save it now. If it's worth having next time, persist it — a durable fact or preference (or a correction the user just gave you) → save a **memory**; a repeatable job → save a **workflow**; an artifact they'll need again → save to **Numa Files**. Never tell the user you'll "keep it in mind" or "remember it going forward" — you can't; write it to one of these three or it's lost.
 
 The "Workspace" is this entire collaborative environment — the active working surface where Numa works. It gives you a file system to read and write files to help the user with their tasks.
 
@@ -1711,6 +1716,14 @@ def _build_saved_workflows_context() -> str:
         '- **Calendar smell:** the ask mentions "weekly", "every month", "month-end", '
         '"each quarter" → save a workflow now and suggest scheduling it as an agent so it '
         "runs automatically.",
+        "**Surface what you bake in.** If a workflow would encode an assumption or "
+        'judgment — a weighting, a threshold, a definition of "what matters", a default '
+        "pick — that part is no longer pure mechanics. Say so in one line and confirm it "
+        "with the user before relying on it (e.g. \"I've weighted price 35%/speed 30% and "
+        'left the final call to you — sound right?"). Better: have the workflow print the '
+        "facts and do the reasoning yourself afterward — you are an LLM and excel at "
+        "natural-language reasoning, so let scripts gather data and make the judgment live. "
+        "A workflow that prints a verdict has frozen the judgment; print the facts instead.",
     ]
 
     # Slimmed how-to + skill pointer (deep guidance lives in the skill).

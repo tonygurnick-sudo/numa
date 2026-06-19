@@ -11,7 +11,7 @@ The `numa-workspace-agent` is a FastAPI application that powers Numa's workspace
 
 **Location:** `services/numa-workspace-agent/`
 
-> **Self-optimisation (FEAT-243):** Numa compounds via saved workflows (`/workdir/chat-workflows/` user-level + `/workdir/agent-workflows/` per-agent, flag `AGENT_WORKFLOWS_ENABLED`) and agent-scoped memories. The chat prompt (`prompts.py:_build_saved_workflows_context`) injects active save triggers; the `saved-workflows` skill holds the authoring guidance. The agent-workflows S3 sync keys off `workspace.get_agent_workflows_scope()` (captured once per request via `set_active_agent_id`). See `documentation/self-optimising-numa.md`.
+> **Self-optimisation (FEAT-243):** Numa compounds via saved workflows (`/workdir/chat-workflows/` user-level + `/workdir/agent-workflows/` per-agent, on whenever a conversation has an `agentId`) and agent-scoped memories. The chat prompt (`prompts.py:_build_saved_workflows_context`) injects active save triggers; the `saved-workflows` skill holds the authoring guidance. The agent-workflows S3 sync keys off `workspace.get_agent_workflows_scope()` (captured once per request via `set_active_agent_id`). See `documentation/self-optimising-numa.md`.
 
 ---
 

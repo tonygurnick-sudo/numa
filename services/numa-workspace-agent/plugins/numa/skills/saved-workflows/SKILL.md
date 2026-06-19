@@ -49,6 +49,24 @@ time you run one: read its output, sanity-check it, and deviate without hesitati
 when the inputs look unusual, the script errors, or the task has drifted. Never
 trade correctness for speed or a lower credit cost.
 
+**Surface what you bake in.** If a workflow can only be written by assuming a
+weighting, a threshold, a definition of "what matters", or a default choice, that
+part is judgment, not mechanics — and burying it in code is how a workflow quietly
+starts making decisions for the user. Don't bury it:
+
+- **Document it** — a comment in the script _and_ a plain-language note when you save it.
+- **In chat, confirm it** with the user before relying on the saved workflow
+  ("I've weighted price 35% / delivery 30% / warranty 15% and left the final call
+  to you — does that match how you decide?").
+- **In a scheduled run** (no user to ask) — record the assumption in the script
+  header _and_ in the `optimised[]` note so the owner reviews it in the run report.
+- **Best of all, don't freeze the verdict.** Have the workflow gather and print the
+  _facts_ (the comparison table, the numbers), then do the reasoning and the actual
+  call **yourself, live, after the script runs**. You are an LLM and excel at
+  natural-language reasoning — that is the part to keep doing, not the part to
+  freeze into code. A script that prints "Recommended: X" has frozen a judgment;
+  one that prints the facts leaves the judgment where it belongs — with you.
+
 ### Save triggers — act on these, don't wait to be asked
 
 - **Second time:** the request resembles something you've done for this user before

@@ -568,9 +568,6 @@ export class NumaClientStack extends TerraformStack {
         creditDebitLambdaName: core.creditDebitLambda.lambda.functionName,
         creditDebitLambdaArn: core.creditDebitLambda.lambda.arn,
         creditMeteringEnabled: true,
-        // FEAT-243 — agent-scoped saved-workflow library. Ships dark; enabled
-        // per-client (hq, nd-labs first) so the feature rolls out deliberately.
-        agentWorkflowsEnabled: clientConfig.agentWorkflowsEnabled ?? false,
         // numa-cli-api Lambda — workspace IAM role gets InvokeFunction so
         // the @numa/cli binary in the MicroVM can call the dispatcher.
         // Always set (numa-cli-api is always deployed).
@@ -1537,14 +1534,6 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         showCredits: z.boolean().optional().default(false),
-        /**
-         * FEAT-243 — enable the agent-scoped saved-workflow library for this
-         * client's workspace agent (per-user-per-agent `/workdir/agent-workflows/`).
-         * Ships dark; enabled for hq + nd-labs first.
-         *
-         * @default false
-         */
-        agentWorkflowsEnabled: z.boolean().optional().default(false),
         /**
          * Central pricing config for the Numa Credit System (SPK-015). Authored in the Customer
          * Success Portal ("Numa Credits" page) and pushed into the client's credit-ledger CONFIG

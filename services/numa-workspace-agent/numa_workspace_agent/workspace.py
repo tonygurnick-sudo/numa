@@ -6,7 +6,6 @@ Session is tied to conversation - each conversation gets its own MicroVM contain
 """
 
 import json
-import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,18 +40,12 @@ def get_active_agent_id() -> Optional[str]:
     return _active_agent_id
 
 
-def agent_workflows_enabled() -> bool:
-    """FEAT-243 feature gate (AGENT_WORKFLOWS_ENABLED env, default off)."""
-    return os.environ.get("AGENT_WORKFLOWS_ENABLED", "").lower() == "true"
-
-
 def get_agent_workflows_scope() -> Optional[str]:
-    """The agent_id to scope the agent-workflow library under, or None when the
-    feature is off OR this isn't an agent conversation. When None, the
-    agent-workflows directory is neither created nor synced — callers fall back
-    to the user-level chat-workflows library."""
-    if not agent_workflows_enabled():
-        return None
+    """The agent_id to scope the agent-workflow library under, or None when this
+    isn't an agent conversation. When None, the agent-workflows directory is
+    neither created nor synced — callers fall back to the user-level
+    chat-workflows library. Agent-scoped workflows are always on for agent
+    conversations — the same primitive as user-level chat-workflows."""
     return get_active_agent_id()
 
 

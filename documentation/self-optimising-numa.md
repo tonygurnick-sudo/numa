@@ -86,9 +86,9 @@ skill: corrections, repeated context, integration gotchas — with scope guidanc
 ### Agent-scoped workflow library (FEAT-243, flag-gated)
 
 Per-user-per-agent: `/workdir/agent-workflows/` ↔ S3
-`numa-chat/workspace/{user_sub}/agents/{agent_id}/chat-workflows/`. Active only
-when `AGENT_WORKFLOWS_ENABLED` (client config) **and** the conversation has an
-`agentId`. The active agent scope is captured once per request
+`numa-chat/workspace/{user_sub}/agents/{agent_id}/chat-workflows/`. Active
+whenever the conversation has an `agentId` (always on for agent conversations —
+the same primitive as user-level chat-workflows). The active agent scope is captured once per request
 (`workspace.set_active_agent_id`, read via `get_agent_workflows_scope`) and the S3
 sync layer + prompt builder pick it up — no `agent_id` threading through sync
 signatures. Cross-user sharing is deliberately **not** here: that arrives via the
@@ -108,7 +108,7 @@ feedback, and the agent-scoped library on top.
 | Concern                                                                      | File                                                                                                                                                        |
 | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Scheduled reflect/remember preamble, `optimised[]`, cost feedback, telemetry | `lambdas/node/agent-schedule-runner/index.ts`                                                                                                               |
-| Runner env/IAM, `SHOW_CREDITS`, `AGENT_WORKFLOWS_ENABLED` flag               | `infra/constructs/app-agnostic-api-gateway-lambda-collection.ts`, `infra/constructs/workspace-chat-agent-construct.ts`, `infra/stacks/numa-client-stack.ts` |
+| Runner env/IAM, `SHOW_CREDITS` gating                                        | `infra/constructs/app-agnostic-api-gateway-lambda-collection.ts`, `infra/constructs/workspace-chat-agent-construct.ts`, `infra/stacks/numa-client-stack.ts` |
 | Chat triggers + agent-workflow table                                         | `services/numa-workspace-agent/numa_workspace_agent/prompts.py`                                                                                             |
 | Workflow libraries (list/format/validate)                                    | `…/numa_workspace_agent/saved_workflows.py`                                                                                                                 |
 | Agent scope + dirs                                                           | `…/numa_workspace_agent/workspace.py`                                                                                                                       |
