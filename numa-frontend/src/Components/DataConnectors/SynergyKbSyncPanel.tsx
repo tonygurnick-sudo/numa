@@ -142,12 +142,13 @@ export const SynergyKbSyncPanel = () => {
           <Form.Check
             type="switch"
             id="synergy-kb-sync-enabled"
-            className="mb-2"
+            className="mb-1"
             label={t('dataConnectors.synergy.sync.enable')}
             checked={Boolean(config?.enabled)}
             disabled={saving}
             onChange={(e) => void save({ enabled: e.target.checked })}
           />
+          <Form.Text className="d-block text-muted mb-2">{t('dataConnectors.synergy.sync.enableHelp')}</Form.Text>
 
           <Form.Group className="mb-2" controlId="synergy-kb-sync-frequency">
             <Form.Label className="small mb-1">{t('dataConnectors.synergy.sync.frequency')}</Form.Label>

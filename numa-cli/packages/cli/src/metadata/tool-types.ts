@@ -65,6 +65,11 @@ export interface QueryKnowledgebaseParams {
    * Defaults to false.
    */
   all_kbs?: boolean;
+  /**
+   * Synergy only: which corpus to search. Omit/"document" = per-document content
+   * (default); "job_rollup" = per-job similarity records ("find similar jobs").
+   */
+  doc_type?: string;
 }
 
 /**

@@ -172,9 +172,9 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
   },
   {
     flag: 'SYNERGY_FILE_PARITY',
-    title: 'Synergy File Parity',
+    title: 'Synergy Remote Files Browser',
     description:
-      'Richer Synergy 12d file experience in Files: revision/version/status columns, a lock indicator, in-job file search (name + contents), and per-file actions (details, version history, copy link). When off, Synergy browsing stays basic (jobs → folders → files + download).',
+      'The Synergy 12d files browser in Files: browse jobs → folders → files with download, plus the rich read-parity experience (revision/version/status columns, lock indicator, in-job file search by name + contents, and per-file actions: details, version history, copy link). When off, no Synergy file-browser routes are deployed and the browser does not surface.',
     icon: 'bi-folder-symlink',
     system_only: false,
     dev_only: false,
@@ -183,9 +183,9 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
   },
   {
     flag: 'SYNERGY_KB_SEARCH',
-    title: 'Synergy Cross-Job Search',
+    title: 'Synergy Connector',
     description:
-      'Index the text of all Synergy 12d documents into a knowledge base so chat can search across every job (e.g. "which jobs use material X"). 12d has no cross-project search; this crawls and indexes document contents, respecting each user\'s Synergy permissions per document. Adds a selectable "Synergy" entry in the chat knowledge-base picker.',
+      'The Synergy 12d connector: connect to the Synergy API and crawl/download indexable documents (background + on-demand "Sync now") into a knowledge base, respecting each user\'s Synergy permissions per document. Adds the Synergy connector to the integrations catalog, the admin crawl/sync panel, and a selectable "Synergy" entry in the chat knowledge-base picker for cross-job search. When off, no Synergy connector or crawl/sync routes are deployed.',
     icon: 'bi-search',
     system_only: false,
     dev_only: false,

@@ -5,6 +5,7 @@ kb_id (the fail-closed filter) and the caller is in allowed_users (the
 per-document ACL). These tests pin that contract.
 """
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -90,6 +91,52 @@ class TestSidecar(unittest.TestCase):
         self.assertEqual(attrs["revision"], "")
         self.assertEqual(attrs["document_status"], "")
         self.assertEqual(attrs["source_weblink"], "")
+
+
+class TestSidecarSizeBudget(unittest.TestCase):
+    """An oversized .metadata.json is rejected by Bedrock ingestion, which strips
+    tenant_id/kb_id and makes the doc invisible to EVERYONE. allowed_users is
+    byte-budgeted so the sidecar always ingests; truncation is logged, not silent.
+    """
+
+    @staticmethod
+    def _subs(n: int):
+        # 36-char UUID-shaped subs, like real Cognito subs.
+        return [f"{i:08d}-0000-4000-8000-000000000000" for i in range(n)]
+
+    def _build(self, users):
+        return lambda_function._build_sidecar(
+            allowed_users=users,
+            job_id="8_1",
+            job_name="Alpha",
+            job_path="Jobs/Alpha",
+            file_obj=FILE_OBJ,
+            file_id="12_1",
+            file_name="spec.pdf",
+            version="3",
+        )
+
+    def test_small_acl_not_truncated(self):
+        users = self._subs(5)
+        attrs = self._build(users)["metadataAttributes"]
+        self.assertEqual(attrs["allowed_users"], users)
+
+    def test_huge_acl_fits_under_cap_and_keeps_keys(self):
+        sidecar = self._build(self._subs(5000))
+        size = len(json.dumps(sidecar, ensure_ascii=False).encode("utf-8"))
+        self.assertLessEqual(size, lambda_function.SIDECAR_MAX_BYTES)
+        # The doc must stay retrievable: identity keys survive, some users kept.
+        attrs = sidecar["metadataAttributes"]
+        self.assertEqual(attrs["tenant_id"], "testclient")
+        self.assertEqual(attrs["kb_id"], "synergy")
+        self.assertGreater(len(attrs["allowed_users"]), 0)
+        self.assertLess(len(attrs["allowed_users"]), 5000)
+
+    def test_truncation_keeps_a_prefix(self):
+        users = self._subs(5000)
+        attrs = self._build(users)["metadataAttributes"]
+        kept = attrs["allowed_users"]
+        self.assertEqual(kept, users[: len(kept)])
 
 
 class TestSafeName(unittest.TestCase):

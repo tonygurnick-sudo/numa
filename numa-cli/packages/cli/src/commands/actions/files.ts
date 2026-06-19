@@ -146,6 +146,10 @@ function createFilesSearchCommand(): Command {
     .option('--max-results <n>', 'Maximum results to return', (v) => parseInt(v, 10))
     .option('--summarise', 'LLM-summarise the results into a single answer (default: return raw matches)')
     .option(
+      '--similar-jobs',
+      'Synergy only: search per-job rollups instead of documents — each result is a whole job, ranked by overall similarity (use with --folder synergy to find jobs like a description). 12d has no cross-job search; this is it.'
+    )
+    .option(
       '-m, --user-message <text>',
       'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
     )
@@ -161,6 +165,7 @@ function createFilesSearchCommand(): Command {
           all?: boolean;
           maxResults?: number;
           summarise?: boolean;
+          similarJobs?: boolean;
         } & StandardOptions
       ) => {
         const account = activeProfile();
@@ -179,6 +184,9 @@ function createFilesSearchCommand(): Command {
           summarise_results: options.summarise ?? false,
           ...(options.maxResults !== undefined ? { max_results: options.maxResults } : {}),
           ...(picked ? { kb_id: picked.id } : {}),
+          // Synergy "find similar jobs": search per-job rollup records instead of
+          // the per-document corpus (one result == one job).
+          ...(options.similarJobs ? { doc_type: 'job_rollup' } : {}),
         };
 
         const request: ToolInvokeRequest<'query_knowledgebase'> = {

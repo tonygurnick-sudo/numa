@@ -63,13 +63,14 @@ SECRETS_PREFIX = os.environ.get("DATA_CONNECTORS_SECRETS_PREFIX")
 SETTINGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SETTINGS_TABLE_NAME")
 SYNC_CONFIGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME")
 EVENT_CONFIGS_TABLE_NAME = os.environ.get("CONNECTOR_EVENT_CONFIGS_TABLE_NAME")
-# Synergy → Bedrock KB crawl Step Function (empty when the crawler is disabled).
-SYNERGY_CRAWL_STATE_MACHINE_ARN = os.environ.get("SYNERGY_CRAWL_STATE_MACHINE_ARN", "")
-# Crawl-state table + worker function for the on-visit incremental sync.
-SYNERGY_CRAWL_STATE_TABLE_NAME = os.environ.get("SYNERGY_CRAWL_STATE_TABLE_NAME", "")
-SYNERGY_TEXT_CRAWLER_FUNCTION_NAME = os.environ.get(
-    "SYNERGY_TEXT_CRAWLER_FUNCTION_NAME", ""
+# Synergy extraction SQS FIFO queue (empty when the crawler is disabled). The
+# on-visit hook enqueues a per-job message; "Sync now" invokes the coordinator.
+SYNERGY_EXTRACT_QUEUE_URL = os.environ.get("SYNERGY_EXTRACT_QUEUE_URL", "")
+SYNERGY_COORDINATOR_FUNCTION_NAME = os.environ.get(
+    "SYNERGY_COORDINATOR_FUNCTION_NAME", ""
 )
+# Crawl-state table for the on-visit grant rows + sync-config/status routes.
+SYNERGY_CRAWL_STATE_TABLE_NAME = os.environ.get("SYNERGY_CRAWL_STATE_TABLE_NAME", "")
 SYNERGY_ONVISIT_COOLDOWN_HOURS = float(
     os.environ.get("SYNERGY_ONVISIT_COOLDOWN_HOURS", "6")
 )
@@ -812,6 +813,25 @@ def _synergy_crawl_state_table():
     return prm_resource("dynamodb").Table(SYNERGY_CRAWL_STATE_TABLE_NAME)
 
 
+def _synergy_crawl_enabled() -> bool:
+    """The admin opt-in gate (CONFIG#crawl.enabled). Default OFF — NO crawl
+    activity of any kind (scheduled, manual, or on-visit) happens until an admin
+    ticks the box in the connector settings, because indexing is a billable
+    operation. The scheduled coordinator enforces the same flag server-side."""
+    if not SYNERGY_CRAWL_STATE_TABLE_NAME:
+        return False
+    try:
+        row = (
+            _synergy_crawl_state_table().get_item(
+                Key={"pk": "CONFIG#crawl", "sk": "META"}
+            )
+        ).get("Item") or {}
+        return bool(row.get("enabled"))
+    except Exception as exc:  # noqa: BLE001 — fail closed
+        logger.warning("synergy_crawl_enabled_check_failed", error=str(exc))
+        return False
+
+
 def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
     """Opportunistic on-visit sync of the Synergy job a user is browsing.
 
@@ -821,7 +841,10 @@ def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
     sidecar restamp makes content retrievable immediately), otherwise throttled
     by ``last_enumerated_at`` cooldown. Never raises into the browse path.
     """
-    if not (SYNERGY_CRAWL_STATE_TABLE_NAME and SYNERGY_TEXT_CRAWLER_FUNCTION_NAME):
+    if not (SYNERGY_CRAWL_STATE_TABLE_NAME and SYNERGY_EXTRACT_QUEUE_URL):
+        return
+    # Admin opt-in gate — no crawl/grant activity until indexing is enabled.
+    if not _synergy_crawl_enabled():
         return
     try:
         table = _synergy_crawl_state_table()
@@ -869,18 +892,24 @@ def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
             UpdateExpression="SET last_enumerated_at = :t",
             ExpressionAttributeValues={":t": datetime.now(timezone.utc).isoformat()},
         )
-        prm_client("lambda").invoke(
-            FunctionName=SYNERGY_TEXT_CRAWLER_FUNCTION_NAME,
-            InvocationType="Event",
-            Payload=json.dumps(
+        # Enqueue onto the single extraction queue. run_id="adhoc" → the worker
+        # refreshes the job but skips the run-completion counter + credit debit
+        # (this is an incremental single-job refresh, not a counted crawl run).
+        # Per-job dedup id collapses rapid repeat visits within the FIFO window.
+        prm_client("sqs").send_message(
+            QueueUrl=SYNERGY_EXTRACT_QUEUE_URL,
+            MessageBody=json.dumps(
                 {
                     "job_id": job_id,
-                    "run_id": f"onvisit-{user_id[:8]}-{int(datetime.now(timezone.utc).timestamp())}",
+                    "run_id": "adhoc",
                     "user_sub": user_id,
                     "secret_id": f"{CLIENT_NAME}/vault/users/{user_id}",
                     "instance_url": server,
+                    "cursor": None,
                 }
-            ).encode("utf-8"),
+            ),
+            MessageGroupId=job_id,
+            MessageDeduplicationId=f"adhoc:{job_id}",
         )
         logger.info(
             "synergy_onvisit_sync",
@@ -1034,18 +1063,28 @@ def _handle_synergy_sync_now(
 ) -> Dict[str, Any]:
     """Kick off a Synergy → Bedrock KB crawl for the calling user (manual sync).
 
-    Runs as the caller's OWN PAT: only the vault ``secret_id`` (never the token)
-    is put into the Step Function input, so the coordinator/worker read the PAT
-    from Secrets Manager under their own role and it never lands in execution
-    history. Every job this crawl indexes is granted to the user's
+    Invokes the coordinator, which enumerates the caller's jobs and enqueues them
+    onto the single extraction queue. Runs as the caller's OWN PAT: only the vault
+    ``secret_id`` (never the token) is passed, so the coordinator/worker read the
+    PAT from Secrets Manager under their own role and it never lands in any event
+    payload. Every job this crawl indexes is granted to the user's
     ``allowed_users`` precisely because it was enumerated with the user's
     credential — access mirrors the user's Synergy permissions by construction.
     """
     del table_name  # crawl reads creds from the vault, not the connector table
-    if not SYNERGY_CRAWL_STATE_MACHINE_ARN:
+    if not SYNERGY_COORDINATOR_FUNCTION_NAME:
         return _response(
             400,
             {"error": "Synergy cross-job search is not enabled for this workspace."},
+        )
+    # Admin opt-in gate — indexing is billable; an admin must enable it first.
+    if not _synergy_crawl_enabled():
+        return _response(
+            400,
+            {
+                "error": "Synergy indexing is turned off. An admin must enable it in "
+                "the connector settings before syncing (it incurs credit usage)."
+            },
         )
 
     # Require a vault-sourced PAT (the worker reads the same vault path) — this
@@ -1072,7 +1111,7 @@ def _handle_synergy_sync_now(
     scope = body.get("scope") if isinstance(body.get("scope"), dict) else {}
 
     run_id = f"sync-{uuid.uuid4().hex[:16]}"
-    sfn_input = {
+    coord_input = {
         "run_id": run_id,
         "user_sub": user_id,
         "secret_id": f"{CLIENT_NAME}/vault/users/{user_id}",
@@ -1081,11 +1120,12 @@ def _handle_synergy_sync_now(
         "trigger": "manual",
     }
     try:
-        sfn = prm_client("stepfunctions")
-        execution = sfn.start_execution(
-            stateMachineArn=SYNERGY_CRAWL_STATE_MACHINE_ARN,
-            name=run_id,
-            input=json.dumps(sfn_input),
+        # Async — the coordinator enumerates + enqueues (up to 900s); the API
+        # returns immediately. The worker drains the queue.
+        prm_client("lambda").invoke(
+            FunctionName=SYNERGY_COORDINATOR_FUNCTION_NAME,
+            InvocationType="Event",
+            Payload=json.dumps(coord_input).encode("utf-8"),
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("synergy_sync_now_failed", user_id=user_id, error=str(exc))
@@ -1097,14 +1137,7 @@ def _handle_synergy_sync_now(
         run_id=run_id,
         user_id=user_id,
     )
-    return _response(
-        202,
-        {
-            "status": "started",
-            "run_id": run_id,
-            "execution_arn": execution.get("executionArn"),
-        },
-    )
+    return _response(202, {"status": "started", "run_id": run_id})
 
 
 def _handle_sync_configs_list(user_id: str, table_name: str) -> Dict[str, Any]:

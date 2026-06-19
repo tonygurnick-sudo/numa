@@ -602,6 +602,7 @@
         "title": "Cross-job knowledge base sync (admin)",
         "intro": "Indexes the text of Synergy documents into the knowledge base so chat can search across all jobs. Each user can only retrieve content from jobs they can see in Synergy.",
         "enable": "Enable scheduled sync",
+        "enableHelp": "Off by default. Turning this on starts downloading and indexing Synergy documents, which consumes credits. No documents are crawled until this is enabled.",
         "frequency": "Sync frequency",
         "everyNHours": "Every {{hours}} hours",
         "everyNDays": "Every {{days}} days",

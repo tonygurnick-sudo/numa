@@ -225,6 +225,19 @@ export class NumaClientStack extends TerraformStack {
           })()
         : undefined;
 
+    // Synergy cross-job KB search ingests + queries the crawled corpus through a
+    // Bedrock knowledge base. With preferredKnowledgeBase 'none' no KB exists, so
+    // the crawler would index documents nowhere and every chat query would fail
+    // silently ("Bedrock knowledge base is not configured"). Fail the synth loudly
+    // rather than ship a dead feature.
+    if ((clientConfig.synergyKbCrawl ?? false) && !knowledgeBase) {
+      throw new Error(
+        `[${clientConfig.clientName}] synergyKbCrawl is enabled but preferredKnowledgeBase is 'none' — ` +
+          `Synergy cross-job search needs a Bedrock knowledge base. Set preferredKnowledgeBase to 'bedrock' (or 'q'), ` +
+          `or disable synergyKbCrawl.`
+      );
+    }
+
     // Include CS Portal origin in data bucket CORS so the Support Docs Manager
     // tool can write support docs into client buckets from the browser.
     const portalOrigin = `https://customer-success-portal.${props.domainSuffix}`;
@@ -744,17 +757,27 @@ export class NumaClientStack extends TerraformStack {
       capabilitiesTableName: core.capabilitiesTable.name,
       creditLedgerTableName: core.creditLedgerTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
-      // Synergy KB crawl Step Function — the data-connectors "Sync now" route
-      // StartExecutions it. Empty strings when the crawler is disabled.
-      synergyKbCrawlStateMachineArn: core.synergyCrawlStateMachineArn,
+      // Synergy extraction queue — the data-connectors on-visit hook enqueues a
+      // per-job message; the "Sync now" route invokes the coordinator to
+      // enumerate + enqueue. Empty strings when the crawler is disabled.
+      synergyExtractQueueUrl: core.synergyExtractQueueUrl,
+      synergyExtractQueueArn: core.synergyExtractQueueArn,
       synergyCrawlStateTableName: core.synergyCrawlStateTableName,
       synergyCrawlStateTableArn: core.synergyCrawlStateTableArn,
-      synergyTextCrawlerFunctionName: core.synergyTextCrawlerFunctionName,
-      synergyTextCrawlerFunctionArn: core.synergyTextCrawlerFunctionArn,
+      synergyCoordinatorFunctionName: core.synergyCoordinatorFunctionName,
+      synergyCoordinatorFunctionArn: core.synergyCoordinatorFunctionArn,
       // Admin-side gate. When false, the unified integrations catalog skips
       // every native row so users never see them; when true, admins can
       // manage native connectors and they surface alongside Pipedream.
       dataConnectorsEnabled: clientConfig.dataConnectorsEnabled ?? false,
+      // Synergy per-feature deploy gates. Both depend on the Synergy connector
+      // existing (dataConnectorsEnabled). When off, the matching Synergy API
+      // routes are never registered — nothing Synergy-specific deploys.
+      //   synergyKbCrawl    → connector + crawl/index control plane (sync routes)
+      //   synergyFileParity → remote files browser (browse + parity routes)
+      synergyKbCrawlEnabled: (clientConfig.synergyKbCrawl ?? false) && (clientConfig.dataConnectorsEnabled ?? false),
+      synergyFileParityEnabled:
+        (clientConfig.synergyFileParity ?? false) && (clientConfig.dataConnectorsEnabled ?? false),
       // Forwarded to scheduled runs as featureFlags on the workspace-agent
       // request body, so the SDK config registers the `connectors` MCP and
       // `vault` MCP in unattended runs. Without these the schedule runner

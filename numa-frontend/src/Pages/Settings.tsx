@@ -2976,11 +2976,14 @@ export default function SettingsPage() {
                         when the connector is Synergy and the native side is
                         configured — auto-rotation can silently fail, and
                         before this badge there was no admin signal for it. */}
-                    {mf.connectorSlug === 'synergy' && mfNativeEnabled && (
-                      <div className="mt-3 d-flex justify-content-end">
-                        <SynergyPatBadge connectorConfigured={mfNativeEnabled} />
-                      </div>
-                    )}
+                    {mf.connectorSlug === 'synergy' &&
+                      mfNativeEnabled &&
+                      sessionStorage.getItem('DEPLOY_SYNERGY_KB_SEARCH') === 'true' &&
+                      getFlag('SYNERGY_KB_SEARCH') && (
+                        <div className="mt-3 d-flex justify-content-end">
+                          <SynergyPatBadge connectorConfigured={mfNativeEnabled} />
+                        </div>
+                      )}
                   </Modal.Body>
                   <Modal.Footer className="border-top pt-3">
                     <div className="d-flex justify-content-between align-items-center w-100">

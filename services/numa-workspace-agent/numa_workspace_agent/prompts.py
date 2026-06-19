@@ -2038,17 +2038,42 @@ def build_kb_context(
         )
         return "\n".join(lines)
 
-    if not available_kbs:
+    # Synergy is a cross-job search corpus, not a Numa Files folder — pull it out
+    # and render it as its own capability section so the agent knows that
+    # kb_id="synergy" exists and when to reach for it.
+    synergy_present = any(kb.get("id") == "synergy" for kb in (available_kbs or []))
+    folder_kbs = [kb for kb in (available_kbs or []) if kb.get("id") != "synergy"]
+
+    def _synergy_section() -> str:
+        if not synergy_present:
+            return ""
+        return (
+            '\n\n**Synergy cross-job search** (`kb_id: "synergy"`):\n'
+            "Searches the indexed text of every Synergy 12d job document the user "
+            "is permitted to see — across ALL jobs/projects at once (12d has no "
+            "native cross-job search). Two modes:\n"
+            '- Content search (default): `numa files search "<query>" --folder synergy` '
+            '— finds matching documents for questions spanning jobs (e.g. "which '
+            'jobs used supplier X", "the spec that mentions Y").\n'
+            "- Find similar jobs: add `--similar-jobs` — each result is a whole job "
+            'ranked by overall similarity, for "find jobs like this one / like this '
+            'description". Use this when the user wants comparable past jobs, not a '
+            "specific document.\n"
+            "Per-document permissions are enforced automatically. To browse a single "
+            "known job's files, use the Synergy connector instead."
+        )
+
+    if not folder_kbs:
         base = (
             "**Numa Files:** No folders are currently enabled. "
             "The user can enable them in the chat settings. "
             "Do not attempt to use the numa_files tool until a folder is enabled."
         )
-        return base + _render_disabled_section()
+        return base + _render_disabled_section() + _synergy_section()
 
     lines = ["**Available Numa Files folders:**"]
 
-    for kb in available_kbs[:10]:  # Limit to 10 folders
+    for kb in folder_kbs[:10]:  # Limit to 10 folders
         kb_id = kb.get("id", "unknown")
         kb_name = kb.get("name", kb_id)
 
@@ -2103,12 +2128,16 @@ def build_kb_context(
     lines.append("\nPass `kb_id` to search a specific folder.")
 
     # Mention all_kbs when multiple folders are available
-    if len(available_kbs) > 1:
+    if len(folder_kbs) > 1:
         lines.append("Set `all_kbs: true` to search every enabled folder at once.")
 
     disabled_section = _render_disabled_section()
     if disabled_section:
         lines.append(disabled_section)
+
+    synergy_section = _synergy_section()
+    if synergy_section:
+        lines.append(synergy_section)
 
     return "\n".join(lines)
 

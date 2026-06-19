@@ -109,7 +109,8 @@ export const clientConfigSchema = z.object({
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
   pipedreamIntegrations: z.boolean().optional(), // default: false
   dataConnectorsEnabled: z.boolean().optional(), // default: false
-  synergyFileParity: z.boolean().optional(), // default: false — Synergy 12d file-interface parity (sub-flag of data connectors)
+  synergyFileParity: z.boolean().optional(), // default: false — Synergy 12d remote files browser (sub-flag of data connectors)
+  synergyKbCrawl: z.boolean().optional(), // default: false — Synergy 12d connector + KB crawl/index (sub-flag of data connectors)
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
   brandingAssetsBucketArn: z.string().optional(),
@@ -240,6 +241,17 @@ export const clientConfigSchema = z.object({
           telephonyPerMin: z.number().min(0).optional(),
           transcribePerMin: z.number().min(0).optional(),
           contactLensPerMin: z.number().min(0).optional(),
+        })
+        .optional(),
+      // Synergy KB crawl ingestion rates. The crawl's embedding cost (+ a small
+      // overhead uplift for S3/SQS/Lambda) metered into the same ledger via
+      // numa-synergy-credit-debit. embedUsdPerMtoken is the dominant lever.
+      synergyRates: z
+        .object({
+          embedUsdPerMtoken: z.number().min(0).optional(),
+          charsPerToken: z.number().min(0).optional(),
+          avgTokensPerDoc: z.number().min(0).optional(),
+          overheadMult: z.number().min(0).optional(),
         })
         .optional(),
     })

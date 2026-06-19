@@ -53,7 +53,8 @@ from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 import httpx
 import structlog
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
+from botocore.exceptions import ClientError
 
 from prm import client as prm_client
 from prm import resource as prm_resource
@@ -66,6 +67,19 @@ STATE_TABLE_NAME = os.getenv("STATE_TABLE_NAME", "")
 DATA_BUCKET_NAME = os.getenv("DATA_BUCKET_NAME", "")
 JOB_PAGE_SIZE = int(os.getenv("JOB_PAGE_SIZE", "100"))
 DEFAULT_FREQUENCY_HOURS = int(os.getenv("DEFAULT_FREQUENCY_HOURS", "24"))
+# The single extraction queue. Every trigger enqueues per-job messages here; the
+# worker is the sole consumer. Empty in unit tests / when the crawler is off.
+SYNERGY_EXTRACT_QUEUE_URL = os.getenv("SYNERGY_EXTRACT_QUEUE_URL", "")
+# Per-run ingestion credit debit (also fired here when reconciling a stalled run
+# so its partial work still gets metered exactly once).
+SYNERGY_CREDIT_DEBIT_FUNCTION_NAME = os.getenv("SYNERGY_CREDIT_DEBIT_FUNCTION_NAME", "")
+# A previous run still "running" past this many hours is treated as stalled (a
+# crashed worker / DLQ'd job / interrupted enumeration) and force-closed so its
+# RUN# row doesn't hang forever and its debit still fires.
+STALE_RUN_HOURS = float(os.getenv("STALE_RUN_HOURS", "6"))
+# Mirrors the worker's S3_PREFIX — used to delete a purged job's rollup record
+# deterministically (job_ids are "N_N", already filename-safe).
+SYNERGY_S3_PREFIX = os.getenv("S3_PREFIX", "documents/synergy")
 
 
 def _now() -> str:
@@ -289,6 +303,25 @@ def _purge_job_corpus(table, job_id: str) -> int:
         if not last_key:
             break
         query_kwargs["ExclusiveStartKey"] = last_key
+    # Also remove the job's cross-job similarity rollup, so a purged job leaves no
+    # orphan whose stale allowed_users would still match a "find similar jobs"
+    # search. Delete BOTH the stored key (if the worker recorded one) AND the
+    # deterministic key — the latter catches a rollup whose state write didn't
+    # land (partial failure), which the stored key would miss.
+    job_row = (table.get_item(Key={"pk": f"JOB#{job_id}", "sk": "META"})).get(
+        "Item"
+    ) or {}
+    rollup_keys = {f"{SYNERGY_S3_PREFIX}/_rollups/{job_id}.txt"}
+    stored = str(job_row.get("rollup_key") or "")
+    if stored:
+        rollup_keys.add(stored)
+    if DATA_BUCKET_NAME:
+        for base in rollup_keys:
+            for obj_key in (base, f"{base}.metadata.json"):
+                try:
+                    s3.delete_object(Bucket=DATA_BUCKET_NAME, Key=obj_key)
+                except Exception:  # noqa: BLE001 — best-effort cleanup
+                    pass
     table.delete_item(Key={"pk": f"JOB#{job_id}", "sk": "META"})
     return deleted
 
@@ -439,6 +472,195 @@ def _skip(reason: str) -> Dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
+# Enqueue
+# --------------------------------------------------------------------------- #
+def _seed_run_counter(table, run_id: str, job_count: int) -> None:
+    """Seed the RUN# completion counter BEFORE enqueuing any message.
+
+    The worker decrements ``remaining`` as each job finishes; the one that drives
+    it to zero closes the run + fires the credit debit. Seeding must precede the
+    first enqueue so a fast worker can never decrement an unset counter. Also
+    zeroes the per-run consumption aggregates the debit reads.
+    """
+    try:
+        table.update_item(
+            Key={"pk": f"RUN#{run_id}", "sk": "META"},
+            UpdateExpression="SET remaining = :c, doc_count = :z, chars_extracted = :z",
+            # Idempotent: an async-Lambda retry of the coordinator must not
+            # re-seed remaining and clobber decrements a worker already made.
+            ConditionExpression="attribute_not_exists(remaining)",
+            ExpressionAttributeValues={":c": job_count, ":z": 0},
+        )
+    except ClientError as exc:
+        if (
+            exc.response.get("Error", {}).get("Code")
+            == "ConditionalCheckFailedException"
+        ):
+            logger.info(
+                "synergy_run_counter_already_seeded",
+                _name="SYNERGY_CRAWL_COORD",
+                run_id=run_id,
+            )
+            return
+        raise
+
+
+def _enqueue_run(table, run_id: str, instance_url: str, run_user_sub: str) -> int:
+    """Send one SQS message per pending job of this run.
+
+    Reads the seeded JOB# rows (run-status-index: run_id + status=pending) — the
+    same per-job payload the former Step Function drain consumed. Dedup id is
+    run-scoped (``run_id:job_id``) so a job enqueued by a different run/on-visit
+    is never collapsed into this run (which would strand the counter). Returns
+    the number enqueued.
+    """
+    if not SYNERGY_EXTRACT_QUEUE_URL:
+        logger.warning(
+            "synergy_enqueue_skip_no_queue", _name="SYNERGY_CRAWL_COORD", run_id=run_id
+        )
+        return 0
+    sqs = prm_client("sqs", region=REGION)
+    sent = 0
+    last_key = None
+    while True:
+        kwargs: Dict[str, Any] = {
+            "IndexName": "run-status-index",
+            "KeyConditionExpression": Key("run_id").eq(run_id)
+            & Key("status").eq("pending"),
+        }
+        if last_key:
+            kwargs["ExclusiveStartKey"] = last_key
+        resp = table.query(**kwargs)
+        for item in resp.get("Items", []):
+            job_id = item.get("job_id") or ""
+            if not job_id:
+                continue
+            body = {
+                "job_id": job_id,
+                "job_name": item.get("job_name") or "",
+                "job_path": item.get("job_path") or "",
+                "run_id": run_id,
+                "user_sub": run_user_sub,
+                "secret_id": item.get("crawl_secret_id") or "",
+                "instance_url": instance_url,
+                "cursor": None,
+            }
+            sqs.send_message(
+                QueueUrl=SYNERGY_EXTRACT_QUEUE_URL,
+                MessageBody=json.dumps(body),
+                MessageGroupId=job_id,
+                # leg:0 keeps the dedup scheme consistent with the worker's
+                # partial re-enqueues (leg:1, leg:2, …) for this run+job.
+                MessageDeduplicationId=f"{run_id}:{job_id}:leg:0",
+            )
+            sent += 1
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+    logger.info(
+        "synergy_run_enqueued",
+        _name="SYNERGY_CRAWL_COORD",
+        run_id=run_id,
+        enqueued=sent,
+    )
+    return sent
+
+
+def _fire_credit_debit(run_id: str, doc_count: int, chars_extracted: int) -> None:
+    """Fire-and-forget the per-run ingestion debit (deterministic id, so a
+    re-fire overwrites rather than double-charges). Best-effort."""
+    if not SYNERGY_CREDIT_DEBIT_FUNCTION_NAME:
+        return
+    try:
+        prm_client("lambda", region=REGION).invoke(
+            FunctionName=SYNERGY_CREDIT_DEBIT_FUNCTION_NAME,
+            InvocationType="Event",
+            Payload=json.dumps(
+                {
+                    "run_id": run_id,
+                    "doc_count": doc_count,
+                    "chars_extracted": chars_extracted,
+                    "title": f"Synergy crawl {run_id}",
+                }
+            ).encode("utf-8"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "synergy_credit_debit_invoke_failed",
+            _name="SYNERGY_CRAWL_COORD",
+            run_id=run_id,
+            error=str(exc),
+        )
+
+
+def _close_run(table, run_id: str, status: str) -> bool:
+    """Conditionally close a run (won't reopen a done run). Returns True if THIS
+    call performed the close (so the caller fires the debit exactly once)."""
+    try:
+        table.update_item(
+            Key={"pk": f"RUN#{run_id}", "sk": "META"},
+            UpdateExpression="SET #s = :st, completed_at = :t",
+            ConditionExpression="#s <> :done AND #s <> :rec",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":st": status,
+                ":done": "done",
+                ":rec": "reconciled",
+                ":t": _now(),
+            },
+        )
+        return True
+    except ClientError as exc:
+        if (
+            exc.response.get("Error", {}).get("Code")
+            == "ConditionalCheckFailedException"
+        ):
+            return False
+        raise
+
+
+def _reconcile_previous_run(table) -> None:
+    """Force-close the previous run if it stalled (crashed worker / DLQ'd job /
+    a never-decremented job from a concurrent re-seed), so its RUN# row doesn't
+    hang 'running' forever and its partial work still gets metered exactly once.
+
+    Reconciles only the immediately-previous run (O(1), via CONFIG.last_run_id),
+    which is enough: each run heals the one before it. Guarded by staleness so a
+    legitimately in-progress run (manual + scheduled overlapping) is never
+    force-closed mid-flight.
+    """
+    cfg = _get_crawl_config(table)
+    prev = str(cfg.get("last_run_id") or "")
+    if not prev:
+        return
+    row = (table.get_item(Key={"pk": f"RUN#{prev}", "sk": "META"})).get("Item") or {}
+    if not row or str(row.get("status") or "") in ("done", "reconciled", "skipped"):
+        return
+    started = str(row.get("started_at") or "")
+    if started:
+        try:
+            age_h = (
+                datetime.now(timezone.utc) - datetime.fromisoformat(started)
+            ).total_seconds() / 3600
+            if age_h < STALE_RUN_HOURS:
+                return  # still plausibly in-flight — leave it alone
+        except ValueError:
+            pass
+    if _close_run(table, prev, "reconciled"):
+        logger.warning(
+            "synergy_run_reconciled_stale",
+            _name="SYNERGY_CRAWL_COORD",
+            run_id=prev,
+            remaining=int(row.get("remaining") or 0),
+        )
+        _fire_credit_debit(
+            prev,
+            int(row.get("doc_count") or 0),
+            int(row.get("chars_extracted") or 0),
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Modes
 # --------------------------------------------------------------------------- #
 def _run_manual(table, event: Dict[str, Any]) -> Dict[str, Any]:
@@ -472,18 +694,32 @@ def _run_manual(table, event: Dict[str, Any]) -> Dict[str, Any]:
         UpdateExpression="SET job_count = :c, enumerated_at = :t",
         ExpressionAttributeValues={":c": job_count, ":t": _now()},
     )
+    # Seed the completion counter BEFORE enqueuing (so a fast worker never
+    # decrements an unset counter), then fan the jobs onto the queue. Dedup ids
+    # are run-scoped, so every pending job lands exactly one message for this run
+    # — enqueued == job_count and the counter reaches zero cleanly. Re-seeding
+    # after enqueue would race a worker that already decremented, so we don't.
+    # A zero-job run has nothing to drain → close it inline (no worker ever would).
+    if job_count == 0:
+        _close_run(table, run_id, "done")
+        enqueued = 0
+    else:
+        _seed_run_counter(table, run_id, job_count)
+        enqueued = _enqueue_run(table, run_id, instance_url, user_sub)
     logger.info(
         "synergy_coordinator_done",
         _name="SYNERGY_CRAWL_COORD",
         mode="manual",
         run_id=run_id,
         job_count=job_count,
+        enqueued=enqueued,
     )
     return {
         "enabled": True,
         "reason": "manual",
         "run_id": run_id,
         "job_count": job_count,
+        "enqueued": enqueued,
         "user_sub": user_sub,
         "secret_id": secret_id,
         "instance_url": instance_url,
@@ -624,12 +860,19 @@ def _run_scheduled(table) -> Dict[str, Any]:
         UpdateExpression="SET job_count = :c, purged_jobs = :pj, enumerated_at = :t",
         ExpressionAttributeValues={":c": job_count, ":pj": purged, ":t": _now()},
     )
+    if job_count == 0:
+        _close_run(table, run_id, "done")
+        enqueued = 0
+    else:
+        _seed_run_counter(table, run_id, job_count)
+        enqueued = _enqueue_run(table, run_id, instance_url, credential_user)
     logger.info(
         "synergy_coordinator_done",
         _name="SYNERGY_CRAWL_COORD",
         mode="scheduled",
         run_id=run_id,
         job_count=job_count,
+        enqueued=enqueued,
         purged_jobs=purged,
         users_verified=len(verified),
     )
@@ -638,6 +881,7 @@ def _run_scheduled(table) -> Dict[str, Any]:
         "reason": "scheduled",
         "run_id": run_id,
         "job_count": job_count,
+        "enqueued": enqueued,
         "user_sub": credential_user,
         "secret_id": _vault_path(credential_user) if credential_user else "",
         "instance_url": instance_url,
@@ -649,6 +893,16 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
         raise ValueError("STATE_TABLE_NAME / CLIENT_NAME not configured")
 
     table = _state_table()
+
+    # Heal a stalled previous run before this one overwrites CONFIG.last_run_id.
+    # Best-effort — never block a new crawl on reconciliation.
+    try:
+        _reconcile_previous_run(table)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "synergy_reconcile_failed", _name="SYNERGY_CRAWL_COORD", error=str(exc)
+        )
+
     trigger = event.get("trigger") or (
         "manual" if event.get("secret_id") else "scheduled"
     )

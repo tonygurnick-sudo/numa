@@ -2100,7 +2100,16 @@ export function UserFilesTab({ onActionChange }: UserFilesTabProps): React.JSX.E
     // aren't part of the User Files index and would silently miss matches. The
     // trailing "+" row routes to the Integrations page rather than creating a folder.
     if (dataConnectorsEnabled && !anyFilterActive) {
-      const fileStoreIntegrations = integrations.filter((i) => i.isFileStore);
+      // The Synergy remote files browser is gated on its own hidden-by-default
+      // flag. When off, drop the Synergy row entirely — with no row it can't
+      // inline-expand or drill-in, so the whole Synergy browser surface
+      // (embedded browser, inline rows, context menu, details + version modals)
+      // is gated by this single choke-point.
+      const synergyBrowserEnabled =
+        sessionStorage.getItem('DEPLOY_SYNERGY_FILE_PARITY') === 'true' && getFlag('SYNERGY_FILE_PARITY');
+      const fileStoreIntegrations = integrations.filter(
+        (i) => i.isFileStore && (i.id !== 'synergy' || synergyBrowserEnabled)
+      );
       const remoteStart = rows.length;
       for (const integration of fileStoreIntegrations) pushIntegrationRow(integration);
       if (rows.length > remoteStart) {

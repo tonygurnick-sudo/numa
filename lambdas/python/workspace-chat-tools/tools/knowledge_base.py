@@ -162,6 +162,11 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     # the Synergy cross-job KB (fail-closed if absent).
     user_sub = params.get("__user_sub", "")
 
+    # Synergy only: which corpus to search. "" / "document" = the per-document
+    # content corpus (default); "job_rollup" = the per-job similarity records
+    # ("find similar jobs"). Ignored for non-Synergy KBs.
+    doc_type = (params.get("doc_type") or "").strip()
+
     # Validate bucket is configured (required for oversized query results)
     if not DATA_BUCKET_NAME:
         raise ValueError("DATA_BUCKET_NAME not configured")
@@ -195,7 +200,12 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # Query single KB
     kb_result = _query_single_kb(
-        query, max_results, kb_id, id_token=id_token, user_sub=user_sub
+        query,
+        max_results,
+        kb_id,
+        id_token=id_token,
+        user_sub=user_sub,
+        doc_type=doc_type,
     )
 
     # Combine content
@@ -229,7 +239,12 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _query_single_kb(
-    query: str, max_results: int, kb_id: str, id_token: str = "", user_sub: str = ""
+    query: str,
+    max_results: int,
+    kb_id: str,
+    id_token: str = "",
+    user_sub: str = "",
+    doc_type: str = "",
 ) -> Dict[str, Any]:
     """Query a single knowledge base.
 
@@ -250,7 +265,9 @@ def _query_single_kb(
         return _query_qbusiness(query, max_results, id_token=id_token)
 
     if BEDROCK_KNOWLEDGE_BASE_ID:
-        return _query_bedrock(query, max_results, kb_id, user_sub=user_sub)
+        return _query_bedrock(
+            query, max_results, kb_id, user_sub=user_sub, doc_type=doc_type
+        )
     raise ValueError("Bedrock knowledge base is not configured")
 
 
@@ -500,7 +517,7 @@ def _query_qbusiness(
 
 
 def _query_bedrock(
-    query: str, max_results: int, kb_id: str, user_sub: str = ""
+    query: str, max_results: int, kb_id: str, user_sub: str = "", doc_type: str = ""
 ) -> Dict[str, Any]:
     """Query Bedrock knowledge base with metadata filtering."""
     start_time = time.time()
@@ -539,6 +556,12 @@ def _query_bedrock(
         if kb_id == "synergy":
             and_clauses.append(
                 {"listContains": {"key": "allowed_users", "value": user_sub}}
+            )
+            # Split the per-document content corpus from the per-job rollup
+            # records. Default search → documents; "find similar jobs" passes
+            # doc_type="job_rollup" to search rollups (one hit == one job).
+            and_clauses.append(
+                {"equals": {"key": "doc_type", "value": doc_type or "document"}}
             )
         retrieval_config["vectorSearchConfiguration"]["filter"] = {
             "andAll": and_clauses

@@ -64,6 +64,32 @@ class TestExtractText(unittest.TestCase):
         with self.assertRaises(SkipType):
             extract_text(b"\x00\x01", "dwg")
 
+    def test_eml_headers_and_body(self):
+        # Emails are text-like but never .txt — must be indexed (stdlib path).
+        eml = (
+            b"Subject: Pipe order\r\nFrom: a@x.com\r\nTo: b@y.com\r\n"
+            b"Content-Type: text/plain\r\n\r\nPlease supply 50m of DN100."
+        )
+        out = extract_text(eml, "eml")
+        self.assertIn("Pipe order", out)
+        self.assertIn("DN100", out)
+
+    def test_eml_in_allowlist(self):
+        self.assertIn("eml", TEXT_EXTS)
+        self.assertIn("msg", TEXT_EXTS)
+
+
+class TestPerTypeSizeCap(unittest.TestCase):
+    """Junk (CAD-heavy PDFs) is excluded from the LISTING by a tight per-type
+    cap — never downloaded — so 8TB of graphics is never pulled."""
+
+    def test_pdf_cap_tighter_than_default(self):
+        import lambda_function as lf
+
+        self.assertLess(lf._max_bytes_for("pdf"), lf._max_bytes_for("docx"))
+        self.assertEqual(lf._max_bytes_for("docx"), lf.DEFAULT_MAX_BYTES)
+        self.assertEqual(lf._max_bytes_for("pdf"), lf.PDF_MAX_BYTES)
+
 
 if __name__ == "__main__":
     unittest.main()
