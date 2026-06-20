@@ -28,6 +28,9 @@
       "scopeAllLatest": "Latest run (all users)",
       "total": "{{credits}} credits",
       "creditsLabel": "Credits",
+      "latest": "Latest",
+      "sourceScheduled": "Scheduled",
+      "sourceOnDemand": "On-demand",
       "topUsers": "Top users"
     },
     "labels": {

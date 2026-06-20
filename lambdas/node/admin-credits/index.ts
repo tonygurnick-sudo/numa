@@ -417,8 +417,17 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       // individual runs and the header reflects the MOST RECENT run's tier — so `runs` (newest-first,
       // capped) + `latestTier` are the primary signal. `monthly`/`dominantTier`/`totalCredits` are kept
       // for the payload contract but the agent card no longer renders them. Credits + tier ONLY.
-      const RUNS_CAP = 5;
-      type AgentStatRun = { conversationId: string; ts: string | null; credits: number; tier: string };
+      const RUNS_PER_SOURCE = 5;
+      // `source` lets the card draw separate scheduled vs on-demand lines. Bucket = 'scheduled' for a
+      // scheduled run, else 'ondemand' (covers interactive 'agent' + 'chat' runs).
+      type RunSource = 'scheduled' | 'ondemand';
+      type AgentStatRun = {
+        conversationId: string;
+        ts: string | null;
+        credits: number;
+        tier: string;
+        source: RunSource;
+      };
       type AgentStatAggregate = {
         monthly: { month: string; credits: number; runCount: number }[];
         dominantTier: string;
@@ -431,14 +440,28 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         typeof r.dominantTier === 'string' && (TIERS as readonly string[]).includes(r.dominantTier)
           ? r.dominantTier
           : 'unclassified';
-      // The newest `RUNS_CAP` runs of `full`, which is already newest-first (GSI3 ScanIndexForward:false).
-      const latestRuns = (full: LedgerRow[]): AgentStatRun[] =>
-        full.slice(0, RUNS_CAP).map((r) => ({
-          conversationId: String(r.PK ?? '').replace(/^CONV#/, ''),
-          ts: (r.lastTs as string) ?? (r.firstTs as string) ?? null,
-          credits: Number(r.creditsCharged ?? 0),
-          tier: tierOf(r),
-        }));
+      const sourceOf = (r: LedgerRow): RunSource => (String(r.source ?? '') === 'scheduled' ? 'scheduled' : 'ondemand');
+      // The newest runs of `full` (already newest-first), keeping up to RUNS_PER_SOURCE per source bucket
+      // so each line on the card can show its own last 5. Flat + newest-first; runs[0] is the newest
+      // overall (always kept), so it still drives `latestTier`.
+      const latestRuns = (full: LedgerRow[]): AgentStatRun[] => {
+        const counts: Record<RunSource, number> = { scheduled: 0, ondemand: 0 };
+        const out: AgentStatRun[] = [];
+        for (const r of full) {
+          const source = sourceOf(r);
+          if (counts[source] >= RUNS_PER_SOURCE) continue;
+          counts[source] += 1;
+          out.push({
+            conversationId: String(r.PK ?? '').replace(/^CONV#/, ''),
+            ts: (r.lastTs as string) ?? (r.firstTs as string) ?? null,
+            credits: Number(r.creditsCharged ?? 0),
+            tier: tierOf(r),
+            source,
+          });
+          if (counts.scheduled >= RUNS_PER_SOURCE && counts.ondemand >= RUNS_PER_SOURCE) break;
+        }
+        return out;
+      };
       // `windowed` drives the monthly/total figures (respects the N-month window); `full` (un-windowed,
       // newest-first) drives `runs` so "last 5 runs" never drops a run that crossed a month boundary.
       const aggregate = (windowed: LedgerRow[], full: LedgerRow[]): AgentStatAggregate => {

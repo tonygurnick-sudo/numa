@@ -90,8 +90,16 @@ export type ConversationValue = {
 // ── Per-agent credit analytics (FEAT-246) ───────────────────────────────────────────────────────
 // Per-month credits + run count (kept in the payload; the agent card now renders `runs` instead).
 export type AgentStatMonth = { month: string; credits: number; runCount: number };
-// One individual run: its credits + own value tier + when it ran. Newest-first in `runs`.
-export type AgentStatRun = { conversationId: string; ts: string | null; credits: number; tier: string };
+// One individual run: its credits + own value tier + when it ran + how it was triggered. Newest-first
+// in `runs` (up to 5 per source, so the card can draw separate scheduled vs on-demand lines).
+export type RunSource = 'scheduled' | 'ondemand';
+export type AgentStatRun = {
+  conversationId: string;
+  ts: string | null;
+  credits: number;
+  tier: string;
+  source: RunSource;
+};
 // An aggregate over a set of runs. The card is run-first: `runs` (last 5, newest-first) drives the
 // chart and `latestTier` (most recent run's tier) drives the header badge. monthly/dominantTier/
 // totalCredits remain for the payload contract but are no longer rendered on the card.

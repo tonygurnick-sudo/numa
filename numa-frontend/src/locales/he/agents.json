@@ -28,6 +28,9 @@
       "scopeAllLatest": "ריצה אחרונה (כל המשתמשים)",
       "total": "{{credits}} קרדיטים",
       "creditsLabel": "קרדיטים",
+      "latest": "אחרונה",
+      "sourceScheduled": "מתוזמן",
+      "sourceOnDemand": "לפי דרישה",
       "topUsers": "משתמשים מובילים"
     },
     "labels": {

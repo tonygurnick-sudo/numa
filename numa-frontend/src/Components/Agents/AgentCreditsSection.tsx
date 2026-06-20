@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { type ComponentProps, useEffect, useMemo, useState } from 'react';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ChevronDown, ChevronUp, Coins } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNumaRequest } from '../../Providers/NumaRequestContext';
-import { AdminCreditsService, type AgentStats } from '../../Services/AdminCreditsService';
+import {
+  AdminCreditsService,
+  type AgentStats,
+  type AgentStatRun,
+  type RunSource,
+} from '../../Services/AdminCreditsService';
 import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
 import { TierBadge } from '../Settings/CreditsDashboard/TierBadge';
 import { brandColor, fmtCredits, tierLabel } from '../Settings/CreditsDashboard/helpers';
@@ -15,8 +20,11 @@ type Props = {
   visibility: 'personal' | 'public';
 };
 
-/** ISO timestamp -> "Jun 20, 14:32" style label for a single run on the chart axis. */
-const runLabel = (ts: string | null): string => {
+/** Scheduled line uses the brand colour; on-demand a muted teal so the two read apart at a glance. */
+const ONDEMAND_COLOR = '#0d9488';
+
+/** ISO timestamp -> "Jun 20, 14:32" — shown on hover so the sequence axis stays uncluttered. */
+const runTime = (ts: string | null): string => {
   if (!ts) return '—';
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return '—';
@@ -24,10 +32,10 @@ const runLabel = (ts: string | null): string => {
 };
 
 /** Per-agent credit analytics (FEAT-246) — a collapsible "Credits" section inside the agent card.
- *  Lazy-loads the data only when expanded (keeps the card list cheap). Run-first: the chart shows the
- *  caller's OWN last 5 runs (credits per run) and the header reflects the MOST RECENT run's value tier.
- *  For a billing admin viewing a COMPANY (public) agent it shows the all-users runs + a top-users list.
- *  Credits + tier only — no cost data. */
+ *  Lazy-loads the data only when expanded (keeps the card list cheap). Run-first: a two-line chart plots
+ *  the caller's OWN last 5 runs per source (scheduled vs on-demand) on a shared credits axis, and the
+ *  header reflects the MOST RECENT run's value tier. For a billing admin viewing a COMPANY (public)
+ *  agent it shows the all-users runs + a top-users list. Credits + tier only — no cost data. */
 export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
   const { t } = useTranslation('agents');
   const { t: tSettings } = useTranslation('settings');
@@ -77,18 +85,98 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
   // For a public agent seen by a billing admin, prefer the all-users aggregate; otherwise the caller's own.
   const showAll = visibility === 'public' && stats?.scope === 'all' && !!stats.all;
   const agg = showAll ? stats?.all : stats?.own;
-  // Run-first: chart shows the last few individual runs (oldest -> newest, left -> right). `runs` comes
-  // back newest-first, so reverse it for the chart while keeping runs[0] as the most recent run.
   const runs = useMemo(() => agg?.runs ?? [], [agg]);
-  const chartData = useMemo(
-    () => runs.map((r) => ({ label: runLabel(r.ts), credits: r.credits, tier: r.tier })).reverse(),
-    [runs]
-  );
-  const latestRun = runs[0];
+  const latestRun = runs[0]; // newest overall (runs is newest-first)
   const latestTier = agg?.latestTier ?? 'unclassified';
   const hasData = runs.length > 0;
 
+  // Two lines — scheduled vs on-demand — each plotting that source's last 5 runs on a shared credits
+  // axis. Runs are sequence-aligned and right-anchored: the rightmost slot is each source's most recent
+  // run ("Latest"), so the lines are comparable run-for-run even though their absolute times differ
+  // (the real time rides in the hover tooltip). Lines with no runs are simply absent.
+  const { chartData, sourcesPresent } = useMemo(() => {
+    const bySource = (s: RunSource): AgentStatRun[] =>
+      runs
+        .filter((r) => r.source === s)
+        .slice(0, 5)
+        .reverse(); // oldest -> newest
+    const scheduled = bySource('scheduled');
+    const ondemand = bySource('ondemand');
+    const span = Math.max(scheduled.length, ondemand.length);
+    type Slot = {
+      label: string;
+      scheduled: number | null;
+      ondemand: number | null;
+      scheduledRun?: AgentStatRun;
+      ondemandRun?: AgentStatRun;
+    };
+    const data: Slot[] = [];
+    for (let i = 0; i < span; i++) {
+      const fromRight = span - 1 - i; // 0 == rightmost == most recent
+      // Right-anchor each line: its last run lands in the rightmost slot.
+      const s = scheduled[scheduled.length - 1 - fromRight];
+      const o = ondemand[ondemand.length - 1 - fromRight];
+      data.push({
+        label: fromRight === 0 ? t('card.credits.latest', { defaultValue: 'Latest' }) : `−${fromRight}`,
+        scheduled: s ? s.credits : null,
+        ondemand: o ? o.credits : null,
+        scheduledRun: s,
+        ondemandRun: o,
+      });
+    }
+    return {
+      chartData: data,
+      sourcesPresent: { scheduled: scheduled.length > 0, ondemand: ondemand.length > 0 },
+    };
+  }, [runs, t]);
+
   const userLabel = (sub: string): string => userMap[sub] ?? `${sub.slice(0, 8)}…`;
+
+  // Custom tooltip: per hovered run-slot, show each present source's real time + credits + tier.
+  // recharts 3 types the content render-prop awkwardly; we only need active + payload[].payload.
+  const renderTooltip = ({
+    active,
+    payload,
+  }: {
+    active?: boolean;
+    payload?: { payload?: { scheduledRun?: AgentStatRun; ondemandRun?: AgentStatRun } }[];
+  }) => {
+    if (!active || !payload?.length) return null;
+    const slot = payload[0]?.payload;
+    if (!slot) return null;
+    const lines: { color: string; label: string; run: AgentStatRun }[] = [];
+    if (slot.scheduledRun)
+      lines.push({
+        color: brand,
+        label: t('card.credits.sourceScheduled', { defaultValue: 'Scheduled' }),
+        run: slot.scheduledRun,
+      });
+    if (slot.ondemandRun)
+      lines.push({
+        color: ONDEMAND_COLOR,
+        label: t('card.credits.sourceOnDemand', { defaultValue: 'On-demand' }),
+        run: slot.ondemandRun,
+      });
+    if (!lines.length) return null;
+    return (
+      <div
+        style={{ background: '#fff', borderRadius: 10, border: '1px solid #e4e4e7', fontSize: 12, padding: '8px 10px' }}
+      >
+        {lines.map(({ color, label, run }) => (
+          <div key={label} className="d-flex flex-column mb-1">
+            <span className="fw-semibold" style={{ color }}>
+              {label}
+            </span>
+            <span className="text-muted">{runTime(run.ts)}</span>
+            <span>
+              {t('card.credits.total', { defaultValue: '{{credits}} credits', credits: fmtCredits(run.credits) })} ·{' '}
+              {tierName(run.tier)}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="border-top pt-3 mb-3" onClick={(e) => e.stopPropagation()}>
@@ -142,9 +230,10 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
                 </div>
               ) : (
                 <>
-                  {/* Credits per run — up to the last 5 runs, oldest -> newest left -> right. */}
-                  <ResponsiveContainer width="100%" height={150}>
-                    <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                  {/* Credits per run — scheduled vs on-demand, each its own line of last-5 runs.
+                      Sequence axis (right = most recent); real run time + tier ride in the tooltip. */}
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={chartData} margin={{ top: 4, right: 10, bottom: 0, left: -20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f3" />
                       <XAxis
                         dataKey="label"
@@ -161,15 +250,36 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
                         width={32}
                       />
                       <Tooltip
-                        cursor={{ fill: 'rgba(0,0,0,0.03)' }}
-                        contentStyle={{ borderRadius: 10, border: '1px solid #e4e4e7', fontSize: 12 }}
-                        formatter={(v: number, _n, item) => [
-                          `${fmtCredits(v)} · ${tierName((item?.payload as { tier?: string })?.tier)}`,
-                          t('card.credits.creditsLabel', { defaultValue: 'Credits' }),
-                        ]}
+                        cursor={{ stroke: '#e4e4e7' }}
+                        content={renderTooltip as unknown as ComponentProps<typeof Tooltip>['content']}
+                        wrapperStyle={{ outline: 'none' }}
                       />
-                      <Bar dataKey="credits" fill={brand} radius={[4, 4, 0, 0]} maxBarSize={36} />
-                    </BarChart>
+                      <Legend iconType="plainline" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                      {sourcesPresent.scheduled && (
+                        <Line
+                          type="monotone"
+                          dataKey="scheduled"
+                          name={t('card.credits.sourceScheduled', { defaultValue: 'Scheduled' })}
+                          stroke={brand}
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: brand }}
+                          activeDot={{ r: 5 }}
+                          connectNulls
+                        />
+                      )}
+                      {sourcesPresent.ondemand && (
+                        <Line
+                          type="monotone"
+                          dataKey="ondemand"
+                          name={t('card.credits.sourceOnDemand', { defaultValue: 'On-demand' })}
+                          stroke={ONDEMAND_COLOR}
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: ONDEMAND_COLOR }}
+                          activeDot={{ r: 5 }}
+                          connectNulls
+                        />
+                      )}
+                    </LineChart>
                   </ResponsiveContainer>
 
                   {/* Top users (billing-admin + public agent only) */}
