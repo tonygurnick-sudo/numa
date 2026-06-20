@@ -38,7 +38,9 @@ prompt section (``prompts.py``) and the Write/Edit validation hook
 
 from __future__ import annotations
 
+import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, TypedDict
 
@@ -71,6 +73,8 @@ class WorkflowHeader(TypedDict, total=False):
     updated: str
     required_integrations: list[str]
     path: str  # filename, set by list_saved_workflows
+    last_run: str  # ISO ts of the most recent execution, from the sidecar index (code-stamped)
+    run_count: int  # total executions recorded in the sidecar index
 
 
 def parse_workflow_header(text: str) -> Optional[WorkflowHeader]:
@@ -160,11 +164,72 @@ def validate_workflow_content(text: str) -> tuple[bool, Optional[str]]:
     return True, None
 
 
+# ── Last-run index (sidecar) ──────────────────────────────────────────────────
+# A per-directory ``.last-run.json`` mapping ``<workflow-path> -> {last_run, run_count}``,
+# stamped by CODE (the PostToolUse workflow-run hook) whenever a workflow executes — never by
+# the agent. The prompt builder orders workflows by ``last_run`` so the ones actually used stay
+# at the top of the agent's context. Kept as a sidecar (not the workflow frontmatter) so a run
+# doesn't rewrite the script, churn S3, or trip the write-guard. The leading ``.`` keeps it out
+# of the workflow listing itself (``_list_workflows`` skips dotfiles).
+LAST_RUN_FILENAME = ".last-run.json"
+
+
+def _last_run_path(base_dir: Path) -> Path:
+    return base_dir / LAST_RUN_FILENAME
+
+
+def _is_within(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+        return True
+    except ValueError:
+        return False
+
+
+def _read_last_run_index(base_dir: Path) -> dict[str, dict]:
+    try:
+        p = _last_run_path(base_dir)
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def record_workflow_run(script_path: str) -> None:
+    """Stamp a workflow's ``last_run`` + ``run_count`` in its dir's sidecar index.
+
+    Best-effort, code-driven — called by the PostToolUse Bash hook when a saved workflow is
+    executed. Only tracks ``*.py`` files inside the known workflow dirs; anything else is
+    ignored. Never raises: run-ordering telemetry must not break a run.
+    """
+    try:
+        p = Path(script_path)
+        base_dir = next(
+            (d for d in (WORKFLOWS_DIR, AGENT_WORKFLOWS_DIR) if _is_within(p, d)), None
+        )
+        if base_dir is None or p.suffix != ".py":
+            return
+        idx = _read_last_run_index(base_dir)
+        name = str(p.relative_to(base_dir))
+        entry = idx.get(name) or {}
+        entry["last_run"] = datetime.now(timezone.utc).isoformat()
+        entry["run_count"] = int(entry.get("run_count", 0)) + 1
+        idx[name] = entry
+        _last_run_path(base_dir).write_text(json.dumps(idx, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _list_workflows(base_dir: Path, max_workflows: int = 20) -> list[WorkflowHeader]:
     """Read parsed headers of all valid saved workflows under ``base_dir``.
 
-    Best-effort: unreadable/malformed files are skipped (they just don't appear
-    in the prompt). No S3 round-trip — reads the synced local folder.
+    Ordered by **most-recently-run** (from the code-stamped ``.last-run.json`` sidecar), then
+    most-recently-updated — so the workflows the user actually uses stay at the top of the
+    prompt, and the ``max_workflows`` cap drops the *least*-used ones. Best-effort: unreadable/
+    malformed files are skipped. No S3 round-trip — reads the synced local folder.
     """
     if not base_dir.exists():
         return []
@@ -186,9 +251,19 @@ def _list_workflows(base_dir: Path, max_workflows: int = 20) -> list[WorkflowHea
             continue
         header["path"] = str(path.relative_to(base_dir))
         out.append(header)
-        if len(out) >= max_workflows:
-            break
-    return out
+    # Attach last-run metadata + order by recency (run, then update). Sort BEFORE the cap so the
+    # most-recently-used survive; never-run workflows fall back to their `updated` date.
+    idx = _read_last_run_index(base_dir)
+    for h in out:
+        meta = idx.get(h.get("path", "")) or {}
+        if meta.get("last_run"):
+            h["last_run"] = str(meta["last_run"])
+        if meta.get("run_count"):
+            h["run_count"] = int(meta["run_count"])
+    out.sort(
+        key=lambda h: (h.get("last_run") or "", h.get("updated") or ""), reverse=True
+    )
+    return out[:max_workflows]
 
 
 def list_saved_workflows(max_workflows: int = 20) -> list[WorkflowHeader]:

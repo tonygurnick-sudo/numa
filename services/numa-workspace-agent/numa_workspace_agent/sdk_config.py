@@ -25,6 +25,7 @@ from numa_workspace_agent.hooks import (
     param_aliases_hook,
     security_hook,
     workflow_guard_hook,
+    workflow_run_tracker_hook,
     workspace_sync_hook,
 )
 from numa_workspace_agent.prompts import (
@@ -1241,7 +1242,13 @@ def create_agent_options(
                     ),
                 ],
                 "PostToolUse": [
-                    HookMatcher(hooks=[numa_call_limit_notice_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[
+                            numa_call_limit_notice_hook,
+                            workflow_run_tracker_hook,
+                            audit_hook,
+                        ]
+                    ),
                 ],
                 "PreCompact": [
                     HookMatcher(hooks=[compaction_hook]),
@@ -1262,7 +1269,13 @@ def create_agent_options(
                     ),
                 ],
                 "PostToolUse": [
-                    HookMatcher(hooks=[numa_call_limit_notice_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[
+                            numa_call_limit_notice_hook,
+                            workflow_run_tracker_hook,
+                            audit_hook,
+                        ]
+                    ),
                 ],
                 "PreCompact": [
                     HookMatcher(hooks=[compaction_hook]),
