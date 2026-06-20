@@ -88,14 +88,20 @@ export type ConversationValue = {
 };
 
 // ── Per-agent credit analytics (FEAT-246) ───────────────────────────────────────────────────────
-// Per-month credits + run count for the agent card's credits-over-time chart.
+// Per-month credits + run count (kept in the payload; the agent card now renders `runs` instead).
 export type AgentStatMonth = { month: string; credits: number; runCount: number };
-// An aggregate over a set of runs: monthly series + the dominant (highest) value tier + totals.
+// One individual run: its credits + own value tier + when it ran. Newest-first in `runs`.
+export type AgentStatRun = { conversationId: string; ts: string | null; credits: number; tier: string };
+// An aggregate over a set of runs. The card is run-first: `runs` (last 5, newest-first) drives the
+// chart and `latestTier` (most recent run's tier) drives the header badge. monthly/dominantTier/
+// totalCredits remain for the payload contract but are no longer rendered on the card.
 export type AgentStatAggregate = {
   monthly: AgentStatMonth[];
   dominantTier: string;
   totalCredits: number;
   runCount: number;
+  runs: AgentStatRun[];
+  latestTier: string;
 };
 // One row of the per-user breakdown (billing-admin scope only). Credits + run count; no cost/tokens.
 export type AgentStatUser = { userSub: string; credits: number; runCount: number };
@@ -218,6 +224,8 @@ export const AdminCreditsService = {
       dominantTier: 'unclassified',
       totalCredits: 0,
       runCount: 0,
+      runs: [],
+      latestTier: 'unclassified',
     });
     const norm = (j: Partial<AgentStats>): AgentStats => ({
       agentId: j?.agentId ?? agentId,

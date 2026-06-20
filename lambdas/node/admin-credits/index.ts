@@ -413,18 +413,39 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       const windowMonth = cutoff.slice(0, 7);
       const inWindow = rows.filter((r) => String(r.month ?? '') >= windowMonth);
 
-      // Per-month + dominant-tier aggregation over a row set. Credits + run count + tier ONLY.
+      // Aggregation over a row set. The card is RUN-FIRST (FEAT-243): the chart shows the last few
+      // individual runs and the header reflects the MOST RECENT run's tier — so `runs` (newest-first,
+      // capped) + `latestTier` are the primary signal. `monthly`/`dominantTier`/`totalCredits` are kept
+      // for the payload contract but the agent card no longer renders them. Credits + tier ONLY.
+      const RUNS_CAP = 5;
+      type AgentStatRun = { conversationId: string; ts: string | null; credits: number; tier: string };
       type AgentStatAggregate = {
         monthly: { month: string; credits: number; runCount: number }[];
         dominantTier: string;
         totalCredits: number;
         runCount: number;
+        runs: AgentStatRun[];
+        latestTier: string;
       };
-      const aggregate = (set: LedgerRow[]): AgentStatAggregate => {
+      const tierOf = (r: LedgerRow): string =>
+        typeof r.dominantTier === 'string' && (TIERS as readonly string[]).includes(r.dominantTier)
+          ? r.dominantTier
+          : 'unclassified';
+      // The newest `RUNS_CAP` runs of `full`, which is already newest-first (GSI3 ScanIndexForward:false).
+      const latestRuns = (full: LedgerRow[]): AgentStatRun[] =>
+        full.slice(0, RUNS_CAP).map((r) => ({
+          conversationId: String(r.PK ?? '').replace(/^CONV#/, ''),
+          ts: (r.lastTs as string) ?? (r.firstTs as string) ?? null,
+          credits: Number(r.creditsCharged ?? 0),
+          tier: tierOf(r),
+        }));
+      // `windowed` drives the monthly/total figures (respects the N-month window); `full` (un-windowed,
+      // newest-first) drives `runs` so "last 5 runs" never drops a run that crossed a month boundary.
+      const aggregate = (windowed: LedgerRow[], full: LedgerRow[]): AgentStatAggregate => {
         const byMonth = new Map<string, { credits: number; runCount: number }>();
         let dominant = '';
         let totalCredits = 0;
-        for (const r of set) {
+        for (const r of windowed) {
           const m = String(r.month ?? '');
           if (!m) continue;
           const credits = Number(r.creditsCharged ?? 0);
@@ -438,17 +459,22 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
         const monthly = Array.from(byMonth.entries())
           .map(([month, v]) => ({ month, credits: v.credits, runCount: v.runCount }))
           .sort((a, b) => a.month.localeCompare(b.month)); // oldest -> newest for the chart
+        const runs = latestRuns(full);
         return {
           monthly,
           dominantTier: dominant || 'unclassified',
           totalCredits,
-          runCount: set.length,
+          runCount: windowed.length,
+          runs,
+          latestTier: runs[0]?.tier ?? 'unclassified',
         };
       };
 
-      // Caller's OWN usage of the agent (always returned).
-      const ownRows = inWindow.filter((r) => r.userSub === sub);
-      const own = aggregate(ownRows);
+      // Caller's OWN usage of the agent (always returned). `runs` come from full history (newest-first),
+      // monthly/total from the windowed slice.
+      const ownFull = rows.filter((r) => r.userSub === sub);
+      const ownWindow = inWindow.filter((r) => r.userSub === sub);
+      const own = aggregate(ownWindow, ownFull);
 
       const body: Record<string, unknown> = {
         agentId,
@@ -460,7 +486,7 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       if (billingAdmin) {
         // All-users aggregate + a per-user breakdown (credits + run count per sub; tier omitted per
         // user to keep the payload lean — the dominant tier is an agent-level signal).
-        body.all = aggregate(inWindow);
+        body.all = aggregate(inWindow, rows);
         const userMap = new Map<string, { credits: number; runCount: number }>();
         for (const r of inWindow) {
           const us = String(r.userSub ?? '');

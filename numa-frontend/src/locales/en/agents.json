@@ -24,8 +24,8 @@
       "loading": "Loading usage…",
       "error": "Could not load credit usage.",
       "empty": "No credit usage recorded yet.",
-      "scopeOwn": "Your usage",
-      "scopeAll": "All users",
+      "scopeOwnLatest": "Latest run",
+      "scopeAllLatest": "Latest run (all users)",
       "total": "{{credits}} credits",
       "creditsLabel": "Credits",
       "topUsers": "Top users"

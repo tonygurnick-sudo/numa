@@ -6,7 +6,7 @@ import { useNumaRequest } from '../../Providers/NumaRequestContext';
 import { AdminCreditsService, type AgentStats } from '../../Services/AdminCreditsService';
 import { UsersService, type WorkspaceUser } from '../../Services/UsersService';
 import { TierBadge } from '../Settings/CreditsDashboard/TierBadge';
-import { brandColor, fmtCredits } from '../Settings/CreditsDashboard/helpers';
+import { brandColor, fmtCredits, tierLabel } from '../Settings/CreditsDashboard/helpers';
 import i18n from '../../i18n';
 
 type Props = {
@@ -15,20 +15,23 @@ type Props = {
   visibility: 'personal' | 'public';
 };
 
-/** Short YYYY-MM -> "Jun" style month label for the chart axis. */
-const monthLabel = (month: string): string => {
-  // month is "YYYY-MM" — render with day 1 so the locale month name resolves.
-  const d = new Date(`${month}-01T00:00:00`);
-  if (Number.isNaN(d.getTime())) return month;
-  return d.toLocaleDateString(i18n.language, { month: 'short' });
+/** ISO timestamp -> "Jun 20, 14:32" style label for a single run on the chart axis. */
+const runLabel = (ts: string | null): string => {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(i18n.language, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
 /** Per-agent credit analytics (FEAT-246) — a collapsible "Credits" section inside the agent card.
- *  Lazy-loads the data only when expanded (keeps the card list cheap). Shows the caller's OWN usage of
- *  the agent (credits-over-time + value tier); for a billing admin viewing a COMPANY (public) agent it
- *  also renders the all-users aggregate + a small top-users list. Credits + tier only — no cost data. */
+ *  Lazy-loads the data only when expanded (keeps the card list cheap). Run-first: the chart shows the
+ *  caller's OWN last 5 runs (credits per run) and the header reflects the MOST RECENT run's value tier.
+ *  For a billing admin viewing a COMPANY (public) agent it shows the all-users runs + a top-users list.
+ *  Credits + tier only — no cost data. */
 export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
   const { t } = useTranslation('agents');
+  const { t: tSettings } = useTranslation('settings');
+  const tierName = (tier?: string): string => tierLabel(tier ?? 'unclassified', tSettings);
   const { numaGet } = useNumaRequest();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -65,16 +68,25 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
     return () => {
       cancelled = true;
     };
-  }, [open, agentId, numaGet, stats, loading]);
+    // Depend ONLY on open/agentId/numaGet — NOT stats/loading. Including them made the effect re-run
+    // on setLoading(true); React then fired the previous run's cleanup (cancelled=true) on the
+    // in-flight fetch, so neither setStats nor setLoading(false) ran → perpetual "Loading…". The
+    // in-effect guard (stats || loading) already prevents a duplicate fetch.
+  }, [open, agentId, numaGet]);
 
   // For a public agent seen by a billing admin, prefer the all-users aggregate; otherwise the caller's own.
   const showAll = visibility === 'public' && stats?.scope === 'all' && !!stats.all;
   const agg = showAll ? stats?.all : stats?.own;
+  // Run-first: chart shows the last few individual runs (oldest -> newest, left -> right). `runs` comes
+  // back newest-first, so reverse it for the chart while keeping runs[0] as the most recent run.
+  const runs = useMemo(() => agg?.runs ?? [], [agg]);
   const chartData = useMemo(
-    () => (agg?.monthly ?? []).map((m) => ({ label: monthLabel(m.month), credits: m.credits })),
-    [agg]
+    () => runs.map((r) => ({ label: runLabel(r.ts), credits: r.credits, tier: r.tier })).reverse(),
+    [runs]
   );
-  const hasData = (agg?.runCount ?? 0) > 0;
+  const latestRun = runs[0];
+  const latestTier = agg?.latestTier ?? 'unclassified';
+  const hasData = runs.length > 0;
 
   const userLabel = (sub: string): string => userMap[sub] ?? `${sub.slice(0, 8)}…`;
 
@@ -104,21 +116,23 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
           )}
           {!loading && !error && stats && (
             <>
-              {/* Scope + value-tier header */}
+              {/* Scope + latest-run header: the most recent run's credits + its value tier. */}
               <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
                 <span className="text-muted small">
                   {showAll
-                    ? t('card.credits.scopeAll', { defaultValue: 'All users' })
-                    : t('card.credits.scopeOwn', { defaultValue: 'Your usage' })}
+                    ? t('card.credits.scopeAllLatest', { defaultValue: 'Latest run (all users)' })
+                    : t('card.credits.scopeOwnLatest', { defaultValue: 'Latest run' })}
                 </span>
                 <div className="d-flex align-items-center gap-2">
-                  <span className="text-muted small">
-                    {t('card.credits.total', {
-                      defaultValue: '{{credits}} credits',
-                      credits: fmtCredits(agg?.totalCredits ?? 0),
-                    })}
-                  </span>
-                  {hasData && <TierBadge tier={agg?.dominantTier ?? 'unclassified'} />}
+                  {hasData && (
+                    <span className="text-muted small">
+                      {t('card.credits.total', {
+                        defaultValue: '{{credits}} credits',
+                        credits: fmtCredits(latestRun?.credits ?? 0),
+                      })}
+                    </span>
+                  )}
+                  {hasData && <TierBadge tier={latestTier} />}
                 </div>
               </div>
 
@@ -128,13 +142,14 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
                 </div>
               ) : (
                 <>
-                  {/* Credits over time */}
-                  <ResponsiveContainer width="100%" height={140}>
+                  {/* Credits per run — up to the last 5 runs, oldest -> newest left -> right. */}
+                  <ResponsiveContainer width="100%" height={150}>
                     <BarChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f3" />
                       <XAxis
                         dataKey="label"
-                        tick={{ fontSize: 11, fill: '#71717a' }}
+                        interval={0}
+                        tick={{ fontSize: 10, fill: '#71717a' }}
                         axisLine={{ stroke: '#e4e4e7' }}
                         tickLine={false}
                       />
@@ -148,8 +163,8 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
                       <Tooltip
                         cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e4e4e7', fontSize: 12 }}
-                        formatter={(v: number) => [
-                          fmtCredits(v),
+                        formatter={(v: number, _n, item) => [
+                          `${fmtCredits(v)} · ${tierName((item?.payload as { tier?: string })?.tier)}`,
                           t('card.credits.creditsLabel', { defaultValue: 'Credits' }),
                         ]}
                       />
