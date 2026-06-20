@@ -354,6 +354,8 @@ type ScheduledRunConfig = {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   allKBsAllowed?: boolean;
 };
 
@@ -362,6 +364,8 @@ type AgentToolsConfig = {
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   enabledConnections?: string[];
   /** Future-shape: agents storing method-tagged integrations directly. */
   enabledIntegrations?: IntegrationListItem[];
@@ -3220,6 +3224,8 @@ const mergeRunConfig = (
   const autoToolsEnabled = base.autoToolsEnabled ?? toolsConfig.autoToolsEnabled;
   const webSearchEnabled = base.webSearchEnabled ?? toolsConfig.webSearchEnabled;
   const createAgentEnabled = base.createAgentEnabled ?? toolsConfig.createAgentEnabled;
+  const memoriesEnabled = base.memoriesEnabled ?? toolsConfig.memoriesEnabled;
+  const numaOpsEnabled = base.numaOpsEnabled ?? toolsConfig.numaOpsEnabled;
   // Model: an explicit per-schedule run_config.modelId wins (none is set today — there's no
   // scheduler model picker), else inherit the agent's live model from the refreshed snapshot so an
   // existing schedule follows the agent's current model. Undefined on both → backend default (Premium).
@@ -3255,6 +3261,8 @@ const mergeRunConfig = (
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
+    memoriesEnabled,
+    numaOpsEnabled,
     enabledKBIds,
     allKBsAllowed,
     kbFieldSet,
@@ -3332,6 +3340,8 @@ export const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
   createAgentEnabled,
+  memoriesEnabled = true,
+  numaOpsEnabled = false,
   enabledKBIds,
   allKBsAllowed,
   kbFieldSet,
@@ -3340,6 +3350,10 @@ export const buildEnabledTools = ({
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  /** Per-agent memories toggle. Defaults on (preserves historical always-on). */
+  memoriesEnabled?: boolean;
+  /** Per-agent Numa Ops toggle. Defaults off. */
+  numaOpsEnabled?: boolean;
   enabledKBIds: string[];
   allKBsAllowed?: boolean;
   kbFieldSet?: boolean;
@@ -3370,17 +3384,20 @@ export const buildEnabledTools = ({
   });
 
   if (auto) {
-    // Auto mode = all standard tools on, individual toggles ignored
-    // (mirrors the chat UI rendering these switches ON+disabled).
+    // Auto mode = standard tools on (mirrors the chat UI rendering these
+    // switches ON+disabled). memories is always-on in auto; numa_ops still
+    // honours the per-agent toggle (it has no always-on default).
     if (hasKBs) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
     enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
+    if (numaOpsEnabled) enabledTools.push('numa_ops_tool');
   } else {
     if (hasKBs) enabledTools.push('knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
-    enabledTools.push('memories_tool');
+    if (memoriesEnabled) enabledTools.push('memories_tool');
+    if (numaOpsEnabled) enabledTools.push('numa_ops_tool');
   }
 
   console.info('[SCHEDULE_RUNNER] buildEnabledTools result', { enabledTools });
