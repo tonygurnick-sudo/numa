@@ -550,7 +550,7 @@ type AgentStatus = {
  * Acting on it is optional — judgment is never scripted. `agentId` scopes saved
  * memories to this agent.
  */
-export const buildScheduledRunPreamble = (agentId?: string | null): string => {
+export const buildScheduledRunPreamble = (agentId?: string | null, priorRunSummary?: string | null): string => {
   const memoryScope = agentId ? `agent:${agentId}` : 'general';
   return `<scheduled-run>
 You are running as a SCHEDULED AGENT — not in an interactive chat session.
@@ -561,6 +561,9 @@ Key behaviour differences:
 - If you encounter errors, try alternative approaches before giving up.
 - Do not use the TodoWrite tool — there is no user watching your progress.
 - If you get an error like "Approval timed out for proxy request to integration API — human-in-the-loop approval is required but no user was available to respond." then you need to let the user know they need to update their agent config to enable auto-approval for the relevant integration.
+
+STAY ON GOAL:
+This is a recurring job with a fixed purpose, defined by your agent description/instructions and this schedule's prompt — that goal is the source of truth. Your saved workflows are tools *derived* from the goal, not the definition of it. Each run, produce a result consistent with that goal — the scope and shape the goal calls for. If a saved workflow has drifted from what the goal requires, fix the workflow to match the goal; never follow a workflow off-course or quietly redefine the job. The data changes each run; the goal does not.${priorRunSummary ? `\nFor consistency, your previous run reported: "${priorRunSummary}" — produce something comparable unless the data genuinely changed.` : ''}
 
 MANDATORY — STATUS REPORT:
 After completing your work — whether successful, partially successful, or failed — you MUST write a JSON status report as the VERY LAST action before your final response. This is required on EVERY scheduled run, no exceptions.
@@ -600,6 +603,7 @@ Even if the task failed entirely, you MUST still write status.json with status "
 REFLECT & COMPOUND (after writing status.json):
 This schedule runs repeatedly — you can make the next run better than this one.
 Considering the two questions below is mandatory on every run. Acting on them is NOT — on many runs the right answer is to save nothing, and that's fine.
+Earlier runs may have already done the optimising. If the deterministic work is already captured in a saved workflow that's running well, you don't need to script anything new this run — just reuse it. Only script or remember when there's genuinely something new and durable to capture. Some agents keep finding improvements; others reach a steady state fast and mostly just run — both are healthy. Never optimise for its own sake, and never let optimising pull you off the goal.
 
 1) SCRIPT — was anything in this run deterministic mechanics?
 - Worth scripting: steps that are identical run-over-run — fixed data pulls, file/format transformations, rendering with fixed parameters, posting results to a fixed destination.
@@ -1816,11 +1820,23 @@ const executeRun = async ({
     // Refresh agent snapshot from DynamoDB so scheduled runs use the latest
     // agent config (integrations, KBs, tools) rather than the frozen snapshot
     // stored at schedule creation time.
-    const freshSnapshot = await refreshAgentSnapshot(agentMeta?.agentId, auth.sub);
-    const effectiveSnapshot = freshSnapshot ?? agentMeta;
+    // Resolve the agentId from the authoritative top-level schedule.agent_id when the snapshot lacks
+    // it. A schedule can be created without an agent_snapshot (e.g. programmatically), leaving
+    // agentMeta null — without this, requestBody.agentId is undefined, so the container emits the
+    // credit event with no agent_id and the ledger row never gets agentId/GSI3 keys (invisible to
+    // per-agent credit analytics, FEAT-246). Also lets the agent's real config/system-prompt load.
+    const resolvedAgentId = agentMeta?.agentId ?? schedule.agent_id;
+    const freshSnapshot = await refreshAgentSnapshot(resolvedAgentId, auth.sub);
+    const effectiveSnapshot: AgentSnapshot | undefined =
+      freshSnapshot ??
+      (agentMeta
+        ? { ...agentMeta, agentId: resolvedAgentId }
+        : resolvedAgentId
+          ? { agentId: resolvedAgentId }
+          : undefined);
 
     console.info('[SCHEDULE_RUNNER] Snapshot resolution', {
-      agentId: agentMeta?.agentId,
+      agentId: resolvedAgentId,
       usedFreshSnapshot: !!freshSnapshot,
       frozenToolsConfig: JSON.stringify(agentMeta?.toolsConfig),
       freshToolsConfig: freshSnapshot ? JSON.stringify(freshSnapshot.toolsConfig) : 'N/A',
@@ -1851,6 +1867,8 @@ const executeRun = async ({
       mergedAutoToolsEnabled: mergedRunConfig?.autoToolsEnabled,
     });
 
+    // Anti-drift: give a scheduled run the previous run's summary so it stays consistent (FEAT-243).
+    const priorRunSummary = adHoc ? null : await fetchPriorRunSummary(schedule);
     assistantText = await invokeWorkspaceAgent({
       prompt: apiPrompt,
       conversationId: runConversationId,
@@ -1858,6 +1876,7 @@ const executeRun = async ({
       agentSnapshot: effectiveSnapshot,
       auth,
       scheduledRun: !adHoc,
+      priorRunSummary,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Agent invocation failed';
@@ -2805,6 +2824,26 @@ const readWorkspaceStatus = async (userId: string, conversationId: string): Prom
  * header for user identity (the proxy recognises this auth pattern for
  * server-to-server calls).
  */
+/**
+ * Best-effort one-line summary of this schedule's PREVIOUS run, read from its stored run log
+ * (`schedule.last_run_s3_key`). Injected into the scheduled-run preamble so the agent stays
+ * consistent with what the job produced last time — the anti-drift anchor (FEAT-243). Returns
+ * null on any miss (first run, no key, unreadable); consistency context is a nicety, never a blocker.
+ */
+const fetchPriorRunSummary = async (schedule: ScheduleRecord): Promise<string | null> => {
+  const key = schedule.last_run_s3_key;
+  if (!OUTPUTS_BUCKET || !key) return null;
+  try {
+    const response = await s3.send(new GetObjectCommand({ Bucket: OUTPUTS_BUCKET, Key: key }));
+    const body = await response.Body?.transformToString();
+    if (!body) return null;
+    const summary = (JSON.parse(body) as { agentStatus?: { summary?: unknown } })?.agentStatus?.summary;
+    return typeof summary === 'string' && summary.trim() ? summary.trim().slice(0, 300) : null;
+  } catch {
+    return null; // no readable prior run — fine, the preamble just omits the consistency line
+  }
+};
+
 const invokeWorkspaceAgent = async ({
   prompt: runPrompt,
   conversationId,
@@ -2812,6 +2851,7 @@ const invokeWorkspaceAgent = async ({
   agentSnapshot,
   auth,
   scheduledRun,
+  priorRunSummary,
 }: {
   prompt: string;
   conversationId: string;
@@ -2819,6 +2859,7 @@ const invokeWorkspaceAgent = async ({
   agentSnapshot?: AgentSnapshot;
   auth: AuthContext;
   scheduledRun?: boolean;
+  priorRunSummary?: string | null;
 }): Promise<string> => {
   if (!WORKSPACE_AGENT_PROXY_URL || !SCHEDULE_RUNNER_SECRET) {
     throw new Error('Workspace agent invocation unavailable');
@@ -2827,8 +2868,11 @@ const invokeWorkspaceAgent = async ({
   // For scheduled runs, prepend instructions so the agent knows to complete
   // autonomously, write a structured status report, and reflect on what to
   // script/remember (FEAT-243). V2 handles the agent's system prompt natively
-  // via agentId — we only add the scheduled-run context.
-  const prompt = scheduledRun ? `${buildScheduledRunPreamble(agentSnapshot?.agentId)}${runPrompt}` : runPrompt;
+  // via agentId — we only add the scheduled-run context (+ the prior run's
+  // summary so it stays consistent run-to-run).
+  const prompt = scheduledRun
+    ? `${buildScheduledRunPreamble(agentSnapshot?.agentId, priorRunSummary)}${runPrompt}`
+    : runPrompt;
 
   // FEAT-143 — build the unified integrations payload server-side. Resolves
   // per-slug method (native vs Pipedream) from the user's live auth state +
