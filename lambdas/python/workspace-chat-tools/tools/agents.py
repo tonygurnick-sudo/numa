@@ -302,16 +302,142 @@ def _generate_agent_id() -> str:
     return f"agt_{uuid.uuid4().hex}"
 
 
+# Shared persona/industry taxonomy. Source of truth: lib/resource-taxonomy.json
+# (TS: lib/resource-taxonomy.ts; Python KB lambda: lib/kb-core/.../resource_taxonomy.py).
+# Mirrored here to avoid a heavy kb-core dependency — keep in sync if values change.
+_PERSONAS = ("CEO", "Finance", "HR", "Operations", "Commercial")
+_INDUSTRIES = (
+    "Manufacturing",
+    "Construction",
+    "Engineering",
+    "Professional Services",
+    "Franchise",
+)
+_MAX_TAGS = 20
+
+
+def _normalise_against(values: object, allowed: tuple) -> Tuple[List[str], List[str]]:
+    """Trim, dedupe case-insensitively, return (canonical_valid, invalid).
+
+    Mirrors lib/resource-taxonomy.ts ``normaliseAgainst`` — lenient on case and
+    whitespace, strict on membership.
+    """
+    if not isinstance(values, list):
+        return [], []
+    lower_to_canonical = {v.lower(): v for v in allowed}
+    seen: set[str] = set()
+    valid: List[str] = []
+    invalid: List[str] = []
+    for v in values:
+        if not isinstance(v, str):
+            continue
+        trimmed = v.strip()
+        if not trimmed:
+            continue
+        canonical = lower_to_canonical.get(trimmed.lower())
+        if canonical is None:
+            invalid.append(trimmed)
+            continue
+        if canonical in seen:
+            continue
+        seen.add(canonical)
+        valid.append(canonical)
+    return valid, invalid
+
+
+def _normalise_personas(values: object) -> Tuple[List[str], List[str]]:
+    """Return (canonical_valid, invalid) personas. See _normalise_against."""
+    return _normalise_against(values, _PERSONAS)
+
+
+def _normalise_industries(values: object) -> Tuple[List[str], List[str]]:
+    """Return (canonical_valid, invalid) industries. See _normalise_against."""
+    return _normalise_against(values, _INDUSTRIES)
+
+
+def _normalise_tags(values: object) -> List[str]:
+    """Trim, drop blanks, dedupe case-insensitively, cap at 20 (mirrors Node)."""
+    if not isinstance(values, list):
+        return []
+    seen: set[str] = set()
+    out: List[str] = []
+    for v in values:
+        if not isinstance(v, str):
+            continue
+        trimmed = v.strip()
+        if not trimmed:
+            continue
+        key = trimmed.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(trimmed)
+        if len(out) >= _MAX_TAGS:
+            break
+    return out
+
+
+def _normalise_integration_rows(rows: object) -> List[Dict]:
+    """Normalise method-tagged integration rows to ``[{slug, method, name}]``.
+
+    Mirrors the Node ``normaliseIntegrationRows`` (lambdas/node/agents/index.ts):
+    drop rows without a slug or a valid method; default ``name`` to the slug.
+    """
+    if not isinstance(rows, list):
+        return []
+    out: List[Dict] = []
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        slug = str(row.get("slug", "")).strip()
+        method = row.get("method")
+        if not slug or method not in ("pipedream", "native"):
+            continue
+        if slug in seen:
+            continue
+        seen.add(slug)
+        name = row.get("name")
+        name = name.strip() if isinstance(name, str) and name.strip() else slug
+        out.append({"slug": slug, "method": method, "name": name})
+    return out
+
+
 def _normalise_tools_config(config: Optional[Dict]) -> Dict:
-    """Normalise agent tools configuration."""
+    """Normalise agent tools configuration.
+
+    Persists the full tool surface so chat/CLI-created agents reach UI parity:
+    the boolean capability toggles, the per-category approval modes, KB scoping,
+    and BOTH integration shapes. ``enabledIntegrations`` (method-tagged) is the
+    source of truth; ``enabledConnections`` (flat slugs) is kept in parallel for
+    one release so legacy readers keep working (expand-contract migration).
+    """
     if not config:
         return {}
+
+    enabled_integrations = _normalise_integration_rows(
+        config.get("enabledIntegrations")
+    )
+    # Backwards-compat dual-write: keep the flat slug list populated whether the
+    # caller sent method-tagged rows or the legacy slug list.
+    if isinstance(config.get("enabledConnections"), list):
+        enabled_connections = [
+            s for s in config["enabledConnections"] if isinstance(s, str)
+        ]
+    else:
+        enabled_connections = [r["slug"] for r in enabled_integrations]
+
     result = {
         "autoToolsEnabled": config.get("autoToolsEnabled", True),
         "queryDataSources": config.get("queryDataSources", False),
         "webSearchEnabled": config.get("webSearchEnabled", False),
         "createAgentEnabled": config.get("createAgentEnabled", False),
-        "enabledConnections": config.get("enabledConnections", []),
+        # Memories defaults on (preserves the historical always-on behaviour);
+        # numaOps defaults off (gated per-agent + by the workspace feature flag).
+        "memoriesEnabled": config.get("memoriesEnabled", True),
+        "numaOpsEnabled": config.get("numaOpsEnabled", False),
+        "enabledConnections": enabled_connections,
+        "enabledIntegrations": enabled_integrations,
         "allowedKnowledgeBases": config.get("allowedKnowledgeBases"),
     }
     # Preserve approval mode fields
@@ -360,6 +486,9 @@ def _map_workspace_agent(item: Dict) -> Dict:
         "requiredIntegrations": item.get("required_integrations", []),
         "toolsConfig": _normalise_tools_config(item.get("tools_config")),
         "referenceFiles": _normalise_reference_files(item.get("reference_files")),
+        "tags": item.get("tags", []),
+        "personas": item.get("personas", []),
+        "industries": item.get("industries", []),
         "createdBy": {
             "userId": item.get("created_by_user_id"),
             "name": item.get("created_by_name"),
@@ -388,6 +517,9 @@ def _map_user_agent(item: Dict) -> Dict:
         "requiredIntegrations": item.get("required_integrations", []),
         "toolsConfig": _normalise_tools_config(item.get("tools_config")),
         "referenceFiles": _normalise_reference_files(item.get("reference_files")),
+        "tags": item.get("tags", []),
+        "personas": item.get("personas", []),
+        "industries": item.get("industries", []),
         "createdBy": {
             "userId": item.get("created_by_user_id"),
             "name": item.get("created_by_name"),
@@ -497,6 +629,21 @@ def _validate_create_payload(payload: Dict) -> Optional[str]:
     if estimated_time is not None:
         if not isinstance(estimated_time, (int, float)) or estimated_time < 0:
             return "estimatedTimeSavedMinutes must be a non-negative number"
+    # Persona/industry must be taxonomy members (matches the Node API which 400s).
+    if payload.get("personas") is not None:
+        _, invalid = _normalise_personas(payload.get("personas"))
+        if invalid:
+            return (
+                f"Invalid persona(s): {', '.join(invalid)}. "
+                f"Allowed: {', '.join(_PERSONAS)}"
+            )
+    if payload.get("industries") is not None:
+        _, invalid = _normalise_industries(payload.get("industries"))
+        if invalid:
+            return (
+                f"Invalid industr(ies): {', '.join(invalid)}. "
+                f"Allowed: {', '.join(_INDUSTRIES)}"
+            )
     return None
 
 
@@ -583,6 +730,15 @@ def _build_user_item(
         "is_favorite": payload.get(
             "isFavorite", existing.get("is_favorite") if existing else None
         ),
+        "tags": _normalise_tags(
+            payload.get("tags", existing.get("tags") if existing else [])
+        ),
+        "personas": _normalise_personas(
+            payload.get("personas", existing.get("personas") if existing else [])
+        )[0],
+        "industries": _normalise_industries(
+            payload.get("industries", existing.get("industries") if existing else [])
+        )[0],
     }
 
 
@@ -619,6 +775,9 @@ def _build_workspace_item(
         "created_at": timestamp,
         "updated_at": timestamp,
         "version": timestamp,
+        "tags": _normalise_tags(payload.get("tags", [])),
+        "personas": _normalise_personas(payload.get("personas", []))[0],
+        "industries": _normalise_industries(payload.get("industries", []))[0],
     }
 
 
@@ -875,7 +1034,18 @@ def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         icon: Optional icon class
         iconImage: Optional {s3Bucket, s3Key}
         requiredIntegrations: Optional list of integration IDs
-        toolsConfig: Optional tools configuration
+        toolsConfig: Optional tools config (full UI parity). Keys:
+            autoToolsEnabled, queryDataSources, webSearchEnabled,
+            createAgentEnabled, memoriesEnabled, numaOpsEnabled,
+            enabledIntegrations ([{slug, method, name}] — method-tagged source
+            of truth; enabledConnections is the legacy slug mirror),
+            allowedKnowledgeBases (null=all, []=none, [ids]=specific),
+            approvalMode (global), approvalModes (per-category:
+            integrations|agents|memories|knowledgeBases|ops|connectors)
+        tags: Optional labels (max 20, deduped)
+        personas: Optional taxonomy tags (CEO|Finance|HR|Operations|Commercial)
+        industries: Optional taxonomy tags (Manufacturing|Construction|
+            Engineering|Professional Services|Franchise)
         referenceFiles: Optional list of reference files (max 5)
         attachFiles: Optional list of workspace paths to attach (max 5)
         createdByName: Optional creator name
@@ -999,7 +1169,18 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         icon: Optional icon class
         iconImage: Optional {s3Bucket, s3Key}
         requiredIntegrations: Optional list of integration IDs
-        toolsConfig: Optional tools configuration
+        toolsConfig: Optional tools config (full UI parity). Keys:
+            autoToolsEnabled, queryDataSources, webSearchEnabled,
+            createAgentEnabled, memoriesEnabled, numaOpsEnabled,
+            enabledIntegrations ([{slug, method, name}] — method-tagged source
+            of truth; enabledConnections is the legacy slug mirror),
+            allowedKnowledgeBases (null=all, []=none, [ids]=specific),
+            approvalMode (global), approvalModes (per-category:
+            integrations|agents|memories|knowledgeBases|ops|connectors)
+        tags: Optional labels (max 20, deduped)
+        personas: Optional taxonomy tags (CEO|Finance|HR|Operations|Commercial)
+        industries: Optional taxonomy tags (Manufacturing|Construction|
+            Engineering|Professional Services|Franchise)
         referenceFiles: Optional list of reference files (max 5)
         attachFiles: Optional list of workspace paths to attach (max 5)
         __user_sub: User's Cognito sub (required)
@@ -1136,6 +1317,15 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
             "reference_files": _normalise_reference_files(
                 params.get("referenceFiles", workspace_agent.get("reference_files"))
             ),
+            "tags": _normalise_tags(
+                params.get("tags", workspace_agent.get("tags", []))
+            ),
+            "personas": _normalise_personas(
+                params.get("personas", workspace_agent.get("personas", []))
+            )[0],
+            "industries": _normalise_industries(
+                params.get("industries", workspace_agent.get("industries", []))
+            )[0],
             "updated_at": now,
             "version": now,
         }
@@ -1434,6 +1624,9 @@ def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
                 "requiredIntegrations": personal_agent.get("required_integrations", []),
                 "toolsConfig": personal_agent.get("tools_config"),
                 "referenceFiles": personal_agent.get("reference_files"),
+                "tags": personal_agent.get("tags", []),
+                "personas": personal_agent.get("personas", []),
+                "industries": personal_agent.get("industries", []),
                 "sourceAgentId": personal_agent.get("source_agent_id") or agent_id,
             },
             user_sub,
@@ -1489,6 +1682,9 @@ def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
                 ),
                 "toolsConfig": workspace_agent.get("tools_config"),
                 "referenceFiles": reference_files,
+                "tags": workspace_agent.get("tags", []),
+                "personas": workspace_agent.get("personas", []),
+                "industries": workspace_agent.get("industries", []),
                 "sourceAgentId": agent_id,
             },
             user_sub,

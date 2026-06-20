@@ -621,12 +621,18 @@ export interface AgentToolsConfig {
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
-  /** Pipedream / native integration slugs the agent can call. */
+  memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
+  /** Legacy flat integration-slug list. Kept in parallel with `enabledIntegrations`. */
   enabledConnections?: string[];
-  /** KB ids the agent is scoped to. `null` = unrestricted. */
+  /** Method-tagged integration rows — the source of truth. */
+  enabledIntegrations?: { slug: string; method: 'pipedream' | 'native'; name: string }[];
+  /** KB ids the agent is scoped to. `null` = unrestricted, `[]` = none. */
   allowedKnowledgeBases?: string[] | null;
-  approvalMode?: string;
-  approvalModes?: Record<string, unknown>;
+  /** Global default approval mode. */
+  approvalMode?: 'always' | 'non_destructive' | 'never';
+  /** Per-category approval: keys integrations|agents|memories|knowledgeBases|ops|connectors. */
+  approvalModes?: Record<string, 'always' | 'non_destructive' | 'never'>;
   [key: string]: unknown;
 }
 
@@ -741,6 +747,12 @@ export interface CreateAgentParams extends HitlParams {
   attachFiles?: string[];
   /** Display name for `createdBy.name`. Defaults to user_email if absent. */
   createdByName?: string;
+  /** Free-form labels (server caps at 20, dedupes). */
+  tags?: string[];
+  /** Taxonomy-validated: CEO|Finance|HR|Operations|Commercial. */
+  personas?: string[];
+  /** Taxonomy-validated: Manufacturing|Construction|Engineering|Professional Services|Franchise. */
+  industries?: string[];
 }
 
 export interface CreateAgentResult {
@@ -768,6 +780,9 @@ export interface UpdateAgentParams extends HitlParams {
   referenceFiles?: AgentReferenceFile[];
   attachFiles?: string[];
   isFavorite?: boolean;
+  tags?: string[];
+  personas?: string[];
+  industries?: string[];
 }
 
 export interface UpdateAgentResult {
