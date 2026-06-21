@@ -11,6 +11,8 @@ import {
   deleteAgent,
   duplicateAgent,
   getAgentPrefs,
+  getCachedAgentPrefs,
+  setCachedAgentPrefs,
   setAgentPref,
   listTeams,
   listTeamAgents,
@@ -148,7 +150,9 @@ export const AgentsManagement = () => {
   });
   const [showFavourites, setShowFavourites] = useState(() => localStorage.getItem(LS_SHOW_FAVS) !== 'false');
   const [showHidden, setShowHidden] = useState(() => localStorage.getItem(LS_SHOW_HIDDEN) === 'true');
-  const [prefs, setPrefs] = useState<AgentUserPref[]>([]);
+  // SWR: seed from localStorage cache so favourites render on first paint instead of
+  // popping in (and shoving the rest of the list down) once /prefs resolves.
+  const [prefs, setPrefs] = useState<AgentUserPref[]>(() => getCachedAgentPrefs() ?? []);
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamAgents, setTeamAgents] = useState<Map<string, AgentSummary[]>>(new Map());
   const [shareModal, setShareModal] = useState<{ show: boolean; agent: AgentSummary | null }>({
@@ -481,10 +485,11 @@ export const AgentsManagement = () => {
       // Optimistic update
       setPrefs((prev) => {
         const existing = prev.find((p) => p.agentId === agent.agentId);
-        if (existing) {
-          return prev.map((p) => (p.agentId === agent.agentId ? { ...p, isFavorite: next } : p));
-        }
-        return [...prev, { agentId: agent.agentId, isFavorite: next, isHidden: false }];
+        const updated = existing
+          ? prev.map((p) => (p.agentId === agent.agentId ? { ...p, isFavorite: next } : p))
+          : [...prev, { agentId: agent.agentId, isFavorite: next, isHidden: false }];
+        setCachedAgentPrefs(updated);
+        return updated;
       });
     } catch (err) {
       console.error('AgentsManagement: toggle favorite failed', err);
@@ -499,10 +504,11 @@ export const AgentsManagement = () => {
       // Optimistic update
       setPrefs((prev) => {
         const existing = prev.find((p) => p.agentId === agent.agentId);
-        if (existing) {
-          return prev.map((p) => (p.agentId === agent.agentId ? { ...p, isHidden: next } : p));
-        }
-        return [...prev, { agentId: agent.agentId, isFavorite: false, isHidden: next }];
+        const updated = existing
+          ? prev.map((p) => (p.agentId === agent.agentId ? { ...p, isHidden: next } : p))
+          : [...prev, { agentId: agent.agentId, isFavorite: false, isHidden: next }];
+        setCachedAgentPrefs(updated);
+        return updated;
       });
     } catch (err) {
       console.error('AgentsManagement: toggle hidden failed', err);
