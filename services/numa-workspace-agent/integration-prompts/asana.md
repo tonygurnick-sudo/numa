@@ -1,20 +1,32 @@
+# Asana Integration Tips
+
+All Asana calls go through the `numa integrations` CLI. Action keys below are
+real (`numa integrations pipedream-actions asana` lists them). The auth prop is
+always required — pass `"asana": {"authProvisionId": "auto"}` and the proxy
+resolves the user's connected account.
+
 **Before performing Asana operations**, establish context:
 
-1. Resolve `workspace` via `configure_props` — if multiple workspaces exist, ask the user which one
+1. Resolve `workspace` via `pipedream-props-options` — if multiple workspaces exist, ask the user which one
 2. For most operations, resolve `project` next (depends on workspace)
 3. For project creation in organization workspaces, resolve `team` — it's required
 
 When working with Asana, keep these tips in mind:
 
-- **Dynamic prop resolution chain:** Use `configure_props` to resolve `workspace` → `project` → `task_gid`/`section_gid` in sequence — each depends on the previous.
+- **Dynamic prop resolution chain:** Use `pipedream-props-options` to resolve `workspace` → `project` → `task_gid`/`section_gid` in sequence — each depends on the previous. Pass the auth prop as `--asana '{"authProvisionId":"auto"}'`:
+
+  ```bash
+  numa integrations pipedream-props-options asana asana-create-task workspace \
+    --asana '{"authProvisionId":"auto"}' -m "Listing Asana workspaces"
+  ```
 
 - **Inconsistent task ID prop names:** Different actions use different prop names for task references:
   - `task_gid`: Used by `create-task`, `update-task`, `delete-task`, `find-task-by-id`, `create-subtask`, `create-task-comment`
   - `taskId`: Used by `list-task-stories`
   - `task`: Used by `add-task-to-section`
-  - Always check the action schema for the correct prop name.
+  - Always check the action schema (`numa integrations pipedream-props asana <action-key>`) for the correct prop name.
 
-- **Team is required for project creation:** When creating a project in an organization workspace (vs a personal workspace), you must provide a `team` value. Resolve it via `configure_props` after setting the workspace.
+- **Team is required for project creation:** When creating a project in an organization workspace (vs a personal workspace), you must provide a `team` value. Resolve it via `pipedream-props-options` after setting the workspace.
 
 - **Plain text notes work:** Unlike Jira's ADF requirement, Asana accepts plain text in `notes` fields. No special formatting required.
 
@@ -28,10 +40,12 @@ When working with Asana, keep these tips in mind:
 
 - **Searching with empty strings:** `search-tasks` and `search-sections` accept empty name strings to return all items. Useful for discovery.
 
-- **CRITICAL: No due date filter in `search-tasks`:** The built-in `search-tasks` action does NOT support filtering by due date. It only has `completedSince` and `modifiedSince`. To find tasks by due date, use `proxy_request` with Asana's advanced search API:
+- **CRITICAL: No due date filter in `search-tasks`:** The built-in `search-tasks` action does NOT support filtering by due date. It only has `completedSince` and `modifiedSince`. To find tasks by due date, use `numa integrations request` with Asana's advanced search API:
 
-  ```
-  GET https://app.asana.com/api/1.0/workspaces/{workspace_gid}/tasks/search?due_on.after=2026-02-09&due_on.before=2026-02-11
+  ```bash
+  numa integrations request asana GET \
+    "https://app.asana.com/api/1.0/workspaces/{workspace_gid}/tasks/search?due_on.after=2026-02-09&due_on.before=2026-02-11" \
+    -m "Searching Asana tasks by due date"
   ```
 
   Supported filters: `due_on.before`, `due_on.after`, `due_at.before`, `due_at.after`, `assignee.any={user_gid}`, `projects.any={project_gid}`, `is_subtask=false`, `completed=false`, `text={search_term}`. Combine multiple filters with `&`.
@@ -46,15 +60,17 @@ When working with Asana, keep these tips in mind:
 
 - **Section behavior:** When you add a task to a section via `add-task-to-section`, it removes the task from other sections in that project. New projects created without `defaultView: "board"` have minimal default sections.
 
-- **Task templates require premium:** The `create-task-from-template` action only works with Asana Business or Enterprise tiers. On free/Premium tiers, `configure_props` for `taskTemplateId` returns an empty array. Creating templates via API also fails on non-Business tiers.
+- **Task templates require premium:** The `create-task-from-template` action only works with Asana Business or Enterprise tiers. On free/Premium tiers, `pipedream-props-options` for `taskTemplateId` returns an empty array. Creating templates via API also fails on non-Business tiers.
 
-- **File attachments via proxy:** There's no built-in Pipedream action for file attachments. Use `proxy_request` to add external link attachments:
+- **File attachments via request:** There's no built-in Pipedream action for file attachments. Use `numa integrations request` to add external link attachments:
 
+  ```bash
+  numa integrations request asana POST \
+    "https://app.asana.com/api/1.0/tasks/{task_gid}/attachments" \
+    --body '{"data":{"resource_subtype":"external","name":"filename.pdf","url":"https://example.com/file.pdf"}}' \
+    -m "Attaching external link to Asana task"
   ```
-  POST https://app.asana.com/api/1.0/tasks/{task_gid}/attachments
-  Body: {"data": {"resource_subtype": "external", "name": "filename.pdf", "url": "https://example.com/file.pdf"}}
-  ```
 
-  Direct file uploads require multipart/form-data which `proxy_request` doesn't support — use external URLs instead.
+  Direct file uploads require multipart/form-data which the request command doesn't support — use external URLs instead.
 
-- **Listing attachments:** Use `proxy_request` with `GET` to `https://app.asana.com/api/1.0/tasks/{task_gid}/attachments` to list a task's attachments.
+- **Listing attachments:** Use `numa integrations request asana GET "https://app.asana.com/api/1.0/tasks/{task_gid}/attachments"` to list a task's attachments. Any binary files are delivered automatically — reference the `downloaded_files` path in the result (default `/workdir/tmp/integrations-results/`).

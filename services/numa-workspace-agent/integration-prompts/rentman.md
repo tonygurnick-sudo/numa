@@ -1,82 +1,60 @@
 # Rentman Integration
 
-## Critical: Pre-Built Actions Are Broken -- Use proxy_request
+## Critical: Pre-Built Actions Are Broken -- Use `numa integrations request`
 
-The Rentman Pipedream actions (`find-item`, `create-item`, `update-item`) all use `reloadProps: true` on the `itemType` prop. The dynamic properties (item ID for find/update, field data for create) only load in Pipedream's UI workflow builder -- they **cannot be passed or discovered via the API**.
+The Rentman Pipedream actions (`rentman-find-item`, `rentman-create-item`, `rentman-update-item`) all use `reloadProps: true` on the `itemType` prop. The dynamic properties (item ID for find/update, field data for create) only load in Pipedream's UI workflow builder -- they **cannot be passed or discovered via the API**.
 
-- `create-item` -- runs but creates blank records with default values, ignoring all field props
-- `find-item` -- always fails with `[400] Invalid id in path`
-- `update-item` -- same failure as find-item
+- `rentman-create-item` -- runs but creates blank records with default values, ignoring all field props
+- `rentman-find-item` -- always fails with `[400] Invalid id in path`
+- `rentman-update-item` -- same failure as find-item
 
-**Always use `proxy_request` for all Rentman operations.** The Rentman REST API is straightforward and works correctly via proxy.
+**Always use `numa integrations request` (the proxy) for all Rentman operations.** The Rentman REST API is straightforward and works correctly via the proxy.
 
 ## API Base URL and Auth
 
 - **Base URL:** `https://api.rentman.net`
 - **Integration slug:** `rentman`
-- **Auth type:** API key (Bearer token, injected automatically by proxy)
+- **Auth type:** API key (Bearer token, injected automatically by the proxy)
 
-## proxy_request Examples
+## `numa integrations request` Examples
 
 ### List items (with pagination)
 
-```json
-{
-  "method": "GET",
-  "upstream_url": "https://api.rentman.net/contacts?limit=50&sort=-id",
-  "integration_slug": "rentman"
-}
+```bash
+numa integrations request rentman GET "https://api.rentman.net/contacts?limit=50&sort=-id" \
+  -m "Listing Rentman contacts"
 ```
 
 Use `?limit=N&offset=N` for pagination. Use `?sort=-id` for newest first.
 
 ### Get item by ID
 
-```json
-{
-  "method": "GET",
-  "upstream_url": "https://api.rentman.net/contacts/3657",
-  "integration_slug": "rentman"
-}
+```bash
+numa integrations request rentman GET "https://api.rentman.net/contacts/3657" \
+  -m "Fetching Rentman contact 3657"
 ```
 
 ### Create item
 
-```json
-{
-  "method": "POST",
-  "upstream_url": "https://api.rentman.net/contacts",
-  "integration_slug": "rentman",
-  "body": {
-    "name": "Acme Corp",
-    "type": "company",
-    "email_1": "info@acme.com"
-  }
-}
+```bash
+numa integrations request rentman POST "https://api.rentman.net/contacts" \
+  --body '{"name":"Acme Corp","type":"company","email_1":"info@acme.com"}' \
+  -m "Creating Rentman contact"
 ```
 
 ### Update item
 
-```json
-{
-  "method": "PATCH",
-  "upstream_url": "https://api.rentman.net/contacts/3657",
-  "integration_slug": "rentman",
-  "body": {
-    "name": "Updated Name",
-    "phone_1": "+64 9 000 0000"
-  }
-}
+```bash
+numa integrations request rentman PATCH "https://api.rentman.net/contacts/3657" \
+  --body '{"name":"Updated Name","phone_1":"+64 9 000 0000"}' \
+  -m "Updating Rentman contact 3657"
 ```
 
 ### Delete item
 
-```json
-{
-  "method": "DELETE",
-  "upstream_url": "https://api.rentman.net/contacts/3657",
-  "integration_slug": "rentman"
-}
+```bash
+numa integrations request rentman DELETE "https://api.rentman.net/contacts/3657" \
+  -m "Deleting Rentman contact 3657"
 ```
 
 DELETE returns null (HTTP 204) on success.

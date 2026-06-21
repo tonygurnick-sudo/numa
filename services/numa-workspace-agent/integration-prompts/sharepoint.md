@@ -6,7 +6,7 @@ The SharePoint integration **only works with Microsoft 365 business/organization
 
 > "This API is not supported for MSA accounts"
 
-**Actions affected:** All site operations (`list-sites`, `search-sites`, `get-site`), search operations (`search-files`, `search-and-filter-files`), and `configure_props` for `siteId` (returns empty arrays).
+**Actions affected:** All site operations (`list-sites`, `search-sites`, `get-site`), search operations (`search-files`, `search-and-filter-files`), and `pipedream-props-options` for `siteId` (returns empty arrays).
 
 **Reason:** Personal accounts have OneDrive, not SharePoint. SharePoint is a Microsoft 365 business product.
 
@@ -16,7 +16,7 @@ The SharePoint integration **only works with Microsoft 365 business/organization
 
 **Establish context first:**
 
-1. Resolve `siteId` via `configure_props` — if multiple sites exist, ask the user which one
+1. Resolve `siteId` via `pipedream-props-options` — if multiple sites exist, ask the user which one
 2. Most actions require the full siteId (format: `hostname,siteGuid,webGuid`)
 3. For file operations, resolve `driveId` after selecting site — each site can have multiple drives (usually "Documents")
 4. For list operations, resolve `listId` — this shows both SharePoint lists AND document libraries
@@ -31,21 +31,21 @@ siteId → listId → itemId
 siteId → itemId (for Excel files)
 ```
 
-Always resolve in sequence using `configure_props`.
+Always resolve in sequence using `pipedream-props-options`.
 
 ## Key Tips
 
-- **Site IDs use composite format:** Site IDs look like `hostname,siteGuid,webGuid` (e.g., `contoso.sharepoint.com,abc123...,def456...`). Always use `configure_props` to get valid values.
+- **Site IDs use composite format:** Site IDs look like `hostname,siteGuid,webGuid` (e.g., `contoso.sharepoint.com,abc123...,def456...`). Always use `pipedream-props-options` to get valid values.
 
-- **Document libraries vs Lists:** `configure_props` for `listId` returns both document libraries (like "Shared Documents") and custom SharePoint lists. Document libraries contain files; lists contain structured data items.
+- **Document libraries vs Lists:** `pipedream-props-options` for `listId` returns both document libraries (like "Shared Documents") and custom SharePoint lists. Document libraries contain files; lists contain structured data items.
 
 - **Folder listing without folderId:** Omitting `folderId` in `list-files-in-folder` returns root-level contents of the selected drive.
 
-- **File downloads require `filename` prop and stash_id:** The `download-file` action requires:
+- **File downloads require `filename` prop and a stash id:** The `download-file` action requires:
   - The `filename` prop (even though not marked optional in schema)
-  - `stash_id="NEW"` in the `run_action` call to enable file stashing
+  - `--stash-id NEW` on the `pipedream-call` to enable file stashing
 
-  Downloaded files land in `/workdir/tmp/integrations-results/__stash/{filename}` (scratch — hidden from the user's Files page) and are immediately available for reading or further processing. If the user asked for the file as a deliverable, `cp` it to `/workdir/outputs/`.
+  The file is delivered into the workspace automatically — its path is reported under `downloaded_files` in the result (default `/workdir/tmp/integrations-results/`, scratch — hidden from the user's Files page). If the user asked for the file as a deliverable, `cp` it to `/workdir/outputs/`.
 
 - **File uploads accept workspace paths:** The `filePath` prop for `upload-file` accepts workspace paths (e.g., `/workdir/uploads/file.txt` or `/workdir/outputs/file.txt`) which are automatically converted to presigned URLs.
 
@@ -63,11 +63,11 @@ Always resolve in sequence using `configure_props`.
 
 - **Excel table reading requires actual Table objects:** The `get-excel-table` action only works with properly formatted Excel Tables (created via Insert > Table in Excel). Data in regular cells won't be detected. The `tableName` picker will return empty if no tables exist.
 
-- **New lists only have Title column:** When you create a new list, only the `Title` column exists. `configure_props` for `columnNames` may return empty. Custom columns must be added via SharePoint admin before they appear.
+- **New lists only have Title column:** When you create a new list, only the `Title` column exists. `pipedream-props-options` for `columnNames` may return empty. Custom columns must be added via SharePoint admin before they appear.
 
 - **create-item uses dynamic column props:** Select columns via `columnNames` array, then provide values as additional props with the column name as the key (e.g., `"Title": "My Item"`).
 
-- **No delete actions in built-in actions:** Use `proxy_request` for delete operations (see below).
+- **No delete actions in built-in actions:** Use `numa integrations request` for delete operations (see below).
 
 ## OData Filter Examples
 
@@ -103,16 +103,12 @@ fields/Modified gt '2024-01-01'
 
 ## Working JSON Examples
 
-**Download file (use stash_id="NEW" in run_action call):**
+**Download file** (pass `--stash-id NEW`; props shown below go in `--props`):
 
-```json
-{
-  "sharepoint": { "authProvisionId": "auto" },
-  "siteId": "contoso.sharepoint.com,abc...,def...",
-  "driveId": "b!...",
-  "fileId": "01ABC123...",
-  "filename": "Report.xlsx"
-}
+```bash
+numa integrations pipedream-call sharepoint sharepoint-download-file \
+  --props '{"sharepoint":{"authProvisionId":"auto"},"siteId":"contoso.sharepoint.com,abc...,def...","driveId":"b!...","fileId":"01ABC123...","filename":"Report.xlsx"}' \
+  --stash-id NEW -m "Download Report.xlsx from SharePoint"
 ```
 
 **Create list item:**
@@ -155,16 +151,16 @@ fields/Modified gt '2024-01-01'
 
 ## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
 
-For bulk Graph fetches via `proxy_request` (drive items, list items, users, etc.), follow the `@odata.nextLink` URL returned on each response until it's absent.
+For bulk Graph fetches via `numa integrations request` (drive items, list items, users, etc.), follow the `@odata.nextLink` URL returned on each response until it's absent.
 
 - **Never iterate `$skip=0, 100, 200, ...` manually** — it's a linear scan that costs one approval + one round-trip per page.
-- **Built-in actions strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. Use `proxy_request` directly for multi-page fetches.
+- **Built-in actions strip pagination tokens** — `@odata.nextLink` does not survive `pipedream-call`. Use `numa integrations request` directly for multi-page fetches.
 - **Decide your `$select` set up front** so you don't have to re-walk the same window with different fields.
 - **Use `$top` to control page size** (typically 200 for drive items, max 5000 for list items).
 
-## Proxy API for Missing Operations
+## Direct API for Missing Operations
 
-Use `proxy_request` with `integration_slug: "sharepoint"` for operations not covered by built-in actions:
+Use `numa integrations request sharepoint <METHOD> <url>` for operations not covered by built-in actions:
 
 | Operation          | Method | Endpoint                                                      |
 | ------------------ | ------ | ------------------------------------------------------------- |
@@ -181,48 +177,40 @@ Use `proxy_request` with `integration_slug: "sharepoint"` for operations not cov
 | List site users    | GET    | `/sites/{siteId}/users`                                       |
 | List org users     | GET    | `/users`                                                      |
 
-**Proxy examples:**
+**Examples:**
 
 Delete a file:
 
-```
-proxy_request(
-  method="DELETE",
-  upstream_url="https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}",
-  integration_slug="sharepoint"
-)
+```bash
+numa integrations request sharepoint DELETE \
+  "https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}" \
+  -m "Delete file from SharePoint"
 ```
 
 Copy a file:
 
-```
-proxy_request(
-  method="POST",
-  upstream_url="https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}/copy",
-  integration_slug="sharepoint",
-  body={"parentReference": {"driveId": "...", "id": "target-folder-id"}, "name": "new-filename.txt"}
-)
+```bash
+numa integrations request sharepoint POST \
+  "https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}/copy" \
+  --body '{"parentReference":{"driveId":"...","id":"target-folder-id"},"name":"new-filename.txt"}' \
+  -m "Copy file in SharePoint"
 ```
 
 Add a column to a list:
 
-```
-proxy_request(
-  method="POST",
-  upstream_url="https://graph.microsoft.com/v1.0/sites/{siteId}/lists/{listId}/columns",
-  integration_slug="sharepoint",
-  body={"name": "DueDate", "dateTime": {}, "description": "Due date for this item"}
-)
+```bash
+numa integrations request sharepoint POST \
+  "https://graph.microsoft.com/v1.0/sites/{siteId}/lists/{listId}/columns" \
+  --body '{"name":"DueDate","dateTime":{},"description":"Due date for this item"}' \
+  -m "Add column to SharePoint list"
 ```
 
 List organization users:
 
-```
-proxy_request(
-  method="GET",
-  upstream_url="https://graph.microsoft.com/v1.0/users",
-  integration_slug="sharepoint"
-)
+```bash
+numa integrations request sharepoint GET \
+  "https://graph.microsoft.com/v1.0/users" \
+  -m "List organization users"
 ```
 
 Returns array of users with `id`, `displayName`, `mail`, `userPrincipalName`, etc.

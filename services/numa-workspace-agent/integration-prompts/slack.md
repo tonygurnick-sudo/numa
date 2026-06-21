@@ -124,20 +124,13 @@ Slack messages (from `find-message`, `list-replies`, etc.) may contain a `files`
 - `id` — unique file ID (e.g. `F0ACCBWBC83`)
 - `mimetype` — file type
 
-To download these files, use `proxy_request` with GET on the `url_private_download` URL. The proxy returns binary files as a JSON object with `{"binary": true, "base64_body": "..."}`. After getting the result, decode and save the file using bash. Default to `/workdir/tmp/integrations-results/` (scratch — hidden from the user's Files page); promote to `/workdir/outputs/` only if the user asked for the file as a deliverable:
+To download these files, GET the `url_private_download` URL via `numa integrations request`:
 
 ```bash
-python3 -c "
-import json, base64, sys
-data = json.load(open(sys.argv[1]))
-result = data.get('result', data)
-if result.get('binary') and result.get('base64_body'):
-    with open(sys.argv[2], 'wb') as f:
-        f.write(base64.b64decode(result['base64_body']))
-    print(f'Saved {sys.argv[2]}')
-else:
-    print('Response is not binary')
-" /path/to/proxy-result.json /workdir/tmp/integrations-results/filename.png
+numa integrations request slack GET "https://files.slack.com/files-pri/..." \
+  -m "Download Slack attachment"
 ```
+
+The binary is delivered into the workspace automatically — its path is reported under `downloaded_files` in the result (default `/workdir/tmp/integrations-results/`, scratch — hidden from the user's Files page). If the user asked for the file as a deliverable, `cp` it to `/workdir/outputs/`. No manual base64 decoding is needed.
 
 When multiple files share the same name (common with `image.png`), deduplicate by appending the file ID: `image_F0ACCBWBC83.png`.

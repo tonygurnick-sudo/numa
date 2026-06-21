@@ -12,8 +12,8 @@ All action keys use the form `xero_accounting_api-{name}`. Do not invent or para
 
 Before performing Xero operations, establish context:
 
-- Resolve `tenantId` via `configure_props` or `get-tenant-connections` — if multiple organizations exist, ask the user which one
-- For invoice/contact operations, resolve `contactId` via `configure_props` after setting `tenantId`
+- Resolve `tenantId` via `numa integrations pipedream-props-options xero_accounting_api <action> tenantId --xeroAccountingApi '{"authProvisionId":"auto"}'` or `get-tenant-connections` — if multiple organizations exist, ask the user which one
+- For invoice/contact operations, resolve `contactId` via `pipedream-props-options` (pass `tenantId` in the configured props) after setting `tenantId`
 
 ## Auth Structure
 
@@ -86,17 +86,15 @@ Sales invoices (ACCREC) and bills (ACCPAY) can share the same invoice number. Us
 
 ### Downloading Invoice PDFs
 
-Include `stash_id="NEW"` when calling `download-invoice`:
+Pass `--stash-id NEW` when calling `download-invoice`:
 
-```python
-mcp__integrations__run_action(
-  action_key="xero_accounting_api-download-invoice",
-  props='{"xeroAccountingApi":{"authProvisionId":"auto"},"tenantId":"...","invoiceId":"..."}',
-  stash_id="NEW"
-)
+```bash
+numa integrations pipedream-call xero_accounting_api xero_accounting_api-download-invoice \
+  --props '{"xeroAccountingApi":{"authProvisionId":"auto"},"tenantId":"...","invoiceId":"..."}' \
+  --stash-id NEW -m "Download invoice PDF"
 ```
 
-The PDF lands in `/workdir/tmp/integrations-results/{invoiceId}.pdf` (scratch — hidden from the user's Files page). If the user asked for the PDF as a deliverable, `cp` it to `/workdir/outputs/`.
+The PDF is delivered into the workspace automatically — its path is reported under `downloaded_files` in the result (default `/workdir/tmp/integrations-results/`, scratch — hidden from the user's Files page). If the user asked for the PDF as a deliverable, `cp` it to `/workdir/outputs/`.
 
 ### Contact Finder Actions Use String Not Boolean
 
@@ -229,11 +227,10 @@ Supported endpoints: BankTransactions, BatchPayments, Contacts, CreditNotes, Inv
 
 Use workspace paths directly in `filePathOrUrl` — they're automatically converted:
 
-```python
-mcp__integrations__run_action(
-  action_key="xero_accounting_api-upload-file",
-  props='{"xeroAccountingApi":{"authProvisionId":"auto"},"tenantId":"...","filePathOrUrl":"/workdir/outputs/invoice.pdf","documentType":"Invoices","documentId":"invoice-uuid-here"}'
-)
+```bash
+numa integrations pipedream-call xero_accounting_api xero_accounting_api-upload-file \
+  --props '{"xeroAccountingApi":{"authProvisionId":"auto"},"tenantId":"...","filePathOrUrl":"/workdir/outputs/invoice.pdf","documentType":"Invoices","documentId":"invoice-uuid-here"}' \
+  -m "Upload file attachment to Xero"
 ```
 
 ### Creating Invoices with New Contacts

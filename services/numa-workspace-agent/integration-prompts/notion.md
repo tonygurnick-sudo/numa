@@ -6,7 +6,7 @@ Establish context first:
 
 - Use `notion-search` to find available pages and databases — filter by `"page"` or `"data_source"` via the `filter` prop
 - For database operations, use `notion-retrieve-database-schema` to understand the property schema before creating/updating entries
-- Use `configure_props` to resolve dynamic IDs for `parent`, `parentDataSource`, `pageId`, `blockId`, etc.
+- Use `numa integrations pipedream-props-options notion <action> <prop> --notion '{"authProvisionId":"auto"}'` to resolve dynamic IDs for `parent`, `parentDataSource`, `pageId`, `blockId`, etc.
 
 ## Key Gotchas
 
@@ -111,7 +111,7 @@ The `markdownContents` prop in `append-block` converts markdown to native Notion
 | `` `code` ``  | `annotations.code: true`          |                        |
 | `[text](url)` | `text.link`                       |                        |
 
-Not supported via markdown: Callouts, toggles, embeds, synced blocks. Use `proxy_request` with the `Notion-Version` header for these.
+Not supported via markdown: Callouts, toggles, embeds, synced blocks. Use `numa integrations request` with the `Notion-Version` header for these (see "Direct API requests" below).
 
 ## Updating Blocks
 
@@ -147,7 +147,7 @@ Use `notion-update-block` with a JSON string in the `content` prop. The JSON mus
 
 ## File Uploads
 
-File uploads require a three-step process using Pipedream actions plus `proxy_request`:
+File uploads require a three-step process using Pipedream actions plus a direct `numa integrations request`:
 
 ### Step 1: Create Upload Session
 
@@ -181,25 +181,13 @@ Use `notion-send-file-upload`:
 
 ### Step 3: Attach File to Page
 
-Use `proxy_request` with PATCH — the `Notion-Version` header is required:
+Use `numa integrations request` with PATCH — the `Notion-Version` header is required:
 
-```python
-mcp__integrations__proxy_request(
-  method="PATCH",
-  upstream_url="https://api.notion.com/v1/blocks/{page_id}/children",
-  integration_slug="notion",
-  headers={"x-pd-proxy-Notion-Version": "2022-06-28"},
-  body={
-    "children": [{
-      "type": "file",
-      "file": {
-        "type": "file_upload",
-        "file_upload": {"id": "file-upload-uuid-here"}
-      }
-    }]
-  },
-  description="Attach uploaded file to page"
-)
+```bash
+numa integrations request notion PATCH "https://api.notion.com/v1/blocks/{page_id}/children" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"children":[{"type":"file","file":{"type":"file_upload","file_upload":{"id":"file-upload-uuid-here"}}}]}' \
+  -m "Attach uploaded file to page"
 ```
 
 ### External URL Mode (Simplest for Public Files)
@@ -219,37 +207,25 @@ For publicly accessible files, skip the send step:
 
 - **Content-Type mismatch:** If you specify `contentType` in `create-file-upload`, the sent file must match exactly. Omit `contentType` to let it auto-detect.
 - **File prop name:** Use `file`, not `filePath` in `send-file-upload`.
-- **Notion-Version header required:** All `proxy_request` calls to Notion require the header `{"x-pd-proxy-Notion-Version": "2022-06-28"}`.
+- **Notion-Version header required:** All `numa integrations request` calls to Notion require the header `{"x-pd-proxy-Notion-Version": "2022-06-28"}`.
 
-## Using `proxy_request` for Notion
+## Direct API requests (`numa integrations request`)
 
-Notion's API requires a version header on all requests. When using `proxy_request`, always include:
+Notion's API requires a version header on all requests. When using `numa integrations request`, always include:
 
 ```
-headers={"x-pd-proxy-Notion-Version": "2022-06-28"}
+--headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}'
 ```
 
 The `x-pd-proxy-` prefix tells Pipedream to forward the header as `Notion-Version` to the upstream API.
 
 Example — Create a callout block (not supported via markdown):
 
-```python
-mcp__integrations__proxy_request(
-  method="PATCH",
-  upstream_url="https://api.notion.com/v1/blocks/{page_id}/children",
-  integration_slug="notion",
-  headers={"x-pd-proxy-Notion-Version": "2022-06-28"},
-  body={
-    "children": [{
-      "type": "callout",
-      "callout": {
-        "icon": {"type": "emoji", "emoji": "💡"},
-        "rich_text": [{"type": "text", "text": {"content": "Important note here"}}]
-      }
-    }]
-  },
-  description="Add callout block to page"
-)
+```bash
+numa integrations request notion PATCH "https://api.notion.com/v1/blocks/{page_id}/children" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"children":[{"type":"callout","callout":{"icon":{"type":"emoji","emoji":"💡"},"rich_text":[{"type":"text","text":{"content":"Important note here"}}]}}]}' \
+  -m "Add callout block to page"
 ```
 
 ## Workflow Examples
@@ -306,8 +282,9 @@ notion-create-file-upload: mode="single_part", filename="report.pdf"
 notion-send-file-upload: fileUploadId="...", file="/workdir/uploads/report.pdf"
 # Wait for status: "uploaded"
 
-# 3. Attach to page via proxy
-proxy_request: PATCH /v1/blocks/{page_id}/children
-  headers: {"x-pd-proxy-Notion-Version": "2022-06-28"}
-  body: {"children": [{"type": "file", "file": {"type": "file_upload", "file_upload": {"id": "..."}}}]}
+# 3. Attach to page via direct request
+numa integrations request notion PATCH "https://api.notion.com/v1/blocks/{page_id}/children" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"children":[{"type":"file","file":{"type":"file_upload","file_upload":{"id":"..."}}}]}' \
+  -m "Attach file to page"
 ```

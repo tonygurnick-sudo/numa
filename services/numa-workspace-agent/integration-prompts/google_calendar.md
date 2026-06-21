@@ -5,7 +5,7 @@
 If the **Connected Integrations** section above lists more than one account under `google_calendar`, each one is a separate Google account with its own calendars.
 
 - `"authProvisionId": "auto"` resolves to ONE account (the oldest). Fine for "what's on my calendar?" when context implies a single account.
-- When the user references multiple accounts ("both calendars", "my work + personal calendar", "from each account"), iterate by calling `run_action` once per account with the explicit `apn_xxx` from the multi-account list.
+- When the user references multiple accounts ("both calendars", "my work + personal calendar", "from each account"), iterate by calling `numa integrations pipedream-call google_calendar <action-key>` once per account with the explicit `apn_xxx` (pass it as the `authProvisionId` in the `googleCalendar` prop) from the multi-account list.
 - Note: within a single Google account, `list-calendars` returns multiple calendars (primary, shared, etc.). This is separate from the multi-account roster — both layers may apply.
 
 ## Essential First Step
@@ -29,7 +29,7 @@ Auth key is `googleCalendar` (camelCase):
   {"calendarId": "primary"}     // Wrong
   ```
 - **`orderBy="startTime"`:** Requires `singleEvents: true` or it will fail.
-- **`maxResults` default:** 250 events. Max 2500. For larger pulls, use `proxy_request` against `https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent. Built-in `list-events` strips `nextPageToken`, so it can't be paginated past one page. Never re-walk a date range from the start with different params — decide your full field set up front.
+- **`maxResults` default:** 250 events. Max 2500. For larger pulls, use `numa integrations request google_calendar GET "https://www.googleapis.com/calendar/v3/calendars/{calendarId}/events" -m "..."` and follow `nextPageToken` (pass it back as `pageToken=...`) until it's absent. The built-in `google_calendar-list-events` action strips `nextPageToken`, so it can't be paginated past one page. Never re-walk a date range from the start with different params — decide your full field set up front.
 - **Always set BOTH `timeMin` AND `timeMax`.** Omitting `timeMax` with `singleEvents: true` expands recurring events into the far future — one bench pulled **14,481 events out to the year 2056** in a single call (28 wasted turns). Bound every events query on both ends.
 - **All-day / working-location events have ~0 duration.** When summing time ("how many meeting-hours this week?"), treat all-day events, out-of-office, and "working location" entries as ≈0h, not 24h — otherwise one all-day event swamps the total (models have reported 1,560h vs 4.5h for the same week). State the convention you used for borderline entries; sub-15-minute slots are usually buffers, not meetings.
 
@@ -59,9 +59,10 @@ If the user refers to someone by name without providing their email, use `list-e
 - `createMeetRoom: true`: Returns `hangoutLink` and full `conferenceData` with dial-in
 - `timeZone`: Supports IANA timezones, get from `get-current-user`
 
-## Dynamic Props (`configure_props`)
+## Dynamic Props (`numa integrations pipedream-props-options`)
 
-Three props support remote options:
+Three props support remote options — resolve them with
+`numa integrations pipedream-props-options google_calendar <action-key> <prop> --google_calendar '{"authProvisionId":"auto"}' -m "..."`:
 
 - `calendarId`: User's accessible calendars
 - `colorId`: Event color IDs (1-11)
