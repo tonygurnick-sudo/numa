@@ -121,6 +121,13 @@ export const AVAILABLE_TOOLS: Tool[] = [
     parameters: [],
   },
   {
+    id: 'agent-library',
+    name: 'Agent Library',
+    description: 'Maintain curated Arcanum agents and deploy them to client Numa instances without a full deploy.',
+    category: 'management',
+    parameters: [],
+  },
+  {
     id: 'platform-settings',
     name: 'Platform Settings',
     description:

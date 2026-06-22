@@ -17,6 +17,7 @@ import { SecretsmanagerSecret } from '@cdktf/provider-aws/lib/secretsmanager-sec
 import { VoiceConfigWriterConstruct } from '../constructs/voice-config-writer-construct';
 import { QuotaReportDailyConstruct } from '../constructs/quota-report-daily-construct';
 import { NumaDashboardRollupConstruct } from '../constructs/numa-dashboard-rollup-construct';
+import { ArcanumAgentDeployerConstruct } from '../constructs/arcanum-agent-deployer-construct';
 
 export class QAppsDeployerStack extends ArcanumStack {
   constructor(scope: Construct, name: string, props: QAppsDeployerStackProps) {
@@ -248,6 +249,14 @@ export class QAppsDeployerStack extends ArcanumStack {
             })
           : undefined;
 
+      // Arcanum Agent Deployer (FEAT-206) — library + deploy engine for pushing
+      // curated "Arcanum" agents into client instances without a full Numa deploy.
+      const arcanumAgentDeployer = new ArcanumAgentDeployerConstruct(this, 'arcanum-agent-deployer', {
+        clientConfigTableArn: clientConfigTable.arn,
+        clientConfigTableName: clientConfigTable.name,
+        portalOrigin: `https://customer-success-portal.${props.domainSuffix}`,
+      });
+
       new CustomerSuccessPortalConstruct(this, 'customer-success-portal', {
         clientConfigTable,
         domainName: `customer-success-portal.${props.domainSuffix}`,
@@ -274,6 +283,16 @@ export class QAppsDeployerStack extends ArcanumStack {
         fleetAnalyticsTableName: numaDashboardRollup?.tableName,
         fleetAnalyticsLambdaArn: numaDashboardRollup?.functionArn,
         fleetAnalyticsLambdaName: numaDashboardRollup?.functionName,
+        arcanumAgentLibraryTableArn: arcanumAgentDeployer.libraryTableArn,
+        arcanumAgentLibraryTableName: arcanumAgentDeployer.libraryTableName,
+        arcanumAgentDeploymentsTableArn: arcanumAgentDeployer.deploymentsTableArn,
+        arcanumAgentDeploymentsTableName: arcanumAgentDeployer.deploymentsTableName,
+        arcanumAgentTargetsTableArn: arcanumAgentDeployer.targetsTableArn,
+        arcanumAgentTargetsTableName: arcanumAgentDeployer.targetsTableName,
+        arcanumAgentLibraryBucketArn: arcanumAgentDeployer.libraryBucketArn,
+        arcanumAgentLibraryBucketName: arcanumAgentDeployer.libraryBucketName,
+        arcanumAgentDeployerLambdaArn: arcanumAgentDeployer.functionArn,
+        arcanumAgentDeployerLambdaName: arcanumAgentDeployer.functionName,
       });
 
       // Useful outputs

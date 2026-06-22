@@ -1,4 +1,4 @@
-import type { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2 } from 'aws-lambda';
+import type { APIGatewayProxyEventV2, APIGatewayProxyHandlerV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DeleteCommand,
@@ -111,6 +111,12 @@ type WorkspaceAgentItem = {
   // Per-agent workspace-chat model (Standard / Premium / Expert). Optional — omitted means the
   // platform default (Premium / Sonnet 4.6) is resolved at runtime. Validated via normaliseModelId.
   model_id?: string;
+  // FEAT-206 — Arcanum-managed agents pushed by the deployer Lambda. When set to
+  // 'arcanum' the agent is read-only in this client (edit/delete blocked) and is
+  // owned by the central library (re-deploys overwrite by deterministic id).
+  managed_by?: string;
+  library_agent_id?: string;
+  library_version?: number;
 };
 
 type UserAgentItem = {
@@ -174,6 +180,8 @@ type AgentResponse = {
   tags: string[];
   personas: string[];
   industries: string[];
+  /** FEAT-206 — 'arcanum' when the agent is centrally managed and read-only here. */
+  managedBy?: string;
 };
 
 type AuthContext = {
@@ -410,6 +418,63 @@ const buildPersonalDuplicatePayload = (
   };
 };
 
+// FEAT-206 — Arcanum-managed reference files live under a shared, library-owned
+// prefix in the client outputs bucket. The deployer's drift-removal deletes that
+// whole prefix when a managed agent is un-deployed, so any duplicate that reused
+// those keys would silently lose its files. The prefix used by the deployer
+// (lambdas/node/arcanum-agent-deployer: deployReferenceFiles / removeAgentReferenceFiles).
+const MANAGED_REFERENCE_PREFIX = 'numa-chat/agents/arcanum/';
+
+// When duplicating an agent, copy any reference file that sits under the managed
+// prefix into a prefix owned by the new agent, so the duplicate is self-contained
+// and survives the source being un-deployed. Files outside the managed prefix are
+// left untouched (a no-op for ordinary agents). Best-effort: on copy failure we
+// keep the original key rather than failing the whole duplicate.
+const relocateManagedReferenceFiles = async (
+  referenceFiles: ReferenceFile[] | undefined,
+  ownerSegment: string,
+  newAgentId: string
+): Promise<ReferenceFile[] | undefined> => {
+  if (!referenceFiles?.length || !OUTPUTS_BUCKET_NAME) return referenceFiles;
+  const s3 = withPRM(S3Client, {});
+  const destPrefix = `numa-chat/agents/${ownerSegment}/${newAgentId}/`;
+  const copyObject = async (srcBucket: string, srcKey: string, suffix: string): Promise<string> => {
+    const destKey = `${destPrefix}${suffix}`;
+    await s3.send(
+      new CopyObjectCommand({
+        Bucket: OUTPUTS_BUCKET_NAME,
+        Key: destKey,
+        CopySource: `${srcBucket}/${encodeURIComponent(srcKey)}`,
+        MetadataDirective: 'COPY',
+      })
+    );
+    return destKey;
+  };
+  return Promise.all(
+    referenceFiles.map(async (file, idx) => {
+      if (!file.s3Key?.startsWith(MANAGED_REFERENCE_PREFIX)) return file;
+      const srcBucket = file.s3Bucket || OUTPUTS_BUCKET_NAME;
+      try {
+        const rawName = file.s3Key.split('/').pop() || `file-${idx}`;
+        const newS3Key = await copyObject(srcBucket, file.s3Key, `${idx}-${rawName}`);
+        let newExtractedKey = file.extractedContentS3Key;
+        if (file.extractedContentS3Key) {
+          const extName = file.extractedContentS3Key.split('/').pop() || `extracted-${idx}.json`;
+          newExtractedKey = await copyObject(srcBucket, file.extractedContentS3Key, `extracted/${idx}-${extName}`);
+        }
+        return { ...file, s3Bucket: OUTPUTS_BUCKET_NAME, s3Key: newS3Key, extractedContentS3Key: newExtractedKey };
+      } catch (e) {
+        console.warn('DuplicateAgent: failed to relocate managed reference file; keeping shared key', {
+          newAgentId,
+          fileName: file.fileName,
+          error: (e as Error)?.message,
+        });
+        return file;
+      }
+    })
+  );
+};
+
 const normaliseWelcomeMessage = (value?: string | null): string | undefined => {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -455,6 +520,7 @@ const mapWorkspaceAgent = (item: WorkspaceAgentItem): AgentResponse => {
     tags: item.tags ?? [],
     personas: item.personas ?? [],
     industries: item.industries ?? [],
+    managedBy: item.managed_by,
   };
 };
 
@@ -990,6 +1056,12 @@ const handleUpdateAgent = async (
     getWorkspaceAgentById(agentId),
   ]);
 
+  // FEAT-206 — Arcanum-managed agents are read-only here; edits happen in the
+  // central library and land via a re-deploy (which writes DynamoDB directly).
+  if (workspaceAgent?.managed_by === 'arcanum') {
+    return errorResponse(403, 'This agent is managed by Arcanum and cannot be edited here.');
+  }
+
   const now = Date.now();
 
   if (userAgent) {
@@ -1252,6 +1324,12 @@ const handleDeleteAgent = async (agentId: string, auth: AuthContext): Promise<Re
     getWorkspaceAgentById(agentId),
   ]);
 
+  // FEAT-206 — Arcanum-managed agents can only be removed by un-listing them in
+  // the central library + re-deploying (drift reconciliation), not deleted here.
+  if (workspaceAgent?.managed_by === 'arcanum') {
+    return errorResponse(403, 'This agent is managed by Arcanum and cannot be deleted here.');
+  }
+
   if (userAgent) {
     // Best-effort cleanup of user-owned icon image
     try {
@@ -1382,6 +1460,12 @@ const duplicateWorkspaceAgent = async (
     }
   }
 
+  duplicatePayload.referenceFiles = await relocateManagedReferenceFiles(
+    duplicatePayload.referenceFiles,
+    auth.sub,
+    newId
+  );
+
   const userItem = buildUserItem(duplicatePayload, auth, now, newId);
 
   await dynamo.send(
@@ -1409,6 +1493,11 @@ const duplicatePersonalAgent = async (
 
   const now = Date.now();
   const newId = generateAgentId();
+  duplicatePayload.referenceFiles = await relocateManagedReferenceFiles(
+    duplicatePayload.referenceFiles,
+    auth.sub,
+    newId
+  );
   const userItem = buildUserItem(duplicatePayload, auth, now, newId);
 
   await dynamo.send(
@@ -1483,6 +1572,8 @@ const duplicateAsWorkspaceAgent = async (
       console.warn('DuplicateAgent: failed to copy icon image', { error: (e as Error)?.message });
     }
   }
+
+  payload.referenceFiles = await relocateManagedReferenceFiles(payload.referenceFiles, 'workspace', newId);
 
   const workspaceItem = buildWorkspaceItem(payload, auth, now, newId);
 
@@ -2253,6 +2344,16 @@ export const __testExports = {
 };
 
 export const handler: APIGatewayProxyHandlerV2 = async (event) => {
+  // FEAT-206 — capability probe via direct Lambda Invoke (the arcanum-agent-deployer
+  // calls this before pushing managed agents, to confirm THIS client actually
+  // enforces the managed-lock). API Gateway v2 events never carry a top-level
+  // `action`, so there's no collision with the normal request path. Returns a
+  // plain object (not an HTTP response) since it's a direct invoke. Older agents
+  // Lambdas (pre-FEAT-206) lack this branch, so the probe fails → deployer treats
+  // the client as not-yet-enforcing.
+  if ((event as unknown as { action?: string })?.action === 'capabilities') {
+    return { capabilities: { managedAgents: true } } as unknown as APIGatewayProxyResultV2;
+  }
   try {
     ensureEnv();
 

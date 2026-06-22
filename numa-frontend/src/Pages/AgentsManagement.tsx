@@ -168,7 +168,12 @@ export const AgentsManagement = () => {
   const isWorkspaceAdmin = Boolean(user?.groups?.includes('admin'));
   const canModifyAgent = useCallback(
     (agent: AgentSummary) =>
-      agent.scope === 'user' || agent.createdBy.userId === userId || (agent.scope === 'workspace' && isWorkspaceAdmin),
+      // FEAT-206 — Arcanum-managed agents are read-only here (edits happen in the
+      // CS Portal library); the server also enforces this with a 403.
+      agent.managedBy !== 'arcanum' &&
+      (agent.scope === 'user' ||
+        agent.createdBy.userId === userId ||
+        (agent.scope === 'workspace' && isWorkspaceAdmin)),
     [userId, isWorkspaceAdmin]
   );
 
