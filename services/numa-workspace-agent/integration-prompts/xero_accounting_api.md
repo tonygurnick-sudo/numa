@@ -5,6 +5,8 @@
 All action keys use the form `xero_accounting_api-{name}`. Do not invent or paraphrase action keys. If an operation you need is not named explicitly in this prompt, read `/workdir/tools/integrations/xero_accounting_api/_index.json` to find the exact key. Common keys that the model frequently gets wrong:
 
 - Create a sales invoice → `xero_accounting_api-xero-create-sales-invoice` (the `xero-` prefix is part of the key, not a typo)
+- Create a purchase bill (full-featured) → `xero_accounting_api-xero-create-purchase-bill`
+- Create a purchase bill (simpler, contact by ID) → `xero_accounting_api-create-bill`
 - Upload a file attachment → `xero_accounting_api-upload-file` (not `upload-file-to-xero`)
 - Direct REST passthrough → `xero_accounting_api-make-an-api-call`
 
@@ -33,9 +35,9 @@ Always check the schema's first prop name field to determine which auth key to u
 
 ### lineItems Format is Inconsistent
 
-Different actions expect different formats for the `lineItems` prop:
+Different actions expect different formats for the `lineItems` prop (verified against the live schemas):
 
-**string[] (array of JSON strings):** `xero-create-sales-invoice`, `xero-create-purchase-bill`, `create-bill`, `add-line-item-to-invoice`
+**string[] (array of JSON strings):** `xero-create-sales-invoice`, `create-bill`, `add-line-item-to-invoice`
 
 ```json
 {
@@ -46,13 +48,19 @@ Different actions expect different formats for the `lineItems` prop:
 }
 ```
 
-**object[] (direct array of objects):** `create-credit-note`, `create-bank-transaction`
+**`object` (array of objects):** `create-credit-note`, `create-bank-transaction`
 
 ```json
 {
   "lineItems": [{ "Description": "Credit item", "Quantity": "1", "UnitAmount": "25.00", "AccountCode": "200" }]
 }
 ```
+
+**`any` (either form works):** `xero-create-purchase-bill` — its schema type is `any`; an object array `[{...}]` is the cleanest. (The other create-bill, `create-bill`, is `string[]`.)
+
+### ⚠️ `add-line-item-to-invoice` REPLACES line items — it does not append
+
+Despite the name, this action **overwrites the invoice's entire `LineItems` set** with the array you pass — any existing lines are lost (this is how Xero's Invoices endpoint works: the collection is replaced wholesale). To genuinely _add_ a line: `get-invoice` first, take its existing `LineItems`, merge in the new one(s), and pass the **full** combined set.
 
 ### lineAmountType Casing: "Exclusive", Not "EXCLUSIVE"
 
@@ -62,12 +70,19 @@ Different actions expect different formats for the `lineItems` prop:
 
 A line item's `AccountCode` must be a real code from the org's chart of accounts (e.g. `200`, `400`) — a guessed code fails validation or, worse, silently posts to the wrong account. Before creating a bill/invoice, list the accounts (`get-accounts`, or `make-an-api-call` on `/Accounts`) and use a real code. If you can't determine the right account, ask rather than guess.
 
-### make-an-api-call Requires Leading Slash
+### make-an-api-call: leading slash + `queryString` must be an OBJECT
 
 The `relativeUrl` must start with `/` (e.g., `/Invoices`, `/Contacts`, `/Items`). Without it, the URL is malformed:
 
 - `"relativeUrl": "Invoices"` -> `api.xro/2.0Invoices` (404 error)
 - `"relativeUrl": "/Invoices"` -> `api.xro/2.0/Invoices`
+
+`queryString` is labelled a string in the schema but **must be passed as a JSON object** — a plain string fails with `target must be an object` (verified):
+
+```json
+{ "queryString": { "where": "Type==\"BANK\"" } }   // ✓
+{ "queryString": "where=Type==\"BANK\"" }            // ✗ "target must be an object"
+```
 
 ### AUTHORISED Invoices Require Due Date
 
@@ -83,6 +98,10 @@ When creating invoices with `status: "AUTHORISED"` or `"SUBMITTED"`, the `dueDat
 ### Invoice Numbers Not Unique Across Types
 
 Sales invoices (ACCREC) and bills (ACCPAY) can share the same invoice number. Use `get-invoice` with `invoiceId` for precision rather than `find-invoice` by number.
+
+### get-invoice-online-url is ACCREC-only (silent failure on bills)
+
+`get-invoice-online-url` only works for **ACCREC** (sales) invoices. Called on an **ACCPAY** bill it doesn't error — it returns an empty `ret: {}` with a "No invoice found" summary. Don't offer an online URL for purchase bills.
 
 ### Downloading Invoice PDFs
 
@@ -103,6 +122,12 @@ Both `find-or-create-contact` and `find-contact` use string values `"Yes"` or `"
 ```json
 { "createContactIfNotFound": "Yes" }
 ```
+
+(`find-contact` searches by name or `accountNumber`; `find-or-create-contact` searches by name or `emailAddress`.)
+
+### create-update-contact: pass `contactStatus` explicitly
+
+`contactStatus` has `default: "ACTIVE"` but is **not** marked optional in the schema — pass it explicitly (`"ACTIVE"` to create/keep active, `"ARCHIVED"` to archive) to avoid validation errors.
 
 ### find-invoice: At Least One Search Field Required
 
@@ -173,6 +198,8 @@ No dedicated delete actions exist. Use `make-an-api-call`, but note the status d
 ```
 
 **Contacts:** Cannot be deleted, only archived (`contactStatus: "ARCHIVED"`).
+
+**Attachments:** Xero's REST API has **no attachment-delete** — `DELETE /…/Attachments/{filename}` via `make-an-api-call` fails silently (empty `action_error`). Attachments can only be removed in the Xero UI. `get-history-of-changes` also returns `[]` for DELETED records — history isn't retrievable after deletion.
 
 ## Emailing Invoices
 
@@ -248,4 +275,4 @@ For `get-bank-summary` or `create-bank-transaction`, discover bank account IDs v
 }
 ```
 
-Then filter for accounts where `Type` is `"BANK"`.
+Then filter the result client-side for accounts where `Type` is `"BANK"`. (A server-side `where` filter works too, but only via the object `queryString` form — `{"queryString": {"where": "Type==\"BANK\""}}` — see the make-an-api-call gotcha above; client-side filtering is simpler and more reliable.)
