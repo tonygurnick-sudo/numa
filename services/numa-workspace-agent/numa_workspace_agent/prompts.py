@@ -1992,14 +1992,21 @@ def build_kb_context(
     accessible_kbs: Optional[list[dict]] = None,
 ) -> str:
     """
-    Build context about available Numa Files folders including file listings.
+    Build context listing the Numa Files folders enabled for this conversation.
+
+    Headers only: we list every enabled folder by name + kb_id but deliberately
+    do NOT inject file listings. The agent finds files by searching/traversing
+    the folders on demand (`numa files search --all`, `numa files show <kb_id>`),
+    not by reading a pre-built index. This keeps the prompt small, scales to
+    "select all" across many folders, and avoids the truncation bug (BUG-375)
+    where a folder count cap silently hid enabled folders from the agent.
 
     Args:
         available_kbs: List of folders enabled for this conversation, with 'id'
                        and optional 'name' fields. None or empty list means no
                        folders are enabled.
-        kb_listings: Optional dict mapping kb_id -> {files, folders, total_count, truncated}
-                     from the list_kb_files Lambda handler.
+        kb_listings: Deprecated / ignored. File listings are no longer injected
+                     into the prompt (BUG-375). Kept for call-site compatibility.
         accessible_kbs: List of all folders the user can toggle on for this chat
                         (the same set shown in the chat folder picker). Used to
                         surface folders the user has access to but has not enabled
@@ -2009,6 +2016,7 @@ def build_kb_context(
     Returns:
         Context string for the prompt
     """
+    del kb_listings  # no longer used — see docstring (BUG-375)
     enabled_ids = {kb.get("id") for kb in (available_kbs or []) if kb.get("id")}
     disabled_kbs = [
         kb
@@ -2046,65 +2054,44 @@ def build_kb_context(
         )
         return base + _render_disabled_section()
 
-    lines = ["**Available Numa Files folders:**"]
+    lines = ["**Available Numa Files folders (enabled for this conversation):**"]
 
-    for kb in available_kbs[:10]:  # Limit to 10 folders
+    user_sub = os.environ.get("NUMA_USER_SUB", "")
+    # Headers only — one line per enabled folder. No file listings are injected;
+    # the agent must search/traverse to find files (see the guidance below).
+    for kb in available_kbs:
         kb_id = kb.get("id", "unknown")
         kb_name = kb.get("name", kb_id)
 
-        # Build folder header
-        user_sub = os.environ.get("NUMA_USER_SUB", "")
         if kb_id == "company":
-            lines.append(f"\n- `company` - Company Files (default)")
+            lines.append("- `company` - Company Files (default)")
         elif user_sub and kb_id == user_sub:
             lines.append(
-                f"\n- `{kb_id}` - Personal (the user's private personal folder; "
+                f"- `{kb_id}` - Personal (the user's private personal folder; "
                 "default save destination when no folder is named)"
             )
         else:
-            lines.append(f"\n- `{kb_id}` - {kb_name}")
+            lines.append(f"- `{kb_id}` - {kb_name}")
 
-        # Add file listing if available
-        if kb_listings and kb_id in kb_listings:
-            listing = kb_listings[kb_id]
-            files = listing.get("files", [])
-            folders = listing.get("folders", [])
-            total_count = listing.get("total_count", 0)
-            truncated = listing.get("truncated", False)
-
-            if files or folders:
-                # Build listing header with count info
-                shown_count = len(files) + len(folders)
-                if truncated:
-                    lines.append(
-                        f"  Top-level contents (showing {shown_count} of {total_count} items - "
-                        f"use `numa files list --folder {kb_id} --json` to see all):"
-                    )
-                else:
-                    lines.append(f"  Top-level contents ({total_count} items):")
-
-                # List sub-paths first
-                for folder_name in folders[:10]:  # Limit sub-paths shown
-                    lines.append(f"    [folder] {folder_name}/")
-
-                # Then files
-                for file_info in files[:20]:  # Limit files shown
-                    name = file_info.get("name", "")
-                    size_formatted = file_info.get("size_formatted", "")
-                    lines.append(f"    [file] {name} ({size_formatted})")
-
-                # Note if more items not shown
-                remaining = total_count - shown_count
-                if remaining > 0:
-                    lines.append(f"    ... ({remaining} more items not shown)")
-            else:
-                lines.append("  Contents: (empty)")
-
-    lines.append("\nPass `kb_id` to search a specific folder.")
-
-    # Mention all_kbs when multiple folders are available
-    if len(available_kbs) > 1:
-        lines.append("Set `all_kbs: true` to search every enabled folder at once.")
+    # Make the no-listings contract explicit: the agent does not get a file index
+    # and MUST search/traverse to find files. This is the core of the BUG-375 fix —
+    # the agent should never claim a file or folder is missing without searching.
+    search_all = 'numa files search "<query>" --all --json'
+    lines.append(
+        "\nThese folders are all enabled and searchable, but their file contents "
+        "are NOT listed here — you are given folder names only, not a file index. "
+        "To find a file you MUST search or browse the folders yourself:\n"
+        f"- Find a file across every enabled folder (recurses into sub-folders): "
+        f"`{search_all}`\n"
+        '- Search one folder: `numa files search "<query>" --folder <kb_id> --json`\n'
+        "- Browse a folder's contents (incl. its sub-folders): "
+        "`numa files show <kb_id> --json`\n"
+        "Always search or list before answering. Never tell the user a file or "
+        "folder doesn't exist, or that a folder is empty, until you have actually "
+        "searched/listed it — if the user names a folder shown above, search it by "
+        "its kb_id. When looking for something and unsure where it lives, default "
+        f"to `{search_all}`."
+    )
 
     disabled_section = _render_disabled_section()
     if disabled_section:

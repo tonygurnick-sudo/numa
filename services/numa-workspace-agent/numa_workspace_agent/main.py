@@ -492,163 +492,11 @@ def _resolve_s3_prefix(
     return template.format(user_sub=user_sub, conversation_id=conversation_id)
 
 
-# Cache KB file listings with TTL
-_kb_listings_cache: dict[str, dict] = {}
-_kb_listings_loaded_at: float = 0.0
-_KB_LISTINGS_TTL_SECONDS = 300  # 5 minutes
-
-
-def _fetch_kb_listings(
-    available_kbs: list[dict], user_sub: str
-) -> dict[str, dict] | None:
-    """
-    Fetch top-level file listings for all enabled knowledge bases.
-
-    Invokes the workspace-chat-tools Lambda with the list_kb_files tool.
-    Results are cached per-conversation.
-
-    Args:
-        available_kbs: List of {id, name} for enabled KBs
-        user_sub: User's Cognito sub for permission verification
-
-    Returns:
-        Dict mapping kb_id -> {files, folders, total_count, truncated}
-        or None if fetch failed
-    """
-    if not available_kbs:
-        return None
-
-    workspace_tools_arn = os.environ.get("WORKSPACE_TOOLS_LAMBDA_ARN", "")
-    if not workspace_tools_arn:
-        logger.warning(
-            "WORKSPACE_TOOLS_LAMBDA_ARN not configured, skipping KB listings"
-        )
-        return None
-
-    kb_ids = [kb.get("id") for kb in available_kbs if kb.get("id")]
-    if not kb_ids:
-        return None
-
-    logger.debug(
-        "Fetching KB file listings",
-        phase="init",
-        kb_ids=kb_ids,
-        user_sub=user_sub,
-    )
-
-    try:
-        lambda_client = boto3.client(
-            "lambda", region_name=os.environ.get("AWS_REGION", "us-east-1")
-        )
-
-        payload = {
-            "tool": "list_kb_files",
-            "params": {"kb_ids": kb_ids},
-            "allowed_kbs": kb_ids,
-            "user_sub": user_sub,
-        }
-
-        response = lambda_client.invoke(
-            FunctionName=workspace_tools_arn,
-            InvocationType="RequestResponse",
-            Payload=json.dumps(payload).encode("utf-8"),
-        )
-
-        response_payload = json.loads(response["Payload"].read().decode("utf-8"))
-
-        if response_payload.get("status") == "error":
-            logger.warning(
-                "KB listings fetch failed",
-                error=response_payload.get("error"),
-            )
-            return None
-
-        # list_kb_files spills its full result to S3 when it would overflow the
-        # 6 MB synchronous Lambda payload, returning a small
-        # {"oversized": true, result_url, result_sha256, ...} envelope instead.
-        # Resolve it losslessly here (download + sha256-verify) so the system
-        # prompt sees the COMPLETE listings. Backward-compatible: a non-oversized
-        # result passes through unchanged.
-        from .oversized_results import resolve_oversized_result
-
-        result = resolve_oversized_result(response_payload.get("result", {}))
-        listings = result.get("listings", {}) if isinstance(result, dict) else {}
-
-        if listings:
-            # Build the prompt content preview for logging
-            from .prompts import build_kb_context
-
-            kb_context_preview = build_kb_context(available_kbs, listings)
-
-            logger.info(
-                "KB listings fetched for system prompt",
-                _name="KB_LISTINGS",
-                phase="init",
-                kb_count=len(listings),
-                kb_ids=list(listings.keys()),
-                total_items=sum(
-                    len(l.get("files", [])) + len(l.get("folders", []))
-                    for l in listings.values()
-                ),
-                prompt_content=kb_context_preview,
-            )
-
-        return listings if listings else None
-
-    except Exception as e:
-        logger.warning(
-            "Failed to fetch KB listings",
-            error=str(e),
-            exc_info=True,
-        )
-        return None
-
-
-def _get_cached_kb_listings(
-    conversation_id: str,
-    available_kbs: list[dict] | None,
-    user_sub: str,
-    force_refresh: bool = False,
-) -> dict[str, dict] | None:
-    """
-    Get KB listings from cache or fetch fresh if needed.
-
-    Uses a 5-minute TTL cache. Force refresh bypasses the cache (used on cold start).
-
-    Args:
-        conversation_id: Current conversation ID
-        available_kbs: List of {id, name} for enabled KBs
-        user_sub: User's Cognito sub
-        force_refresh: If True, bypass cache and fetch fresh
-
-    Returns:
-        Dict mapping kb_id -> listing data, or None
-    """
-    global _kb_listings_cache, _kb_listings_loaded_at
-
-    if not available_kbs:
-        return None
-
-    # Return cached if within TTL and not forcing refresh
-    if (
-        _kb_listings_cache
-        and not force_refresh
-        and (time.time() - _kb_listings_loaded_at) < _KB_LISTINGS_TTL_SECONDS
-    ):
-        logger.debug(
-            "Using cached KB listings",
-            conversation_id=conversation_id[:8] + "..." if conversation_id else "",
-            kb_count=len(_kb_listings_cache),
-        )
-        return _kb_listings_cache
-
-    # Fetch fresh listings
-    listings = _fetch_kb_listings(available_kbs, user_sub)
-    if listings:
-        _kb_listings_cache = listings
-        _kb_listings_loaded_at = time.time()
-
-    return listings
+# NOTE: per-folder file listings are no longer injected into the system prompt
+# (BUG-375). The agent finds files by searching/traversing folders on demand, so
+# the old `_fetch_kb_listings` / `_get_cached_kb_listings` machinery (and its S3
+# round-trip on every cold start) was removed. `build_kb_context` now renders
+# folder headers only.
 
 
 def _extract_user_sub_from_headers(headers: dict[str, str]) -> str:
@@ -2239,15 +2087,10 @@ async def _handle_chat(
         )
 
     async def _load_kb_listings():
-        if not available_kbs:
-            return None
-        return await asyncio.to_thread(
-            _get_cached_kb_listings,
-            conversation_id,
-            available_kbs,
-            user_sub,
-            force_refresh=is_cold_start,
-        )
+        # File listings are no longer injected into the prompt (BUG-375); the
+        # agent searches/traverses folders on demand. Kept as a no-op so the
+        # gather() tuple below stays positionally stable.
+        return None
 
     async def _load_user_data():
         # Prime the consolidated user settings cache (single DynamoDB GetItem).
@@ -2752,15 +2595,8 @@ async def _handle_sync(
         agent_id=agent_id,
     )
 
-    # KB listings
+    # KB listings are no longer fetched/injected (BUG-375) — folder headers only.
     kb_listings = None
-    if available_kbs:
-        kb_listings = _get_cached_kb_listings(
-            conversation_id,
-            available_kbs,
-            user_sub,
-            force_refresh=is_cold_start,
-        )
 
     # Sync ext API docs for any enabled native connectors (instant if cached)
     _connector_names_sync = [
@@ -3091,14 +2927,8 @@ async def _handle_fire_and_forget(
         agent_id=agent_id,
     )
 
+    # KB listings are no longer fetched/injected (BUG-375) — folder headers only.
     kb_listings = None
-    if available_kbs:
-        kb_listings = _get_cached_kb_listings(
-            conversation_id,
-            available_kbs,
-            user_sub,
-            force_refresh=is_cold_start,
-        )
 
     # Sync ext API docs for any enabled native connectors (instant if cached)
     _connector_names_async = [
