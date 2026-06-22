@@ -1197,10 +1197,37 @@ def create_agent_options(
         type_config.enable_security_hooks and type_config.allowed_cli_commands is None
     )
 
+    # Pass the system prompt to the CLI via a FILE rather than an inline argv
+    # string. The Claude Agent SDK otherwise emits `--system-prompt <str>`, and
+    # Linux caps a SINGLE argv string at MAX_ARG_STRLEN (128 KiB, distinct from
+    # the ~2 MB total ARG_MAX). A prompt over that — e.g. the Standard-model
+    # variant, which appends the accuracy/scope + visual-design addenda and runs
+    # ~133 KB — fails the subprocess exec with OSError E2BIG ("Argument list too
+    # long") before the model ever runs. Writing the prompt to a file and
+    # passing {"type": "file", "path": ...} (CLI `--system-prompt-file`, verified
+    # supported on the pinned CLI) takes the prompt out of argv entirely, so its
+    # size is unbounded. Falls back to the inline string only if the write fails
+    # (small prompts keep working; only >128 KiB ones would still hit the cap).
+    system_prompt_option: Any = system_prompt
+    try:
+        system_prompt_path = LOCAL_ROOT / ".system" / "system-prompt.txt"
+        system_prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        system_prompt_path.write_text(system_prompt, encoding="utf-8")
+        system_prompt_option = {"type": "file", "path": str(system_prompt_path)}
+    except OSError:
+        import structlog
+
+        structlog.get_logger().warning(
+            "Failed to persist system prompt to file; falling back to inline arg",
+            _name="SYSTEM_PROMPT_FILE_FALLBACK",
+            phase="sdk",
+            prompt_length=len(system_prompt),
+        )
+
     # Build options dict, conditionally including agents if defined
     options_kwargs: dict[str, Any] = {
         # Core settings
-        "system_prompt": system_prompt,
+        "system_prompt": system_prompt_option,
         "model": effective_model,
         "max_turns": type_config.max_turns,
         # Buffer size for multimodal content (images, PDFs)
