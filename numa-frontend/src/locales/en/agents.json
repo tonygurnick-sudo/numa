@@ -5,6 +5,10 @@
       "company": "Company Agent",
       "personal": "Personal Agent"
     },
+    "managed": {
+      "badge": "Managed by Arcanum",
+      "tooltip": "This is an official Arcanum agent. It's maintained centrally and can't be edited or deleted here."
+    },
     "timeSaved": "Saved {{time}}",
     "knowledgeBases": {
       "all": "All folders"

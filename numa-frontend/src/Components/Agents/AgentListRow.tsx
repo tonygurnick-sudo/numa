@@ -1,5 +1,5 @@
 import { Badge } from 'react-bootstrap';
-import { Copy, Eye, EyeOff, Heart, Pencil, Share2, Trash2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, Heart, Pencil, Share2, ShieldCheck, Trash2 } from 'lucide-react';
 import { AgentAvatar } from './AgentAvatar';
 import type { AgentSummary } from '../../types/agents';
 import { useTranslation } from 'react-i18next';
@@ -69,6 +69,21 @@ export const AgentListRow = ({
           {isHidden && (
             <Badge bg="secondary" className="text-uppercase" style={{ fontSize: '0.65rem' }}>
               {t('management.hidden')}
+            </Badge>
+          )}
+          {agent.managedBy === 'arcanum' && (
+            <Badge
+              bg=""
+              className="d-inline-flex align-items-center gap-1"
+              style={{
+                fontSize: '0.65rem',
+                backgroundColor: 'var(--brand-primary-light, #e8f0fe)',
+                color: 'var(--brand-primary, var(--bs-primary))',
+              }}
+              title={t('card.managed.tooltip')}
+            >
+              <ShieldCheck size={11} />
+              {t('card.managed.badge')}
             </Badge>
           )}
           {roleBadge && (

@@ -70,6 +70,7 @@
     "getPolicyFailed": "Failed to get MCP policy",
     "setPolicyFailed": "Failed to set MCP policy",
     "disconnectFailed": "Failed to disconnect integration",
+    "reconcileFailed": "Failed to reconcile duplicate accounts",
     "unavailable": "Numa Integrations are not available for this account.",
     "relayExecutionFailed": "Relay lambda execution failed: {{message}}",
     "relayHttpError": "HTTP {{status}} error",

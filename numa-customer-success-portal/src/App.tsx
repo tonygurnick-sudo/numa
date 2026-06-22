@@ -33,6 +33,7 @@ import DeploymentLogs from './pages/DeploymentLogs';
 import Activity from './pages/Activity';
 import Tools from './pages/Tools';
 import Docs from './pages/Docs';
+import AgentLibrary from './pages/AgentLibrary';
 import PublicDemoConversations from './pages/PublicDemoConversations';
 
 function App() {
@@ -73,6 +74,7 @@ function App() {
                       <Route path="/tools/get-system-user-secret" element={<GetSystemUserSecret />} />
                       <Route path="/tools/bulk-update-client-config" element={<BulkUpdateClientConfig />} />
                       <Route path="/tools/support-docs-manager" element={<SupportDocsManager />} />
+                      <Route path="/tools/agent-library" element={<AgentLibrary />} />
                       <Route path="/tools/platform-settings" element={<PlatformSettings />} />
                       <Route path="/tools/reset-client-password" element={<ResetClientPasswordTool />} />
                       <Route path="/deployments" element={<Deployments />} />

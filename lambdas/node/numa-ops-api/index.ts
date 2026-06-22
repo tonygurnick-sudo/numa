@@ -924,8 +924,13 @@ const handleBoards = async (
 
     if (!isAdmin(auth) && !isTeamOwner(meta, auth)) return errorResponse(403, 'Admin or board owner access required');
 
+    // Count real ticket rows only. The `TICKET#` SK prefix also matches the
+    // auxiliary GSI2 index rows (`TICKET#{id}#IDX_*`, entityType TICKET_INDEX),
+    // which carry no statusType — a soft-deleted ticket leaves those rows
+    // behind, and without this exclusion they pass the `!== 'deleted'` filter
+    // and falsely block deletion of an empty board. (BUG-361)
     const tickets = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
-    const activeTickets = tickets.filter((t) => t.statusType !== 'deleted');
+    const activeTickets = tickets.filter((t) => t.entityType !== 'TICKET_INDEX' && t.statusType !== 'deleted');
     if (activeTickets.length > 0) {
       return errorResponse(409, 'Cannot delete board with active tickets');
     }
@@ -3282,6 +3287,12 @@ const handleMetrics = async (
     const tickets = await queryByPK(`TEAM#${teamId}`, 'TICKET#');
     const counts: Record<string, number> = {};
     for (const t of tickets) {
+      // Skip the auxiliary GSI2 index rows (`TICKET#{id}#IDX_*`) that share the
+      // TICKET# SK prefix but carry no statusType — counting them produced a
+      // phantom `unknown` bucket. Skip soft-deleted tickets too so an empty
+      // board reports zero rather than a lingering `deleted` count. (BUG-361)
+      if (t.entityType === 'TICKET_INDEX') continue;
+      if (t.statusType === 'deleted') continue;
       const st = String(t.statusType ?? 'unknown');
       counts[st] = (counts[st] ?? 0) + 1;
     }

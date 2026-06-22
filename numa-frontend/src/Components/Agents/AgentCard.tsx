@@ -13,6 +13,7 @@ import {
   FolderOpen,
   Pencil,
   Search,
+  ShieldCheck,
   Star,
   Store,
   Trash2,
@@ -136,6 +137,9 @@ export const AgentCard = ({
     return kb?.kb_name || kbId;
   };
 
+  // FEAT-206 — Arcanum-managed (centrally deployed, read-only here).
+  const isManaged = agent.managedBy === 'arcanum';
+
   const autoMode = agent.toolsConfig?.autoToolsEnabled;
   const hasWeb = autoMode || agent.toolsConfig?.webSearchEnabled;
   // In auto mode, the agent creation tool is also available
@@ -258,6 +262,16 @@ export const AgentCard = ({
                   <span className="text-muted small" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
                     <User size={11} className="me-1" />
                     {t('card.visibility.personal')}
+                  </span>
+                )}
+
+                {isManaged && (
+                  <span
+                    className="small d-inline-flex align-items-center"
+                    style={{ fontSize: '0.7rem', flexShrink: 0, color: 'var(--brand-primary, var(--color-primary))' }}
+                  >
+                    <ShieldCheck size={11} className="me-1" />
+                    {t('card.managed.badge')}
                   </span>
                 )}
 
@@ -481,6 +495,20 @@ export const AgentCard = ({
                     <User size={12} className="me-1" />
                     {t('card.visibility.personal')}
                   </span>
+                )}
+                {isManaged && (
+                  <OverlayTrigger
+                    placement="top"
+                    overlay={<Tooltip id={`managed-${agent.agentId}`}>{t('card.managed.tooltip')}</Tooltip>}
+                  >
+                    <span
+                      className="small d-inline-flex align-items-center"
+                      style={{ fontSize: '0.75rem', color: 'var(--brand-primary, var(--color-primary))' }}
+                    >
+                      <ShieldCheck size={12} className="me-1" />
+                      {t('card.managed.badge')}
+                    </span>
+                  </OverlayTrigger>
                 )}
               </div>
             </div>

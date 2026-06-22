@@ -1,0 +1,29 @@
+{
+  "name": "arcanum-agent-deployer",
+  "packageManager": "yarn@4.9.2",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "devDependencies": {
+    "@arcanumai/style": "workspace:*",
+    "@types/aws-lambda": "^8.10.149",
+    "@types/node": "^22.10.1",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.16.0",
+    "typescript": "^5.7.2"
+  },
+  "scripts": {
+    "clean": "rm -rf dist lambda_function.zip",
+    "build": "rm -rf dist && esbuild --bundle --format=esm --platform=node --target=node22 --outdir=dist --out-extension:.js=.mjs --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" index.ts",
+    "bundle": "yarn build && rm -f lambda_function.zip && touch -d 2024-01-01T00:00:00 dist/index.mjs && (cd dist && zip -X -j ../lambda_function.zip index.mjs)",
+    "lint": "eslint && tsc --noEmit",
+    "test": "echo 'no tests'"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.901.0",
+    "@aws-sdk/client-lambda": "^3.901.0",
+    "@aws-sdk/client-s3": "^3.901.0",
+    "@aws-sdk/client-sts": "^3.901.0",
+    "@aws-sdk/lib-dynamodb": "^3.901.0"
+  }
+}
