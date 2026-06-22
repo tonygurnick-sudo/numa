@@ -29,7 +29,7 @@ from numa_workspace_agent.hooks import (
     workspace_sync_hook,
 )
 from numa_workspace_agent.prompts import (
-    ANTI_FABRICATION_ADDENDUM,
+    ACCURACY_AND_SCOPE_ADDENDUM,
     LANGUAGE_STEER,
     VIEW_IMAGE_USAGE,
     VISUAL_DESIGN_ADDENDUM,
@@ -1147,15 +1147,19 @@ def create_agent_options(
         # 1h prompt-cache toggle so the CLI doesn't send Bedrock cache controls.
         env.pop("ENABLE_PROMPT_CACHING_1H_BEDROCK", None)
 
-        # Model-conditional capabilities: append the anti-fabrication addendum,
-        # the vision-tool advertisement, the language steer, and the visual-design
-        # mandate (the Standard model needs to be pushed to load the design skill;
-        # Claude reaches for it on its own). The `numa vision` command is permitted
-        # by the unrestricted numa-chat policy already; the gate here is purely
-        # whether the prompt advertises it.
+        # Model-conditional capabilities: append the scope/restraint + accuracy
+        # addendum, the vision-tool advertisement, the language steer, and the
+        # visual-design mandate (the Standard model needs to be pushed to load the
+        # design skill; Claude reaches for it on its own). The scope/accuracy
+        # addendum also carries the "do exactly what was asked" + "verify before
+        # acting on a finding" framing that Claude supplies from its own priors —
+        # Premium deliberately gets none of it (it doesn't overstep this way, and
+        # the blunt wording would make it timid). The `numa vision` command is
+        # permitted by the unrestricted numa-chat policy already; the gate here is
+        # purely whether the prompt advertises it.
         system_prompt = (
             f"{system_prompt}\n\n"
-            f"{ANTI_FABRICATION_ADDENDUM}\n\n{VIEW_IMAGE_USAGE}\n\n{LANGUAGE_STEER}"
+            f"{ACCURACY_AND_SCOPE_ADDENDUM}\n\n{VIEW_IMAGE_USAGE}\n\n{LANGUAGE_STEER}"
             f"\n\n{VISUAL_DESIGN_ADDENDUM}"
         )
 
