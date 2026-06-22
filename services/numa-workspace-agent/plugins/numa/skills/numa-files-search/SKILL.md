@@ -135,12 +135,12 @@ Add files from the workspace to a folder for future retrieval.
 
 ### Parameters
 
-| Parameter    | Required | Default  | Description                                                                                                                                                                                                                                                                                           |
-| ------------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `file`       | Yes      | -        | Local path to file in workspace (positional arg)                                                                                                                                                                                                                                                      |
-| `--to`       | Yes      | -        | Destination folder (name or id). `--folder` is an accepted alias for `--to` — prefer `--to`.                                                                                                                                                                                                          |
-| `--path`     | No       | root     | Subfolder prefix within the destination folder, e.g. `"reports/2024/"`. Omit to upload to the folder root. This is a directory path, NOT a filename. **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
-| `--filename` | No       | basename | Override the destination filename (defaults to the local file's basename).                                                                                                                                                                                                                            |
+| Parameter    | Required | Default  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`       | Yes      | -        | Local path to file in workspace (positional arg)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--to`       | Yes      | -        | Destination folder (name or id). `--folder` is an accepted alias for `--to` — prefer `--to`.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `--path`     | No       | root     | Subfolder prefix within the destination folder, e.g. `"reports/2024/"`. Omit to upload to the folder root. This is a directory path, NOT a filename. Any subfolders in the path are created on the fly, but are **ephemeral** — they vanish if emptied (use `mkdir` first for a folder that persists when empty; see the `mkdir` section). **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
+| `--filename` | No       | basename | Override the destination filename (defaults to the local file's basename).                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### Examples
 
@@ -448,6 +448,8 @@ Bash("numa files mkdir 'Personal/projects/2026' -y --json -m 'Creating the 2026 
 
 You can also create subfolders implicitly by uploading with `--path`; use `mkdir` when you want an empty folder to exist first.
 
+**Persistent vs ephemeral folders (important):** a subfolder created with `mkdir` is **persistent** — it survives even after all its files are removed. A subfolder created **implicitly by `upload --path`** is **ephemeral** — it exists only while it still contains files, and disappears once the last file inside it is moved or deleted (standard object-store behaviour: a folder is just a prefix on its files). If you need a folder to stick around when empty, `mkdir` it first rather than relying on `upload --path`.
+
 ---
 
 ## numa files rmdir
@@ -459,7 +461,7 @@ Bash("numa files rmdir 'Personal/projects/2026' -y --json -m 'Removing the 2026 
 ```
 
 - Removes the subfolder and all files/sub-subfolders beneath it. Destructive — confirm the path with `show`/`find` first.
-- Deleting a subfolder does **not** remove its parent (parents created with `mkdir` persist on their own).
+- Deleting a subfolder does **not** remove a parent that was created with `mkdir` (those have their own marker and persist). A parent that only ever existed because a file was uploaded into it (no `mkdir`) **will** disappear once it is emptied — see the persistent-vs-ephemeral note under `mkdir`.
 
 ---
 
