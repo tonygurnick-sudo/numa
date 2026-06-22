@@ -23,12 +23,24 @@ type Props = {
 /** Scheduled line uses the brand colour; on-demand a muted teal so the two read apart at a glance. */
 const ONDEMAND_COLOR = '#0d9488';
 
-/** ISO timestamp -> "Jun 20, 14:32" — shown on hover so the sequence axis stays uncluttered. */
+/** ISO timestamp -> "Jun 20, 14:32" — full date+time for the hover tooltip. */
 const runTime = (ts: string | null): string => {
   if (!ts) return '—';
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleString(i18n.language, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+/** Compact x-axis tick: "14:32" for runs today, else "20 Jun". Keeps the axis readable on a narrow card. */
+const axisTime = (ts: string | null): string => {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return d.toLocaleString(
+    i18n.language,
+    sameDay ? { hour: '2-digit', minute: '2-digit' } : { month: 'short', day: 'numeric' }
+  );
 };
 
 /** Per-agent credit analytics (FEAT-246) — a collapsible "Credits" section inside the agent card.
@@ -90,45 +102,28 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
   const latestTier = agg?.latestTier ?? 'unclassified';
   const hasData = runs.length > 0;
 
-  // Two lines — scheduled vs on-demand — each plotting that source's last 5 runs on a shared credits
-  // axis. Runs are sequence-aligned and right-anchored: the rightmost slot is each source's most recent
-  // run ("Latest"), so the lines are comparable run-for-run even though their absolute times differ
-  // (the real time rides in the hover tooltip). Lines with no runs are simply absent.
+  // Two lines — scheduled vs on-demand — on a shared credits axis over a real chronological x-axis.
+  // Each source contributes its last 5 runs; all runs are merged and sorted by time, so every dot sits
+  // at its own real run time (the tick shows that time). A row holds only the source that ran at that
+  // instant; the other line bridges the gap via connectNulls. Lines with no runs are simply absent.
   const { chartData, sourcesPresent } = useMemo(() => {
-    const bySource = (s: RunSource): AgentStatRun[] =>
-      runs
-        .filter((r) => r.source === s)
-        .slice(0, 5)
-        .reverse(); // oldest -> newest
-    const scheduled = bySource('scheduled');
-    const ondemand = bySource('ondemand');
-    const span = Math.max(scheduled.length, ondemand.length);
-    type Slot = {
-      label: string;
-      scheduled: number | null;
-      ondemand: number | null;
-      scheduledRun?: AgentStatRun;
-      ondemandRun?: AgentStatRun;
-    };
-    const data: Slot[] = [];
-    for (let i = 0; i < span; i++) {
-      const fromRight = span - 1 - i; // 0 == rightmost == most recent
-      // Right-anchor each line: its last run lands in the rightmost slot.
-      const s = scheduled[scheduled.length - 1 - fromRight];
-      const o = ondemand[ondemand.length - 1 - fromRight];
-      data.push({
-        label: fromRight === 0 ? t('card.credits.latest', { defaultValue: 'Latest' }) : `−${fromRight}`,
-        scheduled: s ? s.credits : null,
-        ondemand: o ? o.credits : null,
-        scheduledRun: s,
-        ondemandRun: o,
-      });
-    }
+    const take = (s: RunSource): AgentStatRun[] => runs.filter((r) => r.source === s).slice(0, 5);
+    const scheduled = take('scheduled');
+    const ondemand = take('ondemand');
+    const data = [...scheduled, ...ondemand]
+      .sort((a, b) => String(a.ts ?? '').localeCompare(String(b.ts ?? ''))) // oldest -> newest
+      .map((r) => ({
+        label: axisTime(r.ts),
+        scheduled: r.source === 'scheduled' ? r.credits : null,
+        ondemand: r.source === 'ondemand' ? r.credits : null,
+        scheduledRun: r.source === 'scheduled' ? r : undefined,
+        ondemandRun: r.source === 'ondemand' ? r : undefined,
+      }));
     return {
       chartData: data,
       sourcesPresent: { scheduled: scheduled.length > 0, ondemand: ondemand.length > 0 },
     };
-  }, [runs, t]);
+  }, [runs]);
 
   const userLabel = (sub: string): string => userMap[sub] ?? `${sub.slice(0, 8)}…`;
 
@@ -233,11 +228,11 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
                   {/* Credits per run — scheduled vs on-demand, each its own line of last-5 runs.
                       Sequence axis (right = most recent); real run time + tier ride in the tooltip. */}
                   <ResponsiveContainer width="100%" height={160}>
-                    <LineChart data={chartData} margin={{ top: 4, right: 10, bottom: 0, left: -20 }}>
+                    <LineChart data={chartData} margin={{ top: 4, right: 12, bottom: 0, left: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f3" />
                       <XAxis
                         dataKey="label"
-                        interval={0}
+                        interval="preserveStartEnd"
                         tick={{ fontSize: 10, fill: '#71717a' }}
                         axisLine={{ stroke: '#e4e4e7' }}
                         tickLine={false}
@@ -247,7 +242,7 @@ export const AgentCreditsSection = ({ agentId, visibility }: Props) => {
                         allowDecimals={false}
                         axisLine={false}
                         tickLine={false}
-                        width={32}
+                        width={36}
                       />
                       <Tooltip
                         cursor={{ stroke: '#e4e4e7' }}
