@@ -1003,13 +1003,40 @@ async def move_kb_files(request: Request, kb_id: str) -> Response:
                             error=str(meta_err),
                         )
 
+                # Verify the destination object really landed before removing
+                # the source. copy_object is atomic and raises on failure, but
+                # an explicit head closes the gap entirely — we never delete the
+                # only surviving copy on a silent partial.
+                s3.head_object(Bucket=DATA_BUCKET, Key=dest_key)
+
                 delete_objects = [{"Key": source_key}]
                 if had_metadata:
                     delete_objects.append({"Key": metadata_source})
-                s3.delete_objects(
-                    Bucket=DATA_BUCKET,
-                    Delete={"Objects": delete_objects, "Quiet": True},
-                )
+                try:
+                    s3.delete_objects(
+                        Bucket=DATA_BUCKET,
+                        Delete={"Objects": delete_objects, "Quiet": True},
+                    )
+                except Exception as del_err:  # pylint: disable=broad-except
+                    # Copy is confirmed present, so this is a duplicate (both
+                    # locations exist), not data loss. Surface it loudly rather
+                    # than reporting a clean move.
+                    logger.error(
+                        "Move copied but source delete failed — duplicate left behind",
+                        source_key=source_key,
+                        dest_key=dest_key,
+                        error=str(del_err),
+                    )
+                    failed.append(
+                        {
+                            "key": source_key,
+                            "error": (
+                                "Copied to destination but failed to remove the "
+                                f"original (duplicate left at source): {del_err}"
+                            ),
+                        }
+                    )
+                    continue
                 successful.append({"sourceKey": source_key, "destKey": dest_key})
             except Exception as move_err:  # pylint: disable=broad-except
                 logger.error(
@@ -1169,14 +1196,37 @@ async def rename_kb_file(request: Request, kb_id: str) -> Response:
                     error=str(meta_err),
                 )
 
+        # Confirm the renamed copy exists before deleting the original, so a
+        # silent partial never destroys the only surviving copy.
+        s3.head_object(Bucket=DATA_BUCKET, Key=new_key)
+
         # Delete originals.
         delete_objects = [{"Key": key}]
         if had_metadata:
             delete_objects.append({"Key": metadata_source})
-        s3.delete_objects(
-            Bucket=DATA_BUCKET,
-            Delete={"Objects": delete_objects, "Quiet": True},
-        )
+        try:
+            s3.delete_objects(
+                Bucket=DATA_BUCKET,
+                Delete={"Objects": delete_objects, "Quiet": True},
+            )
+        except Exception as del_err:  # pylint: disable=broad-except
+            logger.error(
+                "Rename copied but source delete failed — duplicate left behind",
+                source_key=key,
+                dest_key=new_key,
+                error=str(del_err),
+            )
+            return JSONResponse(
+                {
+                    "error": (
+                        "Renamed copy created but the original could not be "
+                        "removed (duplicate left behind)"
+                    ),
+                    "sourceKey": key,
+                    "destKey": new_key,
+                },
+                status_code=500,
+            )
 
         logger.info(
             "KB file renamed",
@@ -1270,6 +1320,7 @@ async def create_kb_folder(request: Request, kb_id: str) -> Response:
         path, path_err = _normalize_subfolder_path(body.get("path"))
         if path_err is not None:
             return JSONResponse({"error": path_err}, status_code=400)
+        assert path is not None  # narrowed: path_err is None => path is set
 
         marker_key = f"{s3_prefix}{path}/"
         s3 = prm_client("s3", region=REGION)
@@ -1300,17 +1351,30 @@ async def create_kb_folder(request: Request, kb_id: str) -> Response:
                 status_code=409,
             )
 
-        s3.put_object(Bucket=DATA_BUCKET, Key=marker_key, Body=b"")
+        # mkdir -p: materialize a marker for the leaf AND every ancestor
+        # segment. S3 has no real directories, so a folder "exists" only as
+        # long as some object carries its prefix. Without ancestor markers,
+        # creating "reports/q3" leaves "reports" with no object of its own —
+        # so deleting q3 would make reports silently vanish from listings.
+        # Writing an empty marker per segment is idempotent and cheap.
+        segments = path.split("/")
+        created_keys: list[str] = []
+        for i in range(len(segments)):
+            ancestor = "/".join(segments[: i + 1])
+            ancestor_key = f"{s3_prefix}{ancestor}/"
+            s3.put_object(Bucket=DATA_BUCKET, Key=ancestor_key, Body=b"")
+            created_keys.append(ancestor_key)
 
         logger.info(
             "KB subfolder created",
             kb_id=kb_id,
             user_id=user_id,
             path=path,
+            created_markers=len(created_keys),
         )
 
         return JSONResponse(
-            {"path": path, "key": marker_key},
+            {"path": path, "key": marker_key, "created_keys": created_keys},
             status_code=201,
         )
 

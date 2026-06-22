@@ -56,6 +56,23 @@ const isSentinel = (v: unknown): boolean =>
 const asRecord = (v: unknown): Record<string, unknown> | undefined =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined;
 
+/**
+ * Resolve the on-disk name for a binary payload. Prefer the producer's
+ * `filename_hint` (the real upstream name, e.g. `image.png`) so downloads
+ * keep their identity and don't all collapse onto `${actionKey}-binary` —
+ * which silently overwrites every prior download of the same action (notably
+ * `request` proxy GETs, whose actionKey is just `proxy-<slug>`). Falls back to
+ * the synthetic `${actionKey}-binary${ext}` when no usable hint is present.
+ */
+const resolveBinaryName = (r: Record<string, unknown>, actionKey: string, ext: string): string => {
+  const fallback = `${actionKey}-binary${ext}`;
+  const hint = r['filename_hint'];
+  if (isSentinel(hint)) return fallback;
+  let filename = sanitiseName(hint as string, fallback);
+  if (!filename.includes('.') && ext) filename = `${filename}${ext}`;
+  return filename;
+};
+
 const extFromContentType = (contentType: unknown): string => {
   const base = typeof contentType === 'string' ? contentType.split(';')[0]?.trim() : '';
   // Minimal map — covers what integrations actually return; unknown types
@@ -100,7 +117,7 @@ export function collectIntegrationFileRefs(result: unknown, actionKey: string): 
     // 1. Inline binary (base64)
     if (r['binary'] && typeof r['base64_body'] === 'string') {
       push({
-        filename: `${actionKey}-binary${ext}`,
+        filename: resolveBinaryName(r, actionKey, ext),
         source: { kind: 'base64', data: r['base64_body'] },
         ...(sha ? { expectedSha256: sha } : {}),
       });
@@ -108,14 +125,8 @@ export function collectIntegrationFileRefs(result: unknown, actionKey: string): 
 
     // 2. Staged binary (proxy spilled >6MB bodies to S3, presigned GET)
     if (r['binary'] && r['binary_storage'] === 's3_presigned' && typeof r['presigned_url'] === 'string') {
-      const hint = r['filename_hint'];
-      let filename = `${actionKey}-binary${ext}`;
-      if (!isSentinel(hint)) {
-        filename = sanitiseName(hint as string, filename);
-        if (!filename.includes('.') && ext) filename = `${filename}${ext}`;
-      }
       push({
-        filename,
+        filename: resolveBinaryName(r, actionKey, ext),
         source: { kind: 'url', url: r['presigned_url'] },
         ...(sha ? { expectedSha256: sha } : {}),
         ...(typeof r['size'] === 'number' && r['size'] > 0 ? { expectedSize: r['size'] } : {}),

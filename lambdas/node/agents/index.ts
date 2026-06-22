@@ -58,6 +58,8 @@ type AgentToolsConfig = {
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   /** @deprecated Pre-FEAT-143 flat slug list. New agents write
    *  `enabledIntegrations` instead; we still persist this in parallel for
    *  one release so older chat/runner code paths keep working. */
@@ -329,6 +331,10 @@ const normaliseToolsConfig = (config?: AgentToolsConfig | null): AgentToolsConfi
     queryDataSources: config.queryDataSources ?? false,
     webSearchEnabled: config.webSearchEnabled ?? false,
     createAgentEnabled: config.createAgentEnabled ?? false,
+    // Memories default on (preserves historical always-on behaviour); numaOps
+    // default off (also gated by the workspace feature flag at runtime).
+    memoriesEnabled: config.memoriesEnabled ?? true,
+    numaOpsEnabled: config.numaOpsEnabled ?? false,
     enabledConnections: Array.isArray(config.enabledConnections) ? config.enabledConnections : [],
     enabledIntegrations: normaliseIntegrationRows(config.enabledIntegrations),
     // Preserve allowedKnowledgeBases: null means all KBs, [] means none, array means specific
@@ -760,7 +766,10 @@ const handleListAgents = async (
   auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const scope = (event.queryStringParameters?.scope || 'owned').toLowerCase();
-  const includeOwned = scope === 'owned' || scope === 'all' || scope === '';
+  if (!['owned', 'public', 'all'].includes(scope)) {
+    return errorResponse(400, `Invalid scope '${scope}'. Must be one of: owned, public, all.`);
+  }
+  const includeOwned = scope === 'owned' || scope === 'all';
   const includePublic = scope === 'public' || scope === 'all';
   const agentTypeFilter = event.queryStringParameters?.agentType?.toLowerCase();
   const titleFilter = event.queryStringParameters?.title?.toLowerCase();

@@ -14797,6 +14797,7 @@ __metadata:
   dependencies:
     "@aws-sdk/client-cognito-identity-provider": "npm:^3.600.0"
     "@aws-sdk/client-lambda": "npm:^3.600.0"
+    "@aws-sdk/client-s3": "npm:^3.600.0"
     "@types/node": "npm:^22.0.0"
     cognito-srp-helper: "npm:^2.2.3"
     commander: "npm:^12.1.0"

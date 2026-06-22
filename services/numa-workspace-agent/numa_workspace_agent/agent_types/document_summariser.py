@@ -102,10 +102,7 @@ DOCUMENT_SUMMARISER = AgentTypeConfig(
     enable_scripts_mcp=False,  # No code execution
     enable_integrations_mcp=False,  # No integrations
     enable_numa_mcp=False,  # No Numa tools
-    # No Numa CLI tools at all
-    enabled_numa_tools=[],
-    tools_source_dirs=[],  # Don't copy any tool scripts
-    # Still use default plugins for basic skills
+    # Use default plugins for basic skills
     plugins_path="/app/plugins/numa",
     # No KB or integrations
     restrict_kbs=True,

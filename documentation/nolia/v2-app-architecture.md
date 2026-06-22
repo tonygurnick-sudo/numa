@@ -24,7 +24,7 @@ The full API call chain from the Nolia frontend through to result delivery:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 3. WORKSPACE CHAT AGENT PROXY (lambdas/python/workspace-chat-agent-proxy)  │
 │    - Routes request to AgentCore MicroVM by conversationId                 │
-│    - Creates new session if none exists: conv-{conversationId}             │
+│    - Creates new session if none exists: conv-{conversationId}-{imageTag}  │
 │    - For fire-and-forget: returns immediately after session creation       │
 │    - Cross-region: proxy in Jakarta → AgentCore in Sydney                  │
 └────────────────────────────────┬────────────────────────────────────────────┘
@@ -32,7 +32,7 @@ The full API call chain from the Nolia frontend through to result delivery:
                                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ 4. AGENTCORE MICROVM (services/numa-workspace-agent)                       │
-│    - Per-conversation isolated MicroVM (1hr idle, 8hr max)                 │
+│    - Per-conversation isolated MicroVM (30min idle, 4hr max)               │
 │    - FastAPI /invocations endpoint receives request                        │
 │    - Resolves agent type → "nolia-compliance" → custom orchestrator        │
 │    - Calls run_nolia_pipeline() with request_metadata                      │
@@ -62,6 +62,8 @@ The full API call chain from the Nolia frontend through to result delivery:
 │    Final report at: .../outputs/Final_Evaluation_Report_*.md               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+> **Session ID & image freshness.** The proxy builds the AgentCore session ID as `conv-{conversationId}-{imageTag}`. `imageTag` is a deploy-generation token (the container image hash, injected as `WORKSPACE_IMAGE_GENERATION`) that changes on every image deploy, so a run lands on the newly-deployed image instead of staying pinned to the version its session was created under. Nolia runs build their session ID through the same proxy path as chat, so they inherit this automatically — no Nolia-specific handling. Results are keyed by `runId` in S3 (`v2-apps/nolia/{user_sub}/{runId}/_result.json`), independent of the session ID.
 
 ## How the V2 Apps Architecture Works
 

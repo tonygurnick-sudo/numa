@@ -27,7 +27,7 @@ import structlog
 from botocore.exceptions import ClientError
 
 from .sdk_config import LOCAL_ROOT
-from .workspace import get_workspace_paths
+from .workspace import get_agent_workflows_scope, get_workspace_paths
 
 logger = structlog.get_logger()
 
@@ -94,9 +94,19 @@ def _get_s3_path_for_file(
         # Custom prefix: all files go under it directly (no chat-workflows special case)
         return f"{s3_prefix}/{rel_path}"
 
-    # chat-workflows/ is globally persistent
+    # chat-workflows/ is globally persistent (user-level)
     if rel_path.startswith("chat-workflows/"):
         return f"{S3_PREFIX}/{user_sub}/{rel_path}"
+
+    # agent-workflows/ is per-(user,agent) persistent (FEAT-243). Stored under
+    # the agent's prefix as chat-workflows/ so it reuses the same S3 shape.
+    # Only reachable when a scope exists (the dir is only scanned then); the
+    # guard is defensive against a stray file leaking into the conversation path.
+    if rel_path.startswith("agent-workflows/"):
+        scope = get_agent_workflows_scope()
+        if scope:
+            suffix = rel_path[len("agent-workflows/") :]
+            return f"{S3_PREFIX}/{user_sub}/agents/{scope}/chat-workflows/{suffix}"
 
     # Trace file goes to _system/ in conversation path
     if rel_path == "_system/trace.jsonl":
@@ -148,6 +158,7 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
     protected_dirs = {
         ".system",
         "chat-workflows",
+        "agent-workflows",
         "uploads",
         "outputs",
         "tools",
@@ -156,9 +167,14 @@ def get_local_checksums(conversation_id: str) -> dict[str, FileChecksum]:
 
     # Scan chat-workflows (globally persistent — syncs to the user's root S3
     # path, not the conversation path, so saved workflows survive across all
-    # of the user's conversations).
-    workflows_dir = paths["workflows"]
-    if workflows_dir.exists():
+    # of the user's conversations). agent-workflows (FEAT-243) is the same idea
+    # scoped to one agent; only scanned when a scope is active.
+    workflow_dirs = [paths["workflows"]]
+    if get_agent_workflows_scope():
+        workflow_dirs.append(paths["agent_workflows"])
+    for workflows_dir in workflow_dirs:
+        if not workflows_dir.exists():
+            continue
         for file_path in workflows_dir.rglob("*"):
             if not file_path.is_file():
                 continue
@@ -281,8 +297,12 @@ def workspace_is_dirty(previous: dict[str, FileChecksum]) -> bool:
             return True  # unreadable now → treat as changed
         return st.st_size != prev["size"] or st.st_mtime != prev["mtime"]
 
-    # chat-workflows (global) + uploads + outputs (per-conversation)
-    for dir_key in ("workflows", "uploads", "outputs"):
+    # chat-workflows (global) + agent-workflows (per-agent, FEAT-243, only when
+    # scoped) + uploads + outputs (per-conversation)
+    dirty_dir_keys = ["workflows", "uploads", "outputs"]
+    if get_agent_workflows_scope():
+        dirty_dir_keys.append("agent_workflows")
+    for dir_key in dirty_dir_keys:
         scan_dir = paths[dir_key]
         if scan_dir.exists():
             for fp in scan_dir.rglob("*"):
@@ -293,6 +313,7 @@ def workspace_is_dirty(previous: dict[str, FileChecksum]) -> bool:
     protected = {
         ".system",
         "chat-workflows",
+        "agent-workflows",
         "uploads",
         "outputs",
         "tools",
@@ -385,6 +406,24 @@ def sync_from_s3(
             # Conversation-specific files (uploads, outputs, root files, _system)
             (f"{S3_PREFIX}/{user_sub}/conversations/{conversation_id}/", root),
         ]
+        # FEAT-243 — agent-scoped library, when this is an agent conversation
+        # with the feature on. Stored under the agent's prefix as chat-workflows/.
+        # Clear the local dir first so a deleted/retired agent workflow doesn't
+        # linger from a previous container's sync.
+        agent_scope = get_agent_workflows_scope()
+        if agent_scope:
+            agent_wf_dir = paths["agent_workflows"]
+            if agent_wf_dir.exists():
+                import shutil
+
+                shutil.rmtree(agent_wf_dir, ignore_errors=True)
+            agent_wf_dir.mkdir(parents=True, exist_ok=True)
+            prefixes.append(
+                (
+                    f"{S3_PREFIX}/{user_sub}/agents/{agent_scope}/chat-workflows/",
+                    agent_wf_dir,
+                )
+            )
 
     # Track downloaded output files to avoid old session/ files overwriting them
     downloaded_output_files: set[str] = set()

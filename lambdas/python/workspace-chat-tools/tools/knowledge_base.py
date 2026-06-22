@@ -1177,6 +1177,29 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
     try:
         upload_time = datetime.utcnow().isoformat()
 
+        # Detect overwrite up-front so the caller gets a machine-readable
+        # signal (S3 put_object silently replaces an existing object).
+        overwritten = False
+        try:
+            s3_client.head_object(Bucket=DATA_BUCKET_NAME, Key=s3_key)
+            overwritten = True
+        except s3_client.exceptions.ClientError as head_err:
+            code = head_err.response.get("Error", {}).get("Code", "")
+            if code not in ("404", "NoSuchKey", "NotFound"):
+                # Non-404 head failures shouldn't block the upload, but they're
+                # worth knowing about (permissions, throttling).
+                logger.warning(
+                    "Overwrite pre-check failed; proceeding with upload",
+                    s3_key=s3_key,
+                    error=str(head_err),
+                )
+
+        # For synchronous (inline) uploads we know the exact byte count from the
+        # decoded content — trust that over the caller-supplied size_bytes hint
+        # (which the CLI never populates, so it defaults to 0).
+        if not get_presigned_url and not finalize_upload:
+            size_bytes = len(content)
+
         # If writing directly, upload the file with metadata immediately
         if not get_presigned_url and not finalize_upload:
             s3_client.put_object(
@@ -1254,11 +1277,15 @@ def handle_add_to_kb(params: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         return {
-            "message": f"File '{filename}' uploaded successfully to KB '{kb_id}'",
+            "message": (
+                f"File '{filename}' {'overwritten' if overwritten else 'uploaded'} "
+                f"successfully in KB '{kb_id}'"
+            ),
             "s3_uri": f"s3://{DATA_BUCKET_NAME}/{s3_key}",
             "kb_id": kb_id,
             "filename": filename,
             "size_bytes": size_bytes,
+            "overwritten": overwritten,
             "note": "The file will be indexed and searchable within ~30 minutes.",
         }
 
@@ -1374,12 +1401,20 @@ def handle_delete_kb_file(params: Dict[str, Any]) -> Dict[str, Any]:
         # Delete the file
         s3_client.delete_object(Bucket=DATA_BUCKET_NAME, Key=s3_key)
 
-        # Delete the metadata sidecar if it exists
+        # Delete the metadata sidecar if it exists. A delete_object on a
+        # missing key is a no-op (not an error), so any exception here is a
+        # real failure (permissions, throttling) that would orphan the
+        # sidecar — log it rather than swallowing silently.
         metadata_key = f"{s3_key}.metadata.json"
         try:
             s3_client.delete_object(Bucket=DATA_BUCKET_NAME, Key=metadata_key)
-        except Exception:
-            pass  # Sidecar may not exist; not an error
+        except Exception as sidecar_err:
+            logger.warning(
+                "Failed to delete metadata sidecar; it may be orphaned",
+                metadata_key=metadata_key,
+                kb_id=kb_id,
+                error=str(sidecar_err),
+            )
 
         logger.info(
             "File deleted from KB",
@@ -1631,6 +1666,16 @@ def _download_file(bucket: str, key: str) -> Dict[str, Any]:
         raise ValueError(f"Failed to download file: {str(e)}") from e
 
 
+def _format_size(size_bytes: int) -> str:
+    """Human-readable file size (e.g. "1.2 MB"). Mirrors list_kb_files."""
+    size = float(size_bytes)
+    for unit in ["B", "KB", "MB", "GB"]:
+        if size < 1024:
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} TB"
+
+
 def _list_files(
     bucket: str,
     prefix: str,
@@ -1675,6 +1720,11 @@ def _list_files(
             for obj in page.get("Contents", []):
                 key = obj["Key"]
                 filename = key.split("/")[-1]
+                # Path relative to the listing prefix, e.g. "reports/q3.csv".
+                # Used so glob patterns can match on the sub-path, not just the
+                # basename (fnmatch's `*` spans `/`, so `*.csv` still matches a
+                # nested file while `reports/*.csv` and `**/*.csv` also work).
+                relpath = key[len(prefix) :] if key.startswith(prefix) else filename
 
                 # Skip empty filenames and metadata sidecars
                 if not filename or filename.endswith(".metadata.json"):
@@ -1684,15 +1734,28 @@ def _list_files(
                 if key.endswith("/"):
                     continue
 
-                # Apply pattern filter if specified
-                if pattern and not fnmatch.fnmatch(filename.lower(), pattern.lower()):
-                    continue
+                # Apply pattern filter if specified. Match against EITHER the
+                # basename or the prefix-relative path so "do what I mean"
+                # patterns all land: bare names (`q3.csv`), extension globs
+                # (`*.csv`), and path-scoped globs (`reports/*.csv`, `**/*.csv`).
+                if pattern:
+                    pat = pattern.lower()
+                    if not (
+                        fnmatch.fnmatch(filename.lower(), pat)
+                        or fnmatch.fnmatch(relpath.lower(), pat)
+                    ):
+                        continue
 
                 files.append(
                     {
                         "name": filename,
+                        # Prefix-relative path ("reports/q3.csv" for a nested
+                        # hit, "q3.csv" at the top level) so recursive callers
+                        # can show where a match lives, not just its basename.
+                        "relpath": relpath,
                         "key": key,
                         "size": obj["Size"],
+                        "size_formatted": _format_size(obj["Size"]),
                         "last_modified": obj["LastModified"].isoformat(),
                         "s3_uri": f"s3://{bucket}/{key}",
                     }

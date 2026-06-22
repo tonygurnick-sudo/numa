@@ -11,6 +11,8 @@ The `numa-workspace-agent` is a FastAPI application that powers Numa's workspace
 
 **Location:** `services/numa-workspace-agent/`
 
+> **Self-optimisation (FEAT-243):** Numa compounds via saved workflows (`/workdir/chat-workflows/` user-level + `/workdir/agent-workflows/` per-agent, on whenever a conversation has an `agentId`) and agent-scoped memories. The chat prompt (`prompts.py:_build_saved_workflows_context`) injects active save triggers; the `saved-workflows` skill holds the authoring guidance. The agent-workflows S3 sync keys off `workspace.get_agent_workflows_scope()` (captured once per request via `set_active_agent_id`). See `documentation/self-optimising-numa.md`.
+
 ---
 
 ## Architecture Flow
@@ -544,7 +546,7 @@ When using cross-account Bedrock (configured via `BEDROCK_ACCOUNT` env var), the
 The proxy Lambda bridges HTTP requests from CloudFront to AgentCore SDK invocations. It:
 
 - Validates Cognito JWT tokens and CloudFront shared secret
-- Routes to AgentCore by session ID (`conv-{conversationId}`)
+- Routes to AgentCore by session ID (`conv-{conversationId}-{imageTag}`, where `imageTag` is a deploy-generation token from the `WORKSPACE_IMAGE_GENERATION` env var — it changes on every image deploy so conversations rotate onto the new image instead of staying pinned to the version their session was created under; falls back to `conv-{conversationId}` if unset)
 - Handles the `approve` action directly (DynamoDB write, no AgentCore invocation)
 - Supports file redirect for integration uploads
 - Translates HTTP request/response to AgentCore's `invoke_agent_runtime` format

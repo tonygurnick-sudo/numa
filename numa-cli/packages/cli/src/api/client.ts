@@ -33,7 +33,29 @@ export function numaBaseUrl(account: string): string {
 let _lambdaClient: LambdaClient | undefined;
 function lambdaClient(): LambdaClient {
   if (!_lambdaClient) {
-    _lambdaClient = new LambdaClient({});
+    // On Bedrock quota-sharing clients, sdk_config.py overwrites the standard
+    // AWS_* env vars with the cross-account `bedrock-quota-sharing` role's
+    // credentials (Bedrock-only — no lambda:InvokeFunction) so the Claude SDK's
+    // model calls draw on shared quota. It stashes the native account role's
+    // creds — which DO carry lambda:InvokeFunction on numa-cli-api — under
+    // NUMA_LOCAL_AWS_* BEFORE that overwrite. Prefer those for the CLI's Lambda
+    // invoke; without this every `numa` command 403s on quota-sharing clients
+    // because the default chain picks up the Bedrock-only creds. Falls back to
+    // the default chain (laptop mode, and non-quota clients where the two
+    // credential sets are identical), so behaviour there is unchanged.
+    const accessKeyId = process.env['NUMA_LOCAL_AWS_ACCESS_KEY_ID'];
+    const secretAccessKey = process.env['NUMA_LOCAL_AWS_SECRET_ACCESS_KEY'];
+    _lambdaClient = new LambdaClient(
+      accessKeyId && secretAccessKey
+        ? {
+            credentials: {
+              accessKeyId,
+              secretAccessKey,
+              sessionToken: process.env['NUMA_LOCAL_AWS_SESSION_TOKEN'],
+            },
+          }
+        : {}
+    );
   }
   return _lambdaClient;
 }

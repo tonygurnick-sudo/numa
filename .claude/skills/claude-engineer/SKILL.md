@@ -7,7 +7,8 @@ description: >
   Fetches ticket detail, branches in the persistent claude-engineer git worktree,
   makes the changes, packages lambdas/services, runs a guarded deploy to a dev
   stack (arcanum-demo-sydney), E2E-tests it in Chrome with screenshots, opens a
-  GitLab MR with description + evidence, and moves the ticket to Review.
+  GitLab MR with description + evidence, posts the update to #engineering, and
+  moves the ticket to the Merge Request stage.
 ---
 
 # claude-engineer
@@ -20,6 +21,14 @@ deploy to a dev stack → prove it works in a browser → open an MR with eviden
 move the ticket to Review. You run **fully autonomously**, but inside hard safety
 rails (deploy authority + resource guard below).
 
+**Autonomy means autonomy — don't stop to ask mid-flow.** Once you're on a ticket,
+drive it to completion without pausing for permission on routine engineering
+calls (how to test, whether to repackage, which resource to target, how to word
+the MR). Make the call, state what you did, keep moving. Surface a question only
+for a genuine fork the human alone can resolve (ambiguous requirements, a
+customer-facing/irreversible action, a deploy-authority boundary). Treat status
+pings as "keep going," not "wait for me."
+
 ## Identity & workspace
 
 - **Worktree:** a persistent git worktree off the `numa` repo (Nathan's lives at
@@ -27,11 +36,26 @@ rails (deploy authority + resource guard below).
   their own — the scripts derive the repo root from their own location, nothing is
   path-hard-coded). Kept **warm** (node_modules, `cdktf.out`, packaged lambda zips,
   image tars) so incremental deploys are ~5-10 min, not a 30-60 min cold run.
-- **Branches:** one per ticket — `claude-engineer/<DISPLAY-ID>` (e.g.
-  `claude-engineer/TASK-151`), always cut from latest `dev`.
+- **Branches:** one per ticket — `claude-engineer-<DISPLAY-ID>` (e.g.
+  `claude-engineer-TASK-151`), always cut from latest `origin/dev`.
+  ⚠️ **Use the hyphen, never a slash.** The skill itself lives on a branch named
+  exactly `claude-engineer` (local + `origin/claude-engineer`), and git can't have
+  both a ref _file_ `claude-engineer` and a ref _directory_ `claude-engineer/…` —
+  so `claude-engineer/<id>` fails to create/push with
+  `cannot lock ref … 'claude-engineer' exists`. The hyphen form sidesteps it
+  entirely. Don't delete `origin/claude-engineer` to "free the namespace" — it
+  holds the skill's own unmerged commits.
+- **Park the warm worktree on `dev`, not on `claude-engineer`.** Parking it on a
+  branch literally named `claude-engineer` is what triggers the collision above.
+  Keep a local `dev` tracking `origin/dev`; between tickets the worktree sits on
+  `dev`. Per ticket: `git fetch origin dev`, `git checkout dev`,
+  `git reset --hard origin/dev`, then `git checkout -b claude-engineer-<id>`.
 - **A worktree is not a separate repo.** It shares the one `.git`/branch set. You
   don't "push a worktree" — you `git push -u origin <branch>` and open an MR
-  `source: claude-engineer/<id>` → `target: dev`, exactly like any feature branch.
+  `source: claude-engineer-<id>` → `target: dev`, exactly like any feature branch.
+- **`git stash -u` is dangerous in a warm worktree** — it can sweep up local-only
+  files (e.g. `clientConfigProd.json`, a swapped `public/config.json`). Prefer
+  targeted `git checkout dev && git reset --hard origin/dev` over a blind stash.
 
 ## Per-engineer setup (this skill is team-wide — make it yours)
 
@@ -48,28 +72,146 @@ your first run:
 
 ## The flow
 
-1. **Fetch the ticket.** `scripts/ops-ticket.sh get '<url-or-id>'` → title,
-   description, stage, comments. Read in-progress / in-review tickets first
-   (resume work or ingest feedback) before starting fresh ones.
-2. **Branch.** `cd` into the worktree; `git fetch origin dev`; create
-   `claude-engineer/<id>` off `origin/dev`. (First time on a fresh worktree, run
-   `scripts/bootstrap-worktree.sh` once — see finding #3.)
+1. **Fetch the ticket + claim it.** `scripts/ops-ticket.sh get '<url-or-id>'` →
+   title, description, stage, comments. Read in-progress / in-review tickets first
+   (resume work or ingest feedback) before starting fresh ones. **On pickup, move
+   it to In Progress** so the board reflects you're on it:
+   `scripts/ops-ticket.sh move-stage <id> in-progress`.
+2. **Branch.** `cd` into the worktree; sync to dev and cut the ticket branch
+   (note the **hyphen**): `git fetch origin dev && git checkout dev &&
+git reset --hard origin/dev && git checkout -b claude-engineer-<id>`. (First
+   time on a fresh worktree, run `scripts/bootstrap-worktree.sh` once — finding #3.)
 3. **Implement.** Read before you change. Load the relevant Numa skill for the
    area you're touching (per `numa/CLAUDE.md`). Keep changes production-quality.
-4. **Test locally first.** Prefer the local Docker container loop
-   (`workspace-agent-local-test` skill) over a deploy — it's minutes, not 30.
-   Only deploy when the change is genuinely infra/integration/cross-service.
-5. **Deploy (guarded).** `scripts/deploy.sh numa-<your-dev-stack> --package`
-   (Nathan: `numa-arcanum-demo-sydney`). Enforces the deploy-authority boundary
-   and resource guard.
-6. **E2E test in Chrome.** Open `https://<your-dev-stack>.numa.arcanum.ai`,
-   exercise the change, and **capture screenshots** (humans need visual proof).
-   Use `save_to_disk` on the screenshots so they can be attached to the MR/ticket.
-7. **Open the MR.** Push the branch; `glab mr create --source-branch
-claude-engineer/<id> --target-branch dev` with a clear description + the
-   evidence (what changed, how it was tested, screenshots, ticket link).
-8. **Update the ticket.** `scripts/ops-ticket.sh comment <id> '<p>…</p>'` with the
-   MR link + summary, then `scripts/ops-ticket.sh move-stage <id> review`.
+4. **Test locally first.** For workspace-agent work, the local Docker container
+   loop (`workspace-agent-local-test` skill) beats a deploy. **For frontend work,
+   run the dev server against your dev stack's backend** (no deploy needed — see
+   _Local frontend E2E_ below). Only deploy when the change is genuinely
+   infra/integration/cross-service.
+5. **Deploy (guarded), only if needed.** `scripts/deploy.sh numa-<your-dev-stack>
+--package` (Nathan: `numa-arcanum-demo-sydney`). Enforces the deploy-authority
+   boundary and resource guard. Frontend-only changes don't need this.
+   - **Package only what you changed.** `--package` rebuilds _everything_ (~84
+     lambdas + service + frontend) — minutes of waste for a one-service change.
+     For a workspace-agent change, build just the service:
+     `( cd services && ./package-service.sh numa-workspace-agent )`, then deploy
+     without `--package`. Reach for a full `--package` only when warm artifacts
+     are genuinely stale/broken and it's affecting you (see gotcha #9).
+   - **Service-only change → TARGETED apply, not a whole-stack deploy** (gotcha
+     #9). A full `cdktf deploy` from a warm worktree redeploys _every_ drifted
+     artifact (slow, and it can roll other lambdas/frontend back to an older
+     branch's code). Instead, after building the service image, synth and apply
+     only the agent runtime + its image push from the **worktree** stack dir:
+     ```bash
+     cd infra/cdktf.out/prod/stacks/numa-<stack>          # in the worktree
+     export TF_PLUGIN_CACHE_DIR=<worktree>/.tf-plugin-cache
+     # resolve the addresses (hash suffix varies per stack):
+     #   grep aws_bedrockagentcore_agent_runtime / workspace-chat-agent_push-image in cdk.tf.json
+     AWS_REGION=us-east-1 terraform apply -auto-approve -input=false \
+       -target=null_resource.workspace-chat-agent_push-image_<hash> \
+       -target=aws_bedrockagentcore_agent_runtime.workspace-chat-agent_agentcore-runtime_<hash>
+     ```
+     The runtime `depends_on` the push, so targeting it re-pushes the image and
+     bumps the runtime to the new content-hash tag. Confirm with
+     `aws bedrock-agentcore-control get-agent-runtime … --query agentRuntimeArtifact.containerConfiguration.containerUri`.
+   - **⚠️ Run the WORKTREE's `deploy.sh`, and confirm `REPO_ROOT`** (gotcha #8).
+     `deploy.sh` now prints `ℹ️ deploy REPO_ROOT=…` — it MUST be the worktree.
+     If it shows the main repo, you'll package the fix in the worktree but deploy
+     the main repo's STALE image (the exact BUG-376 mis-ship).
+6. **E2E test in a browser + capture screenshots.** Exercise the change and grab
+   PNGs — humans need visual proof. **Playwright (`playwright-cli`) is the reliable
+   capturer** (`screenshot --filename=…` writes real files); the claude-in-chrome
+   `save_to_disk` does **not** expose a findable path. See _Local frontend E2E_.
+7. **Open the MR.** `git push -u origin claude-engineer-<id>`; `glab mr create
+--source-branch claude-engineer-<id> --target-branch dev` with a clear
+   description + evidence. Attach screenshots by uploading them to the MR:
+   `curl --request POST "https://gitlab.com/api/v4/projects/arcanumai%2Fnuma/uploads"
+   --header "Authorization: Bearer $(yq .hosts.\"gitlab.com\".token ~/Library/Application\ Support/glab-cli/config.yml)"
+   --form "file=@shot.png"` → embed the returned markdown in an MR note.
+8. **Post to #engineering** (`scripts/slack-notify.sh`) — an aliased "Claude
+   Engineer" header (MR link, ticket, dot points) with the screenshots threaded
+   under it. See _Posting to #engineering_.
+9. **Update the ticket.** `scripts/ops-ticket.sh comment <id> '<p>…</p>'` with the
+   MR link + summary, then **move it to the Merge Request stage** (an MR is open
+   and awaiting merge — _not_ Review):
+   `scripts/ops-ticket.sh move-stage <id> merge-request`.
+
+## Local frontend E2E (no deploy needed)
+
+Frontend changes are tested by running the dev server against your dev stack's
+**live backend** — minutes, not a 30-min deploy.
+
+1. **Point the frontend at your stack.** `numa-frontend/public/config.json` is
+   tracked but local-only; the committed copy points at some other stack. Swap it:
+   `curl -fsS https://<your-stack>.numa.arcanum.ai/config.json
+-o numa-frontend/public/config.json`. **Exclude it from commits** (stage only
+   your feature files; never `git add` `public/config.json` or
+   `clientConfigProd.json`).
+2. **Run on a non-default port.** `cd numa-frontend && yarn dev --port 5175
+--strictPort` (you likely run your day-to-day server on 5173).
+3. **Log in.** `localhost` is a _different origin_ than the live site, so an
+   existing browser session does **not** carry over. Creds are in `.env`:
+   `NUMA_USERNAME` / `NUMA_PASSWORD` (note the `export` prefix — source it, or
+   `grep -A0 NUMA_ .env`). They're your dev-stack login (`nathan@arcanum.ai`).
+4. **Drive it with Playwright** (`playwright-cli`): `open --headed`, read the form,
+   `fill <ref> <value>` for user + password, `click` Login. Detail views often
+   scroll an **inner container**, not the window — scroll with
+   `eval "document.querySelectorAll('*').forEach(e=>{if(e.scrollHeight-e.clientHeight>60)e.scrollTop=e.scrollHeight})"`.
+   `screenshot --filename=<abs path>` writes real PNGs.
+   - **claude-in-chrome gotchas:** a password-manager overlay makes every
+     debugger action fail with `Cannot access a chrome-extension:// URL of
+different extension` → open a **fresh MCP tab** to clear the stuck debugger;
+     and `save_to_disk` returns no usable file path (use Playwright for files).
+5. **Seed data if the feature needs it.** Empty dev stacks have no boards/projects/
+   tickets. Seed via the Ops API in the stack's account: board = `POST
+/api/ops/boards` (response is `{board}` with **no** inline stages → `GET
+/api/ops/boards/{id}` to read stage ids; the route is `boards`, not `teams`);
+   project = `POST /api/ops/config/projects` (returns the project **unwrapped**);
+   ticket = `POST /api/ops/tickets` with `boardId` + `stageId`. **Put seed scripts
+   in `dev-notes/tasks/<ticket>/`, never `tools/`** (tools/ is team-shared).
+
+## Posting to #engineering (`scripts/slack-notify.sh`)
+
+Announce the MR with rendered screenshots, signed as **Claude Engineer**. Slack
+forces a split you can't avoid: a **custom username/icon only works on a text
+message** (`chat.postMessage`), and **multiple files in one message only works via
+`files.completeUploadExternal`**, which has no username/icon. So the pattern is:
+
+1. **Aliased header** via `slack-send-message`: set `username: "Claude Engineer"`,
+   `icon_emoji: ":claude-code:"`, `mrkdwn: true`, `include_sent_via_pipedream_flag:
+false`. Body = MR link + ticket + dot points. Capture the returned `ts`.
+2. **Screenshots threaded under it** via the custom **`~/slack-upload-files`**
+   action (`pipedream-call slack ~/slack-upload-files`): `fileUrls[]` (presigned S3
+   URLs — the action sets the filename itself, so the messy query string is fine),
+   `filenames[]`, `initialComment`, `threadTs: <header ts>`. One reply, all images.
+
+`scripts/slack-notify.sh` wraps this. Invocation:
+`slack-notify.sh --client <logged-in-client> --aws-profile <profile> --to
+C02CFP4SZHP --alias "Claude Engineer" --icon ":claude-code:" --message '<mrkdwn>'
+[img1.png …]`. Gotchas baked in from the build:
+
+- **`--client` is REQUIRED** (it presigns images from `numa-<client>-outputs` and
+  drives the `numa` CLI's Pipedream Slack call under that profile). Use a client
+  you're logged into (`ls ~/.config/numa/tokens-*.json`) whose Slack is connected
+  — e.g. `nd-labs`. Omit it and the script aborts with `--client required`.
+- **No backticks in `--message`.** The header text flows through shell/CLI layers
+  that will try to evaluate `` `…` `` as a command substitution (you'll see
+  `command not found: docs` / `parse error near '()'`). Use plain words or
+  `*bold*` for emphasis; for code, drop the backticks.
+- **No images is fine** — header-only post (the script exits cleanly at
+  `no files — header only`). Backend fixes have no screenshots; post the
+  before/after evidence as dot-points in the header instead.
+- **`~/slack-upload-files` is a custom Pipedream component** (published dev+prod;
+  source in `pipedream-components/slack/`). It does Slack's native 3-step external
+  upload _inside the action_, so it **bypasses the raw-proxy media guard** (which
+  blocks `proxy_request` POSTs to any `upload` URL) and renders cleanly with no
+  integration-file/redirect dependency.
+- **DM channel ids matter:** to DM yourself, `slack-send-message` to your user id
+  (`U…`) with `as_user:true` resolves your **self-DM** (`D…`). File uploads must
+  target that self-DM or a real channel — **not** the Pipedream _bot_ DM (a custom
+  username on the bot DM throws `restricted_action_read_only_channel`).
+- **#engineering** = `C02CFP4SZHP`. **DM Nathan a preview before a channel post**
+  unless he's explicitly told you to send it.
 
 ## 🔒 Deploy-authority boundary (the safety core — never relax)
 
@@ -122,6 +264,38 @@ is so you recognise the symptoms if something regresses.
 7. **Memory pressure can crash Docker Desktop itself.** The cascade is real
    (cache corruption → hung apply → stale lock → Docker down). The resource guard
    exists because the failure modes compound.
+8. **`deploy.sh` deployed the WRONG TREE — packaged the worktree, shipped the main
+   repo.** `REPO_ROOT` was derived from the script's own path, so invoking the
+   **main-repo** copy of `deploy.sh` made `cdktf deploy` run against
+   `/…/numa` (main repo) and push _its_ stale `image.tar`, while the fixed
+   worktree build sat undeployed. The runtime updated — to the wrong image — and
+   the repro kept failing with the original bug. **Tell:** the apply shows a huge
+   diff (it's reconciling the stack to the main repo's whole artifact set) and
+   the deployed image's content-hash tag ≠ your worktree `image.tar` hash
+   (`shasum -a256 …/numa-workspace-agent/image.tar | cut -c1-12`). Fixed:
+   `deploy.sh` now derives `REPO_ROOT` from `git -C "$PWD" rev-parse
+--show-toplevel` and prints it. Always confirm the `ℹ️ deploy REPO_ROOT=` line
+   is your worktree. To verify a service deploy landed, compare the runtime's
+   `containerUri` tag (`aws bedrock-agentcore-control get-agent-runtime`) against
+   your local tar hash — and confirm the running image actually contains your
+   change (`docker run --rm <img> grep <marker> /app/...`).
+9. **Whole-stack deploy from a warm worktree redeploys STALE drifted artifacts.**
+   The worktree's lambda zips / frontend build are whatever was last packaged
+   (often a previous ticket's branch), so a full `cdktf deploy` diffs them against
+   the live stack and rolls them in — a slow 600+ resource apply that can revert
+   other lambdas to older code. Surgical packaging alone doesn't help (you'd then
+   deploy stale _unchanged_ artifacts). Fix: for a service-only change, do the
+   **targeted apply** in step 5 (only the runtime + image push). Only do a full
+   `--package` + whole-stack deploy when you actually want to reconcile the stack
+   to dev HEAD.
+10. **`resource-guard` false-positived on a monitoring command.** `pgrep -f
+"cdktf deploy"` also matched a _watcher_ whose own command line contained that
+    string (e.g. `grep -E "…cdktf deploy…"` or `while kill -0 $PID`), so the guard
+    blocked a real deploy that wasn't actually competing. Fixed: the guard now
+    excludes grep/pgrep/tail/sed/awk/`kill -0`/`--filter-pattern`/itself and its
+    own PID tree. Still — **keep the literal strings `cdktf deploy` / `terraform
+apply` out of your monitoring/watcher commands** (match a PID or a logfile
+    marker instead).
 
 **Stale state lock recovery** (from a killed/hung apply): from the stack dir
 `infra/cdktf.out/prod/stacks/<stack>` run `terraform force-unlock --force <id>`
@@ -132,13 +306,21 @@ is so you recognise the symptoms if something regresses.
 | Script                  | Does                                                                    |
 | ----------------------- | ----------------------------------------------------------------------- |
 | `ops-ticket.sh`         | `get` / `comment` / `move-stage` against HQ Ops (`hq_ops-api`)          |
+| `slack-notify.sh`       | Post the MR update to Slack (aliased header + threaded screenshots)     |
 | `resource-guard.sh`     | Refuse to deploy while another heavy op is running                      |
 | `bootstrap-worktree.sh` | One-time cold-worktree setup (container images + isolated plugin cache) |
 | `deploy.sh`             | Guarded, hardened deploy (authority boundary + all 7 findings)          |
 
+**`ops-ticket.sh` write paths (verified this build, were wrong before):** runs on
+macOS **bash 3.2** so it uses no `declare -A` (associative arrays are bash 4+);
+`move-stage` is **`PUT /api/ops/tickets/{id}`** with `{boardId, stageId}` (not
+`PATCH`, and `boardId` is required — resolve it from the ticket item's
+`PK = TEAM#{boardId}`); `comment` posts `{content: …}` (not `body`). Stage keys:
+`in-progress`, `merge-request`, `review`, `done`, `todo`, `blocked`.
+
 ## MR conventions
 
-- Source `claude-engineer/<id>` → target **`dev`**.
+- Source `claude-engineer-<id>` (hyphen — see Branches) → target **`dev`**.
 - Description: what changed + why, how it was tested (local + dev-stack), the
   ticket link, and the screenshots as evidence.
 - **No AI attribution / `Co-Authored-By`** in commits or MRs — these are Nathan's

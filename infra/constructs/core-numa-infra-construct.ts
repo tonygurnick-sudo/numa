@@ -551,6 +551,9 @@ export class CoreNumaInfra extends Construct {
     //   PK=CLIENT#<name>  SK=BALANCE | MONTH#<YYYY-MM>  balance + monthly reconciliation rows
     // GSI1 (USER#<sub> / TS#<ts>): list a user's conversations, newest first (sparse: META rows only)
     // GSI2 (MONTH#<YYYY-MM> / CONV#<id>): per-client monthly billing rollup (sparse: META rows only)
+    // GSI3 (AGENT#<agentId> / TS#<lastTs>): per-agent credit analytics (FEAT-246). Sparse — only META
+    //   rows that carry an agentId (agent chats + scheduled runs) get GSI3 keys, so plain chats never
+    //   index here. Powers the per-agent Credits section on the agent card.
     this.creditLedgerTable = new DynamodbTable(this, 'numa-credit-ledger-table', {
       name: `${numaClient}-credit-ledger`,
       billingMode: 'PAY_PER_REQUEST',
@@ -581,6 +584,14 @@ export class CoreNumaInfra extends Construct {
           name: 'GSI2SK',
           type: 'S',
         },
+        {
+          name: 'GSI3PK',
+          type: 'S',
+        },
+        {
+          name: 'GSI3SK',
+          type: 'S',
+        },
       ],
       globalSecondaryIndex: [
         {
@@ -593,6 +604,12 @@ export class CoreNumaInfra extends Construct {
           name: 'GSI2',
           hashKey: 'GSI2PK',
           rangeKey: 'GSI2SK',
+          projectionType: 'ALL',
+        },
+        {
+          name: 'GSI3',
+          hashKey: 'GSI3PK',
+          rangeKey: 'GSI3SK',
           projectionType: 'ALL',
         },
       ],

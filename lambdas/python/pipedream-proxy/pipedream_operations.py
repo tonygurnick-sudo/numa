@@ -1710,7 +1710,13 @@ class PipedreamOperations:
             allowed_account_ids=allowed_account_ids,
         )
 
-        body = {
+        url = f"https://api.pipedream.com/v1/connect/{project_id}/components/configure"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "x-pd-environment": environment,
+        }
+        base_body = {
             "id": action_key,
             "external_user_id": external_user_id,
             "prop_name": prop_name,
@@ -1718,26 +1724,95 @@ class PipedreamOperations:
         }
 
         try:
-            result = self._post_action_with_namespace_fallback(
-                f"https://api.pipedream.com/v1/connect/{project_id}/components/configure",
-                {
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "x-pd-environment": environment,
-                },
-                body,
-                timeout=30,
+            first = self._post_action_with_namespace_fallback(
+                url, headers, base_body, timeout=30
             )
+
+            # Remote prop options are paginated by Pipedream. The Slack
+            # `conversation` picker returns ~150 per page with channels/DMs
+            # spread across pages, so in a large workspace a target channel
+            # like #sales lands on page 3+ and is invisible to a single-page
+            # fetch. When the response carries a `context.cursor`, follow it
+            # (passing the cursor back as `prev_context`) and merge every page
+            # so callers see the full option set from one call.
+            #
+            # Backwards-compat: if there is NO cursor — the overwhelming
+            # majority of props (drives, small dropdowns, string options,
+            # error envelopes) — return Pipedream's response untouched, exactly
+            # as before. Only genuinely-paginated option lists are merged.
+            cursor = (first.get("context") or {}).get("cursor")
+            if isinstance(first.get("options"), list):
+                opt_key: Optional[str] = "options"
+            elif isinstance(first.get("stringOptions"), list):
+                opt_key = "stringOptions"
+            else:
+                opt_key = None
+
+            if not cursor or opt_key is None:
+                logger.info(
+                    "Configure props completed",
+                    action_key=action_key,
+                    prop_name=prop_name,
+                    external_user_id=external_user_id,
+                    options_count=len(first.get(opt_key, [])) if opt_key else 0,
+                    pages=1,
+                    truncated=False,
+                )
+                return first
+
+            max_pages = 10
+
+            def _val(opt: Any) -> Any:
+                return opt.get("value") if isinstance(opt, dict) else opt
+
+            merged = list(first.get(opt_key) or [])
+            seen: set = set()
+            for opt in merged:
+                try:
+                    seen.add(_val(opt))
+                except TypeError:  # unhashable value → can't dedupe, keep it
+                    pass
+
+            pages = 1
+            while cursor and pages < max_pages:
+                body = {**base_body, "prev_context": {"cursor": cursor}}
+                page = self._post_action_with_namespace_fallback(
+                    url, headers, body, timeout=30
+                )
+                pages += 1
+                for opt in page.get(opt_key) or []:
+                    key = _val(opt)
+                    try:
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                    except TypeError:
+                        pass
+                    merged.append(opt)
+                cursor = (page.get("context") or {}).get("cursor")
+
+            truncated = bool(cursor) and pages >= max_pages
+
+            first[opt_key] = merged
+            # Reflect the true end-state: clear the cursor when exhausted,
+            # preserve it when we stopped at the cap so a caller could resume.
+            ctx = first.get("context")
+            if isinstance(ctx, dict):
+                ctx["cursor"] = cursor if truncated else None
+            if truncated:
+                first["options_truncated"] = True
 
             logger.info(
                 "Configure props completed",
                 action_key=action_key,
                 prop_name=prop_name,
                 external_user_id=external_user_id,
-                options_count=len(result.get("options", [])),
+                options_count=len(merged),
+                pages=pages,
+                truncated=truncated,
             )
 
-            return result
+            return first
 
         except Exception as e:
             logger.error(

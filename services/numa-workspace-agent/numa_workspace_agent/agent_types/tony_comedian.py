@@ -101,9 +101,6 @@ TONY_COMEDIAN = AgentTypeConfig(
     enable_scripts_mcp=False,
     enable_integrations_mcp=False,
     enable_numa_mcp=False,
-    # No Numa CLI tools
-    enabled_numa_tools=[],
-    tools_source_dirs=[],
     # Keep plugins for basic functionality
     plugins_path="/app/plugins/numa",
     # No KB or integrations

@@ -134,10 +134,42 @@ For comprehensive documentation, see supporting files:
   createAgentEnabled: boolean;         // Can create sub-agents
   memoriesEnabled: boolean;            // Can use user memories
   numaOpsEnabled: boolean;             // Can use Numa Ops tools
-  enabledConnections: string[];        // Pipedream integrations
+  enabledIntegrations: { slug, method: 'pipedream'|'native', name }[]; // method-tagged — source of truth
+  enabledConnections: string[];        // legacy flat slug mirror (written in parallel)
   allowedKnowledgeBases: string[] | null; // null=all, []=none, ['x']=specific
-  approvalMode: 'always' | 'non_destructive' | 'never'; // Integration approval override
+  approvalMode: 'always' | 'non_destructive' | 'never'; // global default
+  approvalModes: Record<string, 'always'|'non_destructive'|'never'>; // per-category:
+                                        // integrations|agents|memories|knowledgeBases|ops|connectors
 }
+```
+
+## Configuring agents from Numa chat / the CLI
+
+`numa agents create` and `numa agents update` reach **full UI parity** — chat can
+build a properly-configured agent in one call, not a barebones one. Beyond the
+basics (`--prompt`, `--visibility`, `--description`, …):
+
+- **Integrations:** `--enable-integration <slug>` (repeatable) — turns an integration
+  on as a tool. Resolves the method from the user's connected integrations and writes
+  both `enabledIntegrations` and `enabledConnections`. (Distinct from `--integration`,
+  which only sets `requiredIntegrations`, a "user should connect this" hint.)
+- **Capabilities:** `--web-search` / `--query-data-sources` / `--create-agent` /
+  `--auto-tools` / `--memories` / `--numa-ops` (each with a `--no-` variant).
+- **Knowledge bases:** `--knowledge-base <id>` (repeatable) · `--all-kbs` · `--no-kbs`.
+- **Approvals:** `--approval-mode <always|non_destructive|never>` (global) and
+  `--approval-modes '{"integrations":"never","agents":"always"}'` (per-category).
+- **Taxonomy:** `--tag` (max 20) · `--persona` (CEO|Finance|HR|Operations|Commercial) ·
+  `--industry` (Manufacturing|Construction|Engineering|Professional Services|Franchise).
+  Invalid personas/industries are rejected.
+- **Escape hatch:** `--tools-config '<json>'` accepts the full toolsConfig object
+  (individual flags override it).
+
+Example — an agent that can post to Slack, auto-approving its actions:
+
+```bash
+numa agents create "Slack Poster" --prompt-file ./prompt.txt \
+  --enable-integration slack --approval-mode never \
+  --tag automation --persona Commercial -m "Create Slack poster agent"
 ```
 
 ## Admin Feature Modes

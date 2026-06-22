@@ -307,8 +307,6 @@ async def _run_step(
     # (orchestrator → sdk_runner → s3_workspace → sdk_config → agent_types)
     from ...sdk_config import LOCAL_ROOT
     from ...sdk_runner import run_claude_sdk
-    from ...workspace import setup_agent_tools
-    from .. import ALWAYS_COPY, TOOL_FILE_MAP
 
     step_config = get_agent_type_config(step_type_id)
     step_conversation_id = f"{conversation_id}-step-{step_suffix}"
@@ -316,13 +314,6 @@ async def _run_step(
     # Isolate Claude SDK session state per step to prevent cross-contamination.
     step_system_dir = LOCAL_ROOT / ".system" / f"step-{step_suffix}"
     step_system_dir.mkdir(parents=True, exist_ok=True)
-
-    setup_agent_tools(
-        enabled_numa_tools=step_config.enabled_numa_tools,
-        tools_source_dirs=step_config.tools_source_dirs,
-        tool_file_map=TOOL_FILE_MAP,
-        always_copy=ALWAYS_COPY,
-    )
 
     logger.info(
         "Running Policy Designer pipeline step",

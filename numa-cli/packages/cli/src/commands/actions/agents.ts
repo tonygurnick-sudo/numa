@@ -39,6 +39,149 @@ import { gateWriteOp } from './_hitl.js';
 
 const CREATE_AGENT_TOOL = 'create_agent_tool';
 
+const APPROVAL_MODES = ['always', 'non_destructive', 'never'] as const;
+// UI-facing per-category keys. `connectors` is accepted but is force-mirrored to
+// `integrations` at runtime — prefer `integrations`.
+const APPROVAL_CATEGORIES = ['integrations', 'agents', 'memories', 'knowledgeBases', 'ops', 'connectors'] as const;
+
+// Mirror of lib/resource-taxonomy.json (kept in sync manually) — for help text.
+const PERSONAS = ['CEO', 'Finance', 'HR', 'Operations', 'Commercial'];
+const INDUSTRIES = ['Manufacturing', 'Construction', 'Engineering', 'Professional Services', 'Franchise'];
+
+/** Repeatable-option accumulator. */
+const collect = (val: string, prev: string[]): string[] => [...(prev ?? []), val];
+
+/** Options shared by `create` and `update` for full toolsConfig + taxonomy parity with the UI. */
+interface AgentConfigOptions {
+  toolsConfig?: string;
+  enableIntegration?: string[];
+  approvalMode?: string;
+  approvalModes?: string;
+  webSearch?: boolean;
+  queryDataSources?: boolean;
+  createAgent?: boolean;
+  autoTools?: boolean;
+  memories?: boolean;
+  numaOps?: boolean;
+  knowledgeBase?: string[];
+  allKbs?: boolean;
+  noKbs?: boolean;
+  tag?: string[];
+  persona?: string[];
+  industry?: string[];
+}
+
+/** Add the toolsConfig + taxonomy flags to a create/update command. */
+function addAgentConfigOptions(cmd: Command): Command {
+  return cmd
+    .option(
+      '--enable-integration <slug>',
+      'Enable an integration as an agent tool (repeatable). Resolves the method from your connected integrations.',
+      collect,
+      []
+    )
+    .option('--approval-mode <mode>', `Global integration approval: ${APPROVAL_MODES.join('|')}`)
+    .option(
+      '--approval-modes <json>',
+      `Per-category approval JSON, e.g. '{"integrations":"never","agents":"always"}'. Keys: ${APPROVAL_CATEGORIES.join('|')}`
+    )
+    .option('--web-search', 'Enable web search')
+    .option('--no-web-search', 'Disable web search')
+    .option('--query-data-sources', 'Enable knowledge-base querying')
+    .option('--no-query-data-sources', 'Disable knowledge-base querying')
+    .option('--create-agent', 'Allow this agent to create sub-agents')
+    .option('--no-create-agent', 'Disallow sub-agent creation')
+    .option('--auto-tools', 'Let the agent auto-select tools')
+    .option('--no-auto-tools', 'Disable auto tool selection')
+    .option('--memories', 'Enable memories')
+    .option('--no-memories', 'Disable memories')
+    .option('--numa-ops', 'Enable Numa Ops tools')
+    .option('--no-numa-ops', 'Disable Numa Ops tools')
+    .option('--knowledge-base <id>', 'Scope to specific KB id (repeatable)', collect, [])
+    .option('--all-kbs', 'Allow all knowledge bases (clears KB scoping)')
+    .option('--no-kbs', 'Allow no knowledge bases')
+    .option('--tag <tag>', 'Categorisation tag (repeatable, max 20)', collect, [])
+    .option('--persona <persona>', `Persona tag (repeatable): ${PERSONAS.join('|')}`, collect, [])
+    .option('--industry <industry>', `Industry tag (repeatable): ${INDUSTRIES.join('|')}`, collect, [])
+    .option('--tools-config <json>', 'Full toolsConfig JSON (merged; individual flags override)');
+}
+
+/**
+ * Build an AgentToolsConfig from the shared flags. Starts from `--tools-config`
+ * JSON (if any), then applies individual flags as overrides. Resolves
+ * `--enable-integration` slugs to method-tagged rows from the session's
+ * connected integrations and mirrors them into `enabledConnections`.
+ */
+function buildToolsConfig(opts: AgentConfigOptions, scope: ScopingContext): Record<string, unknown> | undefined {
+  let tc: Record<string, unknown> = {};
+  if (opts.toolsConfig) {
+    try {
+      tc = JSON.parse(opts.toolsConfig);
+    } catch {
+      fail('--tools-config must be valid JSON');
+    }
+    if (typeof tc !== 'object' || tc === null || Array.isArray(tc)) fail('--tools-config must be a JSON object');
+  }
+
+  if (opts.webSearch !== undefined) tc.webSearchEnabled = opts.webSearch;
+  if (opts.queryDataSources !== undefined) tc.queryDataSources = opts.queryDataSources;
+  if (opts.createAgent !== undefined) tc.createAgentEnabled = opts.createAgent;
+  if (opts.autoTools !== undefined) tc.autoToolsEnabled = opts.autoTools;
+  if (opts.memories !== undefined) tc.memoriesEnabled = opts.memories;
+  if (opts.numaOps !== undefined) tc.numaOpsEnabled = opts.numaOps;
+
+  if (opts.approvalMode) {
+    if (!APPROVAL_MODES.includes(opts.approvalMode as (typeof APPROVAL_MODES)[number])) {
+      fail(`--approval-mode must be one of: ${APPROVAL_MODES.join(', ')}`);
+    }
+    tc.approvalMode = opts.approvalMode;
+  }
+  if (opts.approvalModes) {
+    let parsed: Record<string, string>;
+    try {
+      parsed = JSON.parse(opts.approvalModes);
+    } catch {
+      return fail('--approval-modes must be valid JSON') as never;
+    }
+    for (const [k, v] of Object.entries(parsed)) {
+      if (!APPROVAL_CATEGORIES.includes(k as (typeof APPROVAL_CATEGORIES)[number])) {
+        fail(`--approval-modes: unknown category '${k}'. Valid: ${APPROVAL_CATEGORIES.join(', ')}`);
+      }
+      if (!APPROVAL_MODES.includes(v as (typeof APPROVAL_MODES)[number])) {
+        fail(`--approval-modes: '${k}' must be one of ${APPROVAL_MODES.join(', ')}`);
+      }
+    }
+    tc.approvalModes = parsed;
+  }
+
+  // KB tri-state: --all-kbs (null) > --no-kbs ([]) > --knowledge-base (specific)
+  if (opts.allKbs) tc.allowedKnowledgeBases = null;
+  else if (opts.noKbs) tc.allowedKnowledgeBases = [];
+  else if (opts.knowledgeBase?.length) tc.allowedKnowledgeBases = opts.knowledgeBase;
+
+  if (opts.enableIntegration?.length) {
+    const rows = opts.enableIntegration.map((slug) => {
+      const methods = [...new Set(scope.enabled_integrations.filter((i) => i.slug === slug).map((m) => m.method))];
+      if (methods.length === 0) {
+        fail(
+          `--enable-integration '${slug}' is not a connected/enabled integration in this session. ` +
+            `Connect or enable it first (numa integrations list), or pass it explicitly via --tools-config.`
+        );
+      }
+      if (methods.length > 1) {
+        fail(`--enable-integration '${slug}' has multiple methods (${methods.join(', ')}); set it via --tools-config.`);
+      }
+      const method = methods[0];
+      if (method === undefined) fail(`--enable-integration '${slug}' could not be resolved.`);
+      return { slug, method, name: slug };
+    });
+    tc.enabledIntegrations = rows;
+    tc.enabledConnections = rows.map((r) => r.slug); // legacy mirror
+  }
+
+  return Object.keys(tc).length ? tc : undefined;
+}
+
 /** Workspace narrows to frontend-set toggles; locally auto-merge so commands work without dev-context setup. */
 function resolveEnabledTools(scope: ScopingContext): string[] {
   const base = scope.enabled_tools ?? [];
@@ -189,6 +332,10 @@ function printAgentDetail(a: Agent): void {
     }
   }
   if (a.sourceAgentId) process.stdout.write(`sourceAgentId:   ${a.sourceAgentId}\n`);
+  // Knowledge bases are tri-state: null/absent = all, [] = none, [ids] = specific.
+  const kbs = a.toolsConfig?.allowedKnowledgeBases;
+  const kbDisplay = kbs == null ? 'All' : kbs.length === 0 ? 'None' : kbs.join(', ');
+  process.stdout.write(`knowledgeBases:  ${kbDisplay}\n`);
   if (a.systemPrompt) {
     process.stdout.write(`systemPrompt:\n${a.systemPrompt}\n`);
   }
@@ -232,252 +379,266 @@ function createAgentsShowCommand(): Command {
 // ── create ──────────────────────────────────────────────────────────────────
 
 function createAgentsCreateCommand(): Command {
-  return new Command('create')
-    .description('Create a new agent')
-    .argument('<title>', 'Agent title')
-    .option('--prompt <text>', 'System prompt (inline). Use --prompt-file for longer prompts.')
-    .option('--prompt-file <path>', 'Read system prompt from a local file')
-    .option('--visibility <v>', "'personal' (default) or 'public' (workspace-shared)", 'personal')
-    .option('--type <agentType>', "Agent type (default: 'task')", 'task')
-    .option('--description <text>', 'Optional description')
-    .option('--welcome <text>', 'User-facing welcome message shown when the agent opens')
-    .option('--time-saved <minutes>', 'Estimated minutes saved per use', (v) => parseInt(v, 10))
-    .option('--icon <name>', 'Icon class name (e.g. Lucide icon)')
-    .option(
-      '--integration <slug>',
-      'Required integration slug (repeatable)',
-      (val, prev: string[]) => [...(prev ?? []), val],
-      []
-    )
-    .option(
-      '--attach <path>',
-      'Workspace file to attach as a reference (repeatable, max 5)',
-      (val, prev: string[]) => [...(prev ?? []), val],
-      []
-    )
-    .option('-y, --yes', 'Skip the local confirmation prompt')
-    .option(
-      '-m, --user-message <text>',
-      'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
-    )
-    .option('--pretty', 'Force human-readable output')
-    .option('--standard', 'Force standard envelope output (LLM-friendly)')
-    .option('--json', 'Force raw JSON output')
-    .action(
-      async (
-        title: string,
-        options: {
-          prompt?: string;
-          promptFile?: string;
-          visibility?: 'personal' | 'public';
-          type?: string;
-          description?: string;
-          welcome?: string;
-          timeSaved?: number;
-          icon?: string;
-          integration?: string[];
-          attach?: string[];
-          yes?: boolean;
-        } & StandardOptions
-      ) => {
-        const account = activeProfile();
-        if (!account) fail('no active profile — run `numa login` first');
+  return addAgentConfigOptions(
+    new Command('create')
+      .description('Create a new agent')
+      .argument('<title>', 'Agent title')
+      .option('--prompt <text>', 'System prompt (inline). Use --prompt-file for longer prompts.')
+      .option('--prompt-file <path>', 'Read system prompt from a local file')
+      .option('--visibility <v>', "'personal' (default) or 'public' (workspace-shared)", 'personal')
+      .option('--type <agentType>', "Agent type (default: 'task')", 'task')
+      .option('--description <text>', 'Optional description')
+      .option('--welcome <text>', 'User-facing welcome message shown when the agent opens')
+      .option('--time-saved <minutes>', 'Estimated minutes saved per use', (v) => parseInt(v, 10))
+      .option('--icon <name>', 'Icon class name (e.g. Lucide icon)')
+      .option(
+        '--integration <slug>',
+        'Required integration slug (repeatable)',
+        (val, prev: string[]) => [...(prev ?? []), val],
+        []
+      )
+      .option(
+        '--attach <path>',
+        'Workspace file to attach as a reference (repeatable, max 5)',
+        (val, prev: string[]) => [...(prev ?? []), val],
+        []
+      )
+      .option('-y, --yes', 'Skip the local confirmation prompt')
+      .option(
+        '-m, --user-message <text>',
+        'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
+      )
+      .option('--pretty', 'Force human-readable output')
+      .option('--standard', 'Force standard envelope output (LLM-friendly)')
+      .option('--json', 'Force raw JSON output')
+  ).action(
+    async (
+      title: string,
+      options: {
+        prompt?: string;
+        promptFile?: string;
+        visibility?: 'personal' | 'public';
+        type?: string;
+        description?: string;
+        welcome?: string;
+        timeSaved?: number;
+        icon?: string;
+        integration?: string[];
+        attach?: string[];
+        yes?: boolean;
+      } & AgentConfigOptions &
+        StandardOptions
+    ) => {
+      const account = activeProfile();
+      if (!account) fail('no active profile — run `numa login` first');
 
-        const visibility = options.visibility ?? 'personal';
-        if (visibility !== 'personal' && visibility !== 'public') {
-          fail(`--visibility must be 'personal' or 'public', got '${visibility}'`);
-        }
-
-        const systemPrompt = readPromptInput(options.prompt, options.promptFile, true)!;
-
-        const { requestId, autoApproved } = await gateWriteOp({
-          requiresApproval: requiresLocalApproval('agents', 'create', account),
-          yes: !!options.yes,
-          confirmOpts: {
-            title: `Create agent "${title}" (${visibility})`,
-            detail: [
-              `Type: ${options.type ?? 'task'}`,
-              `Prompt: ${systemPrompt.length} chars`,
-              ...(options.attach?.length ? [`Attaching: ${options.attach.length} file(s)`] : []),
-            ],
-          },
-          emit: {
-            actionKey: 'numa_agents_create',
-            toolName: 'create_agent_tool',
-            description: options.userMessage!,
-            propsPreview: { title, visibility },
-            approvalCategory: 'numa_tool',
-          },
-        });
-
-        const params: ParamsForTool<'create_agent'> = {
-          title,
-          systemPrompt,
-          visibility,
-          ...(options.type ? { agentType: options.type } : {}),
-          ...(options.description ? { description: options.description } : {}),
-          ...(options.welcome ? { userWelcomeMessage: options.welcome } : {}),
-          ...(options.timeSaved !== undefined ? { estimatedTimeSavedMinutes: options.timeSaved } : {}),
-          ...(options.icon ? { icon: options.icon } : {}),
-          ...(options.integration?.length ? { requiredIntegrations: options.integration } : {}),
-          ...(options.attach?.length ? { attachFiles: options.attach } : {}),
-          auto_approved: autoApproved,
-        };
-
-        const { accessToken, request, scope } = await buildAgentsRequest(
-          account,
-          'create_agent',
-          params,
-          options.userMessage
-        );
-        if (requestId) request.request_id = requestId;
-        if (options.attach?.length && !scope.conversation_id) {
-          fail(
-            '--attach requires a conversation context (in-workspace or `numa-dev context set --conversation-id`). ' +
-              'The server resolves the workspace path against the conversation to copy the file.'
-          );
-        }
-
-        const res = await invokeTool(account, accessToken, request);
-        if (res.status === 'error') fail(`agents create failed: ${res.error ?? '<no message>'}`);
-
-        emitResult({
-          tool: 'create_agent',
-          result: res.result,
-          options,
-          pretty: (r) => {
-            if (r?.agent) {
-              process.stderr.write(`numa: created ${r.agent.title} (${r.agent.agentId})\n`);
-              process.stdout.write(`${r.agent.agentId}\n`);
-            }
-            if (r?.fileWarnings?.length) {
-              for (const w of r.fileWarnings) {
-                process.stderr.write(`numa: warning — ${w}\n`);
-              }
-            }
-          },
-        });
+      const visibility = options.visibility ?? 'personal';
+      if (visibility !== 'personal' && visibility !== 'public') {
+        fail(`--visibility must be 'personal' or 'public', got '${visibility}'`);
       }
-    );
+
+      const systemPrompt = readPromptInput(options.prompt, options.promptFile, true)!;
+
+      const { requestId, autoApproved } = await gateWriteOp({
+        requiresApproval: requiresLocalApproval('agents', 'create', account),
+        yes: !!options.yes,
+        confirmOpts: {
+          title: `Create agent "${title}" (${visibility})`,
+          detail: [
+            `Type: ${options.type ?? 'task'}`,
+            `Prompt: ${systemPrompt.length} chars`,
+            ...(options.attach?.length ? [`Attaching: ${options.attach.length} file(s)`] : []),
+          ],
+        },
+        emit: {
+          actionKey: 'numa_agents_create',
+          toolName: 'create_agent_tool',
+          description: options.userMessage!,
+          propsPreview: { title, visibility },
+          approvalCategory: 'numa_tool',
+        },
+      });
+
+      const toolsConfig = buildToolsConfig(options, resolveScopingContext(account));
+      const params: ParamsForTool<'create_agent'> = {
+        title,
+        systemPrompt,
+        visibility,
+        ...(options.type ? { agentType: options.type } : {}),
+        ...(options.description ? { description: options.description } : {}),
+        ...(options.welcome ? { userWelcomeMessage: options.welcome } : {}),
+        ...(options.timeSaved !== undefined ? { estimatedTimeSavedMinutes: options.timeSaved } : {}),
+        ...(options.icon ? { icon: options.icon } : {}),
+        ...(options.integration?.length ? { requiredIntegrations: options.integration } : {}),
+        ...(options.attach?.length ? { attachFiles: options.attach } : {}),
+        ...(toolsConfig ? { toolsConfig } : {}),
+        ...(options.tag?.length ? { tags: options.tag } : {}),
+        ...(options.persona?.length ? { personas: options.persona } : {}),
+        ...(options.industry?.length ? { industries: options.industry } : {}),
+        auto_approved: autoApproved,
+      };
+
+      const { accessToken, request, scope } = await buildAgentsRequest(
+        account,
+        'create_agent',
+        params,
+        options.userMessage
+      );
+      if (requestId) request.request_id = requestId;
+      if (options.attach?.length && !scope.conversation_id) {
+        fail(
+          '--attach requires a conversation context (in-workspace or `numa-dev context set --conversation-id`). ' +
+            'The server resolves the workspace path against the conversation to copy the file.'
+        );
+      }
+
+      const res = await invokeTool(account, accessToken, request);
+      if (res.status === 'error') fail(`agents create failed: ${res.error ?? '<no message>'}`);
+
+      emitResult({
+        tool: 'create_agent',
+        result: res.result,
+        options,
+        pretty: (r) => {
+          if (r?.agent) {
+            process.stderr.write(`numa: created ${r.agent.title} (${r.agent.agentId})\n`);
+            process.stdout.write(`${r.agent.agentId}\n`);
+          }
+          if (r?.fileWarnings?.length) {
+            for (const w of r.fileWarnings) {
+              process.stderr.write(`numa: warning — ${w}\n`);
+            }
+          }
+        },
+      });
+    }
+  );
 }
 
 // ── update ──────────────────────────────────────────────────────────────────
 
 function createAgentsUpdateCommand(): Command {
-  return new Command('update')
-    .description('Update fields on an existing agent (use patch-prompt for prompt diffs)')
-    .argument('<id>', 'Agent id')
-    .option('--title <text>', 'New title')
-    .option('--prompt <text>', 'New system prompt (inline). Use --prompt-file for longer prompts.')
-    .option('--prompt-file <path>', 'Read system prompt from a local file')
-    .option('--visibility <v>', "'personal' or 'public'")
-    .option('--type <agentType>', 'New agent type')
-    .option('--description <text>', 'New description')
-    .option('--welcome <text>', 'New user welcome message')
-    .option('--time-saved <minutes>', 'Estimated minutes saved per use', (v) => parseInt(v, 10))
-    .option('--icon <name>', 'New icon class name')
-    .option(
-      '--integration <slug>',
-      'Required integration slug (repeatable; replaces existing)',
-      (val, prev: string[]) => [...(prev ?? []), val],
-      []
-    )
-    .option(
-      '--attach <path>',
-      'Workspace file to attach (repeatable; appends to existing)',
-      (val, prev: string[]) => [...(prev ?? []), val],
-      []
-    )
-    .option('--favorite', 'Mark as favorite')
-    .option('--no-favorite', 'Clear favorite')
-    .option('-y, --yes', 'Skip the local confirmation prompt')
-    .option(
-      '-m, --user-message <text>',
-      'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
-    )
-    .option('--pretty', 'Force human-readable output')
-    .option('--standard', 'Force standard envelope output (LLM-friendly)')
-    .option('--json', 'Force raw JSON output')
-    .action(
-      async (
-        id: string,
-        options: {
-          title?: string;
-          prompt?: string;
-          promptFile?: string;
-          visibility?: 'personal' | 'public';
-          type?: string;
-          description?: string;
-          welcome?: string;
-          timeSaved?: number;
-          icon?: string;
-          integration?: string[];
-          attach?: string[];
-          favorite?: boolean;
-          yes?: boolean;
-        } & StandardOptions
-      ) => {
-        const account = activeProfile();
-        if (!account) fail('no active profile — run `numa login` first');
+  return addAgentConfigOptions(
+    new Command('update')
+      .description('Update fields on an existing agent (use patch-prompt for prompt diffs)')
+      .argument('<id>', 'Agent id')
+      .option('--title <text>', 'New title')
+      .option('--prompt <text>', 'New system prompt (inline). Use --prompt-file for longer prompts.')
+      .option('--prompt-file <path>', 'Read system prompt from a local file')
+      .option('--visibility <v>', "'personal' or 'public'")
+      .option('--type <agentType>', 'New agent type')
+      .option('--description <text>', 'New description')
+      .option('--welcome <text>', 'New user welcome message')
+      .option('--time-saved <minutes>', 'Estimated minutes saved per use', (v) => parseInt(v, 10))
+      .option('--icon <name>', 'New icon class name')
+      .option(
+        '--integration <slug>',
+        'Required integration slug (repeatable; replaces existing)',
+        (val, prev: string[]) => [...(prev ?? []), val],
+        []
+      )
+      .option(
+        '--attach <path>',
+        'Workspace file to attach (repeatable; appends to existing)',
+        (val, prev: string[]) => [...(prev ?? []), val],
+        []
+      )
+      .option('--favorite', 'Mark as favorite')
+      .option('--no-favorite', 'Clear favorite')
+      .option('-y, --yes', 'Skip the local confirmation prompt')
+      .option(
+        '-m, --user-message <text>',
+        'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
+      )
+      .option('--pretty', 'Force human-readable output')
+      .option('--standard', 'Force standard envelope output (LLM-friendly)')
+      .option('--json', 'Force raw JSON output')
+  ).action(
+    async (
+      id: string,
+      options: {
+        title?: string;
+        prompt?: string;
+        promptFile?: string;
+        visibility?: 'personal' | 'public';
+        type?: string;
+        description?: string;
+        welcome?: string;
+        timeSaved?: number;
+        icon?: string;
+        integration?: string[];
+        attach?: string[];
+        favorite?: boolean;
+        yes?: boolean;
+      } & AgentConfigOptions &
+        StandardOptions
+    ) => {
+      const account = activeProfile();
+      if (!account) fail('no active profile — run `numa login` first');
 
-        const systemPrompt = readPromptInput(options.prompt, options.promptFile, false);
+      const systemPrompt = readPromptInput(options.prompt, options.promptFile, false);
 
-        const { requestId, autoApproved } = await gateWriteOp({
-          requiresApproval: requiresLocalApproval('agents', 'update', account),
-          yes: !!options.yes,
-          confirmOpts: {
-            title: `Update agent ${id}`,
-            detail: [
-              ...(options.title ? [`title → "${options.title}"`] : []),
-              ...(systemPrompt !== undefined ? [`prompt → ${systemPrompt.length} chars`] : []),
-              ...(options.visibility ? [`visibility → ${options.visibility}`] : []),
-            ],
-          },
-          emit: {
-            actionKey: 'numa_agents_update',
-            toolName: 'create_agent_tool',
-            description: options.userMessage!,
-            propsPreview: { agent_id: id },
-            approvalCategory: 'numa_tool',
-          },
-        });
+      const { requestId, autoApproved } = await gateWriteOp({
+        requiresApproval: requiresLocalApproval('agents', 'update', account),
+        yes: !!options.yes,
+        confirmOpts: {
+          title: `Update agent ${id}`,
+          detail: [
+            ...(options.title ? [`title → "${options.title}"`] : []),
+            ...(systemPrompt !== undefined ? [`prompt → ${systemPrompt.length} chars`] : []),
+            ...(options.visibility ? [`visibility → ${options.visibility}`] : []),
+          ],
+        },
+        emit: {
+          actionKey: 'numa_agents_update',
+          toolName: 'create_agent_tool',
+          description: options.userMessage!,
+          propsPreview: { agent_id: id },
+          approvalCategory: 'numa_tool',
+        },
+      });
 
-        const params: ParamsForTool<'update_agent'> = {
-          agent_id: id,
-          ...(options.title ? { title: options.title } : {}),
-          ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-          ...(options.visibility ? { visibility: options.visibility } : {}),
-          ...(options.type ? { agentType: options.type } : {}),
-          ...(options.description ? { description: options.description } : {}),
-          ...(options.welcome ? { userWelcomeMessage: options.welcome } : {}),
-          ...(options.timeSaved !== undefined ? { estimatedTimeSavedMinutes: options.timeSaved } : {}),
-          ...(options.icon ? { icon: options.icon } : {}),
-          ...(options.integration?.length ? { requiredIntegrations: options.integration } : {}),
-          ...(options.attach?.length ? { attachFiles: options.attach } : {}),
-          ...(options.favorite !== undefined ? { isFavorite: options.favorite } : {}),
-          auto_approved: autoApproved,
-        };
+      const toolsConfig = buildToolsConfig(options, resolveScopingContext(account));
+      const params: ParamsForTool<'update_agent'> = {
+        agent_id: id,
+        ...(options.title ? { title: options.title } : {}),
+        ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+        ...(options.visibility ? { visibility: options.visibility } : {}),
+        ...(options.type ? { agentType: options.type } : {}),
+        ...(options.description ? { description: options.description } : {}),
+        ...(options.welcome ? { userWelcomeMessage: options.welcome } : {}),
+        ...(options.timeSaved !== undefined ? { estimatedTimeSavedMinutes: options.timeSaved } : {}),
+        ...(options.icon ? { icon: options.icon } : {}),
+        ...(options.integration?.length ? { requiredIntegrations: options.integration } : {}),
+        ...(options.attach?.length ? { attachFiles: options.attach } : {}),
+        ...(options.favorite !== undefined ? { isFavorite: options.favorite } : {}),
+        ...(toolsConfig ? { toolsConfig } : {}),
+        ...(options.tag?.length ? { tags: options.tag } : {}),
+        ...(options.persona?.length ? { personas: options.persona } : {}),
+        ...(options.industry?.length ? { industries: options.industry } : {}),
+        auto_approved: autoApproved,
+      };
 
-        const { accessToken, request } = await buildAgentsRequest(account, 'update_agent', params, options.userMessage);
-        if (requestId) request.request_id = requestId;
-        const res = await invokeTool(account, accessToken, request);
-        if (res.status === 'error') fail(`agents update failed: ${res.error ?? '<no message>'}`);
+      const { accessToken, request } = await buildAgentsRequest(account, 'update_agent', params, options.userMessage);
+      if (requestId) request.request_id = requestId;
+      const res = await invokeTool(account, accessToken, request);
+      if (res.status === 'error') fail(`agents update failed: ${res.error ?? '<no message>'}`);
 
-        emitResult({
-          tool: 'update_agent',
-          result: res.result,
-          options,
-          pretty: (r) => {
-            if (r?.agent) process.stderr.write(`numa: updated ${r.agent.title} (${r.agent.agentId})\n`);
-            if (r?.fileWarnings?.length) {
-              for (const w of r.fileWarnings) {
-                process.stderr.write(`numa: warning — ${w}\n`);
-              }
+      emitResult({
+        tool: 'update_agent',
+        result: res.result,
+        options,
+        pretty: (r) => {
+          if (r?.agent) process.stderr.write(`numa: updated ${r.agent.title} (${r.agent.agentId})\n`);
+          if (r?.fileWarnings?.length) {
+            for (const w of r.fileWarnings) {
+              process.stderr.write(`numa: warning — ${w}\n`);
             }
-          },
-        });
-      }
-    );
+          }
+        },
+      });
+    }
+  );
 }
 
 // ── patch-prompt ────────────────────────────────────────────────────────────

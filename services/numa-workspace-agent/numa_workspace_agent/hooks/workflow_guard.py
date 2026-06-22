@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from numa_workspace_agent.saved_workflows import (
+    AGENT_WORKFLOWS_DIR,
     WORKFLOWS_DIR,
     scan_for_secrets,
     validate_workflow_content,
@@ -41,7 +42,13 @@ def _is_workflow_path(file_path: str) -> bool:
         if not p.is_absolute():
             p = Path("/workdir") / p
         p = p.resolve()
-        return p == WORKFLOWS_DIR.resolve() or WORKFLOWS_DIR.resolve() in p.parents
+        # Guard both the user-level (chat-workflows) and agent-scoped
+        # (agent-workflows, FEAT-243) libraries — same format + validation.
+        for base in (WORKFLOWS_DIR, AGENT_WORKFLOWS_DIR):
+            root = base.resolve()
+            if p == root or root in p.parents:
+                return True
+        return False
     except (OSError, ValueError):
         return False
 

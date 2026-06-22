@@ -35,8 +35,6 @@ def mock_chat_type() -> AgentTypeConfig:
         allowed_tools=["Read", "Write"],
         enable_scripts_mcp=False,
         enable_integrations_mcp=False,
-        enabled_numa_tools=[],
-        tools_source_dirs=[],
         max_turns=5,
     )
     register_agent_type(config)
@@ -54,8 +52,6 @@ def mock_sync_type() -> AgentTypeConfig:
         allowed_tools=["Read"],
         enable_scripts_mcp=False,
         enable_integrations_mcp=False,
-        enabled_numa_tools=[],
-        tools_source_dirs=[],
         pipeline_result_mode="result_file",
         max_turns=3,
     )
@@ -74,8 +70,6 @@ def mock_pipeline_step_a() -> AgentTypeConfig:
         allowed_tools=["Read"],
         enable_scripts_mcp=False,
         enable_integrations_mcp=False,
-        enabled_numa_tools=[],
-        tools_source_dirs=[],
         max_turns=5,
     )
     register_agent_type(config)
@@ -93,8 +87,6 @@ def mock_pipeline_step_b() -> AgentTypeConfig:
         allowed_tools=["Read", "Write"],
         enable_scripts_mcp=False,
         enable_integrations_mcp=False,
-        enabled_numa_tools=[],
-        tools_source_dirs=[],
         max_turns=5,
     )
     register_agent_type(config)
@@ -112,8 +104,6 @@ def mock_pipeline_type(mock_pipeline_step_a, mock_pipeline_step_b) -> AgentTypeC
         allowed_tools=[],
         enable_scripts_mcp=False,
         enable_integrations_mcp=False,
-        enabled_numa_tools=[],
-        tools_source_dirs=[],
         pipeline_steps=["step-a", "step-b"],
         pipeline_result_mode="last_step_text",
         max_turns=10,

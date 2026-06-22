@@ -103,13 +103,6 @@ NUMA_CHAT = AgentTypeConfig(
     enable_numa_mcp=False,  # full CLI cutover; `render` deferred to the numa CLI
     enable_connect_mcp=False,  # CLI cutover: `numa integrations request <native>`
     enable_vault_mcp=False,  # vault MCP retired — secret retrieval returns as a CLI command later
-    # Layer 3: Numa tool reference docs (copied to /workdir/tools/ for Claude to read)
-    enabled_numa_tools=[
-        "agents",
-        "memories",
-        "numa-ops",
-    ],
-    tools_source_dirs=["numa"],
     # Full plugins
     plugins_path="/app/plugins/numa",
     # KBs and integrations: driven by request (no restrictions)

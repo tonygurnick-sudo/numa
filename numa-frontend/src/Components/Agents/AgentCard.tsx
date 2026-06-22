@@ -27,6 +27,8 @@ import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import AgentAvatar from './AgentAvatar';
 import { CollapsibleTagRow } from '../Inputs/CollapsibleTagRow';
 import { downloadAgentExport, serializeAgentSummaryToExport } from '../../utils/agentExport';
+import { getFlag } from '../../utils/featureFlags';
+import AgentCreditsSection from './AgentCreditsSection';
 
 type AgentCardProps = {
   agent: AgentSummary;
@@ -143,6 +145,8 @@ export const AgentCard = ({
   // In auto mode, the agent creation tool is also available
   const hasAgentCreation = autoMode || agent.toolsConfig?.createAgentEnabled;
   const canFavorite = Boolean(onToggleFavorite);
+  // Per-agent credit analytics (FEAT-246) — a collapsible Credits section, gated on SHOW_CREDITS.
+  const creditsEnabled = getFlag('SHOW_CREDITS');
 
   // Compute allowed KBs for display
   const getAllowedKBs = (): string[] | 'all' | 'none' => {
@@ -735,6 +739,11 @@ export const AgentCard = ({
             </div>
           </div>
         </div>
+
+        {/* Per-agent Credits analytics (FEAT-246) — collapsible, lazy-loaded on expand,
+            gated on SHOW_CREDITS. Shows the caller's own usage; a billing admin viewing a
+            company (public) agent additionally sees the all-users aggregate + top users. */}
+        {creditsEnabled && <AgentCreditsSection agentId={agent.agentId} visibility={agent.visibility} />}
 
         {/* Action buttons — body click on the Card starts chat (see Card onClick),
             so the explicit "Chat" button is no longer rendered. Every button here

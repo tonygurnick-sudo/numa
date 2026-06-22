@@ -25,10 +25,11 @@ from numa_workspace_agent.hooks import (
     param_aliases_hook,
     security_hook,
     workflow_guard_hook,
+    workflow_run_tracker_hook,
     workspace_sync_hook,
 )
 from numa_workspace_agent.prompts import (
-    ANTI_FABRICATION_ADDENDUM,
+    ACCURACY_AND_SCOPE_ADDENDUM,
     LANGUAGE_STEER,
     VIEW_IMAGE_USAGE,
     VISUAL_DESIGN_ADDENDUM,
@@ -1146,15 +1147,19 @@ def create_agent_options(
         # 1h prompt-cache toggle so the CLI doesn't send Bedrock cache controls.
         env.pop("ENABLE_PROMPT_CACHING_1H_BEDROCK", None)
 
-        # Model-conditional capabilities: append the anti-fabrication addendum,
-        # the vision-tool advertisement, the language steer, and the visual-design
-        # mandate (the Standard model needs to be pushed to load the design skill;
-        # Claude reaches for it on its own). The `numa vision` command is permitted
-        # by the unrestricted numa-chat policy already; the gate here is purely
-        # whether the prompt advertises it.
+        # Model-conditional capabilities: append the scope/restraint + accuracy
+        # addendum, the vision-tool advertisement, the language steer, and the
+        # visual-design mandate (the Standard model needs to be pushed to load the
+        # design skill; Claude reaches for it on its own). The scope/accuracy
+        # addendum also carries the "do exactly what was asked" + "verify before
+        # acting on a finding" framing that Claude supplies from its own priors —
+        # Premium deliberately gets none of it (it doesn't overstep this way, and
+        # the blunt wording would make it timid). The `numa vision` command is
+        # permitted by the unrestricted numa-chat policy already; the gate here is
+        # purely whether the prompt advertises it.
         system_prompt = (
             f"{system_prompt}\n\n"
-            f"{ANTI_FABRICATION_ADDENDUM}\n\n{VIEW_IMAGE_USAGE}\n\n{LANGUAGE_STEER}"
+            f"{ACCURACY_AND_SCOPE_ADDENDUM}\n\n{VIEW_IMAGE_USAGE}\n\n{LANGUAGE_STEER}"
             f"\n\n{VISUAL_DESIGN_ADDENDUM}"
         )
 
@@ -1192,10 +1197,37 @@ def create_agent_options(
         type_config.enable_security_hooks and type_config.allowed_cli_commands is None
     )
 
+    # Pass the system prompt to the CLI via a FILE rather than an inline argv
+    # string. The Claude Agent SDK otherwise emits `--system-prompt <str>`, and
+    # Linux caps a SINGLE argv string at MAX_ARG_STRLEN (128 KiB, distinct from
+    # the ~2 MB total ARG_MAX). A prompt over that — e.g. the Standard-model
+    # variant, which appends the accuracy/scope + visual-design addenda and runs
+    # ~133 KB — fails the subprocess exec with OSError E2BIG ("Argument list too
+    # long") before the model ever runs. Writing the prompt to a file and
+    # passing {"type": "file", "path": ...} (CLI `--system-prompt-file`, verified
+    # supported on the pinned CLI) takes the prompt out of argv entirely, so its
+    # size is unbounded. Falls back to the inline string only if the write fails
+    # (small prompts keep working; only >128 KiB ones would still hit the cap).
+    system_prompt_option: Any = system_prompt
+    try:
+        system_prompt_path = LOCAL_ROOT / ".system" / "system-prompt.txt"
+        system_prompt_path.parent.mkdir(parents=True, exist_ok=True)
+        system_prompt_path.write_text(system_prompt, encoding="utf-8")
+        system_prompt_option = {"type": "file", "path": str(system_prompt_path)}
+    except OSError:
+        import structlog
+
+        structlog.get_logger().warning(
+            "Failed to persist system prompt to file; falling back to inline arg",
+            _name="SYSTEM_PROMPT_FILE_FALLBACK",
+            phase="sdk",
+            prompt_length=len(system_prompt),
+        )
+
     # Build options dict, conditionally including agents if defined
     options_kwargs: dict[str, Any] = {
         # Core settings
-        "system_prompt": system_prompt,
+        "system_prompt": system_prompt_option,
         "model": effective_model,
         "max_turns": type_config.max_turns,
         # Buffer size for multimodal content (images, PDFs)
@@ -1241,7 +1273,13 @@ def create_agent_options(
                     ),
                 ],
                 "PostToolUse": [
-                    HookMatcher(hooks=[numa_call_limit_notice_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[
+                            numa_call_limit_notice_hook,
+                            workflow_run_tracker_hook,
+                            audit_hook,
+                        ]
+                    ),
                 ],
                 "PreCompact": [
                     HookMatcher(hooks=[compaction_hook]),
@@ -1262,7 +1300,13 @@ def create_agent_options(
                     ),
                 ],
                 "PostToolUse": [
-                    HookMatcher(hooks=[numa_call_limit_notice_hook, audit_hook]),
+                    HookMatcher(
+                        hooks=[
+                            numa_call_limit_notice_hook,
+                            workflow_run_tracker_hook,
+                            audit_hook,
+                        ]
+                    ),
                 ],
                 "PreCompact": [
                     HookMatcher(hooks=[compaction_hook]),

@@ -243,6 +243,8 @@ Valid `statusType` values per zone type:
 | `limit`           | string | No       | Pagination limit                                                 |
 | `cursor`          | string | No       | Pagination cursor from previous response                         |
 
+> **Get ALL tickets — don't get silently truncated.** Omit `limit` entirely and the API auto-paginates, returning every matching ticket in one call. If you DO pass `limit`, the response includes a `cursor` whenever more tickets exist beyond the page — you must re-call with that `cursor` (same filters) and merge pages until no cursor is returned. Never compute counts/totals or build a report off a paginated response that still has a `cursor`.
+
 #### get_ticket
 
 | Parameter   | Type   | Required    | Description                                             |

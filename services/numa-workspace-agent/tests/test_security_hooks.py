@@ -579,7 +579,8 @@ class TestDenyResponseRemediation:
 
 class TestSdkToolResultsAllowlist:
     """The Claude Agent SDK persists oversized tool outputs to
-    /workdir/.system/.claude/projects/<id>/tool-results/<tool_use_id>.json
+    /workdir/.system/.claude/projects/<id>/tool-results/<tool_use_id>.<ext>
+    (`.json` for JSON payloads, `.txt` for plain-text output like Bash stdout)
     and tells the model to Read them. Without an allowlist the security hook
     blocks the Read and the SDK+hook contradict each other.
 
@@ -628,13 +629,23 @@ class TestSdkToolResultsAllowlist:
         )
         assert blocked
 
-    def test_non_json_in_tool_results_still_blocked(self):
-        """Allowlist requires .json suffix."""
-        blocked, _ = is_blocked_path(
+    def test_txt_in_tool_results_allowed(self):
+        """The SDK writes `.txt` sidecars for plain-text tool output (e.g. Bash
+        stdout). These must be Readable too — a `.json`-only allowlist silently
+        blocked them and the model was handed a path it couldn't open."""
+        blocked, reason = is_blocked_path(
             "/workdir/.system/.claude/projects/abc/tool-results/toolu_xyz.txt",
             allow_sdk_tool_results=True,
         )
-        assert blocked
+        assert not blocked, f"Should be allowed but got: {reason}"
+
+    def test_extensionless_tool_result_allowed(self):
+        """No extension constraint — any single filename component is fine."""
+        blocked, reason = is_blocked_path(
+            "/workdir/.system/.claude/projects/abc/tool-results/toolu_xyz",
+            allow_sdk_tool_results=True,
+        )
+        assert not blocked, f"Should be allowed but got: {reason}"
 
     def test_nested_subdir_in_tool_results_blocked(self):
         """Allowlist requires exactly one filename component after tool-results/."""

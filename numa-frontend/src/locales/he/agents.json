@@ -23,6 +23,19 @@
     "collapseAria": "כוללאפסה אגהנט דהטאילס",
     "expandAria": "השפאנד אגהנט דהטאילס",
     "noDescription": "נו דהסכריפטיונ פרובידהד.",
+    "credits": {
+      "title": "קרדיטים",
+      "loading": "טוען שימוש…",
+      "error": "לא ניתן לטעון את נתוני הקרדיטים.",
+      "empty": "אין עדיין שימוש בקרדיטים.",
+      "scopeOwnLatest": "ריצה אחרונה",
+      "scopeAllLatest": "ריצה אחרונה (כל המשתמשים)",
+      "total": "{{credits}} קרדיטים",
+      "creditsLabel": "קרדיטים",
+      "sourceScheduled": "מתוזמן",
+      "sourceOnDemand": "לפי דרישה",
+      "topUsers": "משתמשים מובילים"
+    },
     "labels": {
       "tools": "טוולס",
       "knowledgeBases": "קנוולהדגה באסהס",
