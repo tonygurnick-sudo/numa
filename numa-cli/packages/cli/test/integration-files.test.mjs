@@ -20,6 +20,36 @@ test('inline base64 binary is collected with content-type extension', () => {
   assert.equal(refs[0].expectedSha256, 'a'.repeat(64));
 });
 
+test('inline base64 binary prefers filename_hint over the synthetic name', () => {
+  // A Slack `request` GET on url_private_download returns inline base64 with a
+  // filename_hint. The actionKey is the generic `proxy-slack`, so without the
+  // hint every download collapses onto `proxy-slack-binary.png` and overwrites
+  // the last. The real name must win.
+  const refs = collectIntegrationFileRefs(
+    { binary: true, base64_body: 'aGk=', content_type: 'image/png', filename_hint: 'image.png' },
+    'proxy-slack'
+  );
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0].filename, 'image.png');
+  assert.equal(refs[0].source.kind, 'base64');
+});
+
+test('inline base64 binary appends the content-type ext when the hint lacks one', () => {
+  const refs = collectIntegrationFileRefs(
+    { binary: true, base64_body: 'aGk=', content_type: 'application/pdf', filename_hint: 'invoice' },
+    'proxy-xero_accounting_api'
+  );
+  assert.equal(refs[0].filename, 'invoice.pdf');
+});
+
+test('inline base64 binary falls back to synthetic name when hint is a sentinel', () => {
+  const refs = collectIntegrationFileRefs(
+    { binary: true, base64_body: 'aGk=', content_type: 'text/csv', filename_hint: 'undefined' },
+    'act'
+  );
+  assert.equal(refs[0].filename, 'act-binary.csv');
+});
+
 test('staged presigned binary uses filename_hint with sha + size', () => {
   const refs = collectIntegrationFileRefs(
     {
