@@ -1320,6 +1320,7 @@ async def create_kb_folder(request: Request, kb_id: str) -> Response:
         path, path_err = _normalize_subfolder_path(body.get("path"))
         if path_err is not None:
             return JSONResponse({"error": path_err}, status_code=400)
+        assert path is not None  # narrowed: path_err is None => path is set
 
         marker_key = f"{s3_prefix}{path}/"
         s3 = prm_client("s3", region=REGION)
