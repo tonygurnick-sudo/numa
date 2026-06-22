@@ -72,8 +72,6 @@ NOLIA_FUNDING_ASSESS_EXTRACT = AgentTypeConfig(
     enable_numa_mcp=False,
     enable_connect_mcp=False,
     enable_vault_mcp=False,
-    enabled_numa_tools=["extract_content"],
-    tools_source_dirs=["numa"],
     restrict_kbs=True,
     restrict_integrations=True,
     # Extraction is fast structured-data work; 40 turns is ample.

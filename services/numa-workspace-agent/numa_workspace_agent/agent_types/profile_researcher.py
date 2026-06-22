@@ -114,8 +114,6 @@ PROFILE_RESEARCHER = AgentTypeConfig(
     enable_integrations_mcp=False,
     enable_numa_mcp=False,
     # Web search migrated to MCP numa_tool
-    enabled_numa_tools=[],
-    tools_source_dirs=["numa"],
     plugins_path="/app/plugins/numa",
     restrict_kbs=True,
     restrict_integrations=True,

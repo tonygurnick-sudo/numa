@@ -95,13 +95,11 @@ RUN useradd --uid 1000 --create-home --shell /bin/bash agent
 
 # Create workspace directories under /workdir (ephemeral, synced to S3)
 # AgentCore sets LOCAL_WORKSPACE_ROOT=/workdir, so all paths are relative to /workdir
-# Structure: /workdir/.system/.claude/, /workdir/chat-workflows/, /workdir/tools/, etc.
-# Tools are now inside /workdir to respect workspace boundary
+# Structure: /workdir/.system/.claude/, /workdir/chat-workflows/, /workdir/uploads/, etc.
 RUN mkdir -p /workdir/.system/.claude && \
     mkdir -p /workdir/chat-workflows && \
     mkdir -p /workdir/uploads && \
     mkdir -p /workdir/outputs && \
-    mkdir -p /workdir/tools/numa && \
     chown -R agent:agent /workdir && \
     # Create plugin directory outside /workdir (AI cannot modify plugins)
     mkdir -p /app/plugins/numa && \
@@ -162,12 +160,6 @@ RUN chmod 0755 /usr/local/lib/tcp_keepalive.so
 COPY numa_workspace_agent/ ./numa_workspace_agent/
 COPY integration-prompts/ ./integration-prompts/
 COPY run.sh ./
-
-# Copy tools to /app/tools/ as read-only source (for selective copy at startup)
-# The agent type system copies only enabled tools from here to /workdir/tools/
-COPY --chown=agent:agent --chmod=555 tools/ /app/tools/
-# Also copy to /workdir/tools/ as default (backwards compatible, overwritten at startup)
-COPY --chown=agent:agent tools/ /workdir/tools/
 
 # Make all application files readable by all (required for non-root user)
 RUN chmod -R 755 /app

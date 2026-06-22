@@ -301,9 +301,6 @@ NUMA_CHAT_DEMO = AgentTypeConfig(
     allowed_kb_operations=["query", "list", "download", "download_folder"],
     enable_connect_mcp=False,
     enable_vault_mcp=False,
-    # Layer 3: No tool reference docs needed (web search is via MCP)
-    enabled_numa_tools=[],
-    tools_source_dirs=["numa"],
     # Plugins
     plugins_path="/app/plugins/numa",
     # Read-only Numa Files access -- restrict to default folders only

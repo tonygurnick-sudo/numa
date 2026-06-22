@@ -22,11 +22,12 @@ Agent types are different configurations of the same workspace agent engine. Eac
 - **sync** — Caller waits for full response (used by pipelines and structured output agents)
 - **fire-and-forget** — Accept request, return immediately, write results to S3/DynamoDB
 
-### Three Tool Layers
+### Two Tool Layers
 
 1. **Claude SDK Tools** — Built-in capabilities (Read, Write, Bash, etc.) controlled by `tools`, `allowed_tools`, `disallowed_tools`
 2. **MCP Tools** — Server-side endpoints (execute_script, integration actions) controlled by `enable_scripts_mcp`, `enable_integrations_mcp`
-3. **Numa Tool Reference Docs** — Documentation files copied to `/workdir/tools/` (numa_files_search, web_search, etc.) controlled by `enabled_numa_tools`. These are read-only references — all operations go through the `numa_tool` MCP tool.
+
+Platform capabilities (knowledge base, web search, docs, agents, memory, ops, etc.) are invoked via the `numa <category>` CLI over Bash — there are no per-agent tool reference docs copied into the workspace.
 
 ### MCP Server Architecture
 

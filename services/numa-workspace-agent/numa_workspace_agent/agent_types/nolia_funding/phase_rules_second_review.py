@@ -106,8 +106,6 @@ NOLIA_FUNDING_RULES_SECOND_REVIEW = AgentTypeConfig(
     enable_numa_mcp=False,
     enable_connect_mcp=False,
     enable_vault_mcp=False,
-    enabled_numa_tools=["extract_content"],
-    tools_source_dirs=["numa"],
     restrict_kbs=True,
     restrict_integrations=True,
     # Capped lower than Phase 2 — an audit that exceeds ~30 turns

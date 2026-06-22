@@ -304,8 +304,6 @@ QUOTING_V2 = AgentTypeConfig(
         "extract_content",
         "convert_document",
     ],
-    enabled_numa_tools=[],
-    tools_source_dirs=[],
     plugins_path="/app/plugins/numa",
     # KBs and integrations: driven by request (user-configurable per run)
     restrict_kbs=False,

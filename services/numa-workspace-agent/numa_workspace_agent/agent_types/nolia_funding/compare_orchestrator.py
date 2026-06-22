@@ -540,8 +540,6 @@ async def _run_step(
     """Run a single pipeline step via the Claude Agent SDK."""
     from ...sdk_config import LOCAL_ROOT
     from ...sdk_runner import run_claude_sdk
-    from ...workspace import setup_agent_tools
-    from .. import ALWAYS_COPY, TOOL_FILE_MAP
 
     step_config = get_agent_type_config(step_type_id)
     step_conversation_id = f"{conversation_id}-step-{step_suffix}"
@@ -563,13 +561,6 @@ async def _run_step(
     step_kb_listings = kb_listings
     if step_kbs != available_kbs:
         step_kb_listings = None
-
-    setup_agent_tools(
-        enabled_numa_tools=step_config.enabled_numa_tools,
-        tools_source_dirs=step_config.tools_source_dirs,
-        tool_file_map=TOOL_FILE_MAP,
-        always_copy=ALWAYS_COPY,
-    )
 
     logger.info(
         "Running funding compare pipeline step",

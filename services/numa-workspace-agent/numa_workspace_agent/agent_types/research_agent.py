@@ -89,9 +89,6 @@ RESEARCH_AGENT = AgentTypeConfig(
     enable_scripts_mcp=False,
     enable_integrations_mcp=False,  # No integrations
     enable_numa_mcp=False,
-    # Layer 3: CLI tools (KB + web search migrated to MCP)
-    enabled_numa_tools=[],
-    tools_source_dirs=["numa"],
     # Full plugins
     plugins_path="/app/plugins/numa",
     # KBs allowed, integrations restricted

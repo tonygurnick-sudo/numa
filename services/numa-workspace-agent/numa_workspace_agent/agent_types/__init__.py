@@ -22,7 +22,7 @@ from . import profile_validator as _profile_validator  # noqa: F401
 from . import quoting as _quoting  # noqa: F401
 from . import research_agent as _research_agent  # noqa: F401
 from . import tony_comedian as _tony_comedian  # noqa: F401
-from .base import ALWAYS_COPY, TOOL_FILE_MAP, AgentTypeConfig
+from .base import AgentTypeConfig
 from .registry import (
     all_agent_configs,
     get_agent_type_config,
@@ -45,8 +45,6 @@ for _cfg in all_agent_configs():
 
 __all__ = [
     "AgentTypeConfig",
-    "TOOL_FILE_MAP",
-    "ALWAYS_COPY",
     "get_agent_type_config",
     "list_agent_types",
     "register_agent_type",

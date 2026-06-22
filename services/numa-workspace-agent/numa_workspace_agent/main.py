@@ -41,8 +41,6 @@ from .agent_config import (
     resolve_per_integration_approval_modes,
 )
 from .agent_types import (
-    ALWAYS_COPY,
-    TOOL_FILE_MAP,
     AgentTypeConfig,
     get_agent_type_config,
 )
@@ -1684,22 +1682,14 @@ async def invocations(request: Request):
             errors=len(sync_result["errors"]),
         )
 
-    # Ensure directories exist + copy enabled tool scripts.
+    # Ensure directories exist.
     # If the workspace filesystem is full or otherwise unwritable, surface the
     # OS error as a structured response (HTTP 200) rather than letting it
     # propagate as an uncaught exception → AgentCore RuntimeClientError 500.
     # The most common case is ENOSPC after a conversation processed multi-GB
     # files; the user has no recourse from a raw RuntimeClientError 500.
-    from .workspace import setup_agent_tools
-
     try:
         ensure_directories()
-        setup_agent_tools(
-            enabled_numa_tools=agent_type_config.enabled_numa_tools,
-            tools_source_dirs=agent_type_config.tools_source_dirs,
-            tool_file_map=TOOL_FILE_MAP,
-            always_copy=ALWAYS_COPY,
-        )
     except OSError as e:
         return _workspace_setup_error_response(
             e, body=body, agent_type_config=agent_type_config

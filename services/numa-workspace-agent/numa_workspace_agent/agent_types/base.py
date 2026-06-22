@@ -5,11 +5,6 @@ This module defines `AgentTypeConfig` — the single configuration object that c
 how the workspace agent engine behaves for a given agent type. Different agent types
 (e.g. "numa-chat", "research-agent", "quoting-agent") are just different instances of
 this dataclass: same engine, different knobs.
-
-It also defines the `TOOL_FILE_MAP` and `ALWAYS_COPY` constants, which control the
-selective copy of Numa tool reference documentation from /app/tools/ into the
-workspace at /workdir/tools/ during startup.  These files are documentation only
-(not executable) — all tool operations go through the `numa_tool` MCP tool.
 """
 
 from dataclasses import dataclass, field
@@ -21,19 +16,15 @@ class AgentTypeConfig:
     """Configuration for a workspace agent type.
 
     Each agent type is a different configuration of the same workspace agent engine.
-    It controls which tools are available, what system prompt is used, how responses
-    are delivered, and which Numa CLI tools are copied to /workdir/tools/.
+    It controls which tools are available, what system prompt is used, and how
+    responses are delivered.
 
-    The three tool layers:
+    The two tool layers:
         1. **Claude SDK tools** — built-in SDK capabilities (Read, Write, Bash, etc.)
            controlled by `tools`, `allowed_tools`, and `disallowed_tools`.
         2. **MCP tools** — server-side tool endpoints (execute_script, integration
            actions, numa_tool) controlled by `enable_scripts_mcp`,
            `enable_integrations_mcp`, and `enable_numa_mcp`.
-        3. **Numa tool reference docs** — documentation files copied into the
-           workspace at /workdir/tools/ so Claude can read them for parameter
-           reference. NOT executable — all operations go through the numa_tool
-           MCP. Controlled by `enabled_numa_tools` and `tools_source_dirs`.
 
     Attributes:
         type_id: Unique identifier for this agent type (e.g. "numa-chat",
@@ -58,13 +49,6 @@ class AgentTypeConfig:
             ``["knowledge_base", "web_search"]``).  Valid names:
             knowledge_base, web_search, extract_content,
             convert_document, agents, memories.
-        enabled_numa_tools: Which Numa tool reference docs to copy into the
-            workspace. Names must be keys in TOOL_FILE_MAP.  These files are
-            documentation only — Claude reads them for parameter reference but
-            cannot execute them (blocked by security hooks).
-        tools_source_dirs: Directories under /app/tools/ to copy scripts from.
-            Defaults to ["numa"] for shared tools. Agent types can add their
-            own (e.g. ["numa", "quoting"]).
         plugins_path: Filesystem path to skills/plugins that teach Claude how
             to use the Numa MCP tools. Read-only (outside workspace).
         default_kbs: Pre-configured knowledge bases. Overrides KBs from the
@@ -156,10 +140,6 @@ class AgentTypeConfig:
     # agents, memory, integrations, ops, render.
     allowed_cli_commands: Optional[list[str]] = None
 
-    # ── Layer 3: Numa tool reference docs ─────────────────────────────────
-    enabled_numa_tools: list[str] = field(default_factory=list)
-    tools_source_dirs: list[str] = field(default_factory=lambda: ["numa"])
-
     # ── Skills / Plugins ──────────────────────────────────────────────────
     plugins_path: str = "/app/plugins/numa"
 
@@ -227,31 +207,3 @@ class AgentTypeConfig:
     # own model, prompt, and tools. Use for cost optimisation (e.g. Haiku
     # sub-agents for bulk work).
     agents: Optional[dict[str, Any]] = None
-
-
-# ---------------------------------------------------------------------------
-# Numa tool reference documentation mapping
-# ---------------------------------------------------------------------------
-
-# Maps tool names (used in `enabled_numa_tools`) to their reference doc files,
-# relative to the tools source directory (e.g. tools/numa/).
-#
-# When the workspace initialises, only the docs for the tools listed in the
-# agent type's `enabled_numa_tools` are copied into /workdir/tools/.  Claude
-# reads these for parameter reference when using the numa_tool MCP tool.
-# The files are documentation only — direct bash execution is blocked by
-# security hooks.
-TOOL_FILE_MAP: dict[str, list[str]] = {
-    "numa_files_search": ["numa_files.py"],
-    "knowledge_search": ["numa_files.py"],  # legacy alias for stored configs
-    "web_search": ["web_search.py"],
-    "agents": ["numa-agents.py"],
-    "memories": ["numa-memories.py"],
-    "convert_document": ["convert_document.py"],
-    "extract_content": ["extract_content.py"],
-}
-
-# Files/directories that are always copied when *any* tool from a source dir
-# is enabled.  Previously held helpers/ (shared boto3 clients for the old
-# executable scripts).  Now empty since tool files are documentation only.
-ALWAYS_COPY: list[str] = []
