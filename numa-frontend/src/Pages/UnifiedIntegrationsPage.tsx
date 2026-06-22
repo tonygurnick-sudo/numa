@@ -1501,8 +1501,7 @@ const MethodChooserModal = ({
         <p className="text-muted small">
           {isSwitch
             ? t('methodChooser.switchIntro', {
-                defaultValue:
-                  'Your existing connection will be disconnected first. Any agents or automations relying on it will need to be reconnected.',
+                defaultValue: "Your existing connection will be disconnected first, then you'll set up the new method.",
               })
             : t('methodChooser.intro', {
                 defaultValue:
