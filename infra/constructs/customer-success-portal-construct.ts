@@ -87,6 +87,21 @@ export interface CustomerSuccessPortalConstructProps {
   fleetAnalyticsLambdaArn?: string;
   /** Optional: name of the numa-fleet-analytics-rollup Lambda — surfaced into the portal config.json */
   fleetAnalyticsLambdaName?: string;
+  /** FEAT-206 Arcanum agent library table — granted CRUD to the portal role + surfaced into config. */
+  arcanumAgentLibraryTableArn?: string;
+  arcanumAgentLibraryTableName?: string;
+  /** FEAT-206 Arcanum agent deployments table — granted read to the portal role + surfaced into config. */
+  arcanumAgentDeploymentsTableArn?: string;
+  arcanumAgentDeploymentsTableName?: string;
+  /** FEAT-206 Arcanum agent targets table (per-client deployed-agent selection) — granted CRUD + surfaced into config. */
+  arcanumAgentTargetsTableArn?: string;
+  arcanumAgentTargetsTableName?: string;
+  /** FEAT-206 Arcanum agent library S3 bucket — granted CRUD to the portal role + surfaced into config. */
+  arcanumAgentLibraryBucketArn?: string;
+  arcanumAgentLibraryBucketName?: string;
+  /** FEAT-206 Arcanum agent deployer Lambda — granted InvokeFunction + surfaced into config. */
+  arcanumAgentDeployerLambdaArn?: string;
+  arcanumAgentDeployerLambdaName?: string;
 }
 
 export class CustomerSuccessPortalConstruct extends Construct {
@@ -590,6 +605,60 @@ export class CustomerSuccessPortalConstruct extends Construct {
         resources: [`${props.supportDocsBucketArn}/*`],
       });
     }
+    // FEAT-206 — Arcanum agent library authoring + deploy from the portal.
+    if (props.arcanumAgentLibraryTableArn) {
+      baseStatements.push({
+        sid: 'ArcanumAgentLibraryCrud',
+        effect: 'Allow',
+        actions: [
+          'dynamodb:GetItem',
+          'dynamodb:Query',
+          'dynamodb:Scan',
+          'dynamodb:PutItem',
+          'dynamodb:UpdateItem',
+          'dynamodb:DeleteItem',
+        ],
+        resources: [props.arcanumAgentLibraryTableArn, `${props.arcanumAgentLibraryTableArn}/index/*`],
+      });
+    }
+    if (props.arcanumAgentDeploymentsTableArn) {
+      baseStatements.push({
+        sid: 'ArcanumAgentDeploymentsRead',
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:Query', 'dynamodb:Scan'],
+        resources: [props.arcanumAgentDeploymentsTableArn, `${props.arcanumAgentDeploymentsTableArn}/index/*`],
+      });
+    }
+    if (props.arcanumAgentTargetsTableArn) {
+      baseStatements.push({
+        sid: 'ArcanumAgentTargetsCrud',
+        effect: 'Allow',
+        actions: ['dynamodb:GetItem', 'dynamodb:Scan', 'dynamodb:PutItem', 'dynamodb:DeleteItem'],
+        resources: [props.arcanumAgentTargetsTableArn],
+      });
+    }
+    if (props.arcanumAgentLibraryBucketArn) {
+      baseStatements.push({
+        sid: 'ArcanumAgentLibraryBucketList',
+        effect: 'Allow',
+        actions: ['s3:ListBucket'],
+        resources: [props.arcanumAgentLibraryBucketArn],
+      });
+      baseStatements.push({
+        sid: 'ArcanumAgentLibraryBucketObjects',
+        effect: 'Allow',
+        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+        resources: [`${props.arcanumAgentLibraryBucketArn}/*`],
+      });
+    }
+    if (props.arcanumAgentDeployerLambdaArn) {
+      baseStatements.push({
+        sid: 'ArcanumAgentDeployerInvoke',
+        effect: 'Allow',
+        actions: ['lambda:InvokeFunction'],
+        resources: [props.arcanumAgentDeployerLambdaArn],
+      });
+    }
 
     new IamRolePolicy(this, 'authenticated-policy', {
       name: 'customer-success-portal-authenticated-policy',
@@ -706,6 +775,21 @@ export class CustomerSuccessPortalConstruct extends Construct {
     }
     if (props.fleetAnalyticsLambdaName) {
       portalConfig['FLEET_ANALYTICS_LAMBDA'] = props.fleetAnalyticsLambdaName;
+    }
+    if (props.arcanumAgentLibraryTableName) {
+      portalConfig['ARCANUM_AGENT_LIBRARY_TABLE'] = props.arcanumAgentLibraryTableName;
+    }
+    if (props.arcanumAgentDeploymentsTableName) {
+      portalConfig['ARCANUM_AGENT_DEPLOYMENTS_TABLE'] = props.arcanumAgentDeploymentsTableName;
+    }
+    if (props.arcanumAgentTargetsTableName) {
+      portalConfig['ARCANUM_AGENT_TARGETS_TABLE'] = props.arcanumAgentTargetsTableName;
+    }
+    if (props.arcanumAgentLibraryBucketName) {
+      portalConfig['ARCANUM_AGENT_LIBRARY_BUCKET'] = props.arcanumAgentLibraryBucketName;
+    }
+    if (props.arcanumAgentDeployerLambdaName) {
+      portalConfig['ARCANUM_AGENT_DEPLOYER_LAMBDA'] = props.arcanumAgentDeployerLambdaName;
     }
 
     new S3Object(this, 'portal-config', {

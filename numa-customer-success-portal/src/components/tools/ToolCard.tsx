@@ -1,6 +1,6 @@
 import { Card, Button, Badge } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
-import { BarChart, Play, Search, People, CurrencyDollar } from 'react-bootstrap-icons';
+import { BarChart, Play, Search, People, CurrencyDollar, Robot } from 'react-bootstrap-icons';
 import type { Tool } from '@/types/tools';
 
 interface ToolCardProps {
@@ -39,6 +39,8 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return '/tools/bulk-update-client-config';
       case 'support-docs-manager':
         return '/tools/support-docs-manager';
+      case 'agent-library':
+        return '/tools/agent-library';
       case 'platform-settings':
         return '/tools/platform-settings';
       case 'reset-client-password':
@@ -64,6 +66,8 @@ export function ToolCard({ tool, disabled = false }: ToolCardProps) {
         return <People className="me-2" />;
       case 'cost-analytics':
         return <CurrencyDollar className="me-2" />;
+      case 'agent-library':
+        return <Robot className="me-2" />;
       case 'setup-nextgen-client':
         return <Play className="me-2" />;
       case 'setup-non-nextgen-client':

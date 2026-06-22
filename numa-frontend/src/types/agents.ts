@@ -83,6 +83,8 @@ export type AgentSummary = {
   tags: string[];
   personas: string[];
   industries: string[];
+  /** FEAT-206 — 'arcanum' when centrally managed by Arcanum and read-only in this workspace. */
+  managedBy?: string;
 };
 
 export type AgentListResponse = {
