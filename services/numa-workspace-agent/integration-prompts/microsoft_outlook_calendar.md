@@ -2,129 +2,155 @@
 
 All Outlook Calendar calls go through the `numa integrations` CLI. The slug is
 `microsoft_outlook_calendar`; action keys are `microsoft_outlook_calendar-<name>`
-(`numa integrations pipedream-actions microsoft_outlook_calendar` lists them). The
-auth prop is always required — pass `"microsoftOutlook": {"authProvisionId": "auto"}`.
+(`numa integrations pipedream-actions microsoft_outlook_calendar` lists them).
+Prop names below are verified against the live schemas — if unsure,
+`numa integrations pipedream-props microsoft_outlook_calendar <action>`.
 
-## Establishing Context
+## Auth key
 
-Before performing Calendar operations, establish context:
+Pass `"microsoftOutlook": {"authProvisionId": "auto"}` — it works for **every**
+action. (A couple of schemas name the auth prop differently —
+`get-current-user` → `microsoftOutlookCalendar`, `list-time-zone-options` →
+`microsoft_outlook_calendar` — but the proxy normalises the key, so the common
+`microsoftOutlook` is accepted everywhere. Verified. Don't bother tracking the
+per-action variants.)
 
-- Use `microsoft_outlook_calendar-list-events` with `maxResults` to see existing events and get event IDs
-- Resolve `timeZone` values with `pipedream-props-options` (returns Windows format, not IANA):
+## Account-type caveat (personal vs M365)
 
-```bash
-numa integrations pipedream-props-options microsoft_outlook_calendar microsoft_outlook_calendar-create-calendar-event timeZone \
-  --microsoftOutlook '{"authProvisionId":"auto"}' -m "Listing available timezones"
-```
+Works with personal Microsoft accounts and M365/Exchange. **M365-only features**
+fail on a personal account: `find-meeting-times` and cross-tenant `get-schedule`
+return 401, and `isOnlineMeeting: true` yields `onlineMeetingProvider: "unknown"`
+with a null `onlineMeeting` (Teams needs a business tenant). On a personal
+account the connected address (e.g. `nathandouglassecond@gmail.com`) shows up as
+an internal alias (`outlook_XXXX@outlook.com`) in organiser/attendee fields —
+expected, doesn't affect anything.
 
-## Timezones Use Windows Format
+## Establishing context
 
-The `pipedream-props-options` lookup for `timeZone` returns Windows-style timezone names (e.g., `E. Australia Standard Time`, `Pacific Standard Time`), **NOT** IANA format (`Australia/Brisbane`). Use the exact value from the options result.
+- `get-current-user` → `id`, `displayName`, `mail`, `userPrincipalName` (identify the account).
+- `list-events` (or `get-event`) → event IDs for update/delete/RSVP.
+- `list-time-zone-options` → the full timezone list (a dedicated action — faster than `pipedream-props-options` when you just need the list). Also resolvable via `pipedream-props-options ... timeZone`.
 
-## DateTime Format
+## Timezones use Windows format
 
-Use ISO 8601 without timezone suffix: `yyyy-MM-ddTHH:mm:ss` (e.g., `2026-02-04T14:00:00`). The timezone is specified separately via the `timeZone` prop.
+The `timeZone` prop wants Windows-style names (`AUS Eastern Standard Time`,
+`Pacific Standard Time`), **NOT** IANA (`Australia/Brisbane`). Pull the exact
+value from `list-time-zone-options` / the `timeZone` props-options.
 
-## Creating Events — `attendees` is Required
+## DateTime format
 
-The `microsoft_outlook_calendar-create-calendar-event` action requires `attendees` even for personal events. Use the organizer's email if no other attendees:
+ISO 8601 **without** a timezone suffix: `yyyy-MM-ddTHH:mm:ss` (e.g.
+`2026-07-01T14:00:00`). The zone is set separately via the `timeZone` prop.
 
-```bash
-numa integrations pipedream-call microsoft_outlook_calendar microsoft_outlook_calendar-create-calendar-event \
-  --props '{
-    "microsoftOutlook": { "authProvisionId": "auto" },
-    "subject": "Meeting Title",
-    "start": "2026-02-04T14:00:00",
-    "end": "2026-02-04T15:00:00",
-    "timeZone": "E. Australia Standard Time",
-    "attendees": ["user@example.com"],
-    "location": "Conference Room A"
-  }' \
-  -m "Creating calendar event"
-```
+## Creating events — `attendees` is required
 
-## Teams Meetings Auto-Generate
-
-Set `isOnlineMeeting: true` to automatically create a Teams meeting link. The response includes `onlineMeeting.joinUrl` and the meeting details are appended to the event body. Business accounts show `onlineMeetingProvider: "teamsForBusiness"`.
-
-## Creating Recurring Events
-
-Use the `expand` prop with a `recurrence` object to create recurring events:
+`create-calendar-event` requires `subject`, `start`, `end`, `timeZone`, **and
+`attendees`** (all schema-required). For a personal event with no real guests,
+pass the account owner's own email.
 
 ```bash
 numa integrations pipedream-call microsoft_outlook_calendar microsoft_outlook_calendar-create-calendar-event \
-  --props '{
-    "microsoftOutlook": { "authProvisionId": "auto" },
-    "subject": "Weekly Standup",
-    "start": "2026-02-09T10:00:00",
-    "end": "2026-02-09T11:00:00",
-    "timeZone": "E. Australia Standard Time",
-    "attendees": ["user@example.com"],
-    "expand": {
-      "recurrence": {
-        "pattern": { "type": "weekly", "interval": 1, "daysOfWeek": ["monday"] },
-        "range": { "type": "endDate", "startDate": "2026-02-09", "endDate": "2026-03-09" }
-      }
-    }
-  }' \
-  -m "Creating recurring event"
+  --props '{"microsoftOutlook":{"authProvisionId":"auto"},"subject":"Meeting","start":"2026-07-01T10:00:00","end":"2026-07-01T11:00:00","timeZone":"AUS Eastern Standard Time","attendees":["user@example.com"],"location":"Room A"}' \
+  -m "Create calendar event"
 ```
 
-Pattern types: `daily`, `weekly`, `absoluteMonthly`, `relativeMonthly`, `absoluteYearly`, `relativeYearly`.
+`isOnlineMeeting: true` adds a Teams link (`onlineMeeting.joinUrl`) on M365 accounts.
 
-## Updating Recurring Event Instances
+## Recurring events — use the dedicated `recurrence*` props (not `expand`)
 
-To modify a single occurrence of a recurring series:
+The schema exposes structured top-level props for recurrence — use these rather
+than hand-rolling an `expand.recurrence` object:
 
-- Use `pipedream-props-options` for the `instanceId` prop (passing `recurringEventId`, `startDateTime`, and `endDateTime` as configured props) to get available `instanceId` values
-- Pass the resolved `instanceId` to `microsoft_outlook_calendar-update-recurring-event-instance` or `microsoft_outlook_calendar-delete-recurring-event-instance`
-- The `startDateTime` and `endDateTime` define the date range to search for instances (use ISO 8601 with Z suffix, e.g., `2026-02-09T00:00:00Z`)
+| Prop                            | For                     | Notes                                                                                  |
+| ------------------------------- | ----------------------- | -------------------------------------------------------------------------------------- |
+| `recurrencePatternType`         | all                     | `daily`/`weekly`/`absoluteMonthly`/`relativeMonthly`/`absoluteYearly`/`relativeYearly` |
+| `recurrenceInterval`            | all                     | integer ≥ 1 (every 2 weeks → 2)                                                        |
+| `recurrenceDaysOfWeek`          | weekly, relative\*      | array, e.g. `["monday"]`                                                               |
+| `recurrenceFirstDayOfWeek`      | weekly                  | defaults `"sunday"`; set `"monday"` for business weeks                                 |
+| `recurrenceDayOfMonth`          | absoluteMonthly/Yearly  | 1–31                                                                                   |
+| `recurrenceMonth`               | absolute/relativeYearly | 1–12                                                                                   |
+| `recurrenceIndex`               | relativeMonthly/Yearly  | `first`…`fourth`/`last` (default `first`)                                              |
+| `recurrenceRangeType`           | all                     | `noEnd`/`endDate`/`numbered`                                                           |
+| `recurrenceEndDate`             | endDate range           | `yyyy-MM-dd`                                                                           |
+| `recurrenceNumberOfOccurrences` | numbered range          | integer ≥ 1                                                                            |
 
 ```bash
-numa integrations pipedream-props-options microsoft_outlook_calendar microsoft_outlook_calendar-update-recurring-event-instance instanceId \
-  --microsoftOutlook '{"authProvisionId":"auto"}' \
-  --props '{"recurringEventId":"<id>","startDateTime":"2026-02-09T00:00:00Z","endDateTime":"2026-02-16T00:00:00Z"}' \
-  -m "Listing recurring instances"
+numa integrations pipedream-call microsoft_outlook_calendar microsoft_outlook_calendar-create-calendar-event \
+  --props '{"microsoftOutlook":{"authProvisionId":"auto"},"subject":"Weekly Standup","start":"2026-07-13T10:00:00","end":"2026-07-13T10:30:00","timeZone":"AUS Eastern Standard Time","attendees":["user@example.com"],"recurrencePatternType":"weekly","recurrenceInterval":1,"recurrenceDaysOfWeek":["monday"],"recurrenceFirstDayOfWeek":"monday","recurrenceRangeType":"numbered","recurrenceNumberOfOccurrences":4}' \
+  -m "Create weekly recurring event"
 ```
 
-## `get-schedule` Cross-Tenant Limitation
+The response has `type: "seriesMaster"`. Note: the API **shifts the first
+occurrence** to the first date matching the pattern — a weekly-Monday series
+given a Wednesday `start` begins on the following Monday, not the date you passed.
 
-The `microsoft_outlook_calendar-get-schedule` action works for the user's own calendar and same-tenant users, but fails for cross-tenant/external users with a `FederatedCrossForest` timeout error. This is a Microsoft Graph API limitation — cross-tenant queries require Azure AD federation between organizations, which most personal/small business accounts don't have configured. The `findMeetingTimes` API has the same limitation.
+## Updating / deleting recurring instances
 
-## `search-people` vs `search-contacts`
-
-- `microsoft_outlook_calendar-search-people`: Returns "relevant people" based on communication patterns and business relationships. For business accounts, this includes organizational directory users.
-- `microsoft_outlook_calendar-search-contacts`: Returns saved contacts from the Contacts folder only
-
-Use `search-people` to find recent collaborators; use `search-contacts` for explicitly saved contacts.
-
-## `list-events` Supports OData
-
-Use `orderBy` (e.g., `start/dateTime`) and `maxResults` to control results. The `filter` parameter also works for date range queries.
-
-## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
-
-For bulk calendar fetches (e.g. a full year of `calendarView`), use `numa integrations request` against the raw Graph endpoint and follow `@odata.nextLink` until it's absent:
+`update-recurring-event-instance` / `delete-recurring-event-instance` change a
+single occurrence (series master untouched). They need the specific instance ID
+— **get it from the Graph `/instances` endpoint** (the reliable path; the
+`instanceId` props-options resolver doesn't return usable values):
 
 ```bash
 numa integrations request microsoft_outlook_calendar GET \
-  'https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=2026-01-01T00:00:00Z&endDateTime=2026-12-31T23:59:59Z&$select=subject,start,end,attendees,organizer,location,isOnlineMeeting&$top=200' \
-  -m "Fetching a year of calendar events"
+  "https://graph.microsoft.com/v1.0/me/events/{SERIES_MASTER_ID}/instances?startDateTime=2026-07-01T00:00:00Z&endDateTime=2026-07-31T23:59:59Z&\$select=id,subject,start,end,type" \
+  -m "List instances of a recurring series"
 ```
 
-- **Never re-walk a date window from `$skip=0`.** If you discover you need an extra `$select` field after starting, that's expensive — decide the full `$select` set up front (e.g. `subject,start,end,attendees,organizer,location,isOnlineMeeting`) before issuing the first page.
-- **Never iterate `$skip=0, 100, 200, ...` manually.** Use `@odata.nextLink` instead.
-- **Built-in actions (`list-events`, etc.) strip pagination tokens** — `@odata.nextLink` does not survive a `pipedream-call`. Use `numa integrations request` for multi-page fetches.
-- For `calendarView` specifically: query the endpoint above, then follow the `@odata.nextLink` from each response (pass it as the next `numa integrations request` URL) until it's absent.
+Pass the instance `id` as `instanceId`. A successfully updated instance flips its
+`type` from `"occurrence"` to `"exception"`. Deleting the series master
+(`delete-calendar-event` on the original event ID) removes all instances.
 
-## Summing Meeting Time — All-Day Events ≈ 0h
+## `get-event` vs `list-events`
 
-When totalling time ("how many meeting-hours this week?"), treat all-day events, out-of-office, and "working location" entries as ≈0h, not 24h — one all-day event otherwise swamps the total. State the convention you used; sub-15-minute slots are usually buffers, not meetings. Always bound a time query on BOTH ends (`startDateTime` AND `endDateTime` for `calendarView`) — never leave the end open, or recurring events expand far into the future.
+- `get-event` (`eventId`, optional `select`) returns the **full** event — body, full attendees with RSVP status, recurrence. Use it (with `select` to trim fields) when you need complete data on one event.
+- `list-events` props: `filter`, `orderBy`, `maxResults`, `includeRecurring`, `startDateTime`, `endDateTime`.
+  - `includeRecurring: false` (default) hits `/me/events` — a recurring series shows as a single `seriesMaster`, not expanded.
+  - `includeRecurring: true` hits `/me/calendarView` — each occurrence is its own result; **`startDateTime` + `endDateTime` are required**. Use this to find e.g. "next Monday's standup".
 
-## Event IDs Are Required for Updates/Deletes
+## `update-calendar-event` — include `timeZone` when changing start/end
 
-Get the event `id` (long base64 string) from `microsoft_outlook_calendar-list-events` or `microsoft_outlook_calendar-create-calendar-event` response, then pass it to `microsoft_outlook_calendar-update-calendar-event` or `microsoft_outlook_calendar-delete-calendar-event`.
+Updating non-time fields (subject, location) without `timeZone` is fine. When you
+change `start`/`end`, **always include `timeZone`** — omitting it stores/returns
+the times in UTC, silently shifting the event for other-zone users. (The event
+`id` is stable across updates — unlike Outlook _mail_ message IDs, which rotate on move.)
 
-## Recurring Events Have Separate Actions
+## RSVP actions — `accept-event` / `decline-event` / `tentatively-accept-event`
 
-Use `microsoft_outlook_calendar-update-recurring-event-instance` and `microsoft_outlook_calendar-delete-recurring-event-instance` to modify single occurrences of a recurring event without affecting the series. Deleting the series master (`microsoft_outlook_calendar-delete-calendar-event` on the original event ID) deletes all instances.
+- Only valid when you're an **attendee**, not the organiser. On a self-organised event Graph returns `ErrorInvalidRequest: You can't respond to this meeting because you're the meeting organizer.`
+- `comment` requires `sendResponse: true` — `comment` with `sendResponse: false` → `ErrorInvalidParameter: 'SendResponse' must be true when 'Comment' is not null`.
+- `proposedNewTime` is a **JSON string** (valid only with `allowNewTimeProposals: true` and `sendResponse: true`).
+
+## `search-people` vs `search-contacts`
+
+- `search-people` → "relevant people" from communication history (org directory on M365; limited on personal).
+- `search-contacts` → saved Contacts-folder entries only.
+
+## `get-schedule` / `find-meeting-times` (M365)
+
+`get-schedule` returns the user's own free/busy but fails for cross-tenant/external
+attendees on personal accounts. `find-meeting-times` returns 401 on personal
+accounts and, despite `attendees` reading optional, throws a `ConfigurationError`
+unless you pass at least one attendee. Both need M365/Exchange to be useful.
+
+## Pagination — follow `@odata.nextLink`, never iterate `$skip`
+
+Built-in actions strip pagination tokens (`@odata.nextLink` doesn't survive a
+`pipedream-call`). For bulk fetches use `numa integrations request` against the
+Graph endpoint and follow the returned `@odata.nextLink` verbatim until absent:
+
+```bash
+numa integrations request microsoft_outlook_calendar GET \
+  'https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=2026-01-01T00:00:00Z&endDateTime=2026-12-31T23:59:59Z&\$select=subject,start,end,attendees,organizer,location,isOnlineMeeting&$top=200' \
+  -m "Fetch a year of calendar events"
+```
+
+Decide the full `$select` set up front (re-walking with different fields doubles the cost). Never hand-iterate `$skip`.
+
+## Summing meeting time — all-day events ≈ 0h
+
+When totalling meeting-hours, treat all-day events, out-of-office, and
+working-location entries as ≈0h (not 24h) — one all-day event otherwise swamps
+the total. Always bound `calendarView` on BOTH ends (`startDateTime` AND
+`endDateTime`); an open end expands recurring events far into the future. State
+the convention you used; sub-15-minute slots are usually buffers, not meetings.
