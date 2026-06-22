@@ -52,7 +52,7 @@ When working with Asana, keep these tips in mind:
 
 - **`get-tasks-from-task-list` is for My Tasks:** This action returns tasks from the user's "My Tasks" list, not a project's task list. The `project` prop filters which project's tasks appear in My Tasks. Use `search-tasks` to get tasks within a project.
 
-- **No delete project action:** There's no `asana-delete-project` action available. Projects must be deleted or archived manually in the Asana UI.
+- **No delete-project action — but you can still delete via the API:** there's no pre-built `asana-delete-project` action, which doesn't mean deletion is blocked. Use a direct request: `numa integrations request asana DELETE "https://app.asana.com/api/1.0/projects/{project_gid}"`. (Same for other entities without a delete action — Asana's REST API supports `DELETE /tasks/{gid}`, `/sections/{gid}`, etc.)
 
 - **Date formats:** Use `YYYY-MM-DD` for `due_on` and `start_on`. Use ISO 8601 datetime strings for `due_at` (e.g., `2026-02-15T09:00:00.000Z`). Don't use both `due_on` and `due_at` together.
 
