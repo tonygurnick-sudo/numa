@@ -669,6 +669,16 @@ def _build_user_item(
     if visibility not in ("personal", "public"):
         visibility = "personal"
 
+    # Creator name: prefer an explicit value, then the existing record's value
+    # (so updates never reassign the creator), and for brand-new items fall back
+    # through the caller's email and finally their sub so it is NEVER null —
+    # mirrors the Node handler's `createdByName ?? existing ?? email ?? name ?? sub`.
+    created_by_name = payload.get("createdByName") or (
+        existing.get("created_by_name") if existing else None
+    )
+    if not created_by_name and not existing:
+        created_by_name = payload.get("__user_email") or user_id
+
     return {
         "user_id": user_id,
         "tenant_id": CLIENT_NAME,
@@ -716,11 +726,7 @@ def _build_user_item(
         "created_by_user_id": (
             existing.get("created_by_user_id") if existing else user_id
         ),
-        "created_by_name": payload.get(
-            "createdByName",
-            existing.get("created_by_name") if existing else None,
-        )
-        or (payload.get("__user_email") if not existing else None),
+        "created_by_name": created_by_name,
         "created_at": existing.get("created_at") if existing else timestamp,
         "updated_at": timestamp,
         "version": timestamp,
@@ -781,6 +787,94 @@ def _build_workspace_item(
     }
 
 
+def _normalise_public_icon_image(
+    icon_image: Optional[Dict], public_agent_id: str
+) -> Optional[Dict]:
+    """Ensure a public (workspace-table) agent's icon image lives in the shared
+    ``numa-chat/agent-icons/public/`` prefix so every workspace user can load it.
+
+    Best-effort and non-fatal: returns the image unchanged on any failure, exactly
+    like the Node REST handler. Mostly a no-op for CLI-driven updates (the CLI only
+    sets ``icon`` class names, not uploaded ``icon_image`` objects).
+    """
+    if not icon_image:
+        return icon_image
+    src_bucket = icon_image.get("s3Bucket")
+    src_key = icon_image.get("s3Key")
+    public_prefix = "numa-chat/agent-icons/public/"
+    if not src_bucket or not src_key or not OUTPUTS_BUCKET_NAME:
+        return icon_image
+    if src_bucket == OUTPUTS_BUCKET_NAME and src_key.startswith(public_prefix):
+        return icon_image
+    try:
+        ext_match = re.search(r"\.([a-zA-Z0-9]+)$", src_key)
+        ext = (ext_match.group(1) if ext_match else "png").lower()
+        dest_key = f"{public_prefix}{public_agent_id}.{ext}"
+        s3 = _get_s3_client()
+        s3.copy_object(
+            Bucket=OUTPUTS_BUCKET_NAME,
+            Key=dest_key,
+            CopySource={"Bucket": src_bucket, "Key": src_key},
+            MetadataDirective="COPY",
+        )
+        return {"s3Bucket": OUTPUTS_BUCKET_NAME, "s3Key": dest_key}
+    except Exception as exc:  # noqa: BLE001 — best effort, must not break the update
+        logger.warning(
+            "Failed to normalise public icon image",
+            agent_id=public_agent_id,
+            error=str(exc),
+        )
+        return icon_image
+
+
+def _workspace_item_from_user(
+    merged_user: Dict,
+    public_agent_id: str,
+    timestamp: int,
+    workspace_existing: Optional[Dict],
+) -> Dict:
+    """Build the public (workspace-table) mirror of a personal agent that has just
+    been made public. Preserves the existing workspace mirror's creation metadata
+    when one already exists. Mirrors the Node REST handler's dual-write model."""
+    return {
+        "tenant_id": CLIENT_NAME,
+        "agent_id": public_agent_id,
+        "visibility": "public",
+        "agent_type": merged_user.get("agent_type"),
+        "title": merged_user.get("title"),
+        "description": merged_user.get("description"),
+        "system_prompt": merged_user.get("system_prompt"),
+        "user_instructions": merged_user.get("user_instructions"),
+        "estimated_time_saved_minutes": merged_user.get("estimated_time_saved_minutes"),
+        "is_favorite": merged_user.get("is_favorite"),
+        "icon": merged_user.get("icon"),
+        "icon_image": _normalise_public_icon_image(
+            merged_user.get("icon_image"), public_agent_id
+        ),
+        "required_integrations": merged_user.get("required_integrations", []),
+        "tools_config": merged_user.get("tools_config"),
+        "reference_files": merged_user.get("reference_files"),
+        "tags": merged_user.get("tags", []),
+        "personas": merged_user.get("personas", []),
+        "industries": merged_user.get("industries", []),
+        "created_by_user_id": (
+            workspace_existing.get("created_by_user_id") if workspace_existing else None
+        )
+        or merged_user.get("created_by_user_id"),
+        "created_by_name": (
+            workspace_existing.get("created_by_name") if workspace_existing else None
+        )
+        or merged_user.get("created_by_name"),
+        "created_at": (
+            workspace_existing.get("created_at") if workspace_existing else None
+        )
+        or merged_user.get("created_at")
+        or timestamp,
+        "updated_at": timestamp,
+        "version": timestamp,
+    }
+
+
 def _generate_duplicate_title(
     original_title: Optional[str], existing_agents: List[Dict]
 ) -> str:
@@ -800,6 +894,23 @@ def _generate_duplicate_title(
         candidate = f"{base} (Copy {counter})"
         counter += 1
     return candidate
+
+
+def _strip_leaked_caption_description(params: Dict[str, Any]) -> None:
+    """Drop the caption that ``numa-cli-api`` leaks into ``params['description']``.
+
+    For back-compat with HITL approval handlers, ``numa-cli-api`` copies the
+    ``user_message`` caption into ``params['description']`` whenever the caller
+    did not set one (see ``dispatch-chat-tools.ts``). For agents, ``description``
+    is a real stored field — so that leaked caption would silently overwrite the
+    agent's description on any create/update that omits ``--description``. We can
+    recognise the leak unambiguously: it is exactly the case where ``description``
+    equals ``user_message``. Strip it so the handlers fall back to the existing
+    value (update) or leave it unset (create). Mutates ``params`` in place.
+    """
+    description = params.get("description")
+    if description is not None and description == params.get("user_message"):
+        params.pop("description", None)
 
 
 # =============================================================================
@@ -838,6 +949,10 @@ def handle_list_agents(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"agents": []}
 
     scope = (params.get("scope") or "owned").lower()
+    if scope not in ("owned", "public", "all"):
+        raise ValueError(
+            f"Invalid scope '{scope}'. Must be one of: owned, public, all."
+        )
     agent_type_filter = (params.get("agent_type") or "").lower()
     title_filter = (params.get("title") or "").lower()
     search_filter = (params.get("search") or "").lower()
@@ -1059,6 +1174,9 @@ def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     if not user_sub:
         raise ValueError("User authentication required")
 
+    # Guard against the caption leaking into the agent's description field.
+    _strip_leaked_caption_description(params)
+
     # HITL approval gate
     denial = _check_approval(
         params,
@@ -1106,6 +1224,16 @@ def handle_create_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         resolved_files, file_warnings = _resolve_and_copy_reference_files(
             attach_files, agent_id, user_sub, conversation_id
         )
+
+        # Fail loud if NONE of the requested attachments resolved — otherwise the
+        # caller silently gets referenceFiles: [] and believes the attach worked.
+        if not resolved_files:
+            detail = (
+                "; ".join(file_warnings)
+                if file_warnings
+                else "no files could be resolved from the workspace"
+            )
+            raise ValueError(f"Failed to attach any of the requested files: {detail}")
 
         # Merge with any existing referenceFiles in params
         existing_refs = params.get("referenceFiles", []) or []
@@ -1199,6 +1327,9 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     if not agent_id:
         raise ValueError("agent_id is required")
 
+    # Guard against the caption leaking into the agent's description field.
+    _strip_leaked_caption_description(params)
+
     # HITL approval gate
     denial = _check_approval(
         params,
@@ -1239,6 +1370,16 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
             attach_files, agent_id, user_sub, conversation_id
         )
 
+        # Fail loud if NONE of the requested attachments resolved — otherwise the
+        # caller silently gets referenceFiles: [] and believes the attach worked.
+        if not resolved_files:
+            detail = (
+                "; ".join(file_warnings)
+                if file_warnings
+                else "no files could be resolved from the workspace"
+            )
+            raise ValueError(f"Failed to attach any of the requested files: {detail}")
+
         # Merge with any existing referenceFiles in params
         existing_refs = params.get("referenceFiles", []) or []
         params["referenceFiles"] = existing_refs + resolved_files
@@ -1263,10 +1404,45 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     user_agent = _get_user_agent(agent_id, user_sub)
     if user_agent:
         merged = _build_user_item(params, user_sub, now, agent_id, user_agent)
+
+        # Resolve table migration from the (possibly new) visibility. Mirrors the
+        # Node REST handler's dual-write model: a personal agent made public is
+        # written to BOTH tables (the owner's user copy + a public workspace
+        # mirror); flipping back to personal drops the mirror.
+        workspace_mirror = _get_workspace_agent(agent_id)
+        if merged.get("visibility") == "public":
+            public_agent_id = (
+                workspace_mirror.get("agent_id") if workspace_mirror else agent_id
+            )
+            merged["source_agent_id"] = public_agent_id
+        elif (
+            params.get("visibility") == "personal"
+            and merged.get("source_agent_id") == agent_id
+        ):
+            merged["source_agent_id"] = None
+
         table = dynamo.Table(USER_AGENTS_TABLE)
         table.put_item(Item=merged)
+
+        if merged.get("visibility") == "public":
+            public_agent_id = merged.get("source_agent_id") or agent_id
+            workspace_item = _workspace_item_from_user(
+                merged, public_agent_id, now, workspace_mirror
+            )
+            dynamo.Table(WORKSPACE_AGENTS_TABLE).put_item(Item=workspace_item)
+        elif (
+            workspace_mirror and workspace_mirror.get("created_by_user_id") == user_sub
+        ):
+            # Visibility dropped back to personal — remove the public mirror.
+            dynamo.Table(WORKSPACE_AGENTS_TABLE).delete_item(
+                Key={"tenant_id": CLIENT_NAME, "agent_id": agent_id}
+            )
+
         logger.info(
-            "Updated user agent", agent_id=agent_id, user_sub=user_sub[:8] + "..."
+            "Updated user agent",
+            agent_id=agent_id,
+            user_sub=user_sub[:8] + "...",
+            visibility=merged.get("visibility"),
         )
         result: Dict[str, Any] = {"agent": _map_user_agent(merged)}
         if file_warnings:
@@ -1280,7 +1456,33 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         if workspace_agent.get("created_by_user_id") != user_sub and not is_admin:
             raise ValueError("You do not have permission to update this agent")
 
-        # Update workspace agent
+        # Moving a workspace (public) agent to personal: create the user item and
+        # delete the workspace item (mirrors the Node REST handler). We pass the
+        # workspace agent as `existing` so a partial update (e.g. just
+        # `--visibility personal`) preserves the prompt, title, tools, etc. rather
+        # than wiping them — a real risk on the CLI's partial-update path.
+        if params.get("visibility") == "personal":
+            user_item = _build_user_item(
+                params, user_sub, now, agent_id, existing=workspace_agent
+            )
+            user_item["visibility"] = "personal"
+            user_item["source_agent_id"] = None
+
+            dynamo.Table(USER_AGENTS_TABLE).put_item(Item=user_item)
+            dynamo.Table(WORKSPACE_AGENTS_TABLE).delete_item(
+                Key={"tenant_id": CLIENT_NAME, "agent_id": agent_id}
+            )
+            logger.info(
+                "Migrated workspace agent to personal",
+                agent_id=agent_id,
+                user_sub=user_sub[:8] + "...",
+            )
+            result = {"agent": _map_user_agent(user_item)}
+            if file_warnings:
+                result["fileWarnings"] = file_warnings
+            return result
+
+        # Otherwise: normal in-place workspace (public) update.
         user_instructions = params.get("userWelcomeMessage")
         if user_instructions is None:
             user_instructions = workspace_agent.get("user_instructions")
@@ -1329,6 +1531,10 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
             "updated_at": now,
             "version": now,
         }
+        # Keep a public agent's icon in the shared public prefix (parity with Node).
+        merged["icon_image"] = _normalise_public_icon_image(
+            merged.get("icon_image"), agent_id
+        )
 
         table = dynamo.Table(WORKSPACE_AGENTS_TABLE)
         table.put_item(Item=merged)
@@ -1628,6 +1834,9 @@ def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
                 "personas": personal_agent.get("personas", []),
                 "industries": personal_agent.get("industries", []),
                 "sourceAgentId": personal_agent.get("source_agent_id") or agent_id,
+                # Duplicate is a new agent owned by the duplicating user — stamp
+                # their identity so createdBy.name is populated (not null).
+                "__user_email": params.get("__user_email"),
             },
             user_sub,
             now,
@@ -1686,6 +1895,9 @@ def handle_duplicate_agent(params: Dict[str, Any]) -> Dict[str, Any]:
                 "personas": workspace_agent.get("personas", []),
                 "industries": workspace_agent.get("industries", []),
                 "sourceAgentId": agent_id,
+                # Duplicate is a new agent owned by the duplicating user — stamp
+                # their identity so createdBy.name is populated (not null).
+                "__user_email": params.get("__user_email"),
             },
             user_sub,
             now,

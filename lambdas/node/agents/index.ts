@@ -700,7 +700,10 @@ const handleListAgents = async (
   auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   const scope = (event.queryStringParameters?.scope || 'owned').toLowerCase();
-  const includeOwned = scope === 'owned' || scope === 'all' || scope === '';
+  if (!['owned', 'public', 'all'].includes(scope)) {
+    return errorResponse(400, `Invalid scope '${scope}'. Must be one of: owned, public, all.`);
+  }
+  const includeOwned = scope === 'owned' || scope === 'all';
   const includePublic = scope === 'public' || scope === 'all';
   const agentTypeFilter = event.queryStringParameters?.agentType?.toLowerCase();
   const titleFilter = event.queryStringParameters?.title?.toLowerCase();

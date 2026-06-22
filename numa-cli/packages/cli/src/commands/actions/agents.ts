@@ -332,6 +332,10 @@ function printAgentDetail(a: Agent): void {
     }
   }
   if (a.sourceAgentId) process.stdout.write(`sourceAgentId:   ${a.sourceAgentId}\n`);
+  // Knowledge bases are tri-state: null/absent = all, [] = none, [ids] = specific.
+  const kbs = a.toolsConfig?.allowedKnowledgeBases;
+  const kbDisplay = kbs == null ? 'All' : kbs.length === 0 ? 'None' : kbs.join(', ');
+  process.stdout.write(`knowledgeBases:  ${kbDisplay}\n`);
   if (a.systemPrompt) {
     process.stdout.write(`systemPrompt:\n${a.systemPrompt}\n`);
   }
