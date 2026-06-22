@@ -85,6 +85,24 @@ def _get_s3_prefix(kb_id: str, user_sub: str = "") -> str:
     return f"documents/{s3_kb_id}/"
 
 
+def _validate_subpath(value: Any) -> str:
+    """Validate an optional subfolder path (allows '/' separators, blocks
+    traversal and control chars). Returns a normalized path with no leading or
+    trailing slashes, or "" when not provided."""
+    if value is None or value == "":
+        return ""
+    if not isinstance(value, str):
+        raise ValueError("subpath must be a string")
+    normalized = value.strip().strip("/")
+    if not normalized:
+        return ""
+    if ".." in normalized or "\\" in normalized:
+        raise ValueError("Invalid subpath: traversal is not allowed")
+    if _contains_control_chars(normalized):
+        raise ValueError("Invalid subpath: contains control characters")
+    return normalized
+
+
 def _format_size(size_bytes: Union[int, float]) -> str:
     """Format file size in human-readable format."""
     size = float(size_bytes)
@@ -204,6 +222,100 @@ def _list_top_level(
         }
 
 
+def _list_recursive(bucket: str, prefix: str, max_items: int) -> Dict[str, Any]:
+    """
+    Recursively list every file under ``prefix`` (a full ``ls -R``-style tree).
+
+    Unlike :func:`_list_top_level`, this walks all depths (no Delimiter) and
+    returns each file's path RELATIVE to ``prefix`` in ``name`` (e.g.
+    ``"reports/2024/q3.pdf"``) so the caller can render the hierarchy. Every
+    intermediate directory is surfaced in ``folders`` too, so empty subfolders
+    (zero-byte markers) remain visible.
+
+    Args:
+        bucket: S3 bucket name
+        prefix: S3 prefix to walk (e.g. "documents/company/" or a sub-path)
+        max_items: Cap on files returned (folders are always returned in full)
+
+    Returns:
+        Dict with files, folders, total_count, truncated (same shape as
+        :func:`_list_top_level`).
+    """
+    s3_client = prm_client("s3", region=REGION)
+
+    files: List[Dict[str, Any]] = []
+    folders: set[str] = set()
+    total_count = 0
+
+    try:
+        paginator = s3_client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                key = obj["Key"]
+                relpath = key[len(prefix) :]
+
+                # Directory markers (zero-byte, trailing slash) → record the
+                # folder so empty subfolders stay visible, then skip.
+                if key.endswith("/"):
+                    folder = relpath.rstrip("/")
+                    if folder:
+                        folders.add(folder)
+                    continue
+
+                if not relpath or relpath.endswith(".metadata.json"):
+                    continue
+
+                # Surface every ancestor directory of this file.
+                if "/" in relpath:
+                    parent = relpath.rsplit("/", 1)[0]
+                    parts = parent.split("/")
+                    for i in range(len(parts)):
+                        folders.add("/".join(parts[: i + 1]))
+
+                total_count += 1
+                if len(files) < max_items:
+                    files.append(
+                        {
+                            "name": relpath,
+                            "size": obj["Size"],
+                            "size_formatted": _format_size(obj["Size"]),
+                        }
+                    )
+
+        logger.info(
+            "Recursive listing complete",
+            bucket=bucket,
+            prefix=prefix,
+            files_count=len(files),
+            folders_count=len(folders),
+            total_count=total_count,
+            truncated=total_count > max_items,
+        )
+
+        return {
+            "files": files,
+            "folders": sorted(folders),
+            "total_count": total_count,
+            "truncated": total_count > max_items,
+        }
+
+    except Exception as e:
+        logger.error(
+            "Failed to list recursively",
+            bucket=bucket,
+            prefix=prefix,
+            error=str(e),
+            exc_info=True,
+        )
+        return {
+            "files": [],
+            "folders": [],
+            "total_count": 0,
+            "truncated": False,
+            "error": str(e),
+        }
+
+
 def _spill_listings_response(response: Dict[str, Any]) -> Dict[str, Any]:
     """Return a list_kb_files response inline when it fits, else spill it
     losslessly to S3.
@@ -279,6 +391,17 @@ def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
     if not DATA_BUCKET_NAME:
         raise ValueError("DATA_BUCKET_NAME not configured")
 
+    # Optional listing controls. Defaults reproduce the original top-level,
+    # 30-item behaviour used to inject prompt context; the CLI `show` command
+    # opts into deeper / fuller listings via these params.
+    recursive = bool(params.get("recursive", False))
+    subpath = _validate_subpath(params.get("subpath"))
+    try:
+        max_items = int(params.get("max_items", MAX_ITEMS_PER_KB))
+    except (TypeError, ValueError):
+        max_items = MAX_ITEMS_PER_KB
+    max_items = max(1, max_items)
+
     logger.info(
         "Listing files for knowledge bases",
         kb_ids=kb_ids,
@@ -302,9 +425,15 @@ def handle_list_kb_files(params: Dict[str, Any]) -> Dict[str, Any]:
                 errors.append({"kb_id": kb_id, "error": "Access denied"})
                 continue
 
-            # Get S3 prefix and list top-level contents
+            # Get S3 prefix and list contents. A subpath drills into a
+            # subfolder; recursive walks the whole tree.
             prefix = _get_s3_prefix(kb_id, user_sub)
-            listing = _list_top_level(DATA_BUCKET_NAME, prefix)
+            if subpath:
+                prefix = f"{prefix}{subpath}/"
+            if recursive:
+                listing = _list_recursive(DATA_BUCKET_NAME, prefix, max_items)
+            else:
+                listing = _list_top_level(DATA_BUCKET_NAME, prefix, max_items)
 
             if "error" in listing:
                 errors.append({"kb_id": kb_id, "error": listing["error"]})
