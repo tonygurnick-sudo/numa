@@ -210,6 +210,7 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
             "create_mcp_client",
             "list_mcp_tools",
             "disconnect_integration",
+            "reconcile_accounts",
             "list_actions",
             "run_action",
             "configure_props",

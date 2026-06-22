@@ -8,6 +8,9 @@ export type PipedreamOperation =
   | 'get_mcp_policy'
   | 'set_mcp_policy'
   | 'disconnect_integration'
+  // BUG-380: collapse duplicate accounts (same email) for one app down to one.
+  // Server-authoritative; called right after a connect completes.
+  | 'reconcile_accounts'
   // Trigger lifecycle (read-only ops only — deploy/update/delete go through
   // the agent-schedules API so the schedule and the Pipedream-side trigger
   // stay in lockstep). The frontend only needs to discover triggers and
@@ -188,6 +191,18 @@ export interface IntegrationStatusResult {
   external_user_id: string;
   connections: ConnectionStatus[];
   connected_apps: string[];
+}
+
+/**
+ * BUG-380: result of collapsing an app's duplicate accounts (same email) down
+ * to one. `deleted_account_ids` is non-empty when a duplicate was rolled back.
+ */
+export interface ReconcileAccountsData {
+  external_user_id: string;
+  app_name: string;
+  kept_account_ids: string[];
+  deleted_account_ids: string[];
+  failed_account_ids: string[];
 }
 
 export interface ConnectTokenResult {

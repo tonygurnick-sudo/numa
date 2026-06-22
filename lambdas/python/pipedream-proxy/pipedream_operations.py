@@ -504,32 +504,10 @@ class PipedreamOperations:
 
         Returns a result describing what was deleted or why nothing changed.
         """
-        credentials = self.get_credentials()
-        access_token = self.get_access_token()
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "x-pd-environment": credentials["environment"],
-        }
-
-        base_url = f"https://api.pipedream.com/v1/connect/{credentials['project_id']}"
 
         def _delete_single_account(acc_id: str) -> int:
             """Attempt to delete a single account. Returns HTTP status code."""
-            try:
-                resp = requests.delete(
-                    f"{base_url}/accounts/{acc_id}", headers=headers, timeout=15
-                )
-                # Do not raise for status - we interpret 204/404 specially
-                return resp.status_code
-            except Exception as e:  # network or other errors
-                logger.error(
-                    "Delete account request failed",
-                    error=str(e),
-                    account_id=acc_id,
-                    external_user_id=external_user_id,
-                )
-                raise Exception(f"Pipedream delete account error: {str(e)}") from e
+            return self._delete_pipedream_account(acc_id, external_user_id)
 
         # Case 1: Direct by account_id
         if account_id:
@@ -630,6 +608,161 @@ class PipedreamOperations:
 
         # Neither account_id nor app_name provided
         raise ValueError("disconnect_integration requires account_id or app_name")
+
+    def _delete_pipedream_account(self, account_id: str, external_user_id: str) -> int:
+        """DELETE a single Pipedream Connect account; return the HTTP status.
+
+        Callers interpret 204 (deleted now) and 404 (already gone) as success
+        — the operation is idempotent. Any other status is the caller's to
+        handle. Raises only on transport-level failure.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "x-pd-environment": credentials["environment"],
+        }
+        base_url = f"https://api.pipedream.com/v1/connect/{credentials['project_id']}"
+        try:
+            resp = requests.delete(
+                f"{base_url}/accounts/{account_id}", headers=headers, timeout=15
+            )
+            # Do not raise for status - we interpret 204/404 specially.
+            return resp.status_code
+        except Exception as e:  # network or other errors
+            logger.error(
+                "Delete account request failed",
+                error=str(e),
+                account_id=account_id,
+                external_user_id=external_user_id,
+            )
+            raise Exception(f"Pipedream delete account error: {str(e)}") from e
+
+    def reconcile_app_accounts(
+        self,
+        external_user_id: str,
+        app_name: str,
+        new_account_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Collapse an app's duplicate accounts down to one per identity.
+
+        BUG-380: Pipedream mints a fresh account id (``apn_...``) on every
+        OAuth completion and never dedupes by identity, so connecting the same
+        mailbox twice leaves two live accounts. This deletes the duplicates,
+        keeping ONE account per email (a healthy account beats an
+        unhealthy/dead one; on a tie the oldest by ``created_at`` wins —
+        identical keep-rule to the display dedupe in ``_build_connection_status``).
+
+        Designed to run right after a connect completes, but it is also a valid
+        backlog sweep: it is idempotent (no duplicates → deletes nothing) and
+        never touches genuinely distinct identities, so a user's separate
+        mailboxes are preserved. Accounts with no resolvable identity
+        (empty/``None`` name) are never deleted — we cannot prove they are
+        duplicates.
+
+        When ``new_account_id`` is given we briefly retry the account list
+        until that account exposes a usable name. Pipedream often hasn't
+        populated the name in the first second after connect, and without it we
+        couldn't tell the new account apart from an existing duplicate (the
+        exact failure mode of the old frontend-only guard).
+        """
+        app_connections: List[Dict[str, Any]] = []
+        attempts = 3 if new_account_id else 1
+        for attempt in range(attempts):
+            connections = self._get_user_connections(
+                external_user_id, force_refresh=True
+            )
+            app_connections = [
+                c
+                for c in connections
+                if self._get_app_name_from_pipedream(c) == app_name
+            ]
+            if not new_account_id:
+                break
+            target = next(
+                (c for c in app_connections if c.get("id") == new_account_id),
+                None,
+            )
+            # Stop once the new account is present with a usable name, or we've
+            # run out of attempts.
+            if (target and (target.get("name") or "").strip()) or (
+                attempt == attempts - 1
+            ):
+                break
+            time.sleep(1.0)
+
+        # Oldest first so ties keep the oldest account.
+        app_connections.sort(key=lambda c: c.get("created_at") or "")
+
+        def health_rank(conn: Dict[str, Any]) -> int:
+            if conn.get("dead"):
+                return 0
+            if conn.get("healthy"):
+                return 2
+            return 1
+
+        keeper_by_identity: Dict[str, Dict[str, Any]] = {}
+        to_delete: List[Dict[str, Any]] = []
+        for conn in app_connections:
+            identity = (conn.get("name") or "").strip().lower()
+            if not identity:
+                # Unknown identity — never delete; can't prove it's a dup.
+                continue
+            current = keeper_by_identity.get(identity)
+            if current is None:
+                keeper_by_identity[identity] = conn
+                continue
+            # Duplicate identity: keep the better one, delete the other.
+            if health_rank(conn) > health_rank(current):
+                to_delete.append(current)
+                keeper_by_identity[identity] = conn
+            else:
+                to_delete.append(conn)
+
+        deleted: List[str] = []
+        failed: List[str] = []
+        for conn in to_delete:
+            acc_id = conn.get("id")
+            if not acc_id:
+                continue
+            try:
+                status = self._delete_pipedream_account(acc_id, external_user_id)
+            except Exception:
+                failed.append(acc_id)
+                continue
+            if status in (204, 404):
+                deleted.append(acc_id)
+            else:
+                logger.warning(
+                    "Reconcile failed to delete duplicate account",
+                    external_user_id=external_user_id,
+                    app_name=app_name,
+                    account_id=acc_id,
+                    status=status,
+                )
+                failed.append(acc_id)
+
+        if deleted or failed:
+            # Next status read must reflect the deletions.
+            _USER_CONNECTIONS_CACHE.pop(external_user_id, None)
+
+        logger.info(
+            "Reconciled duplicate accounts",
+            _name="RECONCILE_ACCOUNTS",
+            external_user_id=external_user_id,
+            app_name=app_name,
+            kept=len(keeper_by_identity),
+            deleted=len(deleted),
+            failed=len(failed),
+        )
+
+        return {
+            "external_user_id": external_user_id,
+            "app_name": app_name,
+            "kept_account_ids": [c.get("id") for c in keeper_by_identity.values()],
+            "deleted_account_ids": deleted,
+            "failed_account_ids": failed,
+        }
 
     def list_mcp_tools(
         self, external_user_id: str, app_name: str
@@ -827,6 +960,14 @@ class PipedreamOperations:
                 # Order accounts by creation time (oldest first) so the
                 # "primary" / first-listed account is stable across refreshes.
                 app_connections.sort(key=lambda c: c.get("created_at") or "")
+                # BUG-380: one upstream mailbox can show up 2-3x for a single
+                # user (Pipedream mints a fresh account id on every OAuth
+                # completion and never dedupes by identity). Collapse
+                # same-identity duplicates so the status we report — and the
+                # account count the UI renders — reflects real mailboxes, not
+                # connection attempts. Non-destructive: the dup accounts still
+                # exist in Pipedream; removing them is a separate operation.
+                app_connections = self._dedupe_connections_by_identity(app_connections)
                 accounts = [
                     {
                         "account_id": c.get("id"),
@@ -874,6 +1015,54 @@ class PipedreamOperations:
                 )
 
         return connection_status
+
+    @staticmethod
+    def _dedupe_connections_by_identity(
+        connections: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Collapse connections that point at the same upstream identity.
+
+        BUG-380: Pipedream mints a new account id (``apn_...``) on every OAuth
+        completion and never dedupes by identity, so a single mailbox can show
+        up multiple times for one user — and FEAT-019 (multi-account) surfaced
+        the whole backlog that the old single-account view used to hide.
+
+        We key on the account ``name`` (the connected email for OAuth apps),
+        normalized (trimmed + lowercased), and keep ONE entry per identity: a
+        healthy account beats an unhealthy/dead one, and on a tie the earlier
+        entry wins (callers pass the list oldest-first). Connections with no
+        resolvable identity (empty/``None`` name) are passed through untouched
+        — we cannot prove they are duplicates, so we never drop them. Input
+        order is otherwise preserved.
+
+        Display-only and non-destructive: the duplicate accounts still exist
+        in Pipedream; this only collapses them in the status we report.
+        Actually deleting them is a separate, deliberate operation.
+        """
+
+        def health_rank(conn: Dict[str, Any]) -> int:
+            if conn.get("dead"):
+                return 0
+            if conn.get("healthy"):
+                return 2
+            return 1
+
+        result: List[Dict[str, Any]] = []
+        index_by_identity: Dict[str, int] = {}
+        for conn in connections:
+            identity = (conn.get("name") or "").strip().lower()
+            if not identity:
+                # Unknown identity — never collapse; keep as-is.
+                result.append(conn)
+                continue
+            existing_idx = index_by_identity.get(identity)
+            if existing_idx is None:
+                index_by_identity[identity] = len(result)
+                result.append(conn)
+                continue
+            if health_rank(conn) > health_rank(result[existing_idx]):
+                result[existing_idx] = conn
+        return result
 
     def list_actions(self, app_slug: str) -> List[Dict[str, Any]]:
         """List all available actions for an app from the Pipedream Connect API.
