@@ -479,25 +479,6 @@ export const UnifiedIntegrationsPage = () => {
       if (!lambdaClient || !user) return;
       const externalUserId = PipedreamProxyService.deriveExternalUserId(user);
 
-      // FEAT-019: snapshot existing account display names (typically the
-      // upstream email/identity) before the OAuth flow. After connect we
-      // compare the new account's name against this set to detect duplicate
-      // upstream identities — Pipedream creates a fresh `apn_xxx` for every
-      // OAuth completion, even when the user signs in as the same Google /
-      // Slack / etc. account, so the dedupe must live in our layer.
-      const existingNamesByApp = new Set(
-        pipedreamConnections
-          .filter((c) => c.app_name === pipedreamSlug && c.status === 'connected')
-          .flatMap<string>((c) => {
-            if (c.accounts && c.accounts.length > 0) {
-              return c.accounts.map((a) => (a.name || '').trim().toLowerCase());
-            }
-            // Legacy single-account fallback for cached responses pre-FEAT-019
-            return c.connection_name ? [c.connection_name.trim().toLowerCase()] : [];
-          })
-          .filter((n) => n.length > 0)
-      );
-
       const tokenResponse = await PipedreamProxyService.generateConnectToken(lambdaClient, externalUserId);
       const { connectToken } = tokenResponse;
       const pd = createFrontendClient({
@@ -552,48 +533,45 @@ export const UnifiedIntegrationsPage = () => {
       });
       await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
 
-      // FEAT-019: duplicate-account guard. Fetch fresh status so we can see
-      // the new account's display name, compare to the pre-OAuth snapshot,
-      // and silently undo if the user re-added the same upstream identity.
-      // We hit getIntegrationStatus directly here rather than relying on
-      // `reload` because `reload` doesn't return data and the modal's render
-      // happens before any state-based check could fire.
-      if (newAccountId && existingNamesByApp.size > 0) {
+      // BUG-380: duplicate-account roll-back, server-side. The proxy reads the
+      // LIVE Pipedream account list (not our cache), keeps one account per
+      // email, and deletes any duplicate the user just re-added — Pipedream
+      // mints a fresh account id even when you sign in as the same identity.
+      // Passing the new account id lets the proxy wait for Pipedream to
+      // populate that account's name before deduping. This replaces the old
+      // frontend-only guard, which relied on a pre-OAuth name snapshot AND the
+      // name being present the instant we re-fetched, and silently let
+      // duplicates through whenever either assumption failed.
+      if (newAccountId) {
         try {
-          const fresh = await PipedreamProxyService.getIntegrationStatus(lambdaClient, externalUserId, {
-            forceRefresh: true,
+          const result = await PipedreamProxyService.reconcileAccounts(lambdaClient, externalUserId, {
+            appName: pipedreamSlug,
+            accountId: newAccountId,
           });
-          const slot = (fresh.connections || []).find((c) => c.app_name === pipedreamSlug);
-          const newAccount = (slot?.accounts ?? []).find((a) => a.account_id === newAccountId);
-          const newName = (newAccount?.name || '').trim().toLowerCase();
-          if (newName && existingNamesByApp.has(newName)) {
-            // Same upstream identity as an account already on file — roll
-            // back so the user doesn't end up with five "tom@…" entries.
-            await PipedreamProxyService.disconnectIntegration(lambdaClient, externalUserId, {
-              accountId: newAccountId,
-            });
+          if (result.deleted_account_ids.includes(newAccountId)) {
+            // The account we just connected duplicated an existing one and was
+            // rolled back — tell the user we kept the original.
             await PipedreamProxyService.invalidateIntegrationStatus(externalUserId);
             await reload({ forceRefresh: true });
             setError(
               t('errors.duplicateAccount', {
                 defaultValue:
-                  'That account ({{name}}) is already connected — Pipedream would have added it as a duplicate, so we kept your existing connection. To add a different account, sign in with another identity at the provider sign-in screen.',
-                name: newAccount?.name || newName,
+                  'That account is already connected — Pipedream would have added it as a duplicate, so we kept your existing connection. To add a different account, sign in with another identity at the provider sign-in screen.',
               })
             );
             return;
           }
         } catch (e) {
-          // Don't block the connect flow on a dedupe-check failure; the
-          // worst case is a duplicate slips through and the user can
-          // disconnect it from the modal.
-          console.warn('[connectPipedream] duplicate-account check failed', e);
+          // Don't block the connect flow on a reconcile failure; worst case a
+          // duplicate slips through and the display dedupe still hides it (and
+          // the user can remove it from the modal).
+          console.warn('[connectPipedream] account reconcile failed', e);
         }
       }
 
       await reload({ forceRefresh: true });
     },
-    [lambdaClient, user, pipedreamConnections, reload, t]
+    [lambdaClient, user, reload, t]
   );
 
   const connectNative = useCallback(async (connectorSlug: string) => {

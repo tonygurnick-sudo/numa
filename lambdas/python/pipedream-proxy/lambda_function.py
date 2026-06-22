@@ -32,6 +32,7 @@ SUPPORTED_OPERATIONS = [
     "get_integration_status",
     "create_mcp_client",
     "disconnect_integration",
+    "reconcile_accounts",
     "list_mcp_tools",
     "list_actions",
     "run_action",
@@ -187,6 +188,25 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
                 )
             result = pipedream_ops.disconnect_integration(
                 external_user_id, app_name=app_name, account_id=account_id
+            )
+
+        elif operation == "reconcile_accounts":
+            # BUG-380: collapse duplicate accounts (same email) for one app
+            # down to one. Called right after a connect to roll back a re-added
+            # mailbox; `account_id` (the freshly-connected one) is optional and
+            # only drives the wait-for-name retry.
+            app_name = (
+                parameters.get("app_name") if isinstance(parameters, dict) else None
+            )
+            if not app_name:
+                return _error_response(400, "reconcile_accounts requires app_name")
+            new_account_id = (
+                parameters.get("account_id") if isinstance(parameters, dict) else None
+            )
+            result = pipedream_ops.reconcile_app_accounts(
+                external_user_id,
+                app_name=app_name,
+                new_account_id=new_account_id,
             )
 
         elif operation == "list_mcp_tools":
