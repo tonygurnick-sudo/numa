@@ -168,7 +168,7 @@ Chat V1 (`lambdas/python/numa-chat-agent`) is deprecated — replaced by the wor
 
 The `numa-workspace-agent` is the **default and primary chat backend** — a containerized Python service on AWS Bedrock AgentCore MicroVMs, accessed at `/chat`. Core concepts:
 
-- **Per-conversation MicroVM:** Each conversation gets its own isolated MicroVM (`conv-{conversationId}`). 1hr idle timeout, 8hr max. No cross-conversation contamination.
+- **Per-conversation MicroVM:** Each conversation gets its own isolated MicroVM. The proxy builds the AgentCore session ID as `conv-{conversationId}-{imageTag}` — the image tag is a deploy-generation token so a new image deploy rotates conversations onto the new image (without it, AgentCore pins a session to the image version it was created under for the session's lifetime). 30min idle timeout (Nolia: 3hr), 4hr max. No cross-conversation contamination.
 - **Persistent workspace (`/workdir`):** Uploads and outputs synced to S3 after each request. Up to 200MB file uploads via direct S3.
 - **Claude Agent SDK:** Agentic loop with up to 50 tool-use turns, extended thinking (up to 10k tokens).
 - **numa CLI + skills/plugins:** Tools are invoked via the `numa` CLI through Bash (`numa <category> <command> ...` — categories: files, web, docs, agents, memory, integrations, ops, render). Covers KB queries, web search, document handling, integrations. Sandboxed code execution runs via Bash (write a script to `/workdir/tmp/` and run it). Skills are read-only in `/app/plugins/numa/skills/`.

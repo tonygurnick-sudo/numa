@@ -589,6 +589,10 @@ export class NumaClientStack extends TerraformStack {
         clientName: props.clientName,
         region: clientConfig.region,
         agentRuntimeArn: workspaceChatAgent.agentRuntimeArn,
+        // Deploy-generation token appended to the AgentCore session ID so a new
+        // image deploy forces conversations off the stale (version-pinned)
+        // session and onto the new image — see WorkspaceChatAgentConstruct.imageTag.
+        imageGeneration: workspaceChatAgent.imageTag,
         cloudfrontSharedSecret: cfSecretParam.value,
         // Cognito config for JWT verification (prevents token forgery via direct Lambda URL calls)
         cognitoUserPoolId: core.userPoolId,

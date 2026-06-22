@@ -15,6 +15,14 @@ export interface WorkspaceChatAgentProxyProps {
   region: string;
   /** ARN of the AgentCore runtime to invoke */
   agentRuntimeArn: string;
+  /**
+   * Deploy-generation token (the container image tag) appended to the AgentCore
+   * session ID as conv-{conversationId}-{imageGeneration}. Changes on every
+   * image deploy, so conversations rotate onto the new image instead of staying
+   * pinned to the version their session was created under. Optional: when
+   * omitted, build_session_id falls back to the legacy conv-{conversationId}.
+   */
+  imageGeneration?: string;
   /** Shared secret value CloudFront sends in x-arcanum-cloudfront-secret */
   cloudfrontSharedSecret: string;
   /** Cognito User Pool ID for JWT verification */
@@ -96,6 +104,12 @@ export class WorkspaceChatAgentProxy extends Construct {
         AGENT_RUNTIME_ARN: props.agentRuntimeArn,
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
         CLIENT_NAME: props.clientName,
+        // Deploy-generation token suffixed onto the AgentCore session ID so a
+        // new image deploy rotates conversations onto the new image (build_session_id).
+        // Applies uniformly to chat, scheduled agents, and V2 apps — all route here.
+        ...(props.imageGeneration && {
+          WORKSPACE_IMAGE_GENERATION: props.imageGeneration,
+        }),
         // Cognito config for JWT verification (prevents token forgery)
         COGNITO_USER_POOL_ID: props.cognitoUserPoolId,
         COGNITO_CLIENT_ID: props.cognitoClientId,

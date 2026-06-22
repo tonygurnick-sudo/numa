@@ -546,7 +546,7 @@ When using cross-account Bedrock (configured via `BEDROCK_ACCOUNT` env var), the
 The proxy Lambda bridges HTTP requests from CloudFront to AgentCore SDK invocations. It:
 
 - Validates Cognito JWT tokens and CloudFront shared secret
-- Routes to AgentCore by session ID (`conv-{conversationId}`)
+- Routes to AgentCore by session ID (`conv-{conversationId}-{imageTag}`, where `imageTag` is a deploy-generation token from the `WORKSPACE_IMAGE_GENERATION` env var — it changes on every image deploy so conversations rotate onto the new image instead of staying pinned to the version their session was created under; falls back to `conv-{conversationId}` if unset)
 - Handles the `approve` action directly (DynamoDB write, no AgentCore invocation)
 - Supports file redirect for integration uploads
 - Translates HTTP request/response to AgentCore's `invoke_agent_runtime` format
