@@ -4,14 +4,18 @@ All LinkedIn calls go through the `numa integrations` CLI. Action keys follow
 `linkedin-<name>` (`numa integrations pipedream-actions linkedin` lists them).
 Auth prop: `"linkedin": {"authProvisionId": "auto"}`.
 
-## Scope reality — Marketing API token
+## Scope & account reality
 
-The connection is scoped to LinkedIn's **Marketing API**. Practically:
+The connection's OAuth scopes are fixed by the LinkedIn integration (the same for
+every user — LinkedIn **Premium vs free makes no difference**; Premium is a
+linkedin.com subscription, not an API scope). What varies between users is **what
+Pages / ad accounts they administer**. Practically:
 
-- **Profile reads and post creation work** on a normal personal account.
-- **Org / ad-account features need admin rights** on a LinkedIn Page or ad account. With none, those actions return **empty results (`[]` / null), not errors** — don't mistake that for a connectivity/auth problem (`list-organization-id-options`, `list-ad-account-id-options`, `get-org-member-access`, `search-organization` all return empty on a no-admin account).
-- **No feed / connections / post-search / notifications** — the Marketing API doesn't expose them, and there are no actions for them.
-- `search-organization` is **not a public directory** — it only returns orgs the connected account has a Marketing relationship with (a random company vanity name returns `[]`).
+- **Profile reads work** (`get-current-member-profile`, `get-profile-picture-fields`). **Posting** has dedicated actions (`create-text-post-user` / `-image-post-user`) — the supported path, though not load-tested here (it posts to the real account).
+- **Org / ad-account actions are admin-gated, and results depend on the account.** A user who administers a Page / ad account gets real data; one who doesn't gets **empty results (`[]` / null), not errors** (`list-organization-id-options`, `list-ad-account-id-options`, `get-org-member-access`, `search-organization`). So empty ≠ broken — it can just mean "this account administers none." Don't conclude the feature is unavailable in general.
+- **Most non-profile/post endpoints return `403`** (the token isn't scoped for them) — an upstream permission, not a proxy failure. This is integration-wide, not account-specific.
+- **No feed / connections / post-search / notifications** — there are no actions for these and LinkedIn's API doesn't expose them to standard app tokens; this won't change with a different account.
+- `search-organization` is **not a public directory** — it returns only orgs the connected account has a relationship with (a random company vanity name returns `[]` even though the org exists).
 
 ## Profile
 
