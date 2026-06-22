@@ -199,7 +199,7 @@ No dedicated delete actions exist. Use `make-an-api-call`, but note the status d
 
 **Contacts:** Cannot be deleted, only archived (`contactStatus: "ARCHIVED"`).
 
-**Attachments:** the **Accounting API** has no attachment-delete — `DELETE /…/Attachments/{filename}` via `make-an-api-call` fails (empty `action_error`), so that path can only remove attachments in the Xero UI. (Xero's separate **Files API**, `https://api.xero.com/files.xro/1.0/Files/{FileId}`, does support `DELETE` — untested here and dependent on the connection having Files scope; try it via `numa integrations request` if you must delete programmatically.) `get-history-of-changes` returns `[]` for DELETED records — history isn't retrievable after deletion.
+**Attachments — UI-only to delete (scope limitation, verified):** the **Accounting API** has no attachment-delete (`DELETE /…/Attachments/{filename}` via `make-an-api-call` fails). Xero's separate **Files API** (`https://api.xero.com/files.xro/1.0/Files/{FileId}`) _does_ support `DELETE` and the proxy routes to it, **but this integration's OAuth token isn't scoped for the Files API** — a `files.xro` call returns `401 AuthorizationUnsuccessful` (verified; the connector only holds `accounting.*` scopes). So removing an attachment isn't possible through this integration — it's a manual Xero-UI action. `get-history-of-changes` returns `[]` for DELETED records — history isn't retrievable after deletion.
 
 ## Emailing Invoices
 
