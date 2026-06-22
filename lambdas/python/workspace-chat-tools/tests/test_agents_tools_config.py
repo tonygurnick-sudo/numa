@@ -104,6 +104,7 @@ class TestValidateCreatePayload(unittest.TestCase):
     def test_rejects_invalid_persona(self):
         err = _validate_create_payload({**self._base(), "personas": ["Wizard"]})
         self.assertIsNotNone(err)
+        assert err is not None
         self.assertIn("persona", err.lower())
 
     def test_rejects_invalid_industry(self):
