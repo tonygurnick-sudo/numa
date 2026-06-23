@@ -259,7 +259,7 @@ _RELAY_URL: str = ""
 _LOCAL_DIRECT: bool = False
 _OPENROUTER_KEY: str = ""
 _OPENROUTER_URL: str = "https://openrouter.ai/api/v1/chat/completions"
-_UPSTREAM_MODEL: str = "deepseek/deepseek-v4-flash"
+_UPSTREAM_MODEL: str = "xiaomi/mimo-v2.5-pro"
 _PROVIDER_ORDER: list[str] = ["novita"]
 
 # ── Cost accumulator (Option A, contract §4) ────────────────────────────────

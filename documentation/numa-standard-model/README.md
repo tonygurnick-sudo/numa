@@ -1,10 +1,16 @@
-# Numa Standard Model (DeepSeek V4 Flash)
+# Numa Standard Model (MiMo-V2.5-Pro)
 
 The **Numa Standard Model** is a cheap, non-Anthropic chat model offered as a selectable tier in the
-workspace chat alongside the Anthropic models. The real model is **DeepSeek V4 Flash**, served by
+workspace chat alongside the Anthropic models. The real model is **MiMo-V2.5-Pro** (Xiaomi), served by
 **Novita** through an **Arcanum-owned OpenRouter account**. Everything outside the deployer-account
 relay only ever sees the opaque id **`numa-standard-model`** — the real model name, the provider pin,
 and the API key live in one place and never touch a client account, a trace, or the frontend.
+
+> **Model history:** launched on DeepSeek V4 Flash; switched to **MiMo-V2.5-Pro** on 2026-06-23 after a
+> 20-scenario internal benchmark showed it ~30% cheaper than DeepSeek at equal quality (4–4.5/5), with
+> a longer-lived cache (full hit after ≥45 min idle) and stronger anti-fabrication/honesty. The switch
+> was a one-line relay change (`upstreamModelId`) — the opaque id and everything downstream
+> (container, trace, credits, frontend) were unchanged.
 
 > Status: **feature-flag tested on HQ** (`WORKSPACE_CHAT_MODEL_SELECTION`). Not on by default for
 > customers.
@@ -16,11 +22,11 @@ and the API key live in one place and never touch a client account, a trace, or 
 Selectable in the chat input **and** per-agent (in the agent builder), gated by the per-client
 `WORKSPACE_CHAT_MODEL_SELECTION` flag:
 
-| Tier                    | Curated id                                     | Real model                 | Credits          |
-| ----------------------- | ---------------------------------------------- | -------------------------- | ---------------- |
-| **Standard**            | `numa-standard-model`                          | DeepSeek V4 Flash (Novita) | **¼** of Premium |
-| **Premium** _(default)_ | `anthropic.claude-sonnet-4-6@medium-thinking`  | Sonnet 4.6                 | baseline (1×)    |
-| **Expert**              | `anthropic.claude-opus-4-6-v1@medium-thinking` | Opus 4.6                   | **3×**           |
+| Tier                    | Curated id                                     | Real model             | Credits          |
+| ----------------------- | ---------------------------------------------- | ---------------------- | ---------------- |
+| **Standard**            | `numa-standard-model`                          | MiMo-V2.5-Pro (Novita) | **¼** of Premium |
+| **Premium** _(default)_ | `anthropic.claude-sonnet-4-6@medium-thinking`  | Sonnet 4.6             | baseline (1×)    |
+| **Expert**              | `anthropic.claude-opus-4-6-v1@medium-thinking` | Opus 4.6               | **3×**           |
 
 Curated list + tier constants: `numa-frontend/src/types/workspaceChatTypes.ts`
 (`WORKSPACE_MODEL_OPTIONS_CURATED`, `STANDARD/PREMIUM/EXPERT_WORKSPACE_MODEL`).
@@ -36,10 +42,10 @@ Claude Agent SDK / CLI  ──Anthropic Messages API──▶  in-container prox
                                                        ▼
                                             deployer-account RELAY (LWA Function URL)
                                                        │  validate STS proof (AgentCore role only)
-                                                       │  map numa-standard-model → deepseek/deepseek-v4-flash
+                                                       │  map numa-standard-model → xiaomi/mimo-v2.5-pro
                                                        │  pin provider = novita, inject OpenRouter key
                                                        ▼
-                                            OpenRouter  ──▶  Novita  ──▶  DeepSeek V4 Flash
+                                            OpenRouter  ──▶  Novita  ──▶  MiMo-V2.5-Pro
 ```
 
 ### Why an in-container proxy (not a static base URL)
@@ -86,7 +92,7 @@ builder; it flows through wherever the agent runs:
   Builder UI: `numa-frontend/src/Components/Agents/AgentCreateModal.tsx`.
 - **Default = Premium** (Sonnet 4.6) for new agents and any legacy agent with no `model_id` — so
   existing agents are unchanged (defaulting to Standard would have silently moved every agent to
-  DeepSeek).
+  MiMo).
 - **Ad-hoc agent chat:** selecting an agent seeds the conversation's model from the agent and persists
   it (survives reload); the per-conversation lock then applies.
 - **Scheduled runs:** the runner reads the agent's **live** `model_id` from the refreshed snapshot
@@ -126,8 +132,8 @@ trace's `result.total_cost_usd`.
 
 > **Rule: for `numa-standard-model`, read `total_cost_usd`. Never recompute cost from tokens.** A
 > naive token recompute at Anthropic/Sonnet rates overstates Standard cost **~19×** (measured: real
-> $0.0048 vs $0.092). Even a correct DeepSeek-rate recompute is ~6% low — it misses DeepSeek's
-> reasoning tokens, which the relay's `usage.cost` captures.
+> $0.0048 vs $0.092, measured on the DeepSeek-era model). A correct provider-rate recompute still
+> misses the model's reasoning tokens, which the relay's `usage.cost` captures.
 
 Consumer status:
 | Consumer | Cost method | Standard |
@@ -164,7 +170,7 @@ when it engages. Implementation: `bedrock_mantle_proxy.py` (`_resolve_local_dire
 
 ## Context window (current limitation)
 
-Novita's `deepseek-v4-flash` endpoint supports a **1M-token context window** and **393K max output**.
+Novita's `mimo-v2.5-pro` endpoint supports a **1M-token context window** and **131K max output**.
 But the Claude Code CLI (which the Agent SDK runs) only knows the opaque `numa-standard-model` id as a
 generic **200K** model, so it auto-compacts at ~168K — throwing away most of the real window.
 
@@ -189,7 +195,7 @@ summarisation pass). Tracked as **FEAT-237** (backlog).
 | `NUMA_STANDARD_MODEL_RELAY_URL`                       | client container env            | Relay Function URL (flag-gated injection)                                    |
 | `NUMA_STANDARD_MODEL_PROXY_TOKEN`                     | client container env            | Loopback placeholder API key for the proxy                                   |
 | `numa-standard-model-relay/openrouter-api-key`        | Secrets Manager (deployer acct) | The OpenRouter key — runtime-fetched by the relay; never in a client account |
-| `NUMA_STANDARD_MODEL_UPSTREAM`                        | relay env                       | Real model id (default `deepseek/deepseek-v4-flash`)                         |
+| `NUMA_STANDARD_MODEL_UPSTREAM`                        | relay env                       | Real model id (default `xiaomi/mimo-v2.5-pro`)                               |
 | `NUMA_STANDARD_MODEL_PROVIDER_ORDER`                  | relay env                       | Provider pin (default `novita`)                                              |
 | `NUMA_STANDARD_LOCAL_DIRECT` + `OPEN_ROUTER_TEST_KEY` | local dev only                  | Enable local-direct mode                                                     |
 
@@ -207,6 +213,6 @@ numa-standard-model-relay/openrouter-api-key --secret-string '<key>' --profile a
   `STANDARD_MODEL_RELAY` — logs the resolved `client_name` for OpenRouter attribution (`Numa - {client}`).
 - **Verify cost from a trace** (`s3://numa-{client}-outputs/numa-chat/workspace/<sub>/conversations/<id>/_system/trace.jsonl`):
   the `result` event's `model = numa-standard-model` and `total_cost_usd` is the real charge; the
-  DeepSeek token shape (large `input_tokens`, `cache_creation = 0`) is the tell.
+  MiMo token shape (large `input_tokens`, `cache_creation = 0`) is the tell.
 - **Deploy split:** the relay lives in the **deployer account** (`q-apps-deployer-stack`); the proxy,
   credit lib, agents, and frontend ship with the **per-client** deploy.

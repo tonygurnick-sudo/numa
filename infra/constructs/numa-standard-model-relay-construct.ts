@@ -26,7 +26,7 @@ export interface NumaStandardModelRelayConstructProps {
   region?: string;
   /**
    * Real upstream model id behind the opaque `numa-standard-model`.
-   * @default deepseek/deepseek-v4-flash
+   * @default xiaomi/mimo-v2.5-pro
    */
   upstreamModelId?: string;
   /**
@@ -166,7 +166,7 @@ export class NumaStandardModelRelayConstruct extends Construct {
           OPENROUTER_SECRET_ARN: props.openRouterApiKeySecretArn,
           CLIENT_CONFIG_TABLE_NAME: props.clientConfigTableName,
           NUMA_STANDARD_MODEL_ID: 'numa-standard-model',
-          NUMA_STANDARD_MODEL_UPSTREAM: props.upstreamModelId ?? 'deepseek/deepseek-v4-flash',
+          NUMA_STANDARD_MODEL_UPSTREAM: props.upstreamModelId ?? 'xiaomi/mimo-v2.5-pro',
           NUMA_STANDARD_MODEL_PROVIDER_ORDER: props.providerOrder ?? 'novita',
           ...(props.relaySharedSecret && {
             NUMA_STANDARD_MODEL_RELAY_SECRET: props.relaySharedSecret,
