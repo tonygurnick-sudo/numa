@@ -52,29 +52,19 @@ class ValidateCloudfrontSecretTest(unittest.TestCase):
             lf.validate_cloudfront_secret("nope", authorization="Bearer jwt")
         self.assertEqual(ctx.exception.status_code, 403)
 
-    def test_no_secret_with_auth_is_rejected_by_default(self):
-        """The core FEAT-009 fix: JWT alone no longer bypasses the secret."""
+    def test_no_secret_with_auth_is_allowed(self):
+        """The FE streaming path: direct Function-URL call (no CloudFront secret)
+        carrying a JWT must be ALLOWED — the JWT is verified fail-closed
+        downstream. (Reverts FEAT-009, which broke streaming chat.)"""
         lf.CLOUDFRONT_SECRET = "topsecret"
-        lf.ALLOW_DIRECT_INVOKE = False
-        with self.assertRaises(HTTPException) as ctx:
-            lf.validate_cloudfront_secret(None, authorization="Bearer valid-jwt")
-        self.assertEqual(ctx.exception.status_code, 403)
+        # Should not raise.
+        lf.validate_cloudfront_secret(None, authorization="Bearer valid-jwt")
 
     def test_no_secret_no_auth_rejected(self):
         lf.CLOUDFRONT_SECRET = "topsecret"
-        lf.ALLOW_DIRECT_INVOKE = False
-        with self.assertRaises(HTTPException):
+        with self.assertRaises(HTTPException) as ctx:
             lf.validate_cloudfront_secret(None, authorization=None)
-
-    def test_allow_direct_invoke_restores_jwt_bypass(self):
-        """Explicit opt-in lets a direct call through, but still needs auth."""
-        lf.CLOUDFRONT_SECRET = "topsecret"
-        lf.ALLOW_DIRECT_INVOKE = True
-        # With Authorization → allowed.
-        lf.validate_cloudfront_secret(None, authorization="Bearer valid-jwt")
-        # Without Authorization → still rejected.
-        with self.assertRaises(HTTPException):
-            lf.validate_cloudfront_secret(None, authorization=None)
+        self.assertEqual(ctx.exception.status_code, 403)
 
     def test_unconfigured_secret_skips_validation(self):
         lf.CLOUDFRONT_SECRET = ""

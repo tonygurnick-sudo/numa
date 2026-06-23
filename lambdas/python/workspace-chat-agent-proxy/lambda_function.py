@@ -218,43 +218,40 @@ def validate_cloudfront_secret(
 ) -> None:
     """Validate the CloudFront shared secret header.
 
-    When CLOUDFRONT_SECRET is configured the secret header is REQUIRED — every
-    legitimate request reaches the Function URL through CloudFront, which injects
-    it. A direct Function-URL call (no secret header) is rejected even if it
-    carries an Authorization header: the JWT authenticates the *user* but does
-    nothing to prove the request actually traversed CloudFront, so accepting it
-    would let anyone with a valid token bypass the CloudFront edge entirely
-    (FEAT-009).
+    Two legitimate paths reach this proxy:
+      * CloudFront-routed requests, which carry the injected secret header — we
+        verify it with a timing-safe compare.
+      * The frontend's chat STREAMING, which calls the Function URL directly
+        (RESPONSE_STREAM mode bypasses CloudFront), so it has no secret header,
+        only a JWT.
 
-    The one documented exception is ALLOW_DIRECT_INVOKE='true' (default off),
-    which restores the legacy "Authorization is sufficient" behaviour for
-    debugging / local testing against the raw Function URL. Use it deliberately.
+    We therefore accept a direct call that carries an Authorization header: the
+    JWT is verified fail-closed downstream (BUG-007 / BUG-259), so a forged
+    token can't get through. A request with neither a valid secret nor an
+    Authorization header is rejected.
+
+    NOTE: this reverts FEAT-009, whose mandatory-secret assumption that *every*
+    request traverses CloudFront broke streaming chat (confirmed in QA on
+    arcanum-demo-tony: every message 403'd with "Missing CloudFront secret").
+    Fail-closed JWT verification is the real auth for the direct path, so the
+    mandatory secret was both redundant and product-breaking.
     """
     if not CLOUDFRONT_SECRET:
         return  # Skip validation if not configured (dev mode)
 
-    # Secret header provided → validate it (the normal CloudFront path).
+    # Secret header provided → validate it with a timing-safe compare
+    # (the normal CloudFront-routed path).
     if secret:
         if not hmac_mod.compare_digest(secret, CLOUDFRONT_SECRET):
             raise HTTPException(status_code=403, detail="Invalid CloudFront secret")
         return
 
-    # No secret header = direct Function-URL call. Only allowed when the
-    # operator has explicitly opted in via ALLOW_DIRECT_INVOKE, and even then
-    # an Authorization header is still required to identify the caller.
-    if ALLOW_DIRECT_INVOKE:
-        if authorization:
-            logger.info(
-                "Direct Lambda call (ALLOW_DIRECT_INVOKE), Authorization present - allowing"
-            )
-            return
-        raise HTTPException(status_code=403, detail="Authentication required")
-
-    # Secret configured, no secret header, direct invoke not permitted → reject.
-    logger.warning(
-        "Rejecting request with no CloudFront secret header (ALLOW_DIRECT_INVOKE off)"
-    )
-    raise HTTPException(status_code=403, detail="Missing CloudFront secret")
+    # No secret header = a direct Function-URL call, i.e. the FE streaming path.
+    # Allow it when an Authorization header is present (JWT verified fail-closed
+    # downstream); reject when there's no way to authenticate the caller at all.
+    if authorization:
+        return
+    raise HTTPException(status_code=403, detail="Authentication required")
 
 
 def _get_jwks() -> Dict[str, Any]:
