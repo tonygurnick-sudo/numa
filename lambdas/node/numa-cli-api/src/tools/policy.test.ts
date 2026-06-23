@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { allowedCategoriesForAgentType, isToolAllowedForAgentType, toolCategory } from './policy.js';
+import { SYNERGY_TOOLS } from './registry.js';
 
 test('Nolia types are restricted to the docs category', () => {
   for (const t of [
@@ -73,11 +74,19 @@ test('Unrestricted type may use anything, including unknown tools', () => {
   }
 });
 
+test('SYNERGY_TOOLS holds the full read-only set (27 after Wave 3 connect_synergy_resolve)', () => {
+  // Pins the count so a fold-in (which extends an existing tool — no new id)
+  // can't be mistaken for a new tool, and a genuinely new tool can't be added
+  // without bumping this. Waves 1+2 = 26; Wave 3 adds only connect_synergy_resolve.
+  assert.equal(SYNERGY_TOOLS.length, 27, `expected 27 Synergy tools, got ${SYNERGY_TOOLS.length}`);
+});
+
 test('native-connector file tools are integrations — usable unrestricted, denied for nolia', () => {
+  // Drive the Synergy tools off the shared SYNERGY_TOOLS list so the
+  // metadata/search group (00d7edd48) is covered automatically and the policy
+  // map can't silently miss a tool added in the registry.
   for (const tool of [
-    'connect_synergy_list',
-    'connect_synergy_search',
-    'connect_synergy_download',
+    ...SYNERGY_TOOLS,
     'oauth_list_files',
     'oauth_search_files',
     'oauth_download_file',

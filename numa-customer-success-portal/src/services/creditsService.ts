@@ -84,6 +84,10 @@ export const DEFAULT_CREDIT_CONFIG: Required<CreditConfig> = {
   // Numa Voice per-minute USD anchors (provisional — confirm with Asa). Mirrors
   // lib/credit-pricing/voice_pricing.py defaults; the non-LLM cost of a call.
   voiceRates: { telephonyPerMin: 0.04, transcribePerMin: 0.024, contactLensPerMin: 0.015 },
+  // Synergy KB crawl ingestion rates (provisional — confirm with Asa). Mirrors
+  // lib/credit-pricing/synergy_pricing.py defaults; embedding cost + a small
+  // overhead uplift covering the negligible S3/SQS/Lambda spend.
+  synergyRates: { embedUsdPerMtoken: 0.02, charsPerToken: 4, avgTokensPerDoc: 4000, overheadMult: 1.1 },
 };
 
 export class CreditsService {

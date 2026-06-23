@@ -309,7 +309,9 @@
     "systemManaged": "System Managed",
     "systemManagedTooltip": "This capability is managed by the system and cannot be toggled by an admin.",
     "goldTier": "Gold",
-    "goldTierTooltip": "Premium Gold-tier capability."
+    "goldTierTooltip": "Premium Gold-tier capability.",
+    "metered": "Metered",
+    "meteredTooltip": "Usage of this capability is credit-metered and billed against your plan."
   },
   "brandingAdmin": {
     "title": "Branding Controls",

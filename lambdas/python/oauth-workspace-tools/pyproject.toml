@@ -24,6 +24,7 @@ aws-lambda-powertools = "3.9.0"
 httpx = "^0.25.0"
 prm = { path = "../../../lib/prm", develop = true }
 oauth-providers = { path = "../../../lib/oauth-providers", develop = true }
+synergy-tokenize = { path = "../../../lib/synergy-tokenize", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 mypy = "1.17.1"

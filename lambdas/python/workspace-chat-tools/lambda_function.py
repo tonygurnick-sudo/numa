@@ -275,28 +275,70 @@ def handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, Any]:
         )
 
         # Server-side verification: Check DynamoDB for actual KB permissions
-        # This provides defense-in-depth against manipulated allowed_kbs lists
+        # This provides defense-in-depth against manipulated allowed_kbs lists.
         if user_sub:
-            # For all_kbs mode, verify access to each KB in the allowed list
-            # For single KB mode, verify access to the requested KB
-            kbs_to_verify = allowed_kbs if all_kbs_mode else [kb_id]
-            for verify_kb_id in kbs_to_verify:
-                if not verify_kb_access(user_sub, verify_kb_id):
+            if all_kbs_mode:
+                # Fan-out mode: verify each enabled KB and DROP (don't abort on)
+                # any the user can't access, so one inaccessible folder no longer
+                # kills the whole multi-KB query. The dropped KBs are removed
+                # from both lists actually queried downstream — `allowed_kbs`
+                # (single-KB validation) and `allowed_kbs_with_names` (the
+                # _handle_all_kbs_query fan-out iterates the *_with_names list).
+                accessible_kbs = [
+                    verify_kb_id
+                    for verify_kb_id in allowed_kbs
+                    if verify_kb_access(user_sub, verify_kb_id)
+                ]
+                denied_kbs = [k for k in allowed_kbs if k not in accessible_kbs]
+                if denied_kbs:
                     logger.warning(
-                        "KB access denied - server-side verification failed",
+                        "KB access skipped - dropped from all-KBs fan-out",
                         user_sub=user_sub[:8] + "...",
-                        kb_id=verify_kb_id,
+                        denied_kbs=denied_kbs,
+                    )
+                if not accessible_kbs:
+                    logger.warning(
+                        "KB access denied - no enabled KBs are accessible",
+                        user_sub=user_sub[:8] + "...",
+                        allowed_kbs=allowed_kbs,
                     )
                     return {
                         "status": "error",
                         "result": None,
-                        "error": f"Access denied to folder '{verify_kb_id}'",
+                        "error": "Access denied to all enabled folders",
                     }
-            logger.info(
-                "KB access validated (server-side DynamoDB)",
-                kb_id=kb_id if not all_kbs_mode else "all",
-                user_sub=user_sub[:8] + "...",
-            )
+                # Narrow both lists to the verified set so the downstream
+                # fan-out only queries KBs this user is actually allowed to see.
+                accessible_set = set(accessible_kbs)
+                allowed_kbs = accessible_kbs
+                allowed_kbs_with_names = [
+                    kb
+                    for kb in allowed_kbs_with_names
+                    if kb.get("id") in accessible_set
+                ]
+                logger.info(
+                    "KB access validated (server-side DynamoDB, all-KBs)",
+                    user_sub=user_sub[:8] + "...",
+                    accessible_kbs=accessible_kbs,
+                )
+            else:
+                # Single-KB mode: hard-deny if the user can't access the KB.
+                if not verify_kb_access(user_sub, kb_id):
+                    logger.warning(
+                        "KB access denied - server-side verification failed",
+                        user_sub=user_sub[:8] + "...",
+                        kb_id=kb_id,
+                    )
+                    return {
+                        "status": "error",
+                        "result": None,
+                        "error": f"Access denied to folder '{kb_id}'",
+                    }
+                logger.info(
+                    "KB access validated (server-side DynamoDB)",
+                    kb_id=kb_id,
+                    user_sub=user_sub[:8] + "...",
+                )
 
     # Security: Validate KB file access (fail-closed)
     if tool_name == "retrieve_kb_file":

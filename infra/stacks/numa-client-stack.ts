@@ -225,6 +225,32 @@ export class NumaClientStack extends TerraformStack {
           })()
         : undefined;
 
+    // Synergy is now gated by a SINGLE flag (`synergy`). It collapses the three
+    // legacy input flags (synergyFileParity / synergyKbCrawl / synergyTermIndex)
+    // into one switch that controls ALL Synergy functionality (file browser, the
+    // read chat tools, the cross-job crawl, the exact-term index, KB search).
+    //   synergyOn      — the raw intent (config.json `SYNERGY` key).
+    //   synergyEnabled — synergyOn gated on the Synergy data connector (vault).
+    // Back-compat: live stacks that only carry the legacy flags keep working via
+    // the fallback below. @deprecated — delete the fallback once all configs set
+    // `synergy`.
+    const synergyOn =
+      clientConfig.synergy ?? ((clientConfig.synergyKbCrawl ?? false) || (clientConfig.synergyFileParity ?? false));
+    const synergyEnabled = synergyOn && (clientConfig.dataConnectorsEnabled ?? false);
+
+    // Synergy cross-job KB search ingests + queries the crawled corpus through a
+    // Bedrock knowledge base. With preferredKnowledgeBase 'none' no KB exists, so
+    // the crawler would index documents nowhere and every chat query would fail
+    // silently ("Bedrock knowledge base is not configured"). Fail the synth loudly
+    // rather than ship a dead feature.
+    if (synergyOn && !knowledgeBase) {
+      throw new Error(
+        `[${clientConfig.clientName}] synergy is enabled but preferredKnowledgeBase is 'none' — ` +
+          `Synergy cross-job search needs a Bedrock knowledge base. Set preferredKnowledgeBase to 'bedrock' (or 'q'), ` +
+          `or disable synergy.`
+      );
+    }
+
     // Include CS Portal origin in data bucket CORS so the Support Docs Manager
     // tool can write support docs into client buckets from the browser.
     const portalOrigin = `https://customer-success-portal.${props.domainSuffix}`;
@@ -248,9 +274,10 @@ export class NumaClientStack extends TerraformStack {
       voiceIntakeBucketArn: clientConfig.numaVoice
         ? `arn:aws:s3:::numa-${props.clientName}${props.environmentName !== 'prod' ? `-${props.environmentName}` : ''}-prospect-intake`
         : undefined,
-      // Synergy → Bedrock KB crawler depends on the Synergy data connector + vault,
-      // so it only provisions when data connectors are also enabled.
-      synergyKbCrawlEnabled: (clientConfig.synergyKbCrawl ?? false) && (clientConfig.dataConnectorsEnabled ?? false),
+      // Synergy (single flag). Provisions the entire Synergy surface — the
+      // Bedrock KB crawler, the exact-term index, and the connector/file-browser
+      // routes — only when the Synergy data connector + vault are also enabled.
+      synergyEnabled,
     });
 
     // ── Disaster Recovery ────────────────────────────────────────────────────
@@ -748,17 +775,25 @@ export class NumaClientStack extends TerraformStack {
       capabilitiesTableName: core.capabilitiesTable.name,
       creditLedgerTableName: core.creditLedgerTable.name,
       dataConnectorsSyncConfigsTableName: core.dataConnectorsSyncConfigsTable.name,
-      // Synergy KB crawl Step Function — the data-connectors "Sync now" route
-      // StartExecutions it. Empty strings when the crawler is disabled.
-      synergyKbCrawlStateMachineArn: core.synergyCrawlStateMachineArn,
+      // Synergy extraction queue — the data-connectors on-visit hook enqueues a
+      // per-job message; the "Sync now" route invokes the coordinator to
+      // enumerate + enqueue. Empty strings when the crawler is disabled.
+      synergyExtractQueueUrl: core.synergyExtractQueueUrl,
+      synergyExtractQueueArn: core.synergyExtractQueueArn,
       synergyCrawlStateTableName: core.synergyCrawlStateTableName,
       synergyCrawlStateTableArn: core.synergyCrawlStateTableArn,
-      synergyTextCrawlerFunctionName: core.synergyTextCrawlerFunctionName,
-      synergyTextCrawlerFunctionArn: core.synergyTextCrawlerFunctionArn,
+      synergyCoordinatorFunctionName: core.synergyCoordinatorFunctionName,
+      synergyCoordinatorFunctionArn: core.synergyCoordinatorFunctionArn,
       // Admin-side gate. When false, the unified integrations catalog skips
       // every native row so users never see them; when true, admins can
       // manage native connectors and they surface alongside Pipedream.
       dataConnectorsEnabled: clientConfig.dataConnectorsEnabled ?? false,
+      // Synergy single deploy gate. Depends on the Synergy connector existing
+      // (dataConnectorsEnabled). When off, every Synergy API route — the
+      // crawl/index control plane (sync routes) AND the remote files browser
+      // (browse + parity routes) — is never registered, so nothing
+      // Synergy-specific deploys.
+      synergyEnabled,
       // Forwarded to scheduled runs as featureFlags on the workspace-agent
       // request body, so the SDK config registers the `connectors` MCP and
       // `vault` MCP in unattended runs. Without these the schedule runner
@@ -957,6 +992,16 @@ export class NumaClientStack extends TerraformStack {
       // no permission to write to the real audit table and chat OAuth
       // fetches silently failed audit (TASK-146 follow-up).
       vaultAuditLogTableName: core.vaultAuditLogTable.name,
+      // Synergy crawl state (JOB#) table for the exhaustive structured/portfolio
+      // query. Both are '' when synergy is off, so the construct skips the
+      // env + IAM entirely — strictly flag-gated.
+      synergyCrawlStateTableName: core.synergyCrawlStateTableName,
+      synergyCrawlStateTableArn: core.synergyCrawlStateTableArn,
+      // Synergy per-query credit-debit lambda — fire-and-forget metering of
+      // portfolio / exact-term read-capacity under the real caller. Both '' when
+      // synergy is off → the construct skips the env + InvokeFunction IAM.
+      synergyCreditDebitFunctionName: core.synergyCreditDebitFunctionName,
+      synergyCreditDebitFunctionArn: core.synergyCreditDebitFunctionArn,
     });
 
     // V2 Apps (workspace-agent-based apps: data analysis, quoting, etc.)
@@ -1081,11 +1126,19 @@ export class NumaClientStack extends TerraformStack {
         SHOW_CREDITS: clientConfig.showCredits ?? false,
         // Parent flags
         DATA_CONNECTORS_ENABLED: clientConfig.dataConnectorsEnabled ?? false,
-        // Synergy 12d file-interface parity (rich metadata columns, in-job
-        // file search, per-file actions). Sub-capability of data connectors;
-        // off by default so it ships dark until a client opts in.
-        SYNERGY_FILE_PARITY: clientConfig.synergyFileParity ?? false,
-        SYNERGY_KB_SEARCH: clientConfig.synergyKbCrawl ?? false,
+        // Synergy 12d — single flag gating the whole Synergy surface (file
+        // browser, the read chat tools, cross-job crawl, exact-term index, KB
+        // search). Sub-capability of data connectors; off by default so it
+        // ships dark until a client opts in. Emits the raw intent (synergyOn);
+        // the data-connector dependency is applied at the infra layer.
+        SYNERGY: synergyOn,
+        // Nested synergy sub-capabilities — DERIVED from the single `synergy`
+        // input (no separate input flag). Emitted so the Capabilities tab renders
+        // them nested under SYNERGY (the tab only shows flags deployed true) and
+        // so an admin can fine-tune them via the Layer-3 capability override; the
+        // frontend sub-features gate on these children.
+        SYNERGY_FILE_PARITY: synergyOn,
+        SYNERGY_KB_SEARCH: synergyOn,
         AGENTS: clientConfig.agents ?? false,
         NUMA_WORKSPACE_CHAT: clientConfig.numaWorkspaceChat ?? true,
         SCHEDULING: clientConfig.scheduling ?? false,
@@ -1734,20 +1787,26 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
         numaOps: z.boolean().optional().default(false),
 
         /**
-         * Whether to enable the Synergy 12d file-interface parity features —
-         * rich file metadata columns, in-job file search, and per-file actions
-         * (details / version history / copy link) in the Files Remote UI.
-         * Sub-capability of data connectors; ships dark by default.
-         *
-         * Schema-only on this branch: the feature's config.json wiring and
-         * frontend gating live on the Synergy parity branch. Declared here so
-         * the strict client-config parse tolerates the flag already present on
-         * dev-stack configs (e.g. arcanum-demo-tony) without failing synth.
+         * Single flag gating ALL Synergy 12d functionality — file browser, the
+         * read chat tools, the cross-job crawl, the exact-term index, and KB
+         * search. Sub-capability of data connectors (only provisions when
+         * dataConnectorsEnabled); ships dark by default.
          *
          * @default false
          */
+        synergy: z.boolean().optional().default(false),
+
+        // @deprecated → use `synergy`. Kept .optional() so existing DynamoDB
+        // configs that still carry these legacy keys pass the STRICT parse on
+        // deploy. No longer gates anything except the single back-compat
+        // fallback in synergyOn (numa-client-stack ~238). Delete once all
+        // configs set `synergy`.
         synergyFileParity: z.boolean().optional().default(false),
+        // @deprecated → use `synergy`. See note above.
         synergyKbCrawl: z.boolean().optional().default(false),
+        // @deprecated → use `synergy`. See note above. (Term index now follows
+        // `synergy`; this key is no longer read.)
+        synergyTermIndex: z.boolean().optional().default(true),
 
         /**
          * Whether to enable site-wide search (DynamoDB search index + /api/search).

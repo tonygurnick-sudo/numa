@@ -57,6 +57,7 @@ function withDefaults(c?: CreditConfig): FullConfig {
     },
     marginsByTier: { ...DEFAULT_CREDIT_CONFIG.marginsByTier, ...c?.marginsByTier },
     voiceRates: { ...DEFAULT_CREDIT_CONFIG.voiceRates, ...c?.voiceRates },
+    synergyRates: { ...DEFAULT_CREDIT_CONFIG.synergyRates, ...c?.synergyRates },
     monthlyAllocations:
       c?.monthlyAllocations && c.monthlyAllocations.length === 12
         ? c.monthlyAllocations
@@ -155,6 +156,8 @@ export default function NumaCredits() {
     setConfig((c) => ({ ...c, marginsByTier: { ...c.marginsByTier, [tier]: v } }));
   const setVoiceRate = (k: 'telephonyPerMin' | 'transcribePerMin' | 'contactLensPerMin', v: number) =>
     setConfig((c) => ({ ...c, voiceRates: { ...c.voiceRates, [k]: v } }));
+  const setSynergyRate = (k: 'embedUsdPerMtoken' | 'charsPerToken' | 'avgTokensPerDoc' | 'overheadMult', v: number) =>
+    setConfig((c) => ({ ...c, synergyRates: { ...c.synergyRates, [k]: v } }));
   const setAllMonths = (v: number) =>
     setConfig((c) => ({ ...c, monthlyAllocations: Array.from({ length: 12 }, () => v) }));
   const setMonth = (i: number, v: number) =>
@@ -896,6 +899,52 @@ export default function NumaCredits() {
                                 step="0.005"
                                 value={config.voiceRates.contactLensPerMin ?? 0}
                                 onChange={(e) => setVoiceRate('contactLensPerMin', num(e.target.value))}
+                              />
+                            </Col>
+                          </Row>
+
+                          <Form.Label className="fw-semibold mt-3">Synergy — KB crawl ingestion rates</Form.Label>
+                          <div className="small text-muted mb-2">
+                            The cost of crawling Synergy 12d documents into the knowledge base — dominated by Bedrock
+                            embedding at ingestion. Metered into the same credit ledger; a crawl charges the
+                            cost-recovery floor over these rates, billed once per run to the tenant. The overhead
+                            multiplier (&gt;1) covers the negligible S3/queue/Lambda spend.
+                          </div>
+                          <Row className="g-2">
+                            <Col xs={3}>
+                              <Form.Label className="small text-muted">Embed USD /M tokens</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.005"
+                                value={config.synergyRates.embedUsdPerMtoken ?? 0}
+                                onChange={(e) => setSynergyRate('embedUsdPerMtoken', num(e.target.value))}
+                              />
+                            </Col>
+                            <Col xs={3}>
+                              <Form.Label className="small text-muted">Chars /token</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.5"
+                                value={config.synergyRates.charsPerToken ?? 0}
+                                onChange={(e) => setSynergyRate('charsPerToken', num(e.target.value))}
+                              />
+                            </Col>
+                            <Col xs={3}>
+                              <Form.Label className="small text-muted">Avg tokens /doc</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="100"
+                                value={config.synergyRates.avgTokensPerDoc ?? 0}
+                                onChange={(e) => setSynergyRate('avgTokensPerDoc', num(e.target.value))}
+                              />
+                            </Col>
+                            <Col xs={3}>
+                              <Form.Label className="small text-muted">Overhead ×</Form.Label>
+                              <Form.Control
+                                type="number"
+                                step="0.05"
+                                value={config.synergyRates.overheadMult ?? 0}
+                                onChange={(e) => setSynergyRate('overheadMult', num(e.target.value))}
                               />
                             </Col>
                           </Row>

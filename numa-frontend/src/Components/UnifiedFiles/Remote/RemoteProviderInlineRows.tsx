@@ -312,7 +312,8 @@ function SynergyInlineRows({
   // SYNERGY_FILE_PARITY gates everything Phase A added: the rich metadata
   // columns, in-job search, and per-file actions (context menu / details /
   // history / copy link). When off, Synergy browsing falls back to the basic
-  // jobs → folders → files + download experience.
+  // jobs → folders → files + download experience. The child flag is false in
+  // config.json whenever Synergy itself is off, so this read implies the parent.
   const parityEnabled = getFlag('SYNERGY_FILE_PARITY');
 
   // In-job file search. Synergy file search is job-scoped, so we search within

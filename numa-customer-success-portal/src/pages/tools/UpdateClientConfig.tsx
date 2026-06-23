@@ -102,6 +102,9 @@ export default function UpdateClientConfig() {
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [pipedream, setPipedream] = useState<boolean>(false);
   const [dataConnectorsEnabled, setDataConnectorsEnabled] = useState<boolean>(false);
+  // Master switch for all Synergy 12d functionality. Replaces the deprecated
+  // synergyFileParity/synergyKbCrawl/synergyTermIndex flags — CS sets only this.
+  const [synergy, setSynergy] = useState<boolean>(false);
   const [agents, setAgents] = useState<boolean>(false);
   const [devInstance, setDevInstance] = useState<boolean>(false);
   const [allowQuotaSharing, setAllowQuotaSharing] = useState<boolean>(false);
@@ -238,6 +241,7 @@ export default function UpdateClientConfig() {
     setPipedream(Boolean(pd));
     const dc = (cfg as unknown as Record<string, unknown>)['dataConnectorsEnabled'];
     setDataConnectorsEnabled(Boolean(dc));
+    setSynergy(Boolean((cfg as any).synergy));
     const ag = (cfg as unknown as Record<string, unknown>)['agents'];
     setAgents(Boolean(ag));
     setDevInstance(Boolean(cfg.devInstance));
@@ -339,6 +343,7 @@ export default function UpdateClientConfig() {
       bedrockAccount: current?.bedrockAccount ?? '',
       pipedreamIntegrations: current?.pipedreamIntegrations ?? false,
       dataConnectorsEnabled: (current as any)?.dataConnectorsEnabled ?? false,
+      synergy: (current as any)?.synergy ?? defaults.synergy,
       agents: (current as any)?.agents ?? false,
       brandingProviderEnabled: (current as any)?.brandingProviderEnabled ?? defaults.brandingProviderEnabled,
       numaWorkspaceChat: (current as any)?.numaWorkspaceChat ?? defaults.numaWorkspaceChat,
@@ -403,6 +408,7 @@ export default function UpdateClientConfig() {
     // Only include pipedreamIntegrations if changed
     if (eff.pipedreamIntegrations !== pipedream) updates.pipedreamIntegrations = pipedream;
     if (eff.dataConnectorsEnabled !== dataConnectorsEnabled) updates.dataConnectorsEnabled = dataConnectorsEnabled;
+    if ((eff as any).synergy !== synergy) (updates as any).synergy = synergy;
 
     // Only include agents if changed
     if (eff.agents !== agents) updates.agents = agents;
@@ -751,6 +757,14 @@ export default function UpdateClientConfig() {
                           onChange={setDataConnectorsEnabled}
                           type="switch"
                           helpText="Surface Arcanum's native (first-party OAuth/PAT) integrations alongside Pipedream-backed ones in the unified Integrations surface"
+                        />
+                        <ConfigField
+                          label="Synergy 12d (connector + cross-job search)"
+                          value={synergy}
+                          defaultValue={defaults.synergy}
+                          onChange={setSynergy}
+                          type="switch"
+                          helpText="Master switch for all Synergy functionality — file browser, cross-job AI search, crawl. Requires Native Integrations + a Bedrock KB."
                         />
                         <ConfigField
                           label="Agents"

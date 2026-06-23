@@ -58,6 +58,46 @@ class TestSearchFiles(unittest.TestCase):
         self.assertEqual(out["files_total"], 2)
 
 
+class TestSegPathEncoding(unittest.TestCase):
+    """`_seg` percent-encodes user-controlled id path segments — a value with a
+    `/` or `?` must not be able to reshape the request path. Plain 12d ids
+    (`8_1`) are unreserved and pass through unchanged (so existing URL
+    assertions still hold)."""
+
+    def test_plain_id_passes_through_unchanged(self) -> None:
+        self.assertEqual(synergy_helpers._seg("8_1"), "8_1")
+        self.assertEqual(synergy_helpers._seg("70_1"), "70_1")
+
+    def test_path_traversal_and_query_chars_are_encoded(self) -> None:
+        self.assertEqual(synergy_helpers._seg("../9_1"), "..%2F9_1")
+        self.assertEqual(synergy_helpers._seg("8_1?x=1"), "8_1%3Fx%3D1")
+
+    def test_none_and_empty_become_empty_string(self) -> None:
+        self.assertEqual(synergy_helpers._seg(None), "")
+        self.assertEqual(synergy_helpers._seg(""), "")
+
+    def test_helper_wraps_interpolated_id_in_request_url(self) -> None:
+        # get_folder_items must encode the folder_id it puts in the path.
+        items = MagicMock()
+        items.status_code = 200
+        items.json.return_value = {"SubFolders": []}
+        items.raise_for_status.return_value = None
+        files = MagicMock()
+        files.status_code = 200
+        files.json.return_value = {"Result": [], "TotalPages": 1}
+        files.raise_for_status.return_value = None
+        with patch.object(
+            synergy_helpers.httpx, "get", side_effect=[items, files]
+        ) as g:
+            synergy_helpers.get_folder_items("https://s", "tok", "../evil")
+        urls = [
+            (c.args[0] if c.args else c.kwargs.get("url")) for c in g.call_args_list
+        ]
+        # The raw "../evil" must never appear unencoded in any request path.
+        self.assertFalse(any("../evil" in u for u in urls))
+        self.assertTrue(any("..%2Fevil" in u for u in urls))
+
+
 class TestHandleSynergySearchRouting(unittest.TestCase):
     def test_job_scope_runs_file_search(self) -> None:
         with patch.object(

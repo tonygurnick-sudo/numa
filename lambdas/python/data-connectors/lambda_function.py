@@ -46,6 +46,7 @@ from storage import (
 )
 from synergy_api import (
     SynergyAuthError,
+    count_all_jobs,
     get_file_details,
     get_file_history,
     get_file_weblink,
@@ -63,13 +64,14 @@ SECRETS_PREFIX = os.environ.get("DATA_CONNECTORS_SECRETS_PREFIX")
 SETTINGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SETTINGS_TABLE_NAME")
 SYNC_CONFIGS_TABLE_NAME = os.environ.get("DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME")
 EVENT_CONFIGS_TABLE_NAME = os.environ.get("CONNECTOR_EVENT_CONFIGS_TABLE_NAME")
-# Synergy → Bedrock KB crawl Step Function (empty when the crawler is disabled).
-SYNERGY_CRAWL_STATE_MACHINE_ARN = os.environ.get("SYNERGY_CRAWL_STATE_MACHINE_ARN", "")
-# Crawl-state table + worker function for the on-visit incremental sync.
-SYNERGY_CRAWL_STATE_TABLE_NAME = os.environ.get("SYNERGY_CRAWL_STATE_TABLE_NAME", "")
-SYNERGY_TEXT_CRAWLER_FUNCTION_NAME = os.environ.get(
-    "SYNERGY_TEXT_CRAWLER_FUNCTION_NAME", ""
+# Synergy extraction SQS FIFO queue (empty when the crawler is disabled). The
+# on-visit hook enqueues a per-job message; "Sync now" invokes the coordinator.
+SYNERGY_EXTRACT_QUEUE_URL = os.environ.get("SYNERGY_EXTRACT_QUEUE_URL", "")
+SYNERGY_COORDINATOR_FUNCTION_NAME = os.environ.get(
+    "SYNERGY_COORDINATOR_FUNCTION_NAME", ""
 )
+# Crawl-state table for the on-visit grant rows + sync-config/status routes.
+SYNERGY_CRAWL_STATE_TABLE_NAME = os.environ.get("SYNERGY_CRAWL_STATE_TABLE_NAME", "")
 SYNERGY_ONVISIT_COOLDOWN_HOURS = float(
     os.environ.get("SYNERGY_ONVISIT_COOLDOWN_HOURS", "6")
 )
@@ -812,6 +814,25 @@ def _synergy_crawl_state_table():
     return prm_resource("dynamodb").Table(SYNERGY_CRAWL_STATE_TABLE_NAME)
 
 
+def _synergy_crawl_enabled() -> bool:
+    """The admin opt-in gate (CONFIG#crawl.enabled). Default OFF — NO crawl
+    activity of any kind (scheduled, manual, or on-visit) happens until an admin
+    ticks the box in the connector settings, because indexing is a billable
+    operation. The scheduled coordinator enforces the same flag server-side."""
+    if not SYNERGY_CRAWL_STATE_TABLE_NAME:
+        return False
+    try:
+        row = (
+            _synergy_crawl_state_table().get_item(
+                Key={"pk": "CONFIG#crawl", "sk": "META"}
+            )
+        ).get("Item") or {}
+        return bool(row.get("enabled"))
+    except Exception as exc:  # noqa: BLE001 — fail closed
+        logger.warning("synergy_crawl_enabled_check_failed", error=str(exc))
+        return False
+
+
 def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
     """Opportunistic on-visit sync of the Synergy job a user is browsing.
 
@@ -821,7 +842,10 @@ def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
     sidecar restamp makes content retrievable immediately), otherwise throttled
     by ``last_enumerated_at`` cooldown. Never raises into the browse path.
     """
-    if not (SYNERGY_CRAWL_STATE_TABLE_NAME and SYNERGY_TEXT_CRAWLER_FUNCTION_NAME):
+    if not (SYNERGY_CRAWL_STATE_TABLE_NAME and SYNERGY_EXTRACT_QUEUE_URL):
+        return
+    # Admin opt-in gate — no crawl/grant activity until indexing is enabled.
+    if not _synergy_crawl_enabled():
         return
     try:
         table = _synergy_crawl_state_table()
@@ -869,18 +893,24 @@ def _sneaky_synergy_sync(user_id: str, job_id: str, server: str) -> None:
             UpdateExpression="SET last_enumerated_at = :t",
             ExpressionAttributeValues={":t": datetime.now(timezone.utc).isoformat()},
         )
-        prm_client("lambda").invoke(
-            FunctionName=SYNERGY_TEXT_CRAWLER_FUNCTION_NAME,
-            InvocationType="Event",
-            Payload=json.dumps(
+        # Enqueue onto the single extraction queue. run_id="adhoc" → the worker
+        # refreshes the job but skips the run-completion counter + credit debit
+        # (this is an incremental single-job refresh, not a counted crawl run).
+        # Per-job dedup id collapses rapid repeat visits within the FIFO window.
+        prm_client("sqs").send_message(
+            QueueUrl=SYNERGY_EXTRACT_QUEUE_URL,
+            MessageBody=json.dumps(
                 {
                     "job_id": job_id,
-                    "run_id": f"onvisit-{user_id[:8]}-{int(datetime.now(timezone.utc).timestamp())}",
+                    "run_id": "adhoc",
                     "user_sub": user_id,
                     "secret_id": f"{CLIENT_NAME}/vault/users/{user_id}",
                     "instance_url": server,
+                    "cursor": None,
                 }
-            ).encode("utf-8"),
+            ),
+            MessageGroupId=job_id,
+            MessageDeduplicationId=f"adhoc:{job_id}",
         )
         logger.info(
             "synergy_onvisit_sync",
@@ -1029,23 +1059,278 @@ def _handle_synergy_sync_status(event: Dict[str, Any]) -> Dict[str, Any]:
     )
 
 
+# Hard cap on the FILE# scan so a very large index can't blow the Lambda time
+# budget. When hit we still return a useful (per-job) view and flag truncated.
+_SYNERGY_INDEX_FILE_SCAN_CAP = 20000
+
+
+def _handle_synergy_index_overview(
+    event: Dict[str, Any], user_id: str, table_name: str
+) -> Dict[str, Any]:
+    """Per-job index overview for the admin Synergy config (admin-only).
+
+    Models ``_handle_synergy_sync_status`` for the gate + last-run block, then
+    adds a per-job rollup: every enumerated JOB# row (indexed vs pending), its
+    indexed-file count + freshness (from a BOUNDED FILE# scan), and how many
+    users have access. Read-only — never mutates the crawl state."""
+    if not SYNERGY_CRAWL_STATE_TABLE_NAME:
+        return _response(400, {"error": "Synergy cross-job search is not enabled."})
+    if not _is_admin(event):
+        return _response(403, {"error": "Admin access required"})
+
+    table = _synergy_crawl_state_table()
+
+    # 1) JOB# rows → per-job metadata (existence, status, access, freshness src).
+    jobs: Dict[str, Dict[str, Any]] = {}
+    job_scan_kwargs: Dict[str, Any] = {
+        "ProjectionExpression": (
+            "pk, job_name, job_path, #s, last_enumerated_at, "
+            "completed_at, allowed_users, files_total"
+        ),
+        "FilterExpression": "begins_with(pk, :j)",
+        "ExpressionAttributeNames": {"#s": "status"},
+        "ExpressionAttributeValues": {":j": "JOB#"},
+    }
+    while True:
+        resp = table.scan(**job_scan_kwargs)
+        for item in resp.get("Items", []):
+            pk = str(item.get("pk") or "")
+            if not pk.startswith("JOB#"):
+                continue
+            job_id = pk[len("JOB#") :]
+            if not job_id:
+                continue
+            allowed = item.get("allowed_users")
+            # allowed_users may be a DynamoDB string-set, a list, or absent.
+            if isinstance(allowed, (set, list)):
+                access_count = len(set(allowed))
+            else:
+                access_count = 0
+            # files_total = the coverage denominator (text-bearing files the
+            # worker enumerated for this job). Default 0 when not yet written.
+            try:
+                files_total = int(item.get("files_total") or 0)
+            except (TypeError, ValueError):
+                files_total = 0
+            # Authoritative per-job indexed count, written by the worker at
+            # enumeration_complete. Cap-immune — preferred over the bounded FILE#
+            # scan below. None when not yet written (job still mid-crawl).
+            fi_raw = item.get("files_indexed")
+            try:
+                files_indexed_auth = int(fi_raw) if fi_raw is not None else None
+            except (TypeError, ValueError):
+                files_indexed_auth = None
+            jobs[job_id] = {
+                "job_id": job_id,
+                "name": str(item.get("job_name") or ""),
+                "path": str(item.get("job_path") or ""),
+                "status": str(item.get("status") or "pending"),
+                "indexed_files": 0,
+                "_files_indexed_auth": files_indexed_auth,
+                "files_total": files_total,
+                "last_indexed_at": "",
+                "last_enumerated_at": str(item.get("last_enumerated_at") or ""),
+                "completed_at": str(item.get("completed_at") or ""),
+                "allowed_users": access_count,
+            }
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        job_scan_kwargs["ExclusiveStartKey"] = last_key
+
+    # 2) FILE# rows (BOUNDED) → per-job indexed_files count + max last_seen_at.
+    file_counts: Dict[str, int] = {}
+    file_freshest: Dict[str, str] = {}
+    truncated = False
+    scanned = 0
+    file_scan_kwargs: Dict[str, Any] = {
+        "ProjectionExpression": "pk, job_id, last_seen_at, #st",
+        "FilterExpression": "begins_with(pk, :f)",
+        "ExpressionAttributeNames": {"#st": "state"},
+        "ExpressionAttributeValues": {":f": "FILE#"},
+    }
+    while True:
+        resp = table.scan(**file_scan_kwargs)
+        for item in resp.get("Items", []):
+            pk = str(item.get("pk") or "")
+            if not pk.startswith("FILE#"):
+                continue
+            scanned += 1
+            job_id = str(item.get("job_id") or "")
+            if not job_id:
+                continue
+            file_counts[job_id] = file_counts.get(job_id, 0) + 1
+            seen = str(item.get("last_seen_at") or "")
+            if seen and seen > file_freshest.get(job_id, ""):
+                file_freshest[job_id] = seen
+        if scanned >= _SYNERGY_INDEX_FILE_SCAN_CAP:
+            truncated = True
+            break
+        last_key = resp.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        file_scan_kwargs["ExclusiveStartKey"] = last_key
+
+    # 3) Fold file aggregates into the per-job dicts (a FILE# row whose JOB# row
+    # was purged is ignored — only enumerated jobs are surfaced).
+    for job_id, job in jobs.items():
+        auth = job.pop("_files_indexed_auth", None)
+        # Prefer the worker-written authoritative count (immune to the FILE# scan
+        # cap); fall back to the bounded scan for jobs still mid-crawl.
+        job["indexed_files"] = auth if auth is not None else file_counts.get(job_id, 0)
+        job["last_indexed_at"] = file_freshest.get(job_id, "")
+
+    job_list = list(jobs.values())
+    # Freshest-first; jobs with no files (empty last_indexed_at) sort to the end.
+    job_list.sort(key=lambda j: j["last_indexed_at"], reverse=True)
+
+    total_jobs = len(job_list)
+    indexed_jobs = sum(1 for j in job_list if j["status"] == "done")
+    pending_jobs = total_jobs - indexed_jobs
+    total_indexed_files = sum(j["indexed_files"] for j in job_list)
+    total_files = sum(j["files_total"] for j in job_list)
+
+    # 4) CONFIG#crawl → sync_enabled / frequency_hours / last_run pointer.
+    config = (table.get_item(Key={"pk": "CONFIG#crawl", "sk": "META"})).get(
+        "Item"
+    ) or {}
+    sync_enabled = bool(config.get("enabled"))
+    frequency_hours = int(config.get("frequency_hours") or 24)
+    last_run_id = str(config.get("last_run_id") or "")
+
+    last_run: Optional[Dict[str, Any]] = None
+    if last_run_id:
+        run = (table.get_item(Key={"pk": f"RUN#{last_run_id}", "sk": "META"})).get(
+            "Item"
+        ) or {}
+
+        def _run_job_count(status: str) -> int:
+            total = 0
+            kwargs: Dict[str, Any] = {
+                "IndexName": "run-status-index",
+                "KeyConditionExpression": "run_id = :r AND #s = :st",
+                # The RUN# row itself lands in this index — exclude it so the
+                # job tallies don't over-count (mirrors sync-status).
+                "FilterExpression": "begins_with(pk, :job)",
+                "ExpressionAttributeNames": {"#s": "status"},
+                "ExpressionAttributeValues": {
+                    ":r": last_run_id,
+                    ":st": status,
+                    ":job": "JOB#",
+                },
+                "Select": "COUNT",
+            }
+            while True:
+                qresp = table.query(**kwargs)
+                total += int(qresp.get("Count") or 0)
+                qlast = qresp.get("LastEvaluatedKey")
+                if not qlast:
+                    return total
+                kwargs["ExclusiveStartKey"] = qlast
+
+        last_run = {
+            "run_id": last_run_id,
+            "status": str(run.get("status") or "unknown"),
+            "trigger": str(run.get("trigger") or ""),
+            "started_at": str(run.get("started_at") or ""),
+            "completed_at": str(run.get("completed_at") or ""),
+            "job_count": int(run.get("job_count") or 0),
+            "jobs_done": _run_job_count("done"),
+            "jobs_pending": _run_job_count("pending"),
+        }
+
+    # Live denominator: total jobs the crawl WOULD index (ALL jobs incl sub-jobs)
+    # from Synergy — so the UI shows "indexed of N" / true coverage, not just a
+    # count of already-crawled JOB# rows. Best-effort: None if Synergy is
+    # unreachable / the caller has no connection — the overview still renders.
+    total_synergy_jobs: Optional[int] = None
+    try:
+        # Count against the credential the CRAWL uses (the admin-pinned sync
+        # connection in CONFIG#crawl), not necessarily the viewer's — otherwise
+        # the denominator reflects the viewer's 12d permissions instead of the
+        # portfolio that actually gets indexed. Falls back to the caller.
+        count_user = str(config.get("credential_user_sub") or "").strip() or user_id
+        creds = _get_synergy_credentials(table_name, count_user)
+        if creds:
+            total_synergy_jobs = count_all_jobs(creds[0], creds[1])
+    except Exception:  # noqa: BLE001 — the live count must never break the overview
+        total_synergy_jobs = None
+
+    return _response(
+        200,
+        {
+            "summary": {
+                "total_synergy_jobs": total_synergy_jobs,
+                "total_jobs": total_jobs,
+                "indexed_jobs": indexed_jobs,
+                "pending_jobs": pending_jobs,
+                "total_indexed_files": total_indexed_files,
+                "files_total": total_files,
+                "sync_enabled": sync_enabled,
+                "frequency_hours": frequency_hours,
+                "last_run": last_run,
+            },
+            "jobs": job_list,
+            "truncated": truncated,
+        },
+    )
+
+
 def _handle_synergy_sync_now(
     event: Dict[str, Any], user_id: str, table_name: str
 ) -> Dict[str, Any]:
     """Kick off a Synergy → Bedrock KB crawl for the calling user (manual sync).
 
-    Runs as the caller's OWN PAT: only the vault ``secret_id`` (never the token)
-    is put into the Step Function input, so the coordinator/worker read the PAT
-    from Secrets Manager under their own role and it never lands in execution
-    history. Every job this crawl indexes is granted to the user's
+    Invokes the coordinator, which enumerates the caller's jobs and enqueues them
+    onto the single extraction queue. Runs as the caller's OWN PAT: only the vault
+    ``secret_id`` (never the token) is passed, so the coordinator/worker read the
+    PAT from Secrets Manager under their own role and it never lands in any event
+    payload. Every job this crawl indexes is granted to the user's
     ``allowed_users`` precisely because it was enumerated with the user's
     credential — access mirrors the user's Synergy permissions by construction.
     """
     del table_name  # crawl reads creds from the vault, not the connector table
-    if not SYNERGY_CRAWL_STATE_MACHINE_ARN:
+    if not SYNERGY_COORDINATOR_FUNCTION_NAME:
         return _response(
             400,
             {"error": "Synergy cross-job search is not enabled for this workspace."},
+        )
+    # Admin-only: indexing is billable and crawls company-wide. The UI surfaces
+    # this in the admin connector config, but the route must enforce it too.
+    if not _is_admin(event):
+        return _response(403, {"error": "Admin access required"})
+    # Parse the optional manual scope FIRST. A scoped "index just these job ids"
+    # is an explicit, bounded admin action and is ALWAYS allowed; only a FULL sync
+    # (no job_ids — billable across every job) requires the admin toggle.
+    body: Dict[str, Any] = {}
+    raw = event.get("body")
+    if raw:
+        try:
+            if event.get("isBase64Encoded"):
+                raw = base64.b64decode(raw).decode("utf-8")
+            body = json.loads(raw) or {}
+        except (ValueError, binascii.Error):
+            body = {}
+    raw_scope = body.get("scope")
+    scope: Dict[str, Any] = raw_scope if isinstance(raw_scope, dict) else {}
+    raw_job_ids = body.get("job_ids")
+    job_ids = (
+        [j for j in raw_job_ids if isinstance(j, str) and j.strip()][:200]
+        if isinstance(raw_job_ids, list)
+        else []
+    )
+    if job_ids:
+        scope = {**scope, "job_ids": job_ids}
+
+    # Admin opt-in gate — applies ONLY to a full sync. A scoped manual index is
+    # always allowed (the admin explicitly picked the job and accepts the cost).
+    if not job_ids and not _synergy_crawl_enabled():
+        return _response(
+            400,
+            {
+                "error": "Synergy indexing is turned off. An admin must enable it in "
+                "the connector settings before syncing (it incurs credit usage)."
+            },
         )
 
     # Require a vault-sourced PAT (the worker reads the same vault path) — this
@@ -1060,19 +1345,8 @@ def _handle_synergy_sync_now(
         )
     instance_url, _token = creds
 
-    body: Dict[str, Any] = {}
-    raw = event.get("body")
-    if raw:
-        try:
-            if event.get("isBase64Encoded"):
-                raw = base64.b64decode(raw).decode("utf-8")
-            body = json.loads(raw) or {}
-        except (ValueError, binascii.Error):
-            body = {}
-    scope = body.get("scope") if isinstance(body.get("scope"), dict) else {}
-
     run_id = f"sync-{uuid.uuid4().hex[:16]}"
-    sfn_input = {
+    coord_input = {
         "run_id": run_id,
         "user_sub": user_id,
         "secret_id": f"{CLIENT_NAME}/vault/users/{user_id}",
@@ -1081,11 +1355,12 @@ def _handle_synergy_sync_now(
         "trigger": "manual",
     }
     try:
-        sfn = prm_client("stepfunctions")
-        execution = sfn.start_execution(
-            stateMachineArn=SYNERGY_CRAWL_STATE_MACHINE_ARN,
-            name=run_id,
-            input=json.dumps(sfn_input),
+        # Async — the coordinator enumerates + enqueues (up to 900s); the API
+        # returns immediately. The worker drains the queue.
+        prm_client("lambda").invoke(
+            FunctionName=SYNERGY_COORDINATOR_FUNCTION_NAME,
+            InvocationType="Event",
+            Payload=json.dumps(coord_input).encode("utf-8"),
         )
     except Exception as exc:  # noqa: BLE001
         logger.error("synergy_sync_now_failed", user_id=user_id, error=str(exc))
@@ -1097,14 +1372,7 @@ def _handle_synergy_sync_now(
         run_id=run_id,
         user_id=user_id,
     )
-    return _response(
-        202,
-        {
-            "status": "started",
-            "run_id": run_id,
-            "execution_arn": execution.get("executionArn"),
-        },
-    )
+    return _response(202, {"status": "started", "run_id": run_id})
 
 
 def _handle_sync_configs_list(user_id: str, table_name: str) -> Dict[str, Any]:
@@ -1525,6 +1793,9 @@ def handler(event: Dict[str, Any], _: LambdaContext) -> Dict[str, Any]:
 
     if method == "GET" and path.endswith("/data-connectors/synergy/sync-status"):
         return _handle_synergy_sync_status(event)
+
+    if method == "GET" and path.endswith("/data-connectors/synergy/index-overview"):
+        return _handle_synergy_index_overview(event, user_id, table_name)
 
     if method == "GET" and path.endswith("/data-connectors/synergy/jobs"):
         return _handle_synergy_jobs(event, user_id, table_name)

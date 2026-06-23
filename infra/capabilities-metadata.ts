@@ -46,6 +46,12 @@ export interface CapabilityMetadata {
    * entitlement enforcement is attached (no plan/subscription model exists yet).
    */
   tier?: CapabilityTier;
+  /**
+   * If true, USING this capability draws on the credit ledger (consumption is
+   * metered + billed). Surfaced with a "Metered" badge in the Capabilities tab —
+   * LABEL ONLY, no entitlement enforcement (mirrors `tier`/`system_only` badges).
+   */
+  metered?: boolean;
 }
 
 export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
@@ -171,26 +177,40 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     dependencies: [],
   },
   {
-    flag: 'SYNERGY_FILE_PARITY',
-    title: 'Synergy File Parity',
+    flag: 'SYNERGY',
+    title: 'Synergy 12d',
     description:
-      'Richer Synergy 12d file experience in Files: revision/version/status columns, a lock indicator, in-job file search (name + contents), and per-file actions (details, version history, copy link). When off, Synergy browsing stays basic (jobs → folders → files + download).',
+      "Connect Numa to your Synergy 12d account — browse jobs/folders/files and search across all jobs (each person sees only what they're permitted in Synergy). Turn off to disable Synergy. Usage is credit-metered.",
+    icon: 'bi-building',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: ['DATA_CONNECTORS_ENABLED'],
+    metered: true,
+  },
+  // ── Synergy sub-capabilities (nested under SYNERGY) ────────────────
+  {
+    flag: 'SYNERGY_FILE_PARITY',
+    title: 'Synergy file browser',
+    description:
+      "Browse a Synergy 12d job's folders and files inside Numa — open a job, search within it, see file details and previous versions, and download. Nested under Synergy; turn off to hide just the file browser.",
     icon: 'bi-folder-symlink',
     system_only: false,
     dev_only: false,
-    enabled: false,
-    dependencies: ['DATA_CONNECTORS_ENABLED'],
+    enabled: true,
+    dependencies: ['SYNERGY'],
   },
   {
     flag: 'SYNERGY_KB_SEARCH',
-    title: 'Synergy Cross-Job Search',
+    title: 'Synergy cross-job search',
     description:
-      'Index the text of all Synergy 12d documents into a knowledge base so chat can search across every job (e.g. "which jobs use material X"). 12d has no cross-project search; this crawls and indexes document contents, respecting each user\'s Synergy permissions per document. Adds a selectable "Synergy" entry in the chat knowledge-base picker.',
+      'Cross-job AI search over your whole Synergy 12d account — Numa keeps an up-to-date, ACL-filtered index of your job documents so the assistant can answer questions across all jobs. Nested under Synergy; usage is credit-metered.',
     icon: 'bi-search',
     system_only: false,
     dev_only: false,
-    enabled: false,
-    dependencies: ['DATA_CONNECTORS_ENABLED'],
+    enabled: true,
+    dependencies: ['SYNERGY'],
+    metered: true,
   },
   {
     flag: 'DEVELOPER_MODE',

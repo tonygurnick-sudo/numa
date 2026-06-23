@@ -82,7 +82,7 @@ function getDefaultSharePointKB(): UserKB {
  * Synergy (12d) cross-job KB — the corpus crawled from a client's 12d Synergy
  * instance, indexed once and gated per-document by allowed_users. Backend listing
  * hides it (it's auto-managed), so we inject it into the picker here, only where
- * the crawler is enabled (SYNERGY_KB_SEARCH flag).
+ * Synergy is enabled (SYNERGY flag).
  */
 function getDefaultSynergyKB(): UserKB {
   return {
@@ -238,10 +238,12 @@ export function KnowledgeBaseProvider({ children }: { children: React.ReactNode 
         systemKbsToAdd.push(getDefaultSharePointKB());
       }
       // Synergy cross-job KB is auto-managed and hidden from the backend listing;
-      // surface it in the picker only where the crawler is explicitly enabled.
-      // Hidden-by-default: require the raw DEPLOY_ flag (getFlag defaults missing
-      // flags to true, which would wrongly show it on pre-flag deployments) AND
-      // the live flag so the admin Capabilities toggle is honoured.
+      // surface it in the picker only where the cross-job KB-search sub-capability
+      // is enabled. Hidden-by-default: require the raw DEPLOY_ flag (getFlag
+      // defaults missing flags to true, which would wrongly show it on pre-flag
+      // deployments) AND the live flag so the admin Capabilities toggle is
+      // honoured. The child flags are false in config.json whenever Synergy
+      // itself is off, so this implies the parent.
       const hasSynergyKb = sanitizedKbs.some((kb) => kb.kb_id === SYNERGY_KB_ID);
       const synergyKbDeployed =
         sessionStorage.getItem('DEPLOY_SYNERGY_KB_SEARCH') === 'true' && getFlag('SYNERGY_KB_SEARCH');

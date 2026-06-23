@@ -6,8 +6,8 @@
  * Why a wrapper: OAuth providers use the self-contained `RemoteProviderTree`
  * (inline expansion, its own state via `useRemoteTree`), but Synergy is PAT-
  * backed and uses a fundamentally different jobs → folders → files flow that
- * lives in `useRemoteBrowse`. This component picks the right inner experience
- * by provider id so the parent surface stays oblivious.
+ * is handled by `RemoteProviderInlineRows`. This component picks the right inner
+ * experience by provider id so the parent surface stays oblivious.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -149,8 +149,8 @@ function OAuthEmbeddedBrowser({
 }
 
 // ---------------------------------------------------------------------------
-// Synergy path — uses `useRemoteBrowse` because the jobs → folders → files
-// flow is meaningfully different from the OAuth tree and lives there already.
+// Synergy path — uses `RemoteProviderInlineRows` because the jobs → folders →
+// files flow is meaningfully different from the OAuth tree and lives there.
 // We pre-enter the Synergy view on mount, then render breadcrumbs + the
 // shared file browser in synergy modes.
 // ---------------------------------------------------------------------------
@@ -182,7 +182,9 @@ function SynergyEmbeddedBrowser({
   // covers the whole job (name + contents) regardless of how deep the user has
   // drilled. The query is reset whenever the job scope changes so it never
   // leaks across jobs.
-  // Search is part of SYNERGY_FILE_PARITY — hidden entirely when the flag is off.
+  // Search is part of the Synergy file-browser parity sub-capability —
+  // hidden entirely when the child flag is off (false in config.json whenever
+  // Synergy itself is off, so the child read implies the parent).
   const parityEnabled = getFlag('SYNERGY_FILE_PARITY');
   const insideJob = parityEnabled && subFolderPath.length > 0;
   const jobScopeId = insideJob ? subFolderPath[0].id : null;
@@ -250,8 +252,7 @@ function SynergyEmbeddedBrowser({
       {/* Render the Synergy tree using the SAME inline-rows component the
           User Files surface uses — chevron-expandable jobs → folders →
           subfolders + files, with per-row Load more and download buttons.
-          This replaces the old flat click-to-drill `RemoteFileBrowser`
-          rendering so the drill view's expansion behaviour matches the
+          The drill view's expansion behaviour matches the
           User Files dropdown exactly. When a search is active the same
           component renders the flat job-scoped results instead of the tree. */}
       <div className="finder-list">

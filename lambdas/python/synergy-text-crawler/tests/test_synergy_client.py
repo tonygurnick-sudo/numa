@@ -21,6 +21,34 @@ class TestBuildLimitId(unittest.TestCase):
         self.assertIsNone(Synergy._build_limit_id(""))
 
 
+class TestThrottle(unittest.TestCase):
+    """Proactive pacing caps the steady-state request rate so a full crawl
+    doesn't flood the customer's (typically on-prem) 12d server."""
+
+    def test_throttle_enforces_min_interval(self):
+        import time
+
+        c = Synergy("https://x", "pat")
+        c._min_interval = 0.05  # 50ms
+        c._last_request_at = 0.0
+        c._throttle()  # first call has no recent request; primes the clock
+        start = time.monotonic()
+        c._throttle()  # second call must wait out the interval
+        self.assertGreaterEqual(time.monotonic() - start, 0.04)
+        c.close()
+
+    def test_throttle_disabled_is_noop(self):
+        import time
+
+        c = Synergy("https://x", "pat")
+        c._min_interval = 0.0
+        start = time.monotonic()
+        c._throttle()
+        c._throttle()
+        self.assertLess(time.monotonic() - start, 0.02)
+        c.close()
+
+
 class TestTokenNormalization(unittest.TestCase):
     def test_bearer_prefix_stripped_once(self):
         s = Synergy("https://example.com", "Bearer abc123")

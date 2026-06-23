@@ -8,6 +8,7 @@ import type {
   SyncConfig,
   SynergyKbSyncConfig,
   SynergyKbSyncStatus,
+  SynergyIndexOverview,
 } from '../types/synergySync';
 
 type NumaGet = (url: string, params?: unknown, headers?: Record<string, string>) => Promise<unknown>;
@@ -118,7 +119,7 @@ export const SynergyDataConnectorService = {
   // ---------------------------------------------------------------------------
   // Cross-job KB crawler admin (sync-config / sync-status / sync-now). All
   // admin-gated server-side; the panel additionally gates on the admin group +
-  // DEPLOY_SYNERGY_KB_SEARCH flag.
+  // DEPLOY_SYNERGY flag.
   // ---------------------------------------------------------------------------
   async getKbSyncConfig(numaGet: NumaGet): Promise<SynergyKbSyncConfig> {
     return (await numaGet('/api/data-connectors/synergy/sync-config')) as SynergyKbSyncConfig;
@@ -135,11 +136,27 @@ export const SynergyDataConnectorService = {
     return (await numaGet('/api/data-connectors/synergy/sync-status')) as SynergyKbSyncStatus;
   },
 
+  async getIndexOverview(numaGet: NumaGet): Promise<SynergyIndexOverview> {
+    return (await numaGet('/api/data-connectors/synergy/index-overview')) as SynergyIndexOverview;
+  },
+
   async kbSyncNow(
     numaPost: NumaPost,
     scope?: { max_jobs?: number; job_ids?: string[] }
   ): Promise<{ status?: string; run_id?: string }> {
     return (await numaPost('/api/data-connectors/synergy/sync-now', scope ? { scope } : {})) as {
+      status?: string;
+      run_id?: string;
+    };
+  },
+
+  /**
+   * Manually queue a sync scoped to specific 12d job ids. Posts `job_ids` at the
+   * top level of the sync-now body — the data-connectors lambda forwards it as
+   * the coordinator's `scope.job_ids` (see synergy-overview-v2 contract).
+   */
+  async indexJob(numaPost: NumaPost, jobIds: string[]): Promise<{ status?: string; run_id?: string }> {
+    return (await numaPost('/api/data-connectors/synergy/sync-now', { job_ids: jobIds })) as {
       status?: string;
       run_id?: string;
     };

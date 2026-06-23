@@ -2,7 +2,7 @@
 
 import math
 
-from credit_pricing.credits import floor_credits
+from credit_pricing.credits import FLOOR_STEPS_PER_CREDIT, floor_credits
 from credit_pricing.voice_pricing import (
     VoiceRates,
     rates_from_config,
@@ -33,11 +33,17 @@ def test_contact_lens_adds_a_line():
 
 
 def test_floor_credits_over_voice_cost():
-    # A short call: cost 0.064 → floor at the 'low' margin (1.15), credit_usd 0.30.
+    # A short call: cost 0.064 → cost-recovery floor at the 'low' margin (1.15),
+    # credit_usd 0.30, rounded UP to the nearest tenth-credit (FLOOR_STEPS_PER_CREDIT).
     usd = voice_call_cost_usd(60, transcribed=True)
     credits = floor_credits(usd, margin=1.15, credit_usd=0.30)
-    assert credits == math.ceil(usd * 1.15 / 0.30)
-    assert credits >= 1
+    expected = (
+        math.ceil(usd * 1.15 / 0.30 * FLOOR_STEPS_PER_CREDIT) / FLOOR_STEPS_PER_CREDIT
+    )
+    assert credits == expected
+    assert credits > 0  # the floor always recovers a positive cost
+    # Margin floor holds: the charged value never dips below consumption x margin.
+    assert credits * 0.30 >= usd * 1.15
 
 
 def test_rates_from_config_override():

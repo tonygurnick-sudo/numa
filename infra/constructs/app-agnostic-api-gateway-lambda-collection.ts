@@ -1323,13 +1323,14 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       DATA_CONNECTORS_SETTINGS_TABLE_NAME: props.dataConnectorsSettingsTableName,
       DATA_CONNECTORS_SYNC_CONFIGS_TABLE_NAME: props.dataConnectorsSyncConfigsTableName,
       CONNECTOR_EVENT_CONFIGS_TABLE_NAME: props.connectorEventConfigsTableName,
-      // Synergy KB crawl Step Function (empty when the crawler is disabled). The
-      // "Sync now" route StartExecutions it with the caller's vault secret_id.
-      SYNERGY_CRAWL_STATE_MACHINE_ARN: props.synergyKbCrawlStateMachineArn ?? '',
-      // Crawl-state table + worker for sync-config/status routes and the
-      // on-visit incremental sync (all no-ops when empty).
+      // Synergy extraction queue (empty when the crawler is disabled). The
+      // on-visit hook enqueues a per-job message; "Sync now" invokes the
+      // coordinator to enumerate + enqueue.
+      SYNERGY_EXTRACT_QUEUE_URL: props.synergyExtractQueueUrl ?? '',
+      SYNERGY_COORDINATOR_FUNCTION_NAME: props.synergyCoordinatorFunctionName ?? '',
+      // Crawl-state table for sync-config/status routes + the on-visit grant
+      // rows (all no-ops when empty).
       SYNERGY_CRAWL_STATE_TABLE_NAME: props.synergyCrawlStateTableName ?? '',
-      SYNERGY_TEXT_CRAWLER_FUNCTION_NAME: props.synergyTextCrawlerFunctionName ?? '',
     } as Record<string, string>;
 
     const dataConnectorsPolicy = [
@@ -1382,29 +1383,33 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         actions: ['dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:Query'],
         resources: [`arn:aws:dynamodb:*:*:table/${props.connectorEventConfigsTableName}`],
       },
-      {
-        // "Sync now" triggers the Synergy KB crawl Step Function.
-        effect: 'Allow',
-        actions: ['states:StartExecution'],
-        resources: [`arn:aws:states:*:*:stateMachine:numa-${props.clientName}*synergy-kb-crawl`],
-      },
-      // Crawl-state table (sync-config/status + on-visit grant rows) and the
-      // worker invoke — only when the Synergy KB crawler is provisioned.
+      // On-visit hook enqueues onto the Synergy extraction queue; "Sync now"
+      // invokes the coordinator. Crawl-state table backs sync-config/status +
+      // on-visit grant rows. All only when the crawler is provisioned.
+      ...(props.synergyExtractQueueArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['sqs:SendMessage'],
+              resources: [props.synergyExtractQueueArn],
+            },
+          ]
+        : []),
+      ...(props.synergyCoordinatorFunctionArn
+        ? [
+            {
+              effect: 'Allow',
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.synergyCoordinatorFunctionArn],
+            },
+          ]
+        : []),
       ...(props.synergyCrawlStateTableArn
         ? [
             {
               effect: 'Allow',
               actions: ['dynamodb:GetItem', 'dynamodb:UpdateItem', 'dynamodb:Query'],
               resources: [props.synergyCrawlStateTableArn, `${props.synergyCrawlStateTableArn}/index/*`],
-            },
-          ]
-        : []),
-      ...(props.synergyTextCrawlerFunctionArn
-        ? [
-            {
-              effect: 'Allow',
-              actions: ['lambda:InvokeFunction'],
-              resources: [props.synergyTextCrawlerFunctionArn],
             },
           ]
         : []),
@@ -1441,109 +1446,147 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       route: { verb: 'DELETE', path: 'data-connectors/{connector_id}' },
     });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-jobs', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/jobs' },
-    });
+    // ── Synergy CONNECTOR routes (gated on synergy) ──────────────────────────
+    // The crawl/index control plane: manual "Sync now" + admin crawl config +
+    // run status. Only deploy when the single Synergy flag is on — when off
+    // the crawler construct (state machine, worker, state table) isn't created
+    // either, so these routes would have empty ARNs and 400 at runtime anyway.
+    if (props.synergyEnabled) {
+      // Manual "Sync now" — kicks off the Synergy → Bedrock KB crawl Step Function.
+      this.addLambdaFunction(this, 'data-connectors-synergy-sync-now', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'POST', path: 'data-connectors/synergy/sync-now' },
+      });
 
-    // Manual "Sync now" — kicks off the Synergy → Bedrock KB crawl Step Function.
-    this.addLambdaFunction(this, 'data-connectors-synergy-sync-now', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'POST', path: 'data-connectors/synergy/sync-now' },
-    });
+      // Admin crawl config + run status (admin-gated in the handler).
+      this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-get', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/sync-config' },
+      });
 
-    // Admin crawl config + run status (admin-gated in the handler).
-    this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-get', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/sync-config' },
-    });
+      this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-put', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'PUT', path: 'data-connectors/synergy/sync-config' },
+      });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-sync-config-put', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'PUT', path: 'data-connectors/synergy/sync-config' },
-    });
+      this.addLambdaFunction(this, 'data-connectors-synergy-sync-status', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/sync-status' },
+      });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-sync-status', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/sync-status' },
-    });
+      // Per-job index overview for the admin Synergy config — same codebase,
+      // env, and crawl-state IAM as sync-status (no new zip / CI matrix entry).
+      this.addLambdaFunction(this, 'data-connectors-synergy-index-overview', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        // The overview handler SCANs the crawl-state table (all JOB#/FILE# rows
+        // to build the per-job rollup); the shared dataConnectorsPolicy only
+        // grants GetItem/Query/UpdateItem. Add a read-only Scan scoped to this
+        // one synergy table — only this lambda needs it.
+        additionalPolicyStatements: [
+          ...dataConnectorsPolicy,
+          ...(props.synergyCrawlStateTableArn
+            ? [
+                {
+                  effect: 'Allow',
+                  actions: ['dynamodb:Scan'],
+                  resources: [props.synergyCrawlStateTableArn],
+                },
+              ]
+            : []),
+        ],
+        route: { verb: 'GET', path: 'data-connectors/synergy/index-overview' },
+      });
+    }
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-job-folders', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/jobs/{job_id}/folders' },
-    });
+    // ── Synergy REMOTE FILES BROWSER routes (gated on synergy) ────────────────
+    // Interactive browse + read-parity surface: jobs → folders → files, plus the
+    // rich parity routes (job-scoped search, details, version history, weblink).
+    if (props.synergyEnabled) {
+      this.addLambdaFunction(this, 'data-connectors-synergy-jobs', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/jobs' },
+      });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-folder-items', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/folders/{folder_id}/items' },
-    });
+      this.addLambdaFunction(this, 'data-connectors-synergy-job-folders', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/jobs/{job_id}/folders' },
+      });
 
-    // Synergy file read-parity routes (job-scoped search, details, version
-    // history, weblink). Order in the handler matters — the specific suffixes
-    // (/search, /history, /weblink) are matched before the bare /files/{id}.
-    this.addLambdaFunction(this, 'data-connectors-synergy-file-search', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/files/search' },
-    });
+      this.addLambdaFunction(this, 'data-connectors-synergy-folder-items', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/folders/{folder_id}/items' },
+      });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-file-history', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/history' },
-    });
+      // Synergy file read-parity routes (job-scoped search, details, version
+      // history, weblink). Order in the handler matters — the specific suffixes
+      // (/search, /history, /weblink) are matched before the bare /files/{id}.
+      this.addLambdaFunction(this, 'data-connectors-synergy-file-search', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/files/search' },
+      });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-file-weblink', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/weblink' },
-    });
+      this.addLambdaFunction(this, 'data-connectors-synergy-file-history', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/history' },
+      });
 
-    this.addLambdaFunction(this, 'data-connectors-synergy-file-details', {
-      addAuthorizer: true,
-      lambdaDirectory: 'python/data-connectors',
-      handler: 'lambda_function.handler',
-      environment: dataConnectorsEnv,
-      additionalPolicyStatements: dataConnectorsPolicy,
-      route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}' },
-    });
+      this.addLambdaFunction(this, 'data-connectors-synergy-file-weblink', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}/weblink' },
+      });
+
+      this.addLambdaFunction(this, 'data-connectors-synergy-file-details', {
+        addAuthorizer: true,
+        lambdaDirectory: 'python/data-connectors',
+        handler: 'lambda_function.handler',
+        environment: dataConnectorsEnv,
+        additionalPolicyStatements: dataConnectorsPolicy,
+        route: { verb: 'GET', path: 'data-connectors/synergy/files/{file_id}' },
+      });
+    }
 
     this.addLambdaFunction(this, 'data-connectors-sync-configs-list', {
       addAuthorizer: true,
@@ -3190,16 +3233,25 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   capabilitiesTableName: string;
   /** Data connector selection configs table name. */
   dataConnectorsSyncConfigsTableName: string;
-  /** Synergy KB crawl Step Function ARN (empty string when the crawler is
-   *  disabled). The data-connectors "Sync now" route StartExecutions it. */
-  synergyKbCrawlStateMachineArn?: string;
+  /** Synergy extraction SQS FIFO queue URL/ARN ('' when the crawler is
+   *  disabled). The on-visit hook enqueues a per-job message onto it. */
+  synergyExtractQueueUrl?: string;
+  synergyExtractQueueArn?: string;
   /** Synergy crawl-state table ('' when disabled) — sync-config/status routes
    *  + the on-visit grant/throttle rows. */
   synergyCrawlStateTableName?: string;
   synergyCrawlStateTableArn?: string;
-  /** Synergy crawl worker Lambda ('' when disabled) — on-visit async invoke. */
-  synergyTextCrawlerFunctionName?: string;
-  synergyTextCrawlerFunctionArn?: string;
+  /** Synergy coordinator Lambda ('' when disabled) — "Sync now" invokes it to
+   *  enumerate + enqueue. */
+  synergyCoordinatorFunctionName?: string;
+  synergyCoordinatorFunctionArn?: string;
+  /** Single Synergy flag (synergy && dataConnectorsEnabled). Gates EVERY Synergy
+   *  route: the crawl/index control plane (sync-now, sync-config GET/PUT,
+   *  sync-status) AND the remote files browser + read-parity routes (jobs, job
+   *  folders, folder items, file search/history/weblink/details). They only
+   *  deploy when Synergy is enabled — mirrors the crawler construct, provisioned
+   *  on the same flag. */
+  synergyEnabled?: boolean;
   /** Admin-side gate. When false, the unified integrations catalog returns
    *  no native rows; admins can't add them and users don't see them. The
    *  flag is the only way to suppress natives entirely — there's no
