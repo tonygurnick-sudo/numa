@@ -8,12 +8,12 @@ Deployer-account streaming relay for the **Numa Standard Model** (opaque id
 
 Workspace chat can run a cheap non-Anthropic model surfaced to client accounts
 under the opaque id `numa-standard-model`. The real upstream
-(`deepseek/deepseek-v4-flash` via OpenRouter → Novita) and the OpenRouter API
+(`xiaomi/mimo-v2.5-pro` via OpenRouter → Novita) and the OpenRouter API
 key must **never** touch a client account. So the per-tenant AgentCore container
 reaches this relay cross-account (validated via STS proof, exactly like
 `numa-email-sender`), and the relay holds the secret mapping + key.
 
-The strings `deepseek` / `novita` and the OpenRouter key appear nowhere else in
+The strings `xiaomi` / `mimo` / `novita` and the OpenRouter key appear nowhere else in
 the repo — only here (contracts.md §1).
 
 ## Flow
@@ -55,7 +55,7 @@ real cause is logged here (deployer account) only.
 | `OPENROUTER_API_KEY`                 | Bearer token (from deployer Secrets Manager).                      |
 | `CLIENT_CONFIG_TABLE_NAME`           | `numa-client-config` (account allowlist scan).                     |
 | `NUMA_STANDARD_MODEL_ID`             | Opaque id the proxy sends (default `numa-standard-model`).         |
-| `NUMA_STANDARD_MODEL_UPSTREAM`       | Real upstream id (default `deepseek/deepseek-v4-flash`).           |
+| `NUMA_STANDARD_MODEL_UPSTREAM`       | Real upstream id (default `xiaomi/mimo-v2.5-pro`).                 |
 | `NUMA_STANDARD_MODEL_PROVIDER_ORDER` | Comma-separated provider pin (default `novita`).                   |
 | `NUMA_STANDARD_MODEL_RELAY_SECRET`   | Optional shared-secret gate (defence in depth).                    |
 | `OPENROUTER_BASE_URL`                | Override OpenRouter base (default `https://openrouter.ai/api/v1`). |

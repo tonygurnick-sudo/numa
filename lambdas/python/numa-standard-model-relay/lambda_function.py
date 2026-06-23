@@ -2,8 +2,8 @@
 Numa Standard Model relay (deployer account).
 
 This is the **only** place in the Numa codebase that knows the real upstream
-behind the opaque ``numa-standard-model`` id. The strings ``deepseek`` /
-``novita`` and the OpenRouter API key exist nowhere else — the per-tenant
+behind the opaque ``numa-standard-model`` id. The strings ``xiaomi`` /
+``mimo`` / ``novita`` and the OpenRouter API key exist nowhere else — the per-tenant
 container, the trace, credits, and the frontend all see only
 ``numa-standard-model`` (contracts.md §1).
 
@@ -18,7 +18,7 @@ The in-container proxy POSTs OpenAI Chat Completions JSON with
   1. Validates the ``x-numa-sts-proof`` header **before** opening the upstream
      stream — SSRF allowlist → server-side fetch → parse Account+Arn → role
      regex ``numa-.*-workspace-chat-agentcore`` → account ∈ numa-client-config.
-  2. Maps ``numa-standard-model`` → ``deepseek/deepseek-v4-flash``; attaches the
+  2. Maps ``numa-standard-model`` → ``xiaomi/mimo-v2.5-pro``; attaches the
      provider pin ``{order:["novita"], allow_fallbacks:true, data_collection:
      "deny"}``; forces ``reasoning.enabled`` and ``usage.include``.
   3. Injects ``Authorization: Bearer <OPENROUTER_API_KEY>`` + attribution.
@@ -89,7 +89,7 @@ def _get_openrouter_key() -> str:
 # pinned in contracts.md §1.
 NUMA_STANDARD_MODEL_ID = os.environ.get("NUMA_STANDARD_MODEL_ID", "numa-standard-model")
 UPSTREAM_MODEL_ID = os.environ.get(
-    "NUMA_STANDARD_MODEL_UPSTREAM", "deepseek/deepseek-v4-flash"
+    "NUMA_STANDARD_MODEL_UPSTREAM", "xiaomi/mimo-v2.5-pro"
 )
 
 # Provider routing pin. Novita preferred; allow_fallbacks=true so OpenRouter can
@@ -118,7 +118,7 @@ _UPSTREAM_READ_TIMEOUT = 300.0
 _KEEPALIVE_SECS = 30
 _KEEPALIVE_COMMENT = b": keepalive\n\n"
 
-# Generic opaque message — NEVER name OpenRouter/DeepSeek/Novita.
+# Generic opaque message — NEVER name OpenRouter / the upstream model / Novita.
 _OPAQUE_UNAVAILABLE = (
     "The Standard model is temporarily unavailable — switch to Premium or try "
     "again shortly."
