@@ -60,6 +60,15 @@ export interface WorkspaceChatAgentProxyProps {
   activeRunsTableName?: string;
   /** Active-runs mirror table ARN (for IAM read permission) */
   activeRunsTableArn?: string;
+  /**
+   * Client app origin (e.g. https://nd-labs.numa.arcanum.ai) used to restrict
+   * the Function URL CORS allow-list (BUG-279). The Function URL sits behind
+   * CloudFront for normal traffic, but the frontend also hits it directly for
+   * streaming — so the browser origin is the client app domain. When omitted,
+   * CORS falls back to '*' to preserve the previous (permissive) behaviour for
+   * stacks that don't pass it yet.
+   */
+  appOrigin?: string;
 }
 
 /**
@@ -247,13 +256,18 @@ export class WorkspaceChatAgentProxy extends Construct {
     });
 
     // Create Function URL with streaming support
-    // CORS configured for direct browser access (bypassing CloudFront for streaming)
+    // CORS configured for direct browser access (bypassing CloudFront for streaming).
+    // BUG-279: restrict allowed origins to the client app domain instead of '*'.
+    // Only the client's own frontend ever calls this URL from a browser; locking
+    // the origin down stops other sites from making cross-origin browser requests.
+    // Falls back to '*' if appOrigin isn't supplied (backward compatible).
+    const allowOrigins = props.appOrigin ? [props.appOrigin] : ['*'];
     const fnUrl = new LambdaFunctionUrl(this, 'function-url', {
       functionName: proxyFn.lambda.functionName,
       authorizationType: 'NONE', // CloudFront handles auth via secret header
       invokeMode: 'RESPONSE_STREAM',
       cors: {
-        allowOrigins: ['*'], // TODO: Restrict to specific domains in production
+        allowOrigins,
         allowMethods: ['*'], // All methods (GET, POST, OPTIONS handled automatically)
         allowHeaders: ['*'], // All headers
         allowCredentials: false,

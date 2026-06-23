@@ -19,6 +19,7 @@ from numa_workspace_agent.agent_types import AgentTypeConfig, get_agent_type_con
 from numa_workspace_agent.hooks import (
     audit_hook,
     compaction_hook,
+    credential_scrub_hook,
     image_resize_hook,
     numa_call_counter_reset_hook,
     numa_call_limit_notice_hook,
@@ -494,6 +495,66 @@ MAX_TURNS = int(os.environ.get("MAX_TURNS", "50"))
 
 # Maximum thinking tokens
 MAX_THINKING_TOKENS = int(os.environ.get("MAX_THINKING_TOKENS", "10000"))
+
+# ── Subprocess env scrub (TASK-151) ──────────────────────────────────────────
+# The Claude Agent SDK builds the CLI subprocess env as
+# `{**os.environ, **options.env, ...}` (see subprocess_cli.py): it ALWAYS merges
+# the container's full process environment, then layers our explicit `env` on
+# top. There is no SDK "env allow-list" primitive — the only way to keep an
+# inherited container secret out of the subprocess (and therefore out of the
+# agent's Bash shell, which inherits the CLI's env) is to OVERWRITE it in
+# `options.env`. We can't blanket-drop `AWS_*`: on the default Bedrock path the
+# CLI calls Bedrock directly and needs those creds, and the numa CLI needs
+# `NUMA_LOCAL_AWS_*` + `NUMA_IDENTITY_TOKEN` + `AWS_REGION`. So this is a
+# surgical DENY set of vars that are pure secrets to the workspace and are read
+# ONLY by the main Python process (module-load or the in-container proxy), never
+# by the CLI subprocess or the numa CLI. Each is forced to "" in the env dict so
+# the SDK's `{**os.environ, ...}` merge can't leak the real value to the agent.
+#
+# NOT in this set (intentionally): AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
+# AWS_SESSION_TOKEN (CLI needs them for Bedrock), NUMA_LOCAL_AWS_* (numa CLI
+# Lambda auth), NUMA_IDENTITY_TOKEN (numa CLI identity), AWS_REGION.
+SUBPROCESS_ENV_SCRUB_KEYS: tuple[str, ...] = (
+    # CloudFront origin shared secret — main.py validates inbound requests with
+    # it; the agent must never see it.
+    "CLOUDFRONT_SECRET",
+    # Cognito pool identifiers — only used by the main process for token
+    # verification config; not needed by the CLI or numa CLI.
+    "COGNITO_USER_POOL_ID",
+    "COGNITO_USER_POOL_CLIENT_ID",
+    # Scheduled-run shared secret (proxy → container auth for scheduled runs).
+    "SCHEDULE_RUNNER_SECRET",
+    "SCHEDULE_RUNNER_SHARED_SECRET",
+    # Numa Standard Model relay secret + the loopback proxy token. The proxy
+    # reads these from os.environ in the MAIN process; on the standard-model
+    # path the SDK gets a separate loopback ANTHROPIC_API_KEY placeholder set
+    # explicitly below, so the real proxy token never belongs in the subprocess.
+    "NUMA_STANDARD_MODEL_RELAY_SECRET",
+    "NUMA_STANDARD_MODEL_PROXY_TOKEN",
+    # The user's raw Cognito id token, mirrored to os.environ by main.py for
+    # in-process use. The numa CLI authenticates via NUMA_IDENTITY_TOKEN, not
+    # this — so NUMA_USER_ID_TOKEN is pure secret to the subprocess.
+    "NUMA_USER_ID_TOKEN",
+)
+
+
+def _scrub_sensitive_env(env: dict[str, str]) -> None:
+    """Overwrite inherited container secrets with "" in the subprocess env dict.
+
+    Mutates `env` in place. Setting a key to "" (rather than omitting it) is the
+    operative step: the SDK merges `{**os.environ, **env}`, so an omitted key
+    keeps its inherited container value — only an explicit override wins.
+
+    Every key in SUBPROCESS_ENV_SCRUB_KEYS is unconditionally forced to "":
+    none of them should ever carry a value into the CLI subprocess (they are
+    read only by the main Python process / in-container proxy). Forcing the
+    value — even if one were somehow already present in `env` — is the
+    fail-closed choice; the alternative (skip-if-present) would let a leak
+    through if a sensitive key ever appeared in the env dict.
+    """
+    for key in SUBPROCESS_ENV_SCRUB_KEYS:
+        env[key] = ""
+
 
 # ── Tool Configuration ─────────────────────────────────────────────────────────
 
@@ -1047,6 +1108,16 @@ def create_agent_options(
     if cross_account_creds:
         env.update(cross_account_creds)
 
+    # TASK-151: scrub inherited container secrets the CLI subprocess (and the
+    # agent's Bash shell) does not need. The SDK merges {**os.environ, **env},
+    # so this OVERWRITE — not omission — is what keeps CLOUDFRONT_SECRET,
+    # COGNITO_*, the standard-model relay/proxy secrets, the schedule-runner
+    # secret, and the raw Cognito id token out of the subprocess. AWS_* and the
+    # numa-CLI identity/local-cred vars are intentionally left intact (the CLI
+    # needs them — see SUBPROCESS_ENV_SCRUB_KEYS). Runs BEFORE the standard-model
+    # branch, which sets its own loopback ANTHROPIC_API_KEY placeholder.
+    _scrub_sensitive_env(env)
+
     # Propagate env vars to os.environ for in-process MCP tools.
     # The env dict in ClaudeAgentOptions only reaches subprocess-based tools,
     # but MCP servers created via create_sdk_mcp_server run in-process and
@@ -1275,6 +1346,11 @@ def create_agent_options(
                 "PostToolUse": [
                     HookMatcher(
                         hooks=[
+                            # Redact credential-shaped strings (AWS keys, JWTs)
+                            # from tool output BEFORE the model — and therefore
+                            # the trace and frontend — sees it. Runs first so
+                            # downstream PostToolUse hooks observe scrubbed text.
+                            credential_scrub_hook,
                             numa_call_limit_notice_hook,
                             workflow_run_tracker_hook,
                             audit_hook,
@@ -1302,6 +1378,12 @@ def create_agent_options(
                 "PostToolUse": [
                     HookMatcher(
                         hooks=[
+                            # Credential scrub still applies for hooks-off /
+                            # locked-down types (Nolia pipeline phases process
+                            # UNTRUSTED documents — output redaction matters most
+                            # here). It is output-only, never blocks a tool, so
+                            # it's safe even where the PreToolUse denylist is off.
+                            credential_scrub_hook,
                             numa_call_limit_notice_hook,
                             workflow_run_tracker_hook,
                             audit_hook,

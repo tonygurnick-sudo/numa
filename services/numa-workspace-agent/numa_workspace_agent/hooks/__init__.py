@@ -1,5 +1,6 @@
 """Claude Agent SDK hooks for Numa Workspace Agent."""
 
+from numa_workspace_agent.hooks.credential_scrub import credential_scrub_hook
 from numa_workspace_agent.hooks.image_resize import image_resize_hook
 from numa_workspace_agent.hooks.numa_call_counter import (
     numa_call_counter_reset_hook,
@@ -19,6 +20,7 @@ __all__ = [
     "security_hook",
     "audit_hook",
     "compaction_hook",
+    "credential_scrub_hook",
     "image_resize_hook",
     "param_aliases_hook",
     "workflow_guard_hook",

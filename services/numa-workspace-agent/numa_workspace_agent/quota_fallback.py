@@ -60,6 +60,58 @@ def is_daily_quota_error(text: Optional[str]) -> bool:
     return any(phrase in lower for phrase in _DAILY_QUOTA_PHRASES)
 
 
+# Transient Bedrock failures worth a short bounded retry (TKT-221). These are
+# server-side / rate-limit conditions that usually clear within a second or two,
+# distinct from a daily-quota exhaustion (handled by the fallback-model path) or
+# a deterministic 4xx (validation, access-denied) that retrying can't fix.
+_TRANSIENT_BEDROCK_PHRASES = (
+    "throttlingexception",
+    "throttling",
+    "too many requests",
+    "rate exceeded",
+    "rate limit",
+    "serviceunavailable",
+    "service unavailable",
+    "internalserver",
+    "internal server error",
+    "modelnotreadyexception",
+    "model not ready",
+    "modeltimeout",
+    "read timed out",
+    "readtimeout",
+    "connection reset",
+    "connection aborted",
+    "timeout",
+    "timed out",
+    "503",
+    "500",
+)
+
+# Status-code substrings that signal a transient throttle even without a phrase.
+_TRANSIENT_STATUS_HINTS = ("429", "503", "500", "529")
+
+
+def is_transient_bedrock_error(text: Optional[str]) -> bool:
+    """Check if error text indicates a transient, retryable Bedrock failure.
+
+    True for throttling/429-non-daily, 503/500 server errors, and timeouts —
+    conditions a short exponential backoff can recover from. Deliberately
+    excludes daily-quota 429s (``is_daily_quota_error`` owns those; retrying the
+    same model won't help — the caller swaps to the fallback model instead) and
+    plain client errors (validation, access-denied), which retrying can't fix.
+    """
+    if not text:
+        return False
+    lower = text.lower()
+    # A daily-quota 429 is NOT transient — let the fallback-model path own it.
+    if is_daily_quota_error(text):
+        return False
+    if any(phrase in lower for phrase in _TRANSIENT_BEDROCK_PHRASES):
+        return True
+    # A bare 429 without daily-quota wording is a transient RPM/TPM throttle.
+    return any(code in lower for code in _TRANSIENT_STATUS_HINTS)
+
+
 def mark_quota_exhausted(model_id: str) -> bool:
     """Cache that a model's daily Bedrock quota is exhausted.
 

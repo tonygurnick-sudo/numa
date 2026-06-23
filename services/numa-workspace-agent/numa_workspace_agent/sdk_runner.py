@@ -37,6 +37,7 @@ from numa_workspace_agent.agent_config import AgentConfig
 from numa_workspace_agent.prompts import augment_prompt_with_context
 from numa_workspace_agent.quota_fallback import (
     is_daily_quota_error,
+    is_transient_bedrock_error,
     mark_quota_exhausted,
     resolve_model_with_fallback,
 )
@@ -64,6 +65,37 @@ from numa_workspace_agent.workspace import (
 logger = structlog.get_logger()
 
 RunKey = tuple[str, str, str]
+
+# ── Transient-Bedrock retry bounds (TKT-221) ──────────────────────────────────
+# Bounded exponential backoff around the non-streaming model run for transient
+# Bedrock failures (throttling/429/503/timeout) that the SDK's own internal
+# retry budget didn't absorb. Only applied when nothing was produced yet — i.e.
+# the failure landed before any assistant text / tool use, so re-running the
+# turn from scratch is idempotent (no half-applied tool side-effects). Tunable
+# via env for ops without a redeploy.
+BEDROCK_TRANSIENT_MAX_RETRIES = int(
+    os.environ.get("NUMA_BEDROCK_TRANSIENT_MAX_RETRIES", "3")
+)
+BEDROCK_TRANSIENT_BASE_DELAY_S = float(
+    os.environ.get("NUMA_BEDROCK_TRANSIENT_BASE_DELAY_S", "1.0")
+)
+BEDROCK_TRANSIENT_MAX_DELAY_S = float(
+    os.environ.get("NUMA_BEDROCK_TRANSIENT_MAX_DELAY_S", "8.0")
+)
+
+
+def _transient_backoff_delay(attempt: int) -> float:
+    """Exponential backoff (with a small fixed jitter) for retry `attempt`.
+
+    attempt is 1-based: attempt 1 → base, attempt 2 → 2×base, capped at
+    BEDROCK_TRANSIENT_MAX_DELAY_S. Jitter is deterministic-ish (derived from
+    attempt) to avoid importing random for a non-security delay and to keep the
+    behaviour test-friendly.
+    """
+    raw = BEDROCK_TRANSIENT_BASE_DELAY_S * (2 ** (attempt - 1))
+    capped = min(raw, BEDROCK_TRANSIENT_MAX_DELAY_S)
+    jitter = 0.1 * (attempt % 3)
+    return capped + jitter
 
 
 @dataclass
@@ -1607,120 +1639,177 @@ async def run_claude_sdk(
     _daily_quota_hit = False
 
     try:
-        async with ClaudeSDKClient(options=options) as client:
-            await client.query(augmented_prompt)
+        # ── Transient-Bedrock bounded retry (TKT-221) ─────────────────────
+        # Re-run the primary model turn on a transient Bedrock failure
+        # (throttling/429/503/timeout) that the SDK's own retry didn't absorb,
+        # but ONLY while nothing has been produced — if the failure landed
+        # after assistant text or a tool call, re-running risks duplicate
+        # side-effects, so we let it propagate to the outer error handler.
+        _transient_attempt = 0
+        while True:
+            try:
+                async with ClaudeSDKClient(options=options) as client:
+                    await client.query(augmented_prompt)
 
-            async for message in client.receive_response():
-                msg_type = type(message).__name__
+                    async for message in client.receive_response():
+                        msg_type = type(message).__name__
 
-                # Record in stream log
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            stream_log.record_text(block.text)
-                            collected_text.append(block.text)
-                            logger.debug(
-                                "Assistant text",
-                                _name="SDK_LIVE_TEXT",
-                                phase="sdk",
-                                conversation_id=conversation_id,
-                                text=block.text[:300],
-                            )
-                        elif isinstance(block, ThinkingBlock):
-                            stream_log.record_thinking(block.thinking)
-                            logger.debug(
-                                "Assistant thinking",
-                                _name="SDK_LIVE_THINKING",
-                                phase="sdk",
-                                conversation_id=conversation_id,
-                                thinking=block.thinking[:200],
-                            )
-                        elif isinstance(block, ToolUseBlock):
-                            stream_log.record_tool_start(
-                                block.id,
-                                block.name,
-                                block.input if isinstance(block.input, dict) else None,
-                            )
-                            logger.debug(
-                                "Tool call",
-                                _name="SDK_LIVE_TOOL",
-                                phase="sdk",
-                                conversation_id=conversation_id,
-                                tool_name=block.name,
-                            )
-                elif isinstance(message, UserMessage):
-                    content = message.content
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, ToolResultBlock):
-                                stream_log.record_tool_result(
-                                    block.tool_use_id,
-                                    block.content,
-                                    block.is_error,
+                        # Record in stream log
+                        if isinstance(message, AssistantMessage):
+                            for block in message.content:
+                                if isinstance(block, TextBlock):
+                                    stream_log.record_text(block.text)
+                                    collected_text.append(block.text)
+                                    logger.debug(
+                                        "Assistant text",
+                                        _name="SDK_LIVE_TEXT",
+                                        phase="sdk",
+                                        conversation_id=conversation_id,
+                                        text=block.text[:300],
+                                    )
+                                elif isinstance(block, ThinkingBlock):
+                                    stream_log.record_thinking(block.thinking)
+                                    logger.debug(
+                                        "Assistant thinking",
+                                        _name="SDK_LIVE_THINKING",
+                                        phase="sdk",
+                                        conversation_id=conversation_id,
+                                        thinking=block.thinking[:200],
+                                    )
+                                elif isinstance(block, ToolUseBlock):
+                                    stream_log.record_tool_start(
+                                        block.id,
+                                        block.name,
+                                        (
+                                            block.input
+                                            if isinstance(block.input, dict)
+                                            else None
+                                        ),
+                                    )
+                                    logger.debug(
+                                        "Tool call",
+                                        _name="SDK_LIVE_TOOL",
+                                        phase="sdk",
+                                        conversation_id=conversation_id,
+                                        tool_name=block.name,
+                                    )
+                        elif isinstance(message, UserMessage):
+                            content = message.content
+                            if isinstance(content, list):
+                                for block in content:
+                                    if isinstance(block, ToolResultBlock):
+                                        stream_log.record_tool_result(
+                                            block.tool_use_id,
+                                            block.content,
+                                            block.is_error,
+                                        )
+
+                        # Serialize and write to trace
+                        serialized = serialize_message(message)
+
+                        if isinstance(message, ResultMessage):
+                            captured_session_id = message.session_id
+                            serialized["session_id"] = captured_session_id
+                            stream_log.finalize(message)
+                            serialized = override_result_cost(serialized, stream_log)
+                            usage = getattr(message, "usage", {}) or {}
+                            result_meta = {
+                                "num_turns": message.num_turns,
+                                "total_cost_usd": message.total_cost_usd,
+                                "duration_ms": message.duration_ms,
+                                "is_error": message.is_error,
+                                "input_tokens": usage.get("input_tokens", 0) or 0,
+                                "output_tokens": usage.get("output_tokens", 0) or 0,
+                                "cache_read_tokens": usage.get(
+                                    "cache_read_input_tokens", 0
                                 )
+                                or 0,
+                                "cache_creation_tokens": usage.get(
+                                    "cache_creation_input_tokens", 0
+                                )
+                                or 0,
+                            }
+                            logger.info(
+                                "SDK run result",
+                                _name="SDK_RUN_RESULT",
+                                phase="sdk",
+                                conversation_id=conversation_id,
+                                duration_ms=message.duration_ms,
+                                num_turns=message.num_turns,
+                                total_cost_usd=message.total_cost_usd,
+                                is_error=message.is_error,
+                            )
 
-                # Serialize and write to trace
-                serialized = serialize_message(message)
+                            # Detect daily quota exhaustion (429 "per day")
+                            if message.is_error:
+                                _error_texts = [message.result or ""]
+                                _error_texts.extend(
+                                    e.text or ""
+                                    for e in stream_log.entries
+                                    if e.entry_type == "text"
+                                )
+                                if any(is_daily_quota_error(t) for t in _error_texts):
+                                    _daily_quota_hit = True
 
-                if isinstance(message, ResultMessage):
-                    captured_session_id = message.session_id
-                    serialized["session_id"] = captured_session_id
-                    stream_log.finalize(message)
-                    serialized = override_result_cost(serialized, stream_log)
-                    usage = getattr(message, "usage", {}) or {}
-                    result_meta = {
-                        "num_turns": message.num_turns,
-                        "total_cost_usd": message.total_cost_usd,
-                        "duration_ms": message.duration_ms,
-                        "is_error": message.is_error,
-                        "input_tokens": usage.get("input_tokens", 0) or 0,
-                        "output_tokens": usage.get("output_tokens", 0) or 0,
-                        "cache_read_tokens": usage.get("cache_read_input_tokens", 0)
-                        or 0,
-                        "cache_creation_tokens": usage.get(
-                            "cache_creation_input_tokens", 0
-                        )
-                        or 0,
-                    }
-                    logger.info(
-                        "SDK run result",
-                        _name="SDK_RUN_RESULT",
-                        phase="sdk",
-                        conversation_id=conversation_id,
-                        duration_ms=message.duration_ms,
-                        num_turns=message.num_turns,
-                        total_cost_usd=message.total_cost_usd,
-                        is_error=message.is_error,
-                    )
+                        if (
+                            isinstance(message, SystemMessage)
+                            and message.subtype == "init"
+                        ):
+                            if "session_id" in message.data:
+                                captured_session_id = message.data["session_id"]
 
-                    # Detect daily quota exhaustion (429 "per day")
-                    if message.is_error:
-                        _error_texts = [message.result or ""]
-                        _error_texts.extend(
-                            e.text or ""
-                            for e in stream_log.entries
-                            if e.entry_type == "text"
-                        )
-                        if any(is_daily_quota_error(t) for t in _error_texts):
-                            _daily_quota_hit = True
+                        if (
+                            isinstance(message, SystemMessage)
+                            and message.subtype == "compact_boundary"
+                        ):
+                            logger.warning(
+                                "Context compaction occurred",
+                                _name="SDK_COMPACTION",
+                                phase="sdk",
+                                conversation_id=conversation_id,
+                            )
 
-                if isinstance(message, SystemMessage) and message.subtype == "init":
-                    if "session_id" in message.data:
-                        captured_session_id = message.data["session_id"]
+                        with trace_path.open("a", encoding="utf-8") as f:
+                            f.write(json.dumps(serialized) + "\n")
 
+                # Run completed (success or in-band error result) — leave the
+                # transient-retry loop.
+                break
+            except Exception as _run_exc:  # noqa: BLE001 — inspected below
+                _exc_str = str(_run_exc)
+                _produced = bool(collected_text) or bool(result_meta)
+                _retryable = (
+                    is_transient_bedrock_error(_exc_str)
+                    or is_transient_bedrock_error(getattr(_run_exc, "stderr", None))
+                    or is_transient_bedrock_error(getattr(_run_exc, "stdout", None))
+                )
                 if (
-                    isinstance(message, SystemMessage)
-                    and message.subtype == "compact_boundary"
+                    _retryable
+                    and not _produced
+                    and _transient_attempt < BEDROCK_TRANSIENT_MAX_RETRIES
                 ):
+                    _transient_attempt += 1
+                    _delay = _transient_backoff_delay(_transient_attempt)
                     logger.warning(
-                        "Context compaction occurred",
-                        _name="SDK_COMPACTION",
+                        "Transient Bedrock error — retrying run after backoff",
+                        _name="BEDROCK_TRANSIENT_RETRY",
                         phase="sdk",
                         conversation_id=conversation_id,
+                        request_id=request_id,
+                        attempt=_transient_attempt,
+                        max_retries=BEDROCK_TRANSIENT_MAX_RETRIES,
+                        delay_seconds=_delay,
+                        error=_exc_str[:300],
+                        error_type=type(_run_exc).__name__,
                     )
-
-                with trace_path.open("a", encoding="utf-8") as f:
-                    f.write(json.dumps(serialized) + "\n")
+                    # Clear any partial stream-log state so the retry's trace
+                    # isn't polluted by the aborted attempt. (collected_text /
+                    # result_meta are already empty — guarded by _produced.)
+                    await asyncio.sleep(_delay)
+                    continue
+                # Not retryable, output already produced, or budget exhausted —
+                # propagate to the outer handler (writes the error event + trace).
+                raise
 
         # ── Daily quota fallback retry ────────────────────────────────────
         if _daily_quota_hit and _strip_prefix(options.model) != _strip_prefix(

@@ -16,8 +16,48 @@ from prm import resource as prm_resource
 logger = structlog.get_logger()
 
 
-def upsert_secret(secret_name: str, secret_payload: Dict[str, Any]) -> str:
-    """Create or update a Secrets Manager entry and return its ARN."""
+class SecretConflictError(RuntimeError):
+    """Raised when an optimistic-locked secret write loses a race.
+
+    Signals the caller that the secret was overwritten by a concurrent writer
+    between the read (``expected_version_id``) and the write, so the
+    read-modify-write should be retried against the now-current version.
+    """
+
+
+def read_secret_with_version(secret_name: str) -> tuple[Dict[str, Any], str]:
+    """Read a secret payload alongside the version id that produced it.
+
+    The returned ``version_id`` is the ``AWSCURRENT`` version at read time and
+    is what :func:`upsert_secret` needs as ``expected_version_id`` to perform an
+    optimistic-locked write. Use this (instead of :func:`get_secret_payload`)
+    whenever a read-modify-write must be safe under concurrency.
+    """
+    secrets = prm_client("secretsmanager")
+    response = secrets.get_secret_value(SecretId=secret_name)
+    secret_string = response.get("SecretString") or "{}"
+    return json.loads(secret_string), response["VersionId"]
+
+
+def upsert_secret(
+    secret_name: str,
+    secret_payload: Dict[str, Any],
+    expected_version_id: Optional[str] = None,
+) -> str:
+    """Create or update a Secrets Manager entry and return its ARN.
+
+    When ``expected_version_id`` is provided the update uses AWS-native
+    optimistic concurrency: the new value is staged, then ``AWSCURRENT`` is
+    moved off the expected version atomically. If a concurrent writer already
+    advanced ``AWSCURRENT`` between the caller's read and this write, the
+    promotion fails and is surfaced as :class:`SecretConflictError` for the
+    caller to retry against the now-current version.
+
+    When ``expected_version_id`` is ``None`` the write is an unconditional
+    last-writer-wins overwrite — the original, backward-compatible behaviour
+    for callers that don't need locking. A brand-new secret (created here) is
+    always an unconditional create regardless of ``expected_version_id``.
+    """
     secrets = prm_client("secretsmanager")
     secret_string = json.dumps(secret_payload)
 
@@ -28,11 +68,54 @@ def upsert_secret(secret_name: str, secret_payload: Dict[str, Any]) -> str:
         )
         return response["ARN"]
     except secrets.exceptions.ResourceExistsException:
+        pass
+
+    if expected_version_id is None:
+        # Backward-compatible path: unconditional overwrite.
         response = secrets.put_secret_value(
             SecretId=secret_name,
             SecretString=secret_string,
         )
         return response["ARN"]
+
+    # Optimistic-locked path: stage the new value as AWSPENDING (so it does not
+    # automatically become AWSCURRENT), then promote it to AWSCURRENT while
+    # requiring AWSCURRENT to still sit on the version we read. If a concurrent
+    # writer already moved AWSCURRENT, the staging update fails the compare-and-
+    # swap and we surface a conflict.
+    put_response = secrets.put_secret_value(
+        SecretId=secret_name,
+        SecretString=secret_string,
+        ClientRequestToken=uuid4().hex,
+        VersionStages=["AWSPENDING"],
+    )
+    new_version_id = put_response["VersionId"]
+    try:
+        secrets.update_secret_version_stage(
+            SecretId=secret_name,
+            VersionStage="AWSCURRENT",
+            MoveToVersionId=new_version_id,
+            RemoveFromVersionId=expected_version_id,
+        )
+    except secrets.exceptions.InvalidRequestException as exc:
+        # AWSCURRENT no longer sits on expected_version_id — a concurrent write
+        # won the race. Drop our orphaned AWSPENDING version and signal a retry.
+        try:
+            secrets.update_secret_version_stage(
+                SecretId=secret_name,
+                VersionStage="AWSPENDING",
+                RemoveFromVersionId=new_version_id,
+            )
+        except (
+            secrets.exceptions.InvalidRequestException,
+            secrets.exceptions.ResourceNotFoundException,
+        ):  # pragma: no cover — best-effort cleanup of the staged version
+            pass
+        raise SecretConflictError(
+            f"Concurrent write detected on secret {secret_name}"
+        ) from exc
+
+    return put_response["ARN"]
 
 
 def upsert_connector_record(  # pylint: disable=too-many-arguments,too-many-positional-arguments

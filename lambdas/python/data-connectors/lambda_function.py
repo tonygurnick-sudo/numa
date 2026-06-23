@@ -30,6 +30,7 @@ from connectors import get_connector
 from prm import client as prm_client
 from prm import resource as prm_resource
 from storage import (
+    SecretConflictError,
     create_sync_config,
     delete_connector_record,
     delete_secret,
@@ -38,6 +39,7 @@ from storage import (
     get_secret_payload,
     list_connectors_for_user,
     list_sync_configs,
+    read_secret_with_version,
     update_connector_expiry,
     update_connector_health,
     update_sync_config,
@@ -362,6 +364,9 @@ def _get_synergy_credentials(table_name: str, user_id: str) -> tuple[str, str] |
     return server, token
 
 
+PAT_ROTATION_WRITE_RETRIES = 5
+
+
 def _rotate_synergy_pat(
     server: str,
     current_token: str,
@@ -372,6 +377,12 @@ def _rotate_synergy_pat(
     """Generate a new Synergy PAT and update storage.
 
     Returns (new_token, new_expires_at_iso) or None on failure.
+
+    The new token is minted once. The secret update (read → append history →
+    write) runs under AWS-native optimistic locking inside a bounded retry
+    loop: a concurrent rotation that lands between our read and write would
+    otherwise silently drop the loser's audit-history entry. On conflict we
+    re-read the now-current secret and re-apply, so no history entry is lost.
     """
     from connectors.synergy import _build_base_url, _normalize_token
 
@@ -406,36 +417,79 @@ def _rotate_synergy_pat(
             logger.warning("PAT rotation response missing token", _name="PAT_ROTATION")
             return None
 
-        # Build history entry for old token
-        now = datetime.now(timezone.utc)
-        pat_history = secret.get("pat_history") or []
-        pat_history.append(
-            {
-                "token_prefix": current_token[:12] + "...",
-                "created_at": secret.get("pat_created_at"),
-                "expires_at": secret.get("pat_expires_at"),
-                "replaced_at": now.isoformat(),
-                "reason": "auto_rotation",
-            }
-        )
-        pat_history = pat_history[-50:]  # Cap to prevent unbounded growth
-
-        # Update secret with new token — use secret name (not ARN) because
-        # upsert_secret tries create_secret(Name=...) first, which requires a
-        # valid name, not an ARN.
-        new_expires_at = now + timedelta(days=PAT_TTL_DAYS)
-        expires_at_iso = new_expires_at.isoformat()
-        updated_secret = {
-            **secret,
-            "access_token": new_token,
-            "pat_created_at": now.isoformat(),
-            "pat_expires_at": expires_at_iso,
-            "pat_ttl_days": PAT_TTL_DAYS,
-            "pat_history": pat_history,
-        }
+        # Use the secret name (not ARN) because upsert_secret tries
+        # create_secret(Name=...) first, which requires a valid name, not an ARN.
         prefix = SECRETS_PREFIX or f"{CLIENT_NAME}/data-connectors"
         secret_name = f"{prefix}/synergy/{user_id}"
-        upsert_secret(secret_name, updated_secret)
+
+        # Re-read the secret with its version id so even the first write is
+        # optimistically locked. The caller's `secret` snapshot was read without
+        # a version id, and a concurrent rotation may have landed since; reading
+        # fresh here closes that window. The token minted above is not
+        # regenerated — only the storage read/write is retried on conflict.
+        current_secret, expected_version_id = read_secret_with_version(secret_name)
+
+        # Pre-bind values that are (re)assigned inside the retry loop so static
+        # analysis knows they're set when the loop exits via `break`
+        # (PAT_ROTATION_WRITE_RETRIES is always >= 1, so the body always runs).
+        expires_at_iso = ""
+        pat_history: list = []
+
+        for attempt in range(PAT_ROTATION_WRITE_RETRIES):
+            now = datetime.now(timezone.utc)
+
+            # Append a history entry for the token this rotation supersedes.
+            # Derive it from the freshly-read secret so concurrent rotations'
+            # entries accumulate rather than overwrite one another.
+            superseded_token = current_secret.get("access_token") or current_token
+            pat_history = list(current_secret.get("pat_history") or [])
+            pat_history.append(
+                {
+                    "token_prefix": superseded_token[:12] + "...",
+                    "created_at": current_secret.get("pat_created_at"),
+                    "expires_at": current_secret.get("pat_expires_at"),
+                    "replaced_at": now.isoformat(),
+                    "reason": "auto_rotation",
+                }
+            )
+            pat_history = pat_history[-50:]  # Cap to prevent unbounded growth
+
+            new_expires_at = now + timedelta(days=PAT_TTL_DAYS)
+            expires_at_iso = new_expires_at.isoformat()
+            updated_secret = {
+                **current_secret,
+                "access_token": new_token,
+                "pat_created_at": now.isoformat(),
+                "pat_expires_at": expires_at_iso,
+                "pat_ttl_days": PAT_TTL_DAYS,
+                "pat_history": pat_history,
+            }
+
+            try:
+                upsert_secret(
+                    secret_name,
+                    updated_secret,
+                    expected_version_id=expected_version_id,
+                )
+                break
+            except SecretConflictError:
+                if attempt == PAT_ROTATION_WRITE_RETRIES - 1:
+                    logger.warning(
+                        "PAT rotation write conflict exhausted retries",
+                        _name="PAT_ROTATION",
+                        user_id=user_id,
+                        attempts=PAT_ROTATION_WRITE_RETRIES,
+                    )
+                    return None
+                logger.info(
+                    "PAT rotation write conflict, re-reading and retrying",
+                    _name="PAT_ROTATION",
+                    user_id=user_id,
+                    attempt=attempt + 1,
+                )
+                current_secret, expected_version_id = read_secret_with_version(
+                    secret_name
+                )
 
         # Update DynamoDB expiry for quick querying
         _update_connector_expiry(table_name, user_id, expires_at_iso)
