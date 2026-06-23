@@ -19,6 +19,7 @@ import mimetypes
 import os
 import queue as queue_mod
 import re
+import threading
 import time as time_mod
 from typing import Any, AsyncGenerator, Dict
 
@@ -52,6 +53,12 @@ PREFIX = "/api/workspace-chat-agent"
 # Environment configuration
 AGENT_RUNTIME_ARN = os.environ.get("AGENT_RUNTIME_ARN", "")
 CLOUDFRONT_SECRET = os.environ.get("CLOUDFRONT_SHARED_SECRET", "")
+# FEAT-009: when CLOUDFRONT_SECRET is configured the secret header is REQUIRED —
+# a direct Function-URL call carrying only an Authorization header is NOT enough
+# (the JWT alone doesn't prove the request came through CloudFront). The single
+# documented escape hatch is setting ALLOW_DIRECT_INVOKE='true', which restores
+# the "Authorization is sufficient" behaviour for debugging/testing. Default off.
+ALLOW_DIRECT_INVOKE = os.environ.get("ALLOW_DIRECT_INVOKE", "").lower() == "true"
 CLIENT_NAME = os.environ.get("CLIENT_NAME", "unknown")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 # AgentCore region may differ from Lambda's own region for cross-region deployments
@@ -211,29 +218,43 @@ def validate_cloudfront_secret(
 ) -> None:
     """Validate the CloudFront shared secret header.
 
-    When called via CloudFront, the secret header is required.
-    When called directly (no secret header), we allow the request if Authorization is present.
-    This enables direct Lambda Function URL calls for testing/bypassing CloudFront buffering.
+    When CLOUDFRONT_SECRET is configured the secret header is REQUIRED — every
+    legitimate request reaches the Function URL through CloudFront, which injects
+    it. A direct Function-URL call (no secret header) is rejected even if it
+    carries an Authorization header: the JWT authenticates the *user* but does
+    nothing to prove the request actually traversed CloudFront, so accepting it
+    would let anyone with a valid token bypass the CloudFront edge entirely
+    (FEAT-009).
+
+    The one documented exception is ALLOW_DIRECT_INVOKE='true' (default off),
+    which restores the legacy "Authorization is sufficient" behaviour for
+    debugging / local testing against the raw Function URL. Use it deliberately.
     """
     if not CLOUDFRONT_SECRET:
         return  # Skip validation if not configured (dev mode)
 
-    # If secret header is provided, validate it (CloudFront path)
+    # Secret header provided → validate it (the normal CloudFront path).
     if secret:
-        if secret != CLOUDFRONT_SECRET:
+        if not hmac_mod.compare_digest(secret, CLOUDFRONT_SECRET):
             raise HTTPException(status_code=403, detail="Invalid CloudFront secret")
         return
 
-    # No secret header = direct call. Allow if Authorization is present.
-    # The JWT provides authentication; CloudFront secret just prevents direct access.
-    if authorization:
-        logger.info(
-            "Direct Lambda call (no CloudFront secret), Authorization present - allowing"
-        )
-        return
+    # No secret header = direct Function-URL call. Only allowed when the
+    # operator has explicitly opted in via ALLOW_DIRECT_INVOKE, and even then
+    # an Authorization header is still required to identify the caller.
+    if ALLOW_DIRECT_INVOKE:
+        if authorization:
+            logger.info(
+                "Direct Lambda call (ALLOW_DIRECT_INVOKE), Authorization present - allowing"
+            )
+            return
+        raise HTTPException(status_code=403, detail="Authentication required")
 
-    # No secret and no auth = reject
-    raise HTTPException(status_code=403, detail="Authentication required")
+    # Secret configured, no secret header, direct invoke not permitted → reject.
+    logger.warning(
+        "Rejecting request with no CloudFront secret header (ALLOW_DIRECT_INVOKE off)"
+    )
+    raise HTTPException(status_code=403, detail="Missing CloudFront secret")
 
 
 def _get_jwks() -> Dict[str, Any]:
@@ -1525,33 +1546,76 @@ def _stream_response(response) -> StreamingResponse:
             _sentinel = object()
 
             chunk_q: queue_mod.Queue = queue_mod.Queue()
+            # BUG-258: signalled when the generator is finished (normal end,
+            # error, or client disconnect → GeneratorExit). The reader checks
+            # it between chunks so it stops promptly instead of blocking on
+            # iter_chunks forever and leaking the thread.
+            stop_reading = threading.Event()
 
             def _reader() -> None:
                 """Background thread: pushes chunks then sentinel."""
                 try:
                     for chunk in streaming_body.iter_chunks(chunk_size=128):
+                        if stop_reading.is_set():
+                            break
                         chunk_q.put(chunk)
                 except Exception as exc:
                     chunk_q.put(exc)
                 chunk_q.put(_sentinel)
 
             loop = asyncio.get_event_loop()
-            loop.run_in_executor(None, _reader)
+            # BUG-258: keep the future so we can await/cancel it in the finally
+            # block — never drop it, or the reader thread can outlive the request.
+            reader_future = loop.run_in_executor(None, _reader)
 
-            while True:
+            try:
+                while True:
+                    try:
+                        item = await asyncio.to_thread(
+                            chunk_q.get, True, _keepalive_secs
+                        )
+                    except queue_mod.Empty:
+                        # No data in _keepalive_secs — send SSE comment to
+                        # prevent CloudFront from timing out the connection.
+                        yield _keepalive
+                        continue
+
+                    if item is _sentinel:
+                        break
+                    if isinstance(item, BaseException):
+                        raise item
+                    yield item
+            finally:
+                # Runs on normal completion, on a raised stream error, AND on
+                # client disconnect (the StreamingResponse throws GeneratorExit
+                # into this generator). Tell the reader to stop, drain the queue
+                # so a put() blocked on a bounded queue can't wedge it (defensive;
+                # the queue is unbounded today), then close the upstream body to
+                # unblock a reader parked inside iter_chunks, and finally wait for
+                # the thread to exit so it can't leak past the request.
+                stop_reading.set()
                 try:
-                    item = await asyncio.to_thread(chunk_q.get, True, _keepalive_secs)
+                    while True:
+                        chunk_q.get_nowait()
                 except queue_mod.Empty:
-                    # No data in _keepalive_secs — send SSE comment to
-                    # prevent CloudFront from timing out the connection.
-                    yield _keepalive
-                    continue
-
-                if item is _sentinel:
-                    break
-                if isinstance(item, BaseException):
-                    raise item
-                yield item
+                    pass
+                close = getattr(streaming_body, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:  # pragma: no cover - best-effort cleanup
+                        logger.debug("Error closing streaming body", exc_info=True)
+                try:
+                    await asyncio.wait_for(asyncio.shield(reader_future), timeout=5)
+                except asyncio.TimeoutError:
+                    reader_future.cancel()
+                    logger.warning(
+                        "Stream reader thread did not stop within 5s; cancelled future"
+                    )
+                except Exception:  # pragma: no cover - reader already errored
+                    logger.debug(
+                        "Stream reader future raised on cleanup", exc_info=True
+                    )
 
             # --- ORIGINAL FILTERING CODE (commented out for experiment) ---
             # buffer = b""

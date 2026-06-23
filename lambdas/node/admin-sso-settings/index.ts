@@ -628,6 +628,17 @@ async function handleSaveConfig(event: {
     `SSO config saved: idpType=${idpType}, providerName=${providerName}, metadataSource=${isSaml ? (effMetadataUrl ? 'url' : 'xml') : 'oidc'}, attributes=[${Object.keys(resolvedMapping).join(',')}], updatedBy=${adminSub} (${adminEmail})`
   );
 
+  // BUG-172: structured audit log for SSO config changes
+  console.log(
+    JSON.stringify({
+      _name: 'SSO_CONFIG_UPDATED',
+      adminSub,
+      adminEmail,
+      idpType: idpType as string,
+      clientName: CLIENT_NAME,
+    })
+  );
+
   return { statusCode: 200, body: JSON.stringify({ success: true, providerName }) };
 }
 
@@ -939,9 +950,21 @@ async function handleGetLoginConfig(): Promise<{ statusCode: number; body: strin
 
 // --- SCIM Token Management ---
 
+// BUG-177: SCIM bearer tokens expire 90 days after generation. The scim-endpoint
+// Lambda rejects requests once `expiresAt` (epoch ms) has passed.
+const SCIM_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
 async function handleGenerateScimToken(event: {
   headers?: Record<string, string | undefined>;
 }): Promise<{ statusCode: number; body: string }> {
+  // BUG-177: defense-in-depth admin gating. The main handler already requires the
+  // 'admin' group, but SCIM token mint/revoke are high-value operations — gate them
+  // explicitly here too (same isAdmin pattern) so they stay protected even if the
+  // routing ever changes or the handler is invoked directly.
+  if (!isAdmin(event)) {
+    return { statusCode: 403, body: JSON.stringify({ error: 'Admin access required' }) };
+  }
+
   const adminSub = getSubFromAuth(event);
   const adminEmail = getEmailFromAuth(event);
 
@@ -951,6 +974,9 @@ async function handleGenerateScimToken(event: {
   const salt = randomBytes(32).toString('hex');
   const tokenHash = createHmac('sha256', salt).update(token).digest('hex');
 
+  const now = Date.now();
+  const expiresAt = now + SCIM_TOKEN_TTL_MS;
+
   await ddb.send(
     new PutCommand({
       TableName: TABLE_NAME,
@@ -959,13 +985,17 @@ async function handleGenerateScimToken(event: {
         tokenHash,
         salt,
         revoked: false,
-        createdAt: new Date().toISOString(),
+        createdAt: new Date(now).toISOString(),
         createdBy: adminSub || undefined,
+        // BUG-177: epoch-ms expiry enforced by scim-endpoint validateBearerToken
+        expiresAt,
       },
     })
   );
 
-  console.log(JSON.stringify({ _name: 'SCIM_TOKEN_GENERATED', adminSub, adminEmail, clientName: CLIENT_NAME }));
+  console.log(
+    JSON.stringify({ _name: 'SCIM_TOKEN_GENERATED', adminSub, adminEmail, expiresAt, clientName: CLIENT_NAME })
+  );
 
   // Return the token ONCE — it cannot be retrieved again
   return {
@@ -973,6 +1003,7 @@ async function handleGenerateScimToken(event: {
     body: JSON.stringify({
       success: true,
       token,
+      expiresAt,
       warning: 'Save this token now. It cannot be retrieved again.',
     }),
   };
@@ -1000,6 +1031,11 @@ async function handleGetScimConfig(): Promise<{ statusCode: number; body: string
 async function handleRevokeScimToken(event: {
   headers?: Record<string, string | undefined>;
 }): Promise<{ statusCode: number; body: string }> {
+  // BUG-177: defense-in-depth admin gating (see handleGenerateScimToken).
+  if (!isAdmin(event)) {
+    return { statusCode: 403, body: JSON.stringify({ error: 'Admin access required' }) };
+  }
+
   const adminSub = getSubFromAuth(event);
   const adminEmail = getEmailFromAuth(event);
 
@@ -1017,7 +1053,8 @@ async function handleRevokeScimToken(event: {
     })
   );
 
-  console.log(`SCIM TOKEN REVOKED by ${adminSub} (${adminEmail})`);
+  // BUG-172: structured audit log for SCIM token revocation
+  console.log(JSON.stringify({ _name: 'SCIM_TOKEN_REVOKED', adminSub, adminEmail, clientName: CLIENT_NAME }));
 
   return { statusCode: 200, body: JSON.stringify({ success: true }) };
 }

@@ -39,28 +39,43 @@ function hashToken(token: string, salt: string): string {
   return createHmac('sha256', salt).update(token).digest('hex');
 }
 
-async function validateBearerToken(event: { headers?: Record<string, string | undefined> }): Promise<boolean> {
+interface BearerValidation {
+  valid: boolean;
+  /** BUG-177: true when the token was rejected solely because it has expired. */
+  tokenExpired?: boolean;
+}
+
+async function validateBearerToken(event: { headers?: Record<string, string | undefined> }): Promise<BearerValidation> {
   const auth = event.headers?.authorization || event.headers?.Authorization;
-  if (!auth) return false;
+  if (!auth) return { valid: false };
   const token = String(auth)
     .replace(/^Bearer\s+/i, '')
     .trim();
-  if (!token) return false;
+  if (!token) return { valid: false };
 
   try {
     const res = await ddb.send(new GetCommand({ TableName: SCIM_TOKEN_TABLE, Key: { setting: 'scim-token' } }));
     const stored = res.Item;
-    if (!stored?.tokenHash || !stored?.salt || stored.revoked) return false;
+    if (!stored?.tokenHash || !stored?.salt || stored.revoked) return { valid: false };
+
+    // BUG-177: enforce token expiry BEFORE the constant-time hash comparison so an
+    // expired token is never accepted regardless of whether the secret still matches.
+    // Tokens minted before BUG-177 have no `expiresAt` and are treated as non-expiring
+    // (admins should regenerate to opt into the 90-day TTL).
+    const expiresAt = typeof stored.expiresAt === 'number' ? stored.expiresAt : undefined;
+    if (expiresAt !== undefined && Date.now() >= expiresAt) {
+      return { valid: false, tokenExpired: true };
+    }
 
     const incomingHash = hashToken(token, stored.salt as string);
     const storedHash = stored.tokenHash as string;
 
     const a = Buffer.from(incomingHash, 'hex');
     const b = Buffer.from(storedHash, 'hex');
-    return a.length === b.length && timingSafeEqual(a, b);
+    return { valid: a.length === b.length && timingSafeEqual(a, b) };
   } catch (err) {
     console.error(JSON.stringify({ _name: 'SCIM_AUTH_ERROR', error: (err as Error).message, clientName: CLIENT_NAME }));
-    return false;
+    return { valid: false };
   }
 }
 
@@ -363,10 +378,23 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
   }
 
   // All other SCIM endpoints require bearer token auth
-  if (!(await validateBearerToken(event))) {
-    // Fix #20: structured auth failure log
-    console.warn(JSON.stringify({ _name: 'SCIM_AUTH_FAILURE', method, path, clientName: CLIENT_NAME }));
-    return { ...scimError(401, 'Invalid or missing bearer token'), headers: HEADERS };
+  const authResult = await validateBearerToken(event);
+  if (!authResult.valid) {
+    // Fix #20: structured auth failure log. BUG-177: surface the tokenExpired signal
+    // so operators can distinguish an expired token from an invalid/missing one.
+    console.warn(
+      JSON.stringify({
+        _name: 'SCIM_AUTH_FAILURE',
+        method,
+        path,
+        tokenExpired: authResult.tokenExpired === true,
+        clientName: CLIENT_NAME,
+      })
+    );
+    const detail = authResult.tokenExpired
+      ? 'SCIM token has expired. Generate a new token in SSO settings.'
+      : 'Invalid or missing bearer token';
+    return { ...scimError(401, detail), headers: HEADERS };
   }
 
   try {

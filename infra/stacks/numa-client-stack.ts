@@ -676,6 +676,9 @@ export class NumaClientStack extends TerraformStack {
         // /runs/{id}/status from this table instead of invoking AgentCore
         activeRunsTableName: workspaceChatAgent.activeRunsTable.name,
         activeRunsTableArn: workspaceChatAgent.activeRunsTable.arn,
+        // BUG-279: lock Function URL CORS to the client app origin (the only
+        // browser origin that calls the proxy directly for streaming).
+        appOrigin: `https://${domainName}`,
       });
 
       new TerraformOutput(this, 'workspace-chat-agent-proxy-url', {
