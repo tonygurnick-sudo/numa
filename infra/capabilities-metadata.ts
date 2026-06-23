@@ -213,6 +213,17 @@ export const CAPABILITIES_METADATA: CapabilityMetadata[] = [
     metered: true,
   },
   {
+    flag: 'CONNECTOR_ACCESS_REVIEW',
+    title: 'Connector Access Review',
+    description:
+      'Admin security panel (Settings → Users) listing every native connector authorization in the tenant — who connected which connector, with what method and scopes, and when — with a per-row revoke. Helps audit and clean up stale OAuth/PAT grants. Pipedream-backed connections are not yet covered.',
+    icon: 'bi-shield-lock',
+    system_only: false,
+    dev_only: false,
+    enabled: false,
+    dependencies: [],
+  },
+  {
     flag: 'DEVELOPER_MODE',
     title: 'Developer Mode',
     description: 'Enables developer tools, file drill-down, metadata inspection, and debug views.',

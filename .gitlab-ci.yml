@@ -105,6 +105,7 @@ pre-commit:
   matrix:
     - BUILD_DIR:
         - lambdas/node/admin-capabilities
+        - lambdas/node/admin-connector-access
         - lambdas/node/admin-credits
         - lambdas/node/admin-data-connector-settings
         - lambdas/node/admin-dr-stats

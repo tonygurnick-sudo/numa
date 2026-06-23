@@ -4,7 +4,7 @@ import { Tab, Button, Spinner, Modal, Alert, OverlayTrigger, Tooltip, Form } fro
 import { useTranslation } from 'react-i18next';
 import { Bot } from 'lucide-react';
 import UserManagement from './UserManagement';
-import { SecuritySettingsPanel } from '../Components/UserManagement';
+import { SecuritySettingsPanel, ConnectorAccessPanel } from '../Components/UserManagement';
 import UserProfilePage from './UserProfile';
 import { PageHeader } from '../Components/PageHeader';
 import { SubHeaderTabBar } from '../Components/SubHeaderTabBar';
@@ -146,6 +146,10 @@ export default function SettingsPage() {
   const schedulingEnabled = getFlag('SCHEDULING');
   const dataConnectorsEnabled = getFlag('DATA_CONNECTORS_ENABLED');
   const mfaEnabled = getFlag('MFA_ENABLED');
+  // FEAT-129 — Connector Access Review admin panel (Settings → Users). Off by
+  // default; emitted explicitly from numa-client-stack so getFlag doesn't
+  // default-true on older deployments.
+  const connectorAccessReviewEnabled = getFlag('CONNECTOR_ACCESS_REVIEW');
   const hasOps = getFlag('NUMA_OPS');
   const ssoEnabled = getFlag('SSO_ENABLED');
   const voiceEnabled = getFlag('NUMA_VOICE');
@@ -1611,6 +1615,9 @@ export default function SettingsPage() {
               >
                 <UserManagement embedded mfaEnabled={mfaEnabled} />
                 <SecuritySettingsPanel mfaEnabled={mfaEnabled} numaGet={numaGet} numaPut={numaPut} />
+                {connectorAccessReviewEnabled && isAdmin && (
+                  <ConnectorAccessPanel numaGet={numaGet} numaPost={numaPost} confirm={confirm} />
+                )}
               </Tab>
               {ssoEnabled && isAdmin && (
                 <Tab
