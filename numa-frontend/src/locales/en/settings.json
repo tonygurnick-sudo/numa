@@ -169,14 +169,51 @@
       "apikey": "API Key",
       "unknown": "Unknown"
     },
+    "source": {
+      "native": "Native",
+      "pipedream": "Pipedream"
+    },
+    "provider": {
+      "none": "—"
+    },
+    "lastUsed": {
+      "never": "Never"
+    },
     "columns": {
+      "select": "Select",
       "user": "User",
+      "provider": "Provider",
       "connector": "Connector",
       "method": "Method",
       "scopes": "Scopes",
       "connectedAt": "Connected",
       "lastUsedAt": "Last used",
       "actions": "Actions"
+    },
+    "bulk": {
+      "selectAll": "Select all",
+      "selectRow": "Select {{email}}'s {{connector}} authorization",
+      "selectedCount": "{{count}} selected",
+      "revoke": "Revoke selected",
+      "revokeConfirm_one": "Revoke {{count}} connector authorization? The stored credentials will be cleared immediately.",
+      "revokeConfirm_other": "Revoke {{count}} connector authorizations? Their stored credentials will be cleared immediately.",
+      "revoking": "Revoking…",
+      "revokeError": "Failed to revoke the selected authorizations. Please try again.",
+      "partialError_one": "{{count}} authorization could not be revoked. The rest were cleared.",
+      "partialError_other": "{{count}} authorizations could not be revoked. The rest were cleared."
+    },
+    "csv": {
+      "export": "Export CSV",
+      "headers": {
+        "userEmail": "User Email",
+        "provider": "Provider",
+        "connector": "Connector",
+        "method": "Method",
+        "scopes": "Scopes",
+        "connectedAt": "Connected",
+        "lastUsedAt": "Last Used",
+        "status": "Status"
+      }
     }
   },
   "schedulingSettings": {

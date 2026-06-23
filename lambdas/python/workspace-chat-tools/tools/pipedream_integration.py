@@ -33,6 +33,10 @@ OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 FILE_REDIRECT_BASE_URL = os.environ.get("FILE_REDIRECT_BASE_URL", "")
 VAULT_AUDIT_LOG_TABLE_NAME = os.environ.get("VAULT_AUDIT_LOG_TABLE_NAME", "")
+# FEAT-129: per-connector usage table (PK=USER#{sub}, SK=CONN#{provider}#{connector},
+# attr lastUsedAt ISO8601). Read at call time (not module load) so tests can patch
+# the env var without re-importing. Unset → usage tracking is a silent no-op.
+CONNECTOR_USAGE_TABLE = "CONNECTOR_USAGE_TABLE"
 
 # Audit dedup for chat-driven Pipedream calls. Module-level so it survives
 # across calls within a warm Lambda container. Tied to (user, app_slug) so
@@ -416,6 +420,19 @@ def handle_batch_get_schemas(params: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
+def _app_slug_from_action_key(action_key: str) -> str:
+    """Derive the integration app slug from an action key.
+
+    Action keys look like ``gmail-find-email`` (public) or
+    ``~/pipedrive-create-deal`` (custom-tool, private-registry prefix). Both
+    audit and usage tracking want the bare app slug (``gmail``, ``pipedrive``)
+    so a custom action attributes to the same connector as its public peers.
+    """
+    slug_source = action_key[2:] if action_key.startswith("~/") else action_key
+    dash_index = slug_source.find("-")
+    return slug_source[:dash_index] if dash_index > 0 else slug_source
+
+
 def _audit_pipedream_action(
     user_sub: str,
     action_key: str,
@@ -438,9 +455,7 @@ def _audit_pipedream_action(
 
     # Strip the "~/" custom-tool prefix so a custom action audits under the same
     # app slug as public ones (e.g. "pipedrive", not "~/pipedrive").
-    slug_source = action_key[2:] if action_key.startswith("~/") else action_key
-    dash_index = slug_source.find("-")
-    app_slug = slug_source[:dash_index] if dash_index > 0 else slug_source
+    app_slug = _app_slug_from_action_key(action_key)
 
     key = (user_sub, app_slug)
     now = time.time()
@@ -482,6 +497,46 @@ def _audit_pipedream_action(
             user_sub=user_sub,
             action_key=action_key,
             error=str(e),
+        )
+
+
+def _record_connector_usage(user_sub: str, connector: str) -> None:
+    """FEAT-129: stamp lastUsedAt for a successful connector action.
+
+    Best-effort and non-blocking — a write failure (throttle, missing table,
+    IAM) must NEVER fail the user's request, so every error is swallowed. The
+    table name is read from the ``CONNECTOR_USAGE_TABLE`` env var at call time;
+    if it is unset, usage tracking is a silent no-op (the feature isn't wired
+    for this client). Provider is always ``pipedream`` here — this module only
+    handles the Pipedream relay path; the ``connector`` is the app slug
+    (e.g. ``gmail``, ``google_drive``).
+
+    Row shape (shared contract with admin-connector-access):
+      PK = USER#{user_sub}
+      SK = CONN#pipedream#{connector}
+      lastUsedAt = now, ISO8601 UTC
+    """
+    table_name = os.environ.get(CONNECTOR_USAGE_TABLE, "")
+    if not table_name or not user_sub or not connector:
+        return
+
+    try:
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        dynamodb = prm_client("dynamodb")
+        dynamodb.put_item(
+            TableName=table_name,
+            Item={
+                "PK": {"S": f"USER#{user_sub}"},
+                "SK": {"S": f"CONN#pipedream#{connector}"},
+                "lastUsedAt": {"S": now_iso},
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 — usage tracking must never break a request
+        logger.warning(
+            "Failed to record connector usage (non-fatal)",
+            user_sub=user_sub,
+            connector=connector,
+            error=str(exc),
         )
 
 
@@ -718,6 +773,10 @@ def handle_run_action(params: Dict[str, Any]) -> Dict[str, Any]:
                 ),
                 "result": result,
             }
+        # FEAT-129: real success → stamp lastUsedAt for this connector. Skipped
+        # on the action_error path above: an upstream 400/401 did NOT use the
+        # connector successfully, so it should not count as usage. Best-effort.
+        _record_connector_usage(user_sub, _app_slug_from_action_key(action_key))
         return {
             "status": "success",
             "approval_id": approval_id,
@@ -903,6 +962,9 @@ def handle_proxy_request(params: Dict[str, Any]) -> Dict[str, Any]:
             description,
             is_auto_approved,
         )
+        # FEAT-129: stamp lastUsedAt for this connector. The proxy path is keyed
+        # directly by integration_slug (no action key to parse). Best-effort.
+        _record_connector_usage(user_sub, integration_slug)
         return {
             "status": "success",
             "approval_id": approval_id,

@@ -1,5 +1,6 @@
 import { AwsProvider } from '@cdktf/provider-aws/lib/provider';
 import { CloudwatchLogGroup } from '@cdktf/provider-aws/lib/cloudwatch-log-group';
+import { DynamodbTable } from '@cdktf/provider-aws/lib/dynamodb-table';
 import { S3Object } from '@cdktf/provider-aws/lib/s3-object';
 import { Fn, S3Backend, TerraformOutput, TerraformStack } from 'cdktf';
 import { Construct } from 'constructs';
@@ -425,6 +426,29 @@ export class NumaClientStack extends TerraformStack {
       bedrockKnowledgeBaseId: knowledgeBase?.knowledgeBaseId,
     });
 
+    // Connector-usage table (FEAT-129) — records the last time each user used a
+    // given connector, keyed PK=`USER#{user_sub}`, SK=`CONN#{provider}#{connector}`
+    // with an ISO8601 `lastUsedAt` attribute. workspace-chat-tools writes a row
+    // whenever a connector is invoked in chat; admin-connector-access reads it to
+    // hydrate each row's `lastUsedAt` in the Connector Access Review.
+    // On-demand billing + PITR — a small, hot, write-on-use table.
+    const connectorUsageTable = new DynamodbTable(this, 'connector-usage-table', {
+      name: `${props.clientName}-connector-usage`,
+      billingMode: 'PAY_PER_REQUEST',
+      hashKey: 'pk',
+      rangeKey: 'sk',
+      attribute: [
+        { name: 'pk', type: 'S' },
+        { name: 'sk', type: 'S' },
+      ],
+      pointInTimeRecovery: { enabled: true },
+      tags: {
+        Name: `${props.clientName}-connector-usage`,
+        Environment: props.environmentName,
+        Purpose: 'connector-usage',
+      },
+    });
+
     // Numa Workspace Chat Agent (AgentCore runtime + proxy Lambda, routed through main CloudFront)
     // Created before frontend so we can pass proxy URL for CloudFront routing
     let workspaceChatAgent: WorkspaceChatAgentConstruct | undefined;
@@ -538,6 +562,11 @@ export class NumaClientStack extends TerraformStack {
         // Crawl-page Lambda for web search fetch_url (JS rendering via Playwright)
         browserLambdaArn: core.webCrawler.browserLambda.arn,
         browserLambdaName: core.webCrawler.browserLambda.functionName,
+        // Connector-usage table (FEAT-129) — workspace-chat-tools writes a
+        // last-used row whenever a connector is invoked in chat; the Connector
+        // Access Review admin surface reads it to render lastUsedAt.
+        connectorUsageTableName: connectorUsageTable.name,
+        connectorUsageTableArn: connectorUsageTable.arn,
       });
 
       // Create the AgentCore runtime
@@ -855,6 +884,10 @@ export class NumaClientStack extends TerraformStack {
       // Phase 2 centralised approval orchestrator — DDB create + poll.
       integrationsApprovalTableName: core.integrationsApprovalTable?.name,
       integrationsApprovalTableArn: core.integrationsApprovalTable?.arn,
+      // Connector Access Review (FEAT-129) — admin-connector-access reads this
+      // table to hydrate each row's lastUsedAt.
+      connectorUsageTableName: connectorUsageTable.name,
+      connectorUsageTableArn: connectorUsageTable.arn,
     });
 
     // Numa Ops (work management, kanban boards, CRM, supplier management)
