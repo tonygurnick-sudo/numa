@@ -162,6 +162,19 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
     # the Synergy cross-job KB (fail-closed if absent).
     user_sub = params.get("__user_sub", "")
 
+    # Synergy only: which corpus to search. "" / "document" = the per-document
+    # content corpus (default); "job_rollup" = the per-job similarity records
+    # ("find similar jobs"). Ignored for non-Synergy KBs.
+    doc_type = (params.get("doc_type") or "").strip()
+
+    # Synergy only: structured metadata filters for breadth search across jobs
+    # (created_after / created_before / parent_job_id / is_template). Combined
+    # with the semantic query — e.g. "council jobs created since 2023". Ignored
+    # for non-Synergy KBs and validated/whitelisted in _query_bedrock.
+    structured_filters = params.get("structured_filters") or {}
+    if not isinstance(structured_filters, dict):
+        structured_filters = {}
+
     # Validate bucket is configured (required for oversized query results)
     if not DATA_BUCKET_NAME:
         raise ValueError("DATA_BUCKET_NAME not configured")
@@ -195,7 +208,13 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 
     # Query single KB
     kb_result = _query_single_kb(
-        query, max_results, kb_id, id_token=id_token, user_sub=user_sub
+        query,
+        max_results,
+        kb_id,
+        id_token=id_token,
+        user_sub=user_sub,
+        doc_type=doc_type,
+        structured_filters=structured_filters,
     )
 
     # Combine content
@@ -229,7 +248,13 @@ def handle_query_knowledgebase(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _query_single_kb(
-    query: str, max_results: int, kb_id: str, id_token: str = "", user_sub: str = ""
+    query: str,
+    max_results: int,
+    kb_id: str,
+    id_token: str = "",
+    user_sub: str = "",
+    doc_type: str = "",
+    structured_filters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Query a single knowledge base.
 
@@ -250,7 +275,14 @@ def _query_single_kb(
         return _query_qbusiness(query, max_results, id_token=id_token)
 
     if BEDROCK_KNOWLEDGE_BASE_ID:
-        return _query_bedrock(query, max_results, kb_id, user_sub=user_sub)
+        return _query_bedrock(
+            query,
+            max_results,
+            kb_id,
+            user_sub=user_sub,
+            doc_type=doc_type,
+            structured_filters=structured_filters,
+        )
     raise ValueError("Bedrock knowledge base is not configured")
 
 
@@ -296,6 +328,11 @@ def _handle_all_kbs_query(
 
         try:
             logger.info("Querying KB", kb_id=kb_id, kb_name=kb_name)
+            # By design --all-kbs runs document-mode per KB: doc_type /
+            # structured_filters are intentionally NOT forwarded, so Synergy
+            # rollup ("find similar jobs") and structured breadth search are
+            # single-KB-only. user_sub IS forwarded, so the per-document ACL
+            # still applies here.
             kb_result = _query_single_kb(
                 query, max_results, kb_id, id_token=id_token, user_sub=user_sub
             )
@@ -499,8 +536,66 @@ def _query_qbusiness(
     }
 
 
+def _synergy_structured_clauses(
+    filters: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Whitelisted structured filters → Bedrock metadata clauses for the Synergy
+    rollup. Only known keys with usable values produce a clause; anything else is
+    ignored (fail-open to the semantic query — a bad filter never errors). ISO-8601
+    `created_date` sorts lexicographically, so string range == chronological range.
+    """
+    if not isinstance(filters, dict) or not filters:
+        return []
+    clauses: List[Dict[str, Any]] = []
+    if filters.get("is_template") is not None:
+        # Stored as a "true"/"false" STRING in the sidecar (unambiguous for Bedrock
+        # `equals`); match the type here so the filter actually hits.
+        clauses.append(
+            {
+                "equals": {
+                    "key": "is_template",
+                    "value": "true" if filters["is_template"] else "false",
+                }
+            }
+        )
+    if filters.get("parent_job_id"):
+        clauses.append(
+            {"equals": {"key": "parent_job_id", "value": str(filters["parent_job_id"])}}
+        )
+    if filters.get("created_after"):
+        clauses.append(
+            {
+                "greaterThanOrEquals": {
+                    "key": "created_date",
+                    "value": str(filters["created_after"]),
+                }
+            }
+        )
+    if filters.get("created_before"):
+        clauses.append(
+            {
+                "lessThanOrEquals": {
+                    "key": "created_date",
+                    "value": str(filters["created_before"]),
+                }
+            }
+        )
+    # Tenant attribute filters (attr_<snake> = Job Type/Status/Client/Region/…),
+    # stamped on rollups by the crawler. Low-cardinality equals only; the agent
+    # discovers valid keys/values via `synergy-schema`.
+    for k, v in filters.items():
+        if k.startswith("attr_") and v not in (None, ""):
+            clauses.append({"equals": {"key": k, "value": str(v)}})
+    return clauses
+
+
 def _query_bedrock(
-    query: str, max_results: int, kb_id: str, user_sub: str = ""
+    query: str,
+    max_results: int,
+    kb_id: str,
+    user_sub: str = "",
+    doc_type: str = "",
+    structured_filters: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Query Bedrock knowledge base with metadata filtering."""
     start_time = time.time()
@@ -517,9 +612,17 @@ def _query_bedrock(
     # job). Enforce it as a per-document ACL. Fail closed if we don't know who is
     # asking — a doc is only retrievable when its allowed_users contains the
     # caller (Bedrock `listContains`).
-    if kb_id == "synergy" and not user_sub:
+    #
+    # Both preconditions are load-bearing: the tenant/kb/listContains clauses are
+    # only appended inside the `CLIENT_NAME and kb_id` block below. If CLIENT_NAME
+    # is empty/unset the whole filter is skipped and Bedrock.retrieve runs with NO
+    # filter — leaking the entire shared Synergy corpus across all users. So deny
+    # here (fail-closed) when EITHER caller identity OR tenant name is missing.
+    if kb_id == "synergy" and not (user_sub and CLIENT_NAME):
         logger.warning(
-            "Synergy KB query without caller identity — denying (fail-closed)"
+            "Synergy KB query missing isolation precondition — denying (fail-closed)",
+            has_user_sub=bool(user_sub),
+            has_client_name=bool(CLIENT_NAME),
         )
         return {"content_pieces": [], "references": [], "provider": "bedrock"}
 
@@ -540,6 +643,28 @@ def _query_bedrock(
             and_clauses.append(
                 {"listContains": {"key": "allowed_users", "value": user_sub}}
             )
+            # Split the per-document content corpus from the per-job rollup
+            # records. Default search → documents; "find similar jobs" passes
+            # doc_type="job_rollup" to search rollups (one hit == one job).
+            effective_doc_type = doc_type or "document"
+            and_clauses.append(
+                {"equals": {"key": "doc_type", "value": effective_doc_type}}
+            )
+            # Structured breadth-search filters (rollup metadata stamped by the
+            # crawler). Whitelisted + typed — never pass caller input through raw.
+            # ISO-8601 dates sort lexicographically, so string range == date range.
+            # These fields exist ONLY on per-job rollup sidecars, not on per-document
+            # ones — applying them to a document search would silently match nothing,
+            # so only attach them in rollup mode.
+            if effective_doc_type == "job_rollup":
+                for clause in _synergy_structured_clauses(structured_filters):
+                    and_clauses.append(clause)
+            elif structured_filters:
+                logger.info(
+                    "Ignoring structured_filters for non-rollup Synergy search "
+                    "(fields live only on job rollups; use doc_type=job_rollup)",
+                    doc_type=effective_doc_type,
+                )
         retrieval_config["vectorSearchConfiguration"]["filter"] = {
             "andAll": and_clauses
         }
@@ -1542,6 +1667,19 @@ def _get_s3_prefix(kb_id: str) -> str:
     Returns:
         S3 prefix (e.g., "documents/company/" or "documents/kb-{uuid}/")
     """
+    # SECURITY: Synergy is a cross-job SEARCH corpus, not a browsable folder. Its
+    # only per-user isolation is the per-document allowed_users ACL enforced in the
+    # Bedrock query path (_query_bedrock, listContains). The raw S3 file-ops that
+    # call this helper (retrieve_kb_file list/download/download_folder) have NO such
+    # ACL, so resolving a synergy S3 prefix here would let any user list/download
+    # every crawled job's text regardless of their 12d permissions. Block it — this
+    # is the single chokepoint for all file-ops paths (incl. URI download). Querying
+    # is unaffected (the query path never calls this helper).
+    if kb_id == "synergy":
+        raise ValueError(
+            "Synergy is a cross-job search corpus, not a browsable folder. "
+            "Use query_knowledgebase instead (e.g. `numa files search --folder synergy`)."
+        )
     s3_kb_id = _get_s3_kb_id(kb_id)
     return f"documents/{s3_kb_id}/"
 

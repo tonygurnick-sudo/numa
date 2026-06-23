@@ -13,6 +13,7 @@ import {
 import type { VaultSecretMetadata, VaultSecretWithFields } from '../../../Services/VaultService';
 import type { ConnectorTemplate } from '../connectorRegistry';
 import { AuthTypeBadge } from '../AuthTypeBadge';
+import { SynergyKbSyncPanel } from '../SynergyKbSyncPanel';
 
 // Admin flow for non-OAuth connectors: register + optional metadata only.
 // The per-user credential (PAT / API key / username+password) is captured in
@@ -351,6 +352,14 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               </div>
             </Col>
           </Row>
+
+          {/* Synergy cross-job KB sync — admin control, lives in the admin
+              connector config (self-gates on admin + crawler deployed). */}
+          {connector.id === 'synergy' && (
+            <div className="mt-3">
+              <SynergyKbSyncPanel />
+            </div>
+          )}
         </div>
       )}
 

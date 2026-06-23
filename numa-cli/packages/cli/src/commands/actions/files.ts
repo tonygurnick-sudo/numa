@@ -146,6 +146,23 @@ function createFilesSearchCommand(): Command {
     .option('--max-results <n>', 'Maximum results to return', (v) => parseInt(v, 10))
     .option('--summarise', 'LLM-summarise the results into a single answer (default: return raw matches)')
     .option(
+      '--similar-jobs',
+      'Synergy only: find whole jobs similar to your description, instead of individual files — good for "find jobs like this one" (use with --folder synergy).'
+    )
+    .option('--created-after <date>', 'Synergy only: jobs created on or after this date (YYYY-MM-DD)')
+    .option('--created-before <date>', 'Synergy only: jobs created on or before this date (YYYY-MM-DD)')
+    .option('--parent-job <id>', 'Synergy only: only sub-jobs of this parent job')
+    .option('--exclude-templates', 'Synergy only: leave out template jobs')
+    .option(
+      '--attr <name=value>',
+      'Synergy only: only jobs where a field matches, e.g. --attr "Job Type=Council" --attr "Status=Active". See field names with `numa integrations synergy-schema`.',
+      (val: string, acc: string[] = []) => {
+        acc.push(val);
+        return acc;
+      },
+      [] as string[]
+    )
+    .option(
       '-m, --user-message <text>',
       'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
     )
@@ -161,6 +178,12 @@ function createFilesSearchCommand(): Command {
           all?: boolean;
           maxResults?: number;
           summarise?: boolean;
+          similarJobs?: boolean;
+          createdAfter?: string;
+          createdBefore?: string;
+          parentJob?: string;
+          excludeTemplates?: boolean;
+          attr?: string[];
         } & StandardOptions
       ) => {
         const account = activeProfile();
@@ -179,7 +202,38 @@ function createFilesSearchCommand(): Command {
           summarise_results: options.summarise ?? false,
           ...(options.maxResults !== undefined ? { max_results: options.maxResults } : {}),
           ...(picked ? { kb_id: picked.id } : {}),
+          // Synergy "find similar jobs": search per-job rollup records instead of
+          // the per-document corpus (one result == one job).
+          ...(options.similarJobs ? { doc_type: 'job_rollup' } : {}),
         };
+
+        // Synergy structured breadth-search filters — combine with the semantic
+        // query (e.g. "retaining walls" + created since 2023, no templates).
+        const structuredFilters: Record<string, unknown> = {};
+        if (options.createdAfter) structuredFilters.created_after = options.createdAfter;
+        if (options.createdBefore) structuredFilters.created_before = options.createdBefore;
+        if (options.parentJob) structuredFilters.parent_job_id = options.parentJob;
+        if (options.excludeTemplates) structuredFilters.is_template = false;
+        // --attr "Name=Value" → attr_<snake>=value (matches the crawler's _attr_key).
+        for (const kv of options.attr ?? []) {
+          const eq = kv.indexOf('=');
+          if (eq > 0) {
+            const key =
+              'attr_' +
+              kv
+                .slice(0, eq)
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '_')
+                .replace(/^_+|_+$/g, '');
+            if (key !== 'attr_') structuredFilters[key] = kv.slice(eq + 1).trim();
+          }
+        }
+        if (Object.keys(structuredFilters).length > 0) {
+          params.structured_filters = structuredFilters;
+          // These fields live only on per-job rollups, so filtering implies job
+          // search — force rollup mode even if --similar-jobs wasn't passed.
+          params.doc_type = 'job_rollup';
+        }
 
         const request: ToolInvokeRequest<'query_knowledgebase'> = {
           tool: 'query_knowledgebase',

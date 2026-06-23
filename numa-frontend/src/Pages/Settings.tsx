@@ -72,7 +72,7 @@ import { CharCount } from '../Components/CharCount';
 import { manifestService } from '../Services/manifestService';
 import { loadCapabilities, groupByDependencies } from '../utils/capabilityRegistry';
 import { ROUTE_CONFIG } from '../utils/routeConfig';
-import type { CapabilityItem } from '../utils/capabilityRegistry';
+import type { CapabilityItem, CapabilityGroup } from '../utils/capabilityRegistry';
 import { getFlagRegistry } from '../utils/featureFlags';
 import SSOSettingsPanel from '../Components/Settings/SSOSettingsPanel';
 import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
@@ -1285,7 +1285,7 @@ export default function SettingsPage() {
   /** Group visible capabilities by dependency for the UI. */
   const capabilityGroups = groupByDependencies(visibleCapabilities);
 
-  const renderCapabilityRow = (cap: CapabilityItem, isChild = false) => {
+  const renderCapabilityRow = (cap: CapabilityItem, depth = 0) => {
     const capSetting = capabilitySettings[cap.flag];
     const adminEnabled = capSetting ? capSetting.status === 'enabled' : !DEFAULT_DISABLED_FLAGS.has(cap.flag);
     const isSystemOnly = cap.systemOnly ?? false;
@@ -1313,7 +1313,7 @@ export default function SettingsPage() {
           opacity: isGreyed ? 0.55 : 1,
           cursor: 'default',
           filter: isGreyed ? 'grayscale(40%)' : 'none',
-          ...(isChild ? { marginLeft: '2rem', borderLeft: '3px solid #dee2e6' } : {}),
+          ...(depth > 0 ? { marginLeft: `${depth * 2}rem`, borderLeft: '3px solid #dee2e6' } : {}),
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
@@ -1373,6 +1373,22 @@ export default function SettingsPage() {
                     </span>
                   </OverlayTrigger>
                 )}
+                {cap.metered && (
+                  <OverlayTrigger placement="top" overlay={<Tooltip>{t('capabilities.meteredTooltip')}</Tooltip>}>
+                    <span
+                      className="badge d-inline-flex align-items-center gap-1"
+                      style={{
+                        backgroundColor: '#eef2ff',
+                        color: '#4338ca',
+                        border: '1px solid #c7d2fe',
+                        fontSize: '0.7rem',
+                      }}
+                    >
+                      <i className="bi bi-coin" />
+                      {t('capabilities.metered')}
+                    </span>
+                  </OverlayTrigger>
+                )}
               </div>
               <div
                 className="text-muted small settings-item-description"
@@ -1402,6 +1418,20 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
+      </div>
+    );
+  };
+
+  // Recursively render a capability and its nested sub-capabilities, indenting
+  // one level per depth (DATA_CONNECTORS_ENABLED → SYNERGY → SYNERGY_FILE_PARITY).
+  // Depth-capped so a malformed cyclic dependency in capabilities.json can never
+  // infinitely recurse and hang the Settings page.
+  const renderCapabilityGroup = (group: CapabilityGroup, depth = 0): React.ReactNode => {
+    if (depth > 10) return null;
+    return (
+      <div key={group.parent.flag}>
+        {renderCapabilityRow(group.parent, depth)}
+        {group.children.map((child) => renderCapabilityGroup(child, depth + 1))}
       </div>
     );
   };
@@ -2575,14 +2605,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                 </Alert>
-                <div>
-                  {capabilityGroups.map((group) => (
-                    <div key={group.parent.flag}>
-                      {renderCapabilityRow(group.parent)}
-                      {group.children.map((child) => renderCapabilityRow(child, true))}
-                    </div>
-                  ))}
-                </div>
+                <div>{capabilityGroups.map((group) => renderCapabilityGroup(group, 0))}</div>
               </Tab>
               {creditsEnabled && (
                 <Tab
@@ -2976,11 +2999,14 @@ export default function SettingsPage() {
                         when the connector is Synergy and the native side is
                         configured — auto-rotation can silently fail, and
                         before this badge there was no admin signal for it. */}
-                    {mf.connectorSlug === 'synergy' && mfNativeEnabled && (
-                      <div className="mt-3 d-flex justify-content-end">
-                        <SynergyPatBadge connectorConfigured={mfNativeEnabled} />
-                      </div>
-                    )}
+                    {mf.connectorSlug === 'synergy' &&
+                      mfNativeEnabled &&
+                      sessionStorage.getItem('DEPLOY_SYNERGY') === 'true' &&
+                      getFlag('SYNERGY') && (
+                        <div className="mt-3 d-flex justify-content-end">
+                          <SynergyPatBadge connectorConfigured={mfNativeEnabled} />
+                        </div>
+                      )}
                   </Modal.Body>
                   <Modal.Footer className="border-top pt-3">
                     <div className="d-flex justify-content-between align-items-center w-100">

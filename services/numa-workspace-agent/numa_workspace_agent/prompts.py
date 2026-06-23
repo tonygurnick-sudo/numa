@@ -454,6 +454,7 @@ Activate skills using the Skill tool. Available skills:
 | `spreadsheet-handling` | Reading, writing, and analyzing Excel, CSV, and TSV files |
 | `data-analysis` | Optimizing performance for large datasets (SQLite conversion, SQL querying, charts) |
 | `connect` | Native-connector operations within the unified Integrations system — listing, searching, downloading files, or making authenticated HTTP requests via the user's native connections (Google Drive, OneDrive, Dropbox, Gmail, Synergy 12d). |
+| `synergy-metadata` | Reading Synergy 12d structure, the job attribute schema, and counts (instead of listing everything), cross-job search (exact-term, portfolio breakdowns, `--similar-jobs` ranking), plus live per-job reads — tasks (+ task detail & state vocab), contacts/people (+ full directory & global lists), issues/RFIs, workflow status, file metadata/permission/access (+ by-name & version), file history, recent changes, forums/discussions, embedded 12d Model projects, transmittals/issued-files, companies, webforms, teams/reports/clashes, job dashboard/roles/categories, notes/associations, users/checkouts, the connection-health probe, and resolving a pasted 12d link/path to an entity + URL. Load before answering "how many / what fields / how big", "which jobs mention X", "who's on / what's outstanding on / who can access / what changed on / what's attached to this job", "what is this 12d link / open this link", "is my Synergy connection working" questions over Synergy. |
 | `numa-voice` | Adding or editing Numa Voice SDR prospects / the daily call list (today_calls.json, master_prospects.json in Company Files). **Load this BEFORE editing those files** — the exact snake_case field names (company_name, contact_name, phone) and E.164 phone format are mandatory or the prospect renders blank and undiallable. |
 | `visual-design` | Styling any visual artifact — dashboard, chart, slide deck, PDF/HTML report, styled page. Brand colour/font/spacing tokens and per-artifact layout recipes. Load BEFORE styling so output looks designed, not defaulted. Defaults to the Numa look, or matches the user's own brand if they have one (stated in chat, saved in memory, or in a file you're editing). Pairs with render / pptx / pdf / docx / data-analysis. |
 
@@ -1463,8 +1464,39 @@ Two surfaces, pick by what you need:
 - `numa integrations list-files <slug> [--folder-id <id>] [--query <text>] -m "..."` — browse folders/files (omit `--folder-id` for the root)
 - `numa integrations search-files <slug> <query> -m "..."` — search files/jobs by name
 - `numa integrations download-file <slug> <file-id> -m "..."` — download into `/workdir/uploads/connect-<slug>/`
-- `numa integrations file-info <slug> <file-id> -m "..."` — file metadata (OAuth providers only)
+- `numa integrations file-info <slug> <file-id> -m "..."` — file metadata (Synergy + OAuth providers). Pass a file id, not a `job:`/`folder:` id.
 - Synergy navigation: list jobs at the root, then `--folder-id job:<id>` for a job's folders, `--folder-id folder:<id>` for a folder's contents.
+
+**Synergy 12d — structure & stats (use these instead of expanding every folder):**
+- `numa integrations synergy-stats <job-id> -m "..."` — a job's makeup in ONE call: folder/file counts, file-type mix, size buckets, depth. Use this for "how big / what's in this job", NOT a fan-out of `list-files` per folder.
+- `numa integrations synergy-tree <job-id> [--max-depth N] -m "..."` — the folder outline with per-folder file counts.
+- `numa integrations synergy-job <job-id> -m "..."` — child counts + the job's attributes (type/status/dates/custom fields).
+- `numa integrations synergy-folder <folder-id> -m "..."` — one folder's subfolder + file counts.
+- `numa integrations synergy-schema [--mode job|file|contact|types|categories|find|choices] [--entity job|file|contact] [--name <attr>] [--type-name <enum>] [--extension <ext>] -m "..."` — the filter/report **vocabulary**. Default (no `--mode`) = the job attributes you can filter/report on. `--mode types` decodes the numeric enums (attribute/match-op/entity/file/folder/folder-state/note-target types); `--mode choices --name <attr>` lists an attribute's valid enum picklist; `--mode find --name <attr>` confirms one attribute's exact type; `--mode file|contact` = file/contact filter attributes; `--mode categories` = the category taxonomy. Use this first when a filter/report needs a field's name, type, or valid values.
+- `numa integrations synergy-portfolio [--attr "Job Type=Council"] [--created-after <ISO>] [--exclude-templates] [--group-by "Status"] -m "..."` — **exhaustive** structured query over ALL crawled jobs: count + list jobs by attribute, ACL-enforced. Use this for "how many / list ALL jobs where …" and portfolio breakdowns (`--group-by`). This is the COMPLETE answer; `--similar-jobs` is only top-K by similarity. (Requires the Synergy crawl/index feature; if it's off you'll get a clear message.)
+- `numa integrations synergy-exact-term "<word>" ["<word2>"] [--or] -m "..."` — find every job containing these EXACT words/codes (a supplier name, drawing number, a standard like AS3500), ACL-enforced + exhaustive. Use for "which jobs mention X" / locating a code — NOT `--similar-jobs` (that's meaning-based, top-K). (Requires the crawl/index feature.)
+- **Pick the right search, then prune→rank→drill (don't brute-force):**
+  - exact word/code/name → `synergy-exact-term`; meaning/"jobs like this" → `files search --folder synergy --similar-jobs`; by attribute/date/count → `synergy-portfolio`; inside one job → `search-files`.
+  - To work across jobs: PRUNE to candidates first (exact-term or portfolio), THEN rank with `--similar-jobs`, THEN drill with `synergy-stats`/`synergy-tree`/`search-files`. Don't list every root job and string-match names, and don't open every folder by hand. For more, load the `synergy-metadata` skill.
+
+**Synergy 12d — live reads (current state via the user's own PAT, no crawl/index needed; status fields are READ ONLY):**
+- `numa integrations synergy-tasks [<job-id>] [--task-id <id>] [--task-type-id <id>] [--assignee-id <id>] [--include-closed] [--limit N] -m "..."` — a job's tasks: owner, state, due date, open/closed. Use for "what's outstanding / assigned to X / due". Defaults to open tasks. `--task-id` → one task's detail (children + history); `--task-type-id` → that task type's **state vocabulary** (valid + initial states, task types) to decode a task's state. States are read-only.
+- `numa integrations synergy-contacts [--mode job|search|get|directory|global-lists] [--job-id <id>] [--contact-id <id>] [--query <text>] [--first-name <n>] [--last-name <n>] [--email <e>] [--users-only] [--page N] [--page-size N] -m "..."` — people on a job, a directory search, or one contact's detail. Use for "who's on this job / find <person>'s email". Note: the **PM/foreman** is often a job **attribute** too — `synergy-job` may answer "who is the PM" without a contact lookup. `--mode directory` pages the **full address book** (prefer a targeted `--query` when you know who you want); `--mode global-lists` lists the instance's global contact/distribution lists.
+- `numa integrations synergy-issues [--job-id <id>] [--issue-id <id>] [--page N] [--page-size N] [--include-changes] -m "..."` — a job's issues/RFIs (`--job-id`) or one issue's detail + comments (`--issue-id`). Status/type are read-only labels.
+- `numa integrations synergy-workflow [--mode definitions|definition|instance|transition_log|diagram] [--workflow-id <id>] [--entity-id <id>] [--entity-type job|issue|task] [--instance-id <id>] [--current-state-id <id>] [--return-all] -m "..."` — workflow status, READ ONLY: definitions, one definition, the live instance state (`--entity-id` + `--entity-type`), its transition log, or the stage diagram. You can't advance a workflow.
+- `numa integrations synergy-file-history <file-id> [--page N] [--page-size N] -m "..."` — one file's version history (version, who changed it, when, change type). Pass a FILE id, not a `job:`/`folder:` id.
+- `numa integrations file-info synergy <file-id> [--mode info|permission|access|by-name|version] [--name <file-name>] [--folder-id <id>] [--version N] -m "..."` — a single file's **metadata + access**. Default `info` = metadata (name/size/type/version/checksum/dates/`ActiveCheckout`); `permission` = the caller's permission on it; `access` = the users + groups with access ("who can see this"); `by-name` = look a file up by `--name` within `--folder-id` (both required) instead of by id; `version` = a specific `--version`'s metadata. Pass a FILE id, not a `job:`/`folder:` id.
+- `numa integrations synergy-recent [--job-id <id>] [--folder-id <id>] [--days N] [--since <ISO-UTC>] [--limit N] -m "..."` — what changed recently in a job or folder (one of `--job-id`/`--folder-id`; folder wins). `--since` overrides `--days` (default 7). Polling, not push (no webhooks) — re-run when asked, don't tight-loop.
+- `numa integrations synergy-forums [--mode list|forum|categories|category|topics|topic|posts] [--job-id <id>] [--forum-id <id>] [--category-id <id>] [--topic-id <id>] [--page N] [--page-size N] [--include-permission] -m "..."` — a job's **forums / discussions**: list forums, drill forum → categories → topics → posts (read a thread). The mode is inferred from the id you pass (topic-id→posts, category-id→topics, forum-id→categories, job-id→list), so just pass the deepest id you have.
+- `numa integrations synergy-projects [--mode find|list|get|folders|file-info|associations|notes|permission|history|changed-elements|latest-change|preview] [--project-id <id>] [--job-id <id>] [--folder-id <id>] [--name <n>] [--version N] [--page N] [--page-size N] -m "..."` — the embedded **12d Model projects** (`Sub12dProjects`/`TDJobs`) inside a job/folder: find/list/get metadata, sub-folders, file info, associations, notes, permission, change history, changed elements, latest change, or the preview image. A 12d PROJECT is NOT a Synergy job — jobs are the org unit (use `synergy-list`/`synergy-search`/`synergy-job`); a 12d project is the software project nested inside one. They have different ids; never pass a job id as a project id.
+- `numa integrations synergy-transmittals [--mode types|sets|set|issue|discover|attributes] [--job-id <id>] [--type-id <id>] [--set-id <id>] [--issue-id <id>] [--version N] -m "..."` — **issued files / transmittals** on a job: file-set types → sets → issues (publish events) → published files + recipients. `--mode discover --job-id <id>` lists all of a job's transmittals in one call. NOTE: a transmittal "issue" is a publish event, NOT an issue-tracking RFI (that's `synergy-issues`) — don't cross-wire the ids.
+- `numa integrations synergy-companies [--mode list|get|jobs|staff|schema] [--company-id <id>] [--limit N] -m "..."` — **companies / organisations**: list all, one company + attributes, a company's jobs, its staff (contacts), or the company-attribute vocabulary. Pairs with `synergy-contacts` (contacts carry a `companies[]` back-reference). Some instances have no list-all endpoint — fetch by id or via a contact's company if `list` returns empty.
+- `numa integrations synergy-webforms [--mode enabled|definitions|fills] [--job-id <id>] [--task-id <id>] [--task-type-id <id>] [--file-id <id>] [--definition-id <id>] [--fill-id <id>] [--output-files] [--search] [--user-id <id>] [--page N] [--page-size N] [--limit N] -m "..."` — **webforms**: check the feature is on (`enabled`), list form **definitions** (the field structure) by job/task/task-type/id, or list form **fills** (submissions + their answers) by job/file/task/search/id. `--fill-id … --output-files` lists a submission's generated files (then pull bytes with `download-file`).
+- `numa integrations synergy-job-extras --section team|roles|reports|report|report_inputs|clashes|clash_items|clash_report|dashboard|job-roles|categories|job-file-attributes [--job-id <id>] [--entity-id <id>] [--entity-type <enc>] [--report-type <t>] [--report-id <guid>] [--folder-id <id>] [--clash-id <id>] [--report-format csv|pdf] [--users-only] [--limit N] -m "..."` — heavier job/entity/folder reads: the job **team** + role definitions, server **reports** (catalog/by-entity/one report/its inputs), and **clash detection** (clash sets for a folder, items in a clash, and the binary clash report). `--section` is required. The clash report is staged as a download, not inline JSON. Job-header sections (need `--job-id`): `dashboard` = the job's dashboard/overview header; `job-roles` [`--users-only`] = who holds which role **on this job** (distinct from `roles`, the instance-wide role-id → name reference); `categories` = the job's categories; `job-file-attributes` = the per-job file-attribute schema.
+- `numa integrations synergy-notes [--section notes|associations] --target-id <id> [--target-type <enc>] [--scope job|file|folder|project] [--note-id <id>] [--include-message] [--expected-type <enc>] [--count-only] -m "..."` — **notes & associations** on any entity (job/file/folder/12d-project): "what is attached to / linked from this?". Pass `--scope` to skip the entity-type enum (uses the convenience path). `--count-only` returns just the count; `--section associations` returns linked entities.
+- `numa integrations synergy-status -m "..."` — **connection-health / PAT-validity probe**: rolls up instance reachability (`/health`), API version, server id, and whether the user's PAT is still valid (+ days remaining) into one `healthy` verdict. Use this when a Synergy command failed with an auth/credential error, or to answer "is my Synergy connection working". Takes no other params.
+- `numa integrations synergy-users [--mode lookup|checkouts|module] [--user-id <id>] [--job-id <id>] [--module <name>] -m "..."` — **users**: resolve a user id (from a task owner / issue assignee / checkout holder) to a name/email (`lookup`), list the **caller's own** active file/folder checkouts in a job (`checkouts` — PAT-scoped, NOT an org-wide lock view), or check the caller's access to a license module (`module`). For who-holds-a-specific-file org-wide, read `ActiveCheckout` via `synergy-file-info`.
+- `numa integrations synergy-resolve [--mode link|path|weblink] [--link <synergy-or-web-link>] [--path <12d-path>] [--entity-id <id>] [--entity-type <enc>] -m "..."` — **resolve a pasted 12d link/path to an entity (+ clickable URL)**. When the user pastes a `synergy://…` link, a Synergy web URL, or a 12d path: `--link` parses it to an entity ref (id + type) then best-effort its web URL; `--path` finds the entity at a 12d path; `--mode weblink --entity-id <id> --entity-type <enc>` builds the clickable web URL for an entity you already have. Read-only lookup — then follow up with the entity-specific tool (`synergy-job`/`synergy-folder`/`synergy-file-info`). Degrades with a note when the link/path shape is undocumented.
 
 **Authenticated HTTP API calls** (`request`):
 - `numa integrations request <slug> <METHOD> <url> -m "..."` — authenticated HTTP request (requires approval)
@@ -2138,20 +2170,52 @@ def build_kb_context(
         )
         return "\n".join(lines)
 
-    if not available_kbs:
+    # Synergy is a cross-job search corpus, not a Numa Files folder — pull it out
+    # and render it as its own capability section so the agent knows that
+    # kb_id="synergy" exists and when to reach for it.
+    synergy_present = any(kb.get("id") == "synergy" for kb in (available_kbs or []))
+    folder_kbs = [kb for kb in (available_kbs or []) if kb.get("id") != "synergy"]
+
+    def _synergy_section() -> str:
+        if not synergy_present:
+            return ""
+        return (
+            '\n\n**Synergy cross-job search** (`kb_id: "synergy"`) — 12d has no native '
+            "cross-job search, so Numa indexes every job document the user may see. "
+            "FOUR ways to search; pick by the question:\n"
+            '- MEANING ("jobs like this / about retaining walls"): '
+            '`numa files search "<query>" --folder synergy` for documents, or add '
+            "`--similar-jobs` for whole jobs ranked by similarity (top matches, not all).\n"
+            '- EXACT word/code/name ("which jobs mention supplier X / contain AS3500"): '
+            '`numa integrations synergy-exact-term "<word>" [--or]` — every matching '
+            "job, literal, exhaustive.\n"
+            '- BY ATTRIBUTE/DATE/COUNT ("how many council jobs since 2023"): '
+            '`numa integrations synergy-portfolio --attr "Job Type=Council" '
+            "[--created-after <ISO>] [--group-by Status]` — complete count + list.\n"
+            '- INSIDE one chosen job: `numa integrations search-files synergy "<q>" '
+            "--folder-id job:<id>`.\n"
+            "Combine for breadth+precision: prune with exact-term or portfolio, then "
+            "rank the survivors with `--similar-jobs`. Permissions are enforced in every "
+            "mode (results are always safe to show). The `--similar-jobs` rollup also "
+            "shows each job's document-type mix for quick 'what kind of job' context."
+        )
+
+    if not folder_kbs:
         base = (
             "**Numa Files:** No folders are currently enabled. "
             "The user can enable them in the chat settings. "
             "Do not attempt to use the numa_files tool until a folder is enabled."
         )
-        return base + _render_disabled_section()
+        return base + _render_disabled_section() + _synergy_section()
 
     lines = ["**Available Numa Files folders (enabled for this conversation):**"]
 
     user_sub = os.environ.get("NUMA_USER_SUB", "")
     # Headers only — one line per enabled folder. No file listings are injected;
-    # the agent must search/traverse to find files (see the guidance below).
-    for kb in available_kbs:
+    # the agent must search/traverse to find files. Iterate folder_kbs (the
+    # non-synergy folders) — the synergy cross-job corpus is rendered separately
+    # by _synergy_section below, not as a browsable folder.
+    for kb in folder_kbs:
         kb_id = kb.get("id", "unknown")
         kb_name = kb.get("name", kb_id)
 
@@ -2188,6 +2252,10 @@ def build_kb_context(
     disabled_section = _render_disabled_section()
     if disabled_section:
         lines.append(disabled_section)
+
+    synergy_section = _synergy_section()
+    if synergy_section:
+        lines.append(synergy_section)
 
     return "\n".join(lines)
 

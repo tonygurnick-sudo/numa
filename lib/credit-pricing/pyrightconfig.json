@@ -1,0 +1,3 @@
+{
+  "exclude": [".venv", "**/.venv", "build_venv", "**/build_venv", "dist", "build", "*.egg-info", "wheels"]
+}

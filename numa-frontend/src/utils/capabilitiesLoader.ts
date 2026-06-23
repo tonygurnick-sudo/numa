@@ -37,11 +37,15 @@ export interface CapabilityItem {
   systemOnly: boolean;
   /** Commercial tier: 'gold' = premium (shows a Gold badge). Absent/'standard' = standard. Label only. */
   tier?: 'standard' | 'gold';
+  /** If true, using this capability is credit-metered (shows a Metered badge). Label only. */
+  metered?: boolean;
 }
 
 export interface CapabilityGroup {
   parent: CapabilityItem;
-  children: CapabilityItem[];
+  /** Nested sub-capabilities — recursive, so a child can itself be a parent
+   *  (e.g. DATA_CONNECTORS_ENABLED → SYNERGY → SYNERGY_FILE_PARITY). */
+  children: CapabilityGroup[];
 }
 
 let cachedCapabilities: CapabilityItem[] | null = null;
@@ -72,6 +76,7 @@ export async function loadCapabilities(): Promise<CapabilityItem[]> {
       dependencies: (item.dependencies ?? []).map(camelToUpperSnake),
       systemOnly: item.systemOnly ?? item.system_only ?? false,
       tier: item.tier,
+      metered: item.metered ?? false,
     }));
     return cachedCapabilities;
   } catch {
@@ -88,37 +93,30 @@ export function clearCapabilitiesCache(): void {
 }
 
 /**
- * Group capabilities by dependency relationships.
+ * Group capabilities into a dependency TREE (multi-level).
  *
- * Capabilities with no dependencies are treated as top-level parents.
- * Capabilities with dependencies are nested under their first dependency.
- * If a child's parent is not in the list, it becomes a standalone group.
+ * Each capability nests under its first dependency, recursively — so a child
+ * can itself be a parent (e.g. DATA_CONNECTORS_ENABLED → SYNERGY →
+ * SYNERGY_FILE_PARITY / SYNERGY_KB_SEARCH, and NUMA_OPS → NUMA_VOICE →
+ * VOICE_ANALYTICS). A capability with no dependencies, or whose first
+ * dependency isn't present in the list, becomes a top-level (root) group.
+ * Insertion order (the metadata array order) is preserved at every level.
  */
 export function groupByDependencies(caps: CapabilityItem[]): CapabilityGroup[] {
-  const parentFlags = new Set(caps.filter((c) => c.dependencies.length === 0).map((c) => c.flag));
+  const nodes = new Map<string, CapabilityGroup>(caps.map((c) => [c.flag, { parent: c, children: [] }]));
+  const roots: CapabilityGroup[] = [];
 
-  const groups = new Map<string, CapabilityGroup>();
-
-  // Create parent groups (sorted alphabetically)
   for (const cap of caps) {
-    if (parentFlags.has(cap.flag)) {
-      groups.set(cap.flag, { parent: cap, children: [] });
+    const node = nodes.get(cap.flag)!;
+    const parentFlag = cap.dependencies[0];
+    const parentNode = parentFlag ? nodes.get(parentFlag) : undefined;
+    if (parentNode) {
+      parentNode.children.push(node);
+    } else {
+      // No dependency, or the parent isn't in the visible list → top-level.
+      roots.push(node);
     }
   }
 
-  // Assign children to their parent's group
-  for (const cap of caps) {
-    if (cap.dependencies.length > 0) {
-      const parentFlag = cap.dependencies[0];
-      const group = groups.get(parentFlag);
-      if (group) {
-        group.children.push(cap);
-      } else {
-        // Parent not in list — treat as standalone
-        groups.set(cap.flag, { parent: cap, children: [] });
-      }
-    }
-  }
-
-  return Array.from(groups.values());
+  return roots;
 }

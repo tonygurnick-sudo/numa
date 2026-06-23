@@ -48,9 +48,10 @@ async function seed(): Promise<void> {
                 system_only: cap.system_only,
                 dev_only: cap.dev_only,
                 dependencies: cap.dependencies,
-                // Only write tier when set — lib-dynamodb rejects undefined
-                // attribute values (this client has no removeUndefinedValues).
+                // Only write tier/metered when set — lib-dynamodb rejects
+                // undefined attribute values (this client has no removeUndefinedValues).
                 ...(cap.tier ? { tier: cap.tier } : {}),
+                ...(cap.metered ? { metered: cap.metered } : {}),
               },
             },
           })),

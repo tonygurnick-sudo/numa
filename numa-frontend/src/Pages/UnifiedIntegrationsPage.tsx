@@ -42,7 +42,6 @@ import {
   getConnectionConfig,
 } from '../config/integrationsConfig';
 import { getConnectorById, surfacesInFiles } from '../Components/DataConnectors/connectorRegistry';
-import { SynergyKbSyncPanel } from '../Components/DataConnectors/SynergyKbSyncPanel';
 import { connectorSlugForPipedream } from '../Components/Integrations/integrationCatalogHelpers';
 import type { DataConnectorStatus } from '../types/dataConnectors';
 import type { ConnectionStatus, ConnectedAccount } from '../types/pipedream';
@@ -1986,9 +1985,9 @@ const NativeIntegrationSettingsModal = ({
           saving={approvalSaving}
           onChange={onApprovalModeChange}
         />
-        {/* Cross-job KB crawler admin controls — renders nothing unless the
-            caller is an admin AND the crawler is deployed for this workspace. */}
-        {svc.entry.slug === 'synergy' && <SynergyKbSyncPanel />}
+        {/* The Synergy cross-job KB sync panel is an ADMIN control — it now lives
+            in the admin connector config wizard (ApiKeyWizard, launched from
+            Settings → Admin → Integrations → Manage), not in this per-user modal. */}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={onHide}>

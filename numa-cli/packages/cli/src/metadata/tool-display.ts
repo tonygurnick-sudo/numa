@@ -30,9 +30,32 @@ import type {
   ConnectRequestResult,
   ConnectStatusParams,
   ConnectStatusResult,
+  ConnectSynergyCompaniesParams,
+  ConnectSynergyContactsParams,
   ConnectSynergyDownloadParams,
+  ConnectSynergyFileHistoryParams,
+  ConnectSynergyFileInfoParams,
+  ConnectSynergyFolderSummaryParams,
+  ConnectSynergyForumsParams,
+  ConnectSynergyIssuesParams,
+  ConnectSynergyJobExtrasParams,
+  ConnectSynergyJobMetaParams,
+  ConnectSynergyExactTermParams,
+  ConnectSynergyJobStatsParams,
+  ConnectSynergyJobTreeParams,
+  ConnectSynergyNotesParams,
+  ConnectSynergyPortfolioParams,
   ConnectSynergyListParams,
+  ConnectSynergyProjectsParams,
+  ConnectSynergyRecentParams,
+  ConnectSynergyResolveParams,
+  ConnectSynergySchemaParams,
   ConnectSynergySearchParams,
+  ConnectSynergyTasksParams,
+  ConnectSynergyTransmittalsParams,
+  ConnectSynergyUsersParams,
+  ConnectSynergyWebformsParams,
+  ConnectSynergyWorkflowParams,
   ConnectorDownloadResult,
   ConnectorFileMetadataResult,
   ConnectorListResult,
@@ -829,6 +852,418 @@ export const TOOL_DISPLAY: { [T in ToolName]: ToolDisplayInfo<T> } = {
     display: 'card',
     describeCall: (p: ConnectSynergyDownloadParams) => (p.file_id ? `Downloading Synergy file ${p.file_id}` : null),
     describeResult: describeConnectorDownload,
+  },
+
+  connect_synergy_job_meta: {
+    tool: 'connect_synergy_job_meta',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyJobMeta',
+    fallbackLabel: 'Synergy job details',
+    icon: 'Info',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyJobMetaParams) => (p.job_id ? `Looking up Synergy job ${p.job_id}` : null),
+    describeResult: () => null,
+  },
+
+  connect_synergy_folder_summary: {
+    tool: 'connect_synergy_folder_summary',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyFolderSummary',
+    fallbackLabel: 'Synergy folder contents',
+    icon: 'FolderOpen',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyFolderSummaryParams) =>
+      p.folder_id ? `Counting what's in Synergy folder ${p.folder_id}` : null,
+    describeResult: () => null,
+  },
+
+  connect_synergy_schema: {
+    tool: 'connect_synergy_schema',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergySchema',
+    fallbackLabel: 'Synergy fields & vocabulary',
+    icon: 'Info',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergySchemaParams) => {
+      if (p.mode === 'types')
+        return p.type_name ? `Looking up the Synergy "${p.type_name}" enum` : 'Looking up the Synergy decode enums';
+      if (p.mode === 'categories') return 'Looking up the Synergy category vocabulary';
+      if (p.mode === 'find')
+        return p.name ? `Resolving the Synergy attribute "${p.name}"` : 'Resolving a Synergy attribute';
+      if (p.mode === 'choices')
+        return p.name
+          ? `Looking up valid choices for Synergy attribute "${p.name}"`
+          : 'Looking up valid Synergy attribute choices';
+      if (p.mode === 'file' || p.entity === 'file') return 'Looking up the Synergy file fields';
+      if (p.mode === 'contact' || p.entity === 'contact') return 'Looking up the Synergy contact fields';
+      return 'Looking up the Synergy job fields';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_file_info: {
+    tool: 'connect_synergy_file_info',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsFileInfo',
+    fallbackLabel: 'Synergy file details',
+    icon: 'Info',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyFileInfoParams) => (p.file_id ? `Looking up Synergy file ${p.file_id}` : null),
+    describeResult: (r: ConnectorFileMetadataResult) =>
+      r?.name ? `${r.name}${typeof r.size === 'number' ? ` (${formatBytes(r.size)})` : ''}` : null,
+  },
+
+  connect_synergy_job_stats: {
+    tool: 'connect_synergy_job_stats',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyJobStats',
+    fallbackLabel: 'Synergy job summary',
+    icon: 'BarChart',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyJobStatsParams) => (p.job_id ? `Summarising Synergy job ${p.job_id}` : null),
+    describeResult: () => null,
+  },
+
+  connect_synergy_job_tree: {
+    tool: 'connect_synergy_job_tree',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyJobTree',
+    fallbackLabel: 'Synergy folder layout',
+    icon: 'FolderTree',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyJobTreeParams) =>
+      p.job_id ? `Mapping the folders in Synergy job ${p.job_id}` : null,
+    describeResult: () => null,
+  },
+
+  connect_synergy_exact_term: {
+    tool: 'connect_synergy_exact_term',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyExactTerm',
+    fallbackLabel: 'Synergy exact-word search',
+    icon: 'Search',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyExactTermParams) =>
+      Array.isArray(p.terms) && p.terms.length
+        ? `Finding Synergy jobs containing ${p.terms.join(p.mode === 'OR' ? ' or ' : ' + ')}`
+        : 'Searching Synergy jobs by exact word',
+    describeResult: () => null,
+  },
+
+  connect_synergy_portfolio: {
+    tool: 'connect_synergy_portfolio',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyPortfolio',
+    fallbackLabel: 'Synergy job search',
+    icon: 'BarChart',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyPortfolioParams) =>
+      p.group_by ? `Counting Synergy jobs by ${p.group_by.replace(/^attr_/, '')}` : 'Searching across Synergy jobs',
+    describeResult: () => null,
+  },
+
+  // ─── Wave 1 read-only Synergy tools (PAT-scoped live 12d reads) ───────────
+
+  connect_synergy_tasks: {
+    tool: 'connect_synergy_tasks',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyTasks',
+    fallbackLabel: 'Synergy tasks',
+    icon: 'ListChecks',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyTasksParams) => {
+      if (!p.job_id) return null;
+      if (p.assignee_id) return `Listing Synergy tasks for ${p.assignee_id} on job ${p.job_id}`;
+      return `Listing Synergy tasks on job ${p.job_id}`;
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_contacts: {
+    tool: 'connect_synergy_contacts',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyContacts',
+    fallbackLabel: 'Synergy contacts',
+    icon: 'Users',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyContactsParams) => {
+      if (p.contact_id) return `Looking up Synergy contact ${p.contact_id}`;
+      if (p.job_id) return `Listing Synergy contacts on job ${p.job_id}`;
+      const term = p.query || [p.first_name, p.last_name, p.email].filter(Boolean).join(' ');
+      return term ? `Searching Synergy contacts for "${truncate(term, 50)}"` : 'Searching Synergy contacts';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_issues: {
+    tool: 'connect_synergy_issues',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyIssues',
+    fallbackLabel: 'Synergy issues',
+    icon: 'AlertCircle',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyIssuesParams) => {
+      if (p.issue_id) return `Looking up Synergy issue ${p.issue_id}`;
+      if (p.job_id) return `Listing Synergy issues on job ${p.job_id}`;
+      return 'Looking up Synergy issues';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_workflow: {
+    tool: 'connect_synergy_workflow',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyWorkflow',
+    fallbackLabel: 'Synergy workflow status',
+    icon: 'GitBranch',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyWorkflowParams) => {
+      if (p.mode === 'instance' || (p.entity_id && p.mode !== 'definitions')) {
+        return `Checking Synergy workflow status${p.entity_id ? ` for ${p.entity_id}` : ''}`;
+      }
+      if (p.mode === 'diagram') return 'Fetching the Synergy workflow diagram';
+      if (p.workflow_id) return `Looking up Synergy workflow ${p.workflow_id}`;
+      return 'Listing Synergy workflows';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_file_history: {
+    tool: 'connect_synergy_file_history',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyFileHistory',
+    fallbackLabel: 'Synergy file history',
+    icon: 'History',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyFileHistoryParams) =>
+      p.file_id ? `Looking up version history for Synergy file ${p.file_id}` : null,
+    describeResult: () => null,
+  },
+
+  connect_synergy_recent: {
+    tool: 'connect_synergy_recent',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyRecent',
+    fallbackLabel: 'Synergy recent changes',
+    icon: 'Clock',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyRecentParams) => {
+      const scope = p.folder_id ? `folder ${p.folder_id}` : p.job_id ? `job ${p.job_id}` : 'Synergy';
+      return `Checking recent changes in ${scope}`;
+    },
+    describeResult: () => null,
+  },
+
+  // ─── Wave 2 read-only Synergy tools (PAT-scoped live 12d reads) ───────────
+
+  connect_synergy_forums: {
+    tool: 'connect_synergy_forums',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyForums',
+    fallbackLabel: 'Synergy forums',
+    icon: 'MessagesSquare',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyForumsParams) => {
+      if (p.topic_id) return `Reading Synergy forum thread ${p.topic_id}`;
+      if (p.category_id) return `Listing Synergy forum topics in ${p.category_id}`;
+      if (p.forum_id) return `Opening Synergy forum ${p.forum_id}`;
+      if (p.job_id) return `Listing Synergy forums on job ${p.job_id}`;
+      return 'Looking up Synergy forums';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_projects: {
+    tool: 'connect_synergy_projects',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyProjects',
+    fallbackLabel: 'Synergy 12d projects',
+    icon: 'Box',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyProjectsParams) => {
+      if (p.mode === 'preview')
+        return `Fetching the Synergy 12d project preview${p.project_id ? ` for ${p.project_id}` : ''}`;
+      if (p.name) return `Finding the Synergy 12d project "${truncate(p.name, 50)}"`;
+      if (p.project_id) return `Looking up Synergy 12d project ${p.project_id}`;
+      if (p.job_id) return `Listing 12d projects in Synergy job ${p.job_id}`;
+      if (p.folder_id) return `Listing 12d projects in Synergy folder ${p.folder_id}`;
+      return 'Looking up Synergy 12d projects';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_transmittals: {
+    tool: 'connect_synergy_transmittals',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyTransmittals',
+    fallbackLabel: 'Synergy transmittals',
+    icon: 'Send',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyTransmittalsParams) => {
+      if (p.issue_id) return `Looking up Synergy transmittal ${p.issue_id}`;
+      if (p.set_id) return `Looking up Synergy issued file-set ${p.set_id}`;
+      if (p.job_id) return `Listing Synergy transmittals on job ${p.job_id}`;
+      return 'Looking up Synergy transmittals';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_companies: {
+    tool: 'connect_synergy_companies',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyCompanies',
+    fallbackLabel: 'Synergy companies',
+    icon: 'Building2',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyCompaniesParams) => {
+      if (p.mode === 'jobs') return `Listing jobs for Synergy company ${p.company_id ?? ''}`.trim();
+      if (p.mode === 'staff') return `Listing staff for Synergy company ${p.company_id ?? ''}`.trim();
+      if (p.mode === 'schema') return 'Looking up the Synergy company fields';
+      if (p.company_id) return `Looking up Synergy company ${p.company_id}`;
+      return 'Listing Synergy companies';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_webforms: {
+    tool: 'connect_synergy_webforms',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyWebforms',
+    fallbackLabel: 'Synergy web forms',
+    icon: 'ClipboardList',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyWebformsParams) => {
+      if (p.mode === 'enabled') return 'Checking whether Synergy web forms are enabled';
+      if (p.fill_id) return `Looking up Synergy form submission ${p.fill_id}`;
+      if (p.definition_id) return `Looking up Synergy form definition ${p.definition_id}`;
+      if (p.mode === 'definitions') {
+        const scope = p.task_type_id ?? p.task_id ?? p.job_id;
+        return scope ? `Listing Synergy form definitions for ${scope}` : 'Listing Synergy form definitions';
+      }
+      const scope = p.file_id ?? p.task_id ?? p.job_id;
+      return scope ? `Listing Synergy form submissions for ${scope}` : 'Looking up Synergy web forms';
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_job_extras: {
+    tool: 'connect_synergy_job_extras',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyJobExtras',
+    fallbackLabel: 'Synergy job extras',
+    icon: 'LayoutGrid',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyJobExtrasParams) => {
+      switch (p.section) {
+        case 'team':
+          return `Looking up the Synergy job team${p.job_id ? ` on ${p.job_id}` : ''}`;
+        case 'roles':
+          return 'Looking up Synergy team role definitions';
+        case 'reports':
+          return 'Listing Synergy reports';
+        case 'report':
+          return `Looking up Synergy report ${p.report_id ?? ''}`.trim();
+        case 'report_inputs':
+          return `Looking up inputs for Synergy report ${p.report_id ?? ''}`.trim();
+        case 'clashes':
+          return `Listing Synergy clash detections${p.folder_id ? ` in ${p.folder_id}` : ''}`;
+        case 'clash_items':
+          return `Listing items in Synergy clash ${p.clash_id ?? ''}`.trim();
+        case 'clash_report':
+          return `Fetching the Synergy clash report ${p.clash_id ?? ''}`.trim();
+        default:
+          return 'Looking up Synergy job extras';
+      }
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_notes: {
+    tool: 'connect_synergy_notes',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyNotes',
+    fallbackLabel: 'Synergy notes',
+    icon: 'StickyNote',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyNotesParams) => {
+      const target = p.target_id ? ` on ${p.target_id}` : '';
+      if (p.section === 'associations') return `Looking up Synergy associations${target}`;
+      return `Looking up Synergy notes${target}`;
+    },
+    describeResult: () => null,
+  },
+
+  connect_synergy_status: {
+    tool: 'connect_synergy_status',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyStatus',
+    fallbackLabel: 'Synergy connection status',
+    icon: 'Activity',
+    category: 'integrations',
+    display: 'card',
+    describeCall: () => 'Checking the Synergy connection health',
+    describeResult: () => null,
+  },
+
+  connect_synergy_users: {
+    tool: 'connect_synergy_users',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyUsers',
+    fallbackLabel: 'Synergy users',
+    icon: 'UserCircle',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyUsersParams) => {
+      if (p.mode === 'module' || p.module) return `Checking Synergy module access${p.module ? ` for ${p.module}` : ''}`;
+      if (p.mode === 'checkouts' || p.job_id)
+        return `Listing Synergy checkouts${p.job_id ? ` on job ${p.job_id}` : ''}`;
+      if (p.user_id) return `Looking up Synergy user ${p.user_id}`;
+      return 'Looking up Synergy users';
+    },
+    describeResult: () => null,
+  },
+
+  // ─── Wave 3 read-only Synergy tool (PAT-scoped live 12d reads) ────────────
+
+  connect_synergy_resolve: {
+    tool: 'connect_synergy_resolve',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSynergyResolve',
+    fallbackLabel: 'Synergy link resolver',
+    icon: 'Link',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSynergyResolveParams) => {
+      if (p.mode === 'path' || (p.path && p.mode !== 'link' && p.mode !== 'weblink')) {
+        return p.path ? `Resolving Synergy path ${truncate(p.path, 60)}` : 'Resolving a Synergy path';
+      }
+      if (p.mode === 'weblink' || (p.entity_id && !p.link && !p.path)) {
+        return p.entity_id ? `Building a Synergy link for ${p.entity_id}` : 'Building a Synergy link';
+      }
+      return p.link ? `Resolving Synergy link ${truncate(p.link, 60)}` : 'Resolving a Synergy link';
+    },
+    describeResult: () => null,
   },
 
   oauth_list_files: {

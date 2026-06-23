@@ -241,7 +241,8 @@ pre-commit:
         - lambdas/python/structured-data-extraction
         - lambdas/python/structured-data-query
         - lambdas/python/synergy-crawl-coordinator
-        - lambdas/python/synergy-crawl-restart
+        - lambdas/python/synergy-credit-debit
+        - lambdas/python/synergy-text-crawler
         - lambdas/python/tor-assessment
         - lambdas/python/vault-secrets
         - lambdas/python/web-crawler-start
@@ -255,9 +256,11 @@ pre-commit:
         - deployer
         - lib/aws-transcribe
         - lib/bedrock
+        - lib/credit-pricing
         - lib/helpers
         - lib/markdown-to-pdf
         - lib/s3_helpers
+        - lib/synergy-tokenize
 
 .node_job:
   cache:
@@ -395,7 +398,9 @@ python-libraries-check:
   extends: .python-check-base
   script:
     - poetry run pyright .
-    - if [ -d tests ]; then poetry run python -m unittest discover -s tests -v; else echo "No tests/ directory, skipping"; fi
+    # pytest collects BOTH bare def test_* functions (e.g. synergy-tokenize, credit-pricing)
+    # AND unittest.TestCase tests; libs without pytest fall back to unittest discover.
+    - if [ -d tests ]; then poetry run pytest -q tests || poetry run python -m unittest discover -s tests -p "test_*.py"; else echo "No tests/ directory, skipping"; fi
   parallel: !reference [.python-libraries-matrix]
   rules:
     - changes:
@@ -407,7 +412,9 @@ python-lambdas-check:
   extends: .python-check-base
   script:
     - poetry run pyright .
-    - if [ -d tests ]; then poetry run python -m unittest discover -s tests -v; else echo "No tests/ directory, skipping"; fi
+    # pytest collects BOTH bare def test_* functions (e.g. synergy-credit-debit)
+    # AND unittest.TestCase tests; lambdas without pytest fall back to unittest discover.
+    - if [ -d tests ]; then poetry run pytest -q tests || poetry run python -m unittest discover -s tests -p "test_*.py"; else echo "No tests/ directory, skipping"; fi
   parallel: !reference [.python-lambdas-matrix]
   rules:
     - changes:
@@ -632,37 +639,6 @@ browser-lambda-package:
   artifacts:
     paths:
       - infra/assets/artifacts/browser-lambda/image.tar
-    expire_in: 7 days
-
-# Build synergy-text-crawler container Lambda (document text extractors) for the
-# Synergy → Bedrock KB crawler.
-synergy-text-crawler-package:
-  stage: package
-  timeout: 20 minutes
-  image: docker:24
-  services:
-    - docker:24-dind
-  tags:
-    - aws
-  rules:
-    - !reference [.rules, if-deployable]
-  variables:
-    DOCKER_TLS_CERTDIR: '/certs'
-    DOCKER_BUILD_OPTS: '--cache-from type=local,src=$CI_PROJECT_DIR/.docker-cache-synergy-text-crawler --cache-to type=local,dest=$CI_PROJECT_DIR/.docker-cache-synergy-text-crawler,mode=max'
-  cache:
-    - key: synergy-text-crawler-docker-${CI_DEFAULT_BRANCH}
-      paths:
-        - .docker-cache-synergy-text-crawler/
-  before_script:
-    - apk add --no-cache bash git
-    - docker run --privileged --rm tonistiigi/binfmt --install arm64
-  script:
-    - cd lambdas
-    - chmod +x package-container-lambda.sh
-    - ./package-container-lambda.sh python/synergy-text-crawler
-  artifacts:
-    paths:
-      - infra/assets/artifacts/synergy-text-crawler/image.tar
     expire_in: 7 days
 
 # Build + push the deployment container image. Two jobs share this base:
