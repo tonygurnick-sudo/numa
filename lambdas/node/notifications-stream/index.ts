@@ -1,33 +1,60 @@
+import { timingSafeEqual } from 'crypto';
+import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 
 const NOTIFICATIONS_TABLE = process.env.NOTIFICATIONS_TABLE_NAME ?? '';
 const CLOUDFRONT_SHARED_SECRET = process.env.CLOUDFRONT_SHARED_SECRET ?? '';
 
-const parseJwt = (token: string): Record<string, unknown> => {
-  try {
-    const payload = token.split('.')[1];
-    return JSON.parse(Buffer.from(payload, 'base64').toString('utf8')) as Record<string, unknown>;
-  } catch {
-    return {};
+const USER_POOL_ID = process.env.COGNITO_USER_POOL_ID ?? '';
+const USER_POOL_CLIENT_ID = process.env.COGNITO_USER_POOL_CLIENT_ID ?? '';
+const ADDITIONAL_IDS = (process.env.ADDITIONAL_COGNITO_CLIENT_IDS ?? '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const ALL_CLIENT_IDS = ADDITIONAL_IDS.length > 0 ? [USER_POOL_CLIENT_ID, ...ADDITIONAL_IDS] : USER_POOL_CLIENT_ID;
+
+const verifier = CognitoJwtVerifier.create({
+  userPoolId: USER_POOL_ID,
+  tokenUse: 'access',
+  clientId: ALL_CLIENT_IDS,
+  includeRawJwtInErrors: true,
+});
+
+// Constant-time string comparison. timingSafeEqual throws on length mismatch,
+// so guard the length first and treat a mismatch as not-equal without leaking
+// timing via an early return on the buffers themselves.
+const constantTimeEquals = (a: string, b: string): boolean => {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    return false;
   }
+  return timingSafeEqual(bufA, bufB);
 };
 
-const validateAuth = (headers: Record<string, string | undefined>): string | null => {
-  // Validate CloudFront secret
+// Verify the bearer token's signature against the Cognito JWKS and return the
+// verified subject. Fails closed: any verification error (bad signature,
+// expiry, wrong audience, missing header) returns null → 401.
+const validateAuth = async (headers: Record<string, string | undefined>): Promise<string | null> => {
+  // Validate CloudFront secret with a constant-time comparison
   const cfSecret = headers['x-arcanum-cloudfront-secret'];
-  if (cfSecret !== CLOUDFRONT_SHARED_SECRET) {
+  if (!cfSecret || !constantTimeEquals(cfSecret, CLOUDFRONT_SHARED_SECRET)) {
     return null;
   }
 
-  // Parse JWT token
+  // Verify JWT signature with Cognito (never trust an unverified decode)
   const authHeader = headers.authorization;
   if (!authHeader) return null;
 
   const token = String(authHeader).replace(/^Bearer\s+/i, '');
-  const payload = parseJwt(token);
-  const sub = typeof payload.sub === 'string' ? payload.sub : undefined;
 
-  return sub || null;
+  try {
+    const payload = await verifier.verify(token);
+    return typeof payload.sub === 'string' ? payload.sub : null;
+  } catch (err) {
+    console.error('JWT verification failed:', err);
+    return null;
+  }
 };
 
 export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGatewayProxyResultV2> => {
@@ -55,7 +82,7 @@ export const handler = async (event: APIGatewayProxyEventV2): Promise<APIGateway
     };
   }
 
-  const userId = validateAuth(event.headers || {});
+  const userId = await validateAuth(event.headers || {});
   if (!userId) {
     return {
       statusCode: 401,

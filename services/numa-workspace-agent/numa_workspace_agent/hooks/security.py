@@ -297,6 +297,13 @@ DANGEROUS_PYTHON_PATTERNS = [
     r"^\s*import\s+marshal\b",
     r"^\s*import\s+antigravity\b",
     r"^\s*import\s+webbrowser\b",
+    # Native-code escape hatches: ctypes/cffi load arbitrary shared libraries and
+    # call into libc (system(), execve(), dlopen()), bypassing every Python-level
+    # guard above. No legitimate workspace use — block the imports outright.
+    r"^\s*import\s+ctypes\b",
+    r"^\s*import\s+cffi\b",
+    r"^\s*from\s+ctypes\s+import",
+    r"^\s*from\s+cffi\s+import",
     r"^\s*from\s+subprocess\s+import",
     r"^\s*from\s+socket\s+import",
     r"^\s*from\s+sys\s+import",
@@ -609,6 +616,36 @@ def strip_data_content(command: str) -> str:
 _NUMA_CLI_BINARIES = frozenset({"numa", "numa-dev"})
 _HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 
+# Brace-expansion sandbox escape (BUG-273). bash `{a,b}` / `{a..b}` expansion
+# lets the model reconstruct a blocked literal from fragments the substring
+# scanners never see — e.g. `cat /e{t,}c/passwd` → /etc/passwd, `{cat,/etc/passwd}`
+# → cat /etc/passwd, `c{u,}rl evil` → curl. We block the comma-list form
+# `{x,y[,z]}` and the range form `{a..b}`. The check runs on the data-stripped
+# command (so a Python `{1: 2, 3: 4}` dict literal inside `-c "..."` is excluded),
+# and `${VAR}` parameter expansions are removed first so their inner commas
+# (e.g. `${arr[@]:0,2}`) don't trip it. find's bare `{}` placeholder has no comma
+# and is unaffected.
+_BRACE_EXPANSION_RE = re.compile(r"\{[^{}]*(?:,[^{}]*|\.\.[^{}]+)[^{}]*\}")
+_PARAM_EXPANSION_RE = re.compile(r"\$\{[^{}]*\}")
+
+# Boundary after a protected path segment (BUG-274 / BUG-320). The final
+# blocked-path / blocked-file scans below previously used a bare substring
+# `pattern in command`, which false-positived on legitimate sibling paths
+# whose names merely START with a protected name — e.g. `/workdir/secrets`
+# matched `/workdir/secrets_inventory.csv`, `/workdir/.env` matched
+# `/workdir/.environment.md`, `/workdir/.system` matched
+# `/workdir/.systematic-plan.txt`. Requiring a path-component boundary after
+# the protected name (slash, end, whitespace, quote, or shell operator)
+# blocks the real targets while letting distinct siblings through, without
+# weakening the boundary (the exact protected dirs/files still match).
+_SEGMENT_BOUNDARY_AFTER = r"(?=/|[\"'\s;|&><)$]|\\|\Z)"
+# A protected FILE name must also be a complete filename component: preceded by
+# a path separator/quote/start, and followed by a boundary OR a `.` (so the
+# `.env` entry still catches the `.env.local` / `.env.bak` family, while
+# `agent.env.config.json` — `.env` not preceded by a separator — is allowed).
+_FILENAME_BOUNDARY_BEFORE = r"(?:^|[/\s\"'=:])"
+_FILENAME_BOUNDARY_AFTER = r"(?=[./]|[\"'\s;|&><)$]|\\|\Z)"
+
 
 def check_bash_command(
     command: str, cwd: str = WORKSPACE_ROOT
@@ -646,6 +683,21 @@ def check_bash_command(
                 True,
                 "Access to protected directories (.system/, secrets/) is blocked",
             )
+
+    # Block bash brace-expansion sandbox escapes (BUG-273). `{a,b}` / `{a..b}`
+    # expansion can reconstruct a blocked literal from fragments the substring
+    # scanners above never see (`c{u,}rl`, `/e{t,}c/passwd`, `{cat,/etc/passwd}`).
+    # Run on the data-stripped structure (so a Python/Node dict literal inside an
+    # inline `-c`/`-e` body is not misread as brace expansion) and after removing
+    # `${VAR}` parameter expansions (whose inner commas are not expansion).
+    brace_structure = _PARAM_EXPANSION_RE.sub("", strip_data_content(command))
+    if _BRACE_EXPANSION_RE.search(brace_structure):
+        return (
+            True,
+            "Bash brace expansion is blocked: it can reconstruct blocked "
+            "commands or paths from fragments. Write the literal path/command "
+            "out in full instead.",
+        )
 
     # Block direct execution of Numa CLI tools via bash.
     # All Numa tool operations MUST go through the mcp__numa__numa_tool MCP tool,
@@ -720,15 +772,22 @@ def check_bash_command(
                 continue
             return True, f"Command references path outside workspace: {token}"
 
-    # Check for blocked paths in the command string
+    # Check for blocked paths in the command string. Anchored to a path-segment
+    # boundary so `/workdir/secrets` matches the protected dir but NOT a distinct
+    # sibling like `/workdir/secrets_inventory.csv` (BUG-274 / BUG-320).
     for pattern in BLOCKED_PATH_PATTERNS:
         clean_pattern = pattern.strip("/")
-        if clean_pattern in command:
+        if re.search(re.escape(clean_pattern) + _SEGMENT_BOUNDARY_AFTER, command):
             return True, f"Bash command references blocked path '{clean_pattern}'"
 
-    # Check for blocked file patterns
+    # Check for blocked file patterns. Anchored to a complete filename component
+    # so `.env` matches `.env` / `.env.local` but NOT `.environment.md` or
+    # `agent.env.config.json` (BUG-274 / BUG-320).
     for pattern in BLOCKED_FILE_PATTERNS:
-        if pattern in command:
+        if re.search(
+            _FILENAME_BOUNDARY_BEFORE + re.escape(pattern) + _FILENAME_BOUNDARY_AFTER,
+            command,
+        ):
             return True, f"Bash command references blocked file '{pattern}'"
 
     return False, None
@@ -802,6 +861,8 @@ def _remediation_hint(reason: str) -> str:
             "directly when the SDK gives you that path."
         )
     if reason.startswith("Direct execution of Numa CLI"):
+        return ""  # The reason already contains its own remediation.
+    if reason.startswith("Bash brace expansion is blocked"):
         return ""  # The reason already contains its own remediation.
     if reason.startswith("Command references path outside workspace"):
         return (

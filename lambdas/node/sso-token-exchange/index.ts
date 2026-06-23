@@ -58,11 +58,15 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'Invalid authorization code' }) };
     }
 
-    // Validate redirectUri is a valid URL with https
+    // Validate redirectUri is a valid URL using https (HTTPS-only — reject http and all other schemes)
     try {
       const parsed = new URL(redirectUri);
-      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-        return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'redirectUri must use https' }) };
+      if (parsed.protocol !== 'https:') {
+        return {
+          statusCode: 400,
+          headers: HEADERS,
+          body: JSON.stringify({ error: 'redirectUri must use https' }),
+        };
       }
     } catch {
       return { statusCode: 400, headers: HEADERS, body: JSON.stringify({ error: 'redirectUri must be a valid URL' }) };

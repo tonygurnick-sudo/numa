@@ -22,19 +22,29 @@ interface Props {
 }
 
 /**
- * Script injected into HTML iframes to provide sendPrompt() and openLink().
- * Posts structured messages to the parent window.
+ * Build the script injected into HTML iframes to provide sendPrompt() and
+ * openLink(). Posts structured messages to the parent window.
+ *
+ * Security (BUG-173): every postMessage targets the concrete parent origin
+ * (`targetOrigin`) rather than the `'*'` wildcard, so a malicious page that
+ * managed to host this iframe cannot harvest the messages. The iframe is
+ * sandboxed without `allow-same-origin`, so it cannot read the parent origin
+ * itself — we interpolate it at render time. The value is JSON-encoded to keep
+ * it a safe string literal inside the injected script.
  */
-const IFRAME_BRIDGE_SCRIPT = `
+function buildBridgeScript(targetOrigin: string): string {
+  const origin = JSON.stringify(targetOrigin);
+  return `
 <script>
 (function() {
+  var TARGET_ORIGIN = ${origin};
   window.sendPrompt = function(text) {
     if (typeof text !== 'string' || !text.trim()) return;
-    window.parent.postMessage({ type: 'numa-render-send-prompt', text: text.trim() }, '*');
+    window.parent.postMessage({ type: 'numa-render-send-prompt', text: text.trim() }, TARGET_ORIGIN);
   };
   window.openLink = function(url) {
     if (typeof url !== 'string') return;
-    window.parent.postMessage({ type: 'numa-render-open-link', url: url }, '*');
+    window.parent.postMessage({ type: 'numa-render-open-link', url: url }, TARGET_ORIGIN);
   };
   document.addEventListener('click', function(e) {
     var a = e.target.closest && e.target.closest('a[href]');
@@ -50,7 +60,7 @@ const IFRAME_BRIDGE_SCRIPT = `
       document.body ? document.body.scrollHeight : 0,
       document.documentElement ? document.documentElement.scrollHeight : 0
     );
-    if (h > 0) window.parent.postMessage({ type: 'numa-render-height', height: h }, '*');
+    if (h > 0) window.parent.postMessage({ type: 'numa-render-height', height: h }, TARGET_ORIGIN);
   }
   window.addEventListener('load', postHeight);
   setTimeout(postHeight, 50);
@@ -59,16 +69,19 @@ const IFRAME_BRIDGE_SCRIPT = `
   }
 })();
 </script>`;
+}
 
 /**
- * Inject the bridge script at the end of HTML content so sendPrompt() is available.
+ * Inject the bridge script at the end of HTML content so sendPrompt() is
+ * available. `targetOrigin` is the parent origin every message is sent to.
  */
-function injectBridge(html: string): string {
+function injectBridge(html: string, targetOrigin: string): string {
+  const script = buildBridgeScript(targetOrigin);
   // Insert before </body> if present, otherwise append
   if (html.includes('</body>')) {
-    return html.replace('</body>', IFRAME_BRIDGE_SCRIPT + '</body>');
+    return html.replace('</body>', script + '</body>');
   }
-  return html + IFRAME_BRIDGE_SCRIPT;
+  return html + script;
 }
 
 /**
@@ -105,8 +118,15 @@ export const RenderToolRenderer = ({ result, conversationId, sub, onSendPrompt }
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       if (!event.data || typeof event.data !== 'object') return;
-      // Verify the message came from one of our iframes
-      if (iframeRef.current && event.source !== iframeRef.current.contentWindow) return;
+      // Validate the message origin (BUG-173). The render iframe is sandboxed
+      // without `allow-same-origin`, so its messages carry the opaque origin
+      // string 'null'; same-origin host messages carry our own origin. Reject
+      // anything else (e.g. a cross-origin frame on the page spoofing our
+      // message shape).
+      if (event.origin !== 'null' && event.origin !== window.location.origin) return;
+      // Verify the message came from our iframe specifically (strong binding —
+      // ties the message to this exact iframe window, not just any 'null' origin).
+      if (event.source !== iframeRef.current?.contentWindow) return;
 
       if (event.data.type === 'numa-render-send-prompt' && typeof event.data.text === 'string') {
         onSendPrompt?.(event.data.text);
@@ -191,7 +211,7 @@ export const RenderToolRenderer = ({ result, conversationId, sub, onSendPrompt }
       {renderData.render_type === 'html' ? (
         <iframe
           ref={iframeRef}
-          srcDoc={injectBridge(renderData.content)}
+          srcDoc={injectBridge(renderData.content, window.location.origin)}
           sandbox="allow-scripts"
           className="render-tool-iframe"
           // Auto-fit to content up to the cap (renderData.height lets the agent
