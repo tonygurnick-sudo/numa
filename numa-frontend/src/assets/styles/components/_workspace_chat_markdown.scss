@@ -495,6 +495,12 @@
 .pptx-thumbnail-strip {
   width: 120px;
   flex-shrink: 0;
+  // Stay pinned while the main slide area scrolls; the strip gets its own
+  // independent scroll bounded to the visible viewport height.
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -513,6 +519,8 @@
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
+  // Always clickable, even if an ancestor sets pointer-events: none.
+  pointer-events: auto;
   padding: 0;
   background: #fff;
   transition:
@@ -631,6 +639,12 @@
 .pdf-thumbnail-strip {
   width: 120px;
   flex-shrink: 0;
+  // Stay pinned while the main page area scrolls; the strip gets its own
+  // independent scroll bounded to the visible viewport height.
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -648,6 +662,8 @@
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
+  // Always clickable, even if an ancestor sets pointer-events: none.
+  pointer-events: auto;
   padding: 0;
   background: #fff;
   transition:
@@ -765,6 +781,12 @@
 .docx-thumbnail-strip {
   width: 120px;
   flex-shrink: 0;
+  // Stay pinned while the main page area scrolls; the strip gets its own
+  // independent scroll bounded to the visible viewport height.
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -783,6 +805,8 @@
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
+  // Always clickable, even if an ancestor sets pointer-events: none.
+  pointer-events: auto;
   padding: 0;
   background: #fff;
   transition:
