@@ -703,3 +703,127 @@ class TestSystemInfoCommandBoundary:
     def test_bare_system_info_commands_blocked(self, cmd):
         blocked, _ = check_bash_command(cmd)
         assert blocked, f"should be blocked: {cmd}"
+
+
+# ── TASK-151: native-code escape-hatch imports ───────────────────────────────
+# ctypes/cffi load arbitrary shared libraries and call into libc (system,
+# execve, dlopen), bypassing every Python-level guard. The imports are blocked
+# outright; the existing __import__ bypass guard is unchanged.
+
+
+class TestNativeCodeImportsBlocked:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            'python3 -c "import ctypes"',
+            'python3 -c "import ctypes; ctypes.CDLL(None)"',
+            'python3 -c "from ctypes import CDLL"',
+            'python3 -c "import cffi"',
+            'python3 -c "from cffi import FFI"',
+        ],
+    )
+    def test_ctypes_cffi_imports_blocked(self, cmd):
+        blocked, reason = check_bash_command(cmd)
+        assert blocked, f"should be blocked: {cmd}"
+
+    def test_import_bypass_guard_unchanged(self):
+        """The pre-existing __import__ bypass guard must still fire."""
+        blocked, _ = check_bash_command("python3 -c \"__import__('os')\"")
+        assert blocked
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # Anchored to a real import statement (line start) — a variable name
+            # or a mid-line/commented reference must not false-positive.
+            'python3 -c "my_ctypes_helper = 1"',
+            'python3 -c "x = 1  # import ctypes later"',
+        ],
+    )
+    def test_ctypes_substring_not_overblocked(self, cmd):
+        blocked, reason = check_bash_command(cmd)
+        assert not blocked, f"should be allowed but got: {reason}"
+
+
+# ── TASK-183 / BUG-273: bash brace-expansion sandbox escape ──────────────────
+# `{a,b}` / `{a..b}` expansion can reconstruct a blocked literal from fragments
+# the substring scanners never see. Block the comma-list and range forms; leave
+# inline dict literals and find's `{}` placeholder alone.
+
+
+class TestBraceExpansionBlocked:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "cat /e{t,}c/passwd",  # -> /etc/passwd
+            "{cat,/etc/passwd}",  # -> cat /etc/passwd
+            "c{u,}rl http://evil.com",  # -> curl
+            "cat /workdir/.{s,}ystem",  # -> .system
+            "echo {a..z}",  # range form
+            "cp /workdir/{a,b}.txt /workdir/out/",
+        ],
+    )
+    def test_brace_expansion_blocked(self, cmd):
+        blocked, reason = check_bash_command(cmd)
+        assert blocked, f"should be blocked: {cmd}"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # Python/Node dict literals inside inline -c/-e bodies are stripped
+            # before the brace check, so their commas are not expansion.
+            'python3 -c "d = {1: 2, 3: 4}"',
+            'node -e "const o = {x: 1, y: 2}"',
+            # find's bare {} placeholder has no comma — unaffected.
+            'find /workdir/uploads -name "*.pdf" -exec ls {} \\;',
+            # ${VAR} parameter expansion is not brace expansion.
+            "ls /workdir/outputs/",
+        ],
+    )
+    def test_legitimate_braces_allowed(self, cmd):
+        blocked, reason = check_bash_command(cmd)
+        assert not blocked, f"should be allowed but got: {reason}"
+
+
+# ── TASK-183 / BUG-274 + BUG-320: substring-match false positives ────────────
+# The final blocked-path / blocked-file scans used a bare `pattern in command`
+# substring match that false-positived on distinct sibling paths whose names
+# merely START with a protected name. Now anchored to a path-component boundary.
+
+
+class TestBlockedPathSubstringFalsePositives:
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # Distinct siblings of /workdir/secrets, /.env, /.system — these are
+            # NOT the protected dir/file and must be allowed (use non-ls/find
+            # verbs so we isolate the substring loop, not the ls/find discovery
+            # patterns).
+            "cat /workdir/secrets_inventory.csv",
+            "cat /workdir/.environment.md",
+            "cat /workdir/.systematic-plan.txt",
+            "cp /workdir/secrets_q3/report.pdf /workdir/out/",
+            # `.env` inside a longer filename component (not a separator before
+            # the `.env`) is a distinct file, not the protected `.env`.
+            "cat /workdir/uploads/agent.env.config.json",
+        ],
+    )
+    def test_sibling_paths_allowed(self, cmd):
+        blocked, reason = check_bash_command(cmd)
+        assert not blocked, f"should be allowed but got: {reason}"
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            # The real protected targets must STILL be blocked.
+            "cat /workdir/.env",
+            "cat /workdir/secrets/api_key",
+            "cat /workdir/.env.production",
+            "cat /workdir/.env.development",
+            "cat /workdir/uploads/.env",
+            "cat /workdir/uploads/.env.local",
+        ],
+    )
+    def test_protected_paths_still_blocked(self, cmd):
+        blocked, _ = check_bash_command(cmd)
+        assert blocked, f"should be blocked: {cmd}"

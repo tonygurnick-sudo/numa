@@ -279,6 +279,91 @@ def _resolve_and_copy_reference_files(
     return reference_files, warnings
 
 
+def _validate_reference_file_metadata(ref_file: Dict) -> Dict:
+    """Return a copy of a reference file with its S3-derived metadata refreshed.
+
+    BUG-197: the generic ``referenceFiles`` update path trusts caller-supplied
+    ``fileSize`` / ``extractedContentS3Key``, so a re-attach (new/changed s3Key)
+    keeps the OLD size and a now-dangling extracted-content key. This brings that
+    path up to parity with the ``attachFiles`` path (``_resolve_and_copy_reference
+    _files``), which HeadObjects for true size and probes for extracted content.
+
+    For the given file:
+    - HeadObject the main object to refresh ``fileSize`` (left untouched on miss
+      so a transient S3 error never zeroes a real size).
+    - Confirm any supplied ``extractedContentS3Key`` still exists; null it out if
+      not, signalling chat that re-extraction is needed.
+
+    Idempotent and safe to re-run. The input dict is not mutated.
+    """
+    if not OUTPUTS_BUCKET_NAME:
+        return ref_file
+
+    s3_key = ref_file.get("s3Key")
+    if not s3_key:
+        return ref_file
+
+    bucket = ref_file.get("s3Bucket") or OUTPUTS_BUCKET_NAME
+    s3_client = _get_s3_client()
+    refreshed = dict(ref_file)
+
+    # Refresh the true file size from S3.
+    try:
+        head = s3_client.head_object(Bucket=bucket, Key=s3_key)
+        refreshed["fileSize"] = head.get("ContentLength", refreshed.get("fileSize"))
+    except ClientError as e:
+        logger.warning(
+            "Could not HeadObject reference file for size refresh",
+            s3_key=s3_key,
+            error=str(e),
+        )
+
+    # Resolve the extracted-content key: keep it only if the object exists,
+    # otherwise null it so chat knows re-extraction is required.
+    extracted_key = refreshed.get("extractedContentS3Key")
+    if extracted_key:
+        extracted_bucket = refreshed.get("s3Bucket") or OUTPUTS_BUCKET_NAME
+        try:
+            s3_client.head_object(Bucket=extracted_bucket, Key=extracted_key)
+        except ClientError:
+            refreshed["extractedContentS3Key"] = None
+    else:
+        refreshed["extractedContentS3Key"] = None
+
+    return refreshed
+
+
+def _refresh_changed_reference_files(
+    new_files: Optional[List[Dict]], existing_files: Optional[List[Dict]]
+) -> List[Dict]:
+    """Validate-and-refresh reference files whose ``s3Key`` is new or changed.
+
+    Diffs the normalised ``new_files`` against the agent's previously stored
+    ``existing_files`` (keyed by s3Key). Unchanged rows pass through untouched so
+    we never re-HeadObject the whole library on an unrelated edit; only rows the
+    caller actually (re-)attached hit S3. See ``_validate_reference_file_metadata``.
+
+    Both inputs are assumed already normalised (``_normalise_reference_files``).
+    """
+    normalised = _normalise_reference_files(new_files)
+    if not normalised:
+        return normalised
+
+    existing_keys = {
+        f.get("s3Key")
+        for f in (existing_files or [])
+        if isinstance(f, dict) and f.get("s3Key")
+    }
+
+    out: List[Dict] = []
+    for ref_file in normalised:
+        if ref_file.get("s3Key") in existing_keys:
+            out.append(ref_file)
+        else:
+            out.append(_validate_reference_file_metadata(ref_file))
+    return out
+
+
 def _get_agents_settings_mode() -> AgentsMode:
     """Read the agents settings mode from DynamoDB."""
     if not AGENTS_SETTINGS_TABLE_NAME:
@@ -1403,6 +1488,14 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
     # Check personal agent first
     user_agent = _get_user_agent(agent_id, user_sub)
     if user_agent:
+        # BUG-197: refresh S3-derived metadata (true fileSize, extracted-content
+        # key) for any reference file whose s3Key is new/changed vs the stored
+        # record, before _build_user_item normalises it through verbatim.
+        if "referenceFiles" in params:
+            params["referenceFiles"] = _refresh_changed_reference_files(
+                params.get("referenceFiles"), user_agent.get("reference_files")
+            )
+
         merged = _build_user_item(params, user_sub, now, agent_id, user_agent)
 
         # Resolve table migration from the (possibly new) visibility. Mirrors the
@@ -1455,6 +1548,14 @@ def handle_update_agent(params: Dict[str, Any]) -> Dict[str, Any]:
         # Permission check
         if workspace_agent.get("created_by_user_id") != user_sub and not is_admin:
             raise ValueError("You do not have permission to update this agent")
+
+        # BUG-197: refresh S3-derived metadata (true fileSize, extracted-content
+        # key) for any reference file whose s3Key is new/changed vs the stored
+        # record, for both the migrate-to-personal and in-place update paths.
+        if "referenceFiles" in params:
+            params["referenceFiles"] = _refresh_changed_reference_files(
+                params.get("referenceFiles"), workspace_agent.get("reference_files")
+            )
 
         # Moving a workspace (public) agent to personal: create the user item and
         # delete the workspace item (mirrors the Node REST handler). We pass the

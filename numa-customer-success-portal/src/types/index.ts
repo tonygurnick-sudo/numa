@@ -157,6 +157,7 @@ export const clientConfigSchema = z.object({
   ssoEnterprise: z.boolean().optional(), // default: false
   chatSuggestions: z.boolean().optional(), // default: true (capability availability)
   siteWideSearch: z.boolean().optional(), // default: false
+  connectorAccessReview: z.boolean().optional(), // default: false — FEAT-129 Connector Access Review admin panel (kept in sync with infra clientConfigSchema)
   racetechDataFeed: z.boolean().optional(), // default: false
   disasterRecovery: z.boolean().optional(), // default: false
 
