@@ -21,8 +21,12 @@ workflow:
     - if: $CI_COMMIT_BRANCH == "dev"
     - if: $CI_PIPELINE_SOURCE == "web"
 
-services:
-  - docker:dind
+# docker:dind is intentionally NOT a global service. Only the few jobs that
+# actually run `docker` declare it locally (the *-package image builds and
+# .build-deployment-container-base). A global sidecar made every lint/test/
+# package matrix job (~120 on main) spawn an unused dind container, overloading
+# the runners' Docker daemon and producing `context deadline exceeded` system
+# failures. See documentation/gitlab-runners/hotfix-log.md.
 
 variables:
   PYTHON_VER: 3.13
@@ -132,6 +136,7 @@ pre-commit:
         - lambdas/node/notifications-api
         - lambdas/node/notifications-stream
         - lambdas/node/numa-app-inbox-api
+        - lambdas/node/numa-cli-api
         - lambdas/node/numa-quota-report-daily
         - lambdas/node/oauth-auth-handler
         - lambdas/node/numa-ops-api
@@ -141,6 +146,7 @@ pre-commit:
         - lambdas/node/numa-search-api
         - lambdas/node/numa-users-api
         - lambdas/node/numa-voice-admin
+        - lambdas/node/numa-voice-analytics
         - lambdas/node/numa-voice-router
         - lambdas/node/openapi-docs-server
         - lambdas/node/pipedream-event-receiver
@@ -204,6 +210,7 @@ pre-commit:
         - lambdas/python/numa-dr-export
         - lambdas/python/numa-kb-manager
         - lambdas/python/numa-recent-jobs
+        - lambdas/python/numa-voice-credit-debit
         - lambdas/python/numa-voice-intake
         - lambdas/python/numa-voice-processor
         - lambdas/python/oauth-files-api
@@ -288,6 +295,42 @@ install-common-dependencies:
   artifacts:
     paths:
       - node_modules
+  rules:
+    - !reference [.rules, if-deployable]
+
+# Build the @numa/cli production tarball once, here, where the Node toolchain
+# and the yarn workspace exist. The workspace-agent image build runs on a
+# Node-less docker:24 host and just consumes this artifact — so the CLI is
+# never (and can't be) built during the Docker image build. The tarball is
+# architecture-independent (tsc → dist/), so there's no reason to build it
+# inside the emulated ARM64 image. Doubles as the CLI's build check in CI.
+numa-cli-package:
+  stage: setup
+  image: node:lts
+  interruptible: true
+  cache:
+    - key:
+        files:
+          - yarn.lock
+      fallback_keys:
+        - yarn-cache-$CI_DEFAULT_BRANCH
+      paths:
+        - .yarn/cache/
+  before_script:
+    - !reference [.yarn, setup-private-auth]
+  script:
+    - !reference [.yarn, install]
+    - corepack enable
+    # Build @numa/cli (and its workspace deps); pack ONLY @numa/cli — the
+    # @numa/cli-dev addon (bypass flags) must never ship into a MicroVM.
+    - (cd numa-cli && yarn build)
+    - (cd numa-cli/packages/cli && npm pack --pack-destination "$CI_PROJECT_DIR/services/numa-workspace-agent")
+    # Dockerfile COPYs a version-agnostic name; rename off the version glob.
+    - mv services/numa-workspace-agent/numa-cli-*.tgz services/numa-workspace-agent/numa-cli.tgz
+  artifacts:
+    paths:
+      - services/numa-workspace-agent/numa-cli.tgz
+    expire_in: 7 days
   rules:
     - !reference [.rules, if-deployable]
 
@@ -531,6 +574,12 @@ workspace-agent-package:
     - aws # Runs on AWS workers with Docker
   rules:
     - !reference [.rules, if-deployable]
+  # Pull in ONLY the prebuilt numa-cli.tgz (from numa-cli-package). Without
+  # this, the job would default-download every earlier-stage artifact —
+  # including the large node_modules it never uses. package-service.sh detects
+  # the staged tarball and skips the (Node-requiring) CLI build on this host.
+  dependencies:
+    - numa-cli-package
   variables:
     DOCKER_TLS_CERTDIR: '/certs'
     # BuildKit cache: reuse system packages, Node.js, Pandoc, Python deps between builds.
@@ -633,6 +682,8 @@ synergy-text-crawler-package:
   stage: image-build
   timeout: 30 minutes # Docker build + ECR push — P90 is ~12min
   image: registry.gitlab.com/arcanumai/ci/all-inclusive # don't need a lot of this, but it gets us started
+  services:
+    - docker:dind # builds + pushes the deploy image; was relying on the former global service
   tags:
     - aws # need to use our AWS workers as TLS docker doesn't seem to work on hosted runners
   environment:

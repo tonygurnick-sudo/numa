@@ -157,6 +157,9 @@ tools/email-verification-report.json
 
 # numa-cli standard-mode spill files (transient — created on each tool call)
 **/tmp/numa-cli/
+# @numa/cli tarball staged into the workspace-agent image build (built by the
+# numa-cli-package CI job, or locally by services/package-service.sh)
+services/numa-workspace-agent/numa-cli.tgz
 # scratch dirs when running the CLI from the repo root / numa-cli/ on a laptop
 /tmp/
 numa-cli/tmp/
