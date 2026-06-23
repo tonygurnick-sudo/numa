@@ -148,7 +148,7 @@ export class QAppsDeployerStack extends ArcanumStack {
 
     // Numa Standard Model relay — deployer-account streaming egress chokepoint
     // for the opaque `numa-standard-model`. The only place that knows the real
-    // upstream (DeepSeek via OpenRouter→Novita) + holds the OpenRouter key.
+    // upstream (MiMo via OpenRouter→Novita) + holds the OpenRouter key.
     // Per-tenant AgentCore containers reach it cross-account via STS proof
     // (same pattern as the email sender).
     //
@@ -167,6 +167,13 @@ export class QAppsDeployerStack extends ArcanumStack {
       clientConfigTableArn: clientConfigTable.arn,
       clientConfigTableName: clientConfigTable.name,
       region: 'us-east-1',
+      // Real model behind the opaque `numa-standard-model` id. Switched from
+      // DeepSeek V4 Flash → MiMo-V2.5-Pro (both Novita) 2026-06: benchmarked
+      // ~30% cheaper at equal quality with a longer-lived cache. The opaque id is
+      // unchanged, so nothing downstream (container/trace/credits/frontend) is
+      // affected — see documentation/numa-standard-model/README.md. providerOrder
+      // stays the default (novita).
+      upstreamModelId: 'xiaomi/mimo-v2.5-pro',
     });
 
     new TerraformOutput(this, 'numa-standard-model-relay-function-url', {
