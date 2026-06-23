@@ -1043,6 +1043,12 @@ async def compaction_hook(
     This fires for ALL agents in the tree (including sub-agents spawned via
     the Task tool), so it catches compaction events that the parent's message
     stream would never see.
+
+    TKT-221 note: a "defer compaction while a tool_use is in flight" guard was
+    evaluated here and DEFERRED — the SDK's PreCompactHookInput exposes only
+    `trigger` + `custom_instructions` (no in-flight-tool signal), and a
+    PreCompact hook can only block/abort compaction, not defer-then-resume it.
+    Implementing it cleanly needs an SDK affordance that does not yet exist.
     """
     trigger = input_data.get("trigger", "unknown")
 

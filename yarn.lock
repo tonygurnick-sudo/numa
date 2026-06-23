@@ -32500,7 +32500,9 @@ __metadata:
     esbuild: "npm:^0.25.0"
     eslint: "npm:^9.16.0"
     rimraf: "npm:^6.0.1"
+    tsx: "npm:^4.19.2"
     typescript: "npm:^5.7.2"
+    vitest: "npm:^2.1.5"
   languageName: unknown
   linkType: soft
 

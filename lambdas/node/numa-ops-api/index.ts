@@ -1729,7 +1729,26 @@ const handleTickets = async (
       createdAt: ts,
       updatedAt: ts,
     };
-    await putItem(commentItem);
+
+    // Write the comment item and bump commentCount on the ticket in a SINGLE
+    // transaction (BUG-222). The Update targets the STORED ticket's PK/SK —
+    // resolved by `authorizeTicketAccess`, never a client-supplied boardId
+    // (BUG-221/BUG-224) — and is conditioned on the ticket still existing, so
+    // the whole write (comment included) aborts if the ticket was deleted
+    // between the access check and here. Comment and count stay in lockstep.
+    const commentTransactItems: Record<string, unknown>[] = [{ Put: { TableName: OPS_TABLE, Item: commentItem } }];
+    if (ticket) {
+      commentTransactItems.push({
+        Update: {
+          TableName: OPS_TABLE,
+          Key: { PK: String(ticket.PK), SK: String(ticket.SK) },
+          UpdateExpression: 'ADD commentCount :inc',
+          ConditionExpression: 'attribute_exists(PK)',
+          ExpressionAttributeValues: { ':inc': 1 },
+        },
+      });
+    }
+    await dynamo.send(new TransactWriteCommand({ TransactItems: commentTransactItems as never }));
 
     // Parse mentions and send emails
     const mentions = new Set<string>();
@@ -1825,21 +1844,9 @@ const handleTickets = async (
       }
     }
 
-    if (ticket) {
-      try {
-        await dynamo.send(
-          new UpdateCommand({
-            TableName: OPS_TABLE,
-            Key: { PK: String(ticket.PK), SK: String(ticket.SK) },
-            UpdateExpression: 'ADD commentCount :inc',
-            ExpressionAttributeValues: { ':inc': 1 },
-          })
-        );
-      } catch (e) {
-        console.warn('Failed to increment commentCount', (e as Error).message);
-      }
-      if (ticket.teamId) await bumpBoardVersion(String(ticket.teamId));
-    }
+    // commentCount was already incremented atomically in the transaction
+    // above; here we only nudge the board heartbeat so polling clients refetch.
+    if (ticket?.teamId) await bumpBoardVersion(String(ticket.teamId));
 
     return jsonResponse(201, { comment: commentItem });
   }
@@ -1872,28 +1879,37 @@ const handleTickets = async (
     const commentId = segments[2];
     const access = await authorizeTicketAccess(ticketId, auth);
     if (access.response) return access.response;
+    const ticket = access.ticket;
     const comments = await queryByPK(`TICKET#${ticketId}`, 'COMMENT#');
     const existing = comments.find((c) => c.commentId === commentId);
     if (!existing) return errorResponse(404, 'Comment not found');
 
-    await deleteItem(String(existing.PK), String(existing.SK));
-
-    // Decrement commentCount — find ticket via body.boardId or best-effort
-    if (body.boardId) {
-      try {
-        await dynamo.send(
-          new UpdateCommand({
-            TableName: OPS_TABLE,
-            Key: { PK: `TEAM#${String(body.boardId)}`, SK: `TICKET#${ticketId}` },
-            UpdateExpression: 'ADD commentCount :dec',
-            ExpressionAttributeValues: { ':dec': -1 },
-          })
-        );
-      } catch (e) {
-        console.warn('Failed to decrement commentCount', (e as Error).message);
-      }
-      await bumpBoardVersion(String(body.boardId));
+    // Delete the comment and decrement commentCount on the ticket in a SINGLE
+    // transaction (BUG-222). The ticket's PK/SK come from the STORED ticket
+    // resolved by `authorizeTicketAccess`, never the client-supplied
+    // body.boardId (BUG-221/BUG-224), so a forged/incorrect boardId can no
+    // longer point the decrement at the wrong row (or no row). The decrement is
+    // conditioned on the ticket existing so the comment delete doesn't proceed
+    // against a deleted ticket.
+    const deleteTransactItems: Record<string, unknown>[] = [
+      { Delete: { TableName: OPS_TABLE, Key: { PK: String(existing.PK), SK: String(existing.SK) } } },
+    ];
+    if (ticket) {
+      deleteTransactItems.push({
+        Update: {
+          TableName: OPS_TABLE,
+          Key: { PK: String(ticket.PK), SK: String(ticket.SK) },
+          UpdateExpression: 'ADD commentCount :dec',
+          ConditionExpression: 'attribute_exists(PK)',
+          ExpressionAttributeValues: { ':dec': -1 },
+        },
+      });
     }
+    await dynamo.send(new TransactWriteCommand({ TransactItems: deleteTransactItems as never }));
+
+    // Bump the board heartbeat (boardVersion) using the ticket's stored teamId
+    // so polling clients refetch the updated comment count.
+    if (ticket?.teamId) await bumpBoardVersion(String(ticket.teamId));
 
     return jsonResponse(200, { deleted: true });
   }

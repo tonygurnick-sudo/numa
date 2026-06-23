@@ -36,6 +36,12 @@ FROM --platform=linux/arm64 python:3.13-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates jq \
+    # iptables: TASK-151 sandbox boundary — run.sh drops outbound traffic to the
+    # instance-metadata (169.254.169.254) and ECS-credential (169.254.170.2)
+    # endpoints at container start, before privileges are dropped to `agent`.
+    # util-linux: provides `setpriv`, used by run.sh to exec the app as the
+    # non-root `agent` user after the firewall rules are applied as root.
+    iptables util-linux \
     # PDF-to-image, text extraction (pdftoppm, pdftotext, pdfimages)
     poppler-utils \
     # WeasyPrint system dependencies (HTML→PDF)
@@ -164,8 +170,18 @@ COPY run.sh ./
 # Make all application files readable by all (required for non-root user)
 RUN chmod -R 755 /app
 
-# Switch to non-root user
-USER agent
+# Make run.sh executable (it self-execs and drops privileges, so it must run).
+RUN chmod 0755 /app/run.sh
+
+# NOTE: the container intentionally starts as ROOT (no `USER agent` here) so the
+# entrypoint (run.sh) can install the TASK-151 IMDS/ECS-credential firewall
+# rules (NET_ADMIN-only) at start, then immediately drop privileges to the
+# non-root `agent` user via `setpriv` before exec'ing the app. The application
+# and every agent Bash subprocess therefore still run as UID 1000 — the
+# non-root guarantee is preserved, just enforced at runtime rather than via the
+# image's USER directive. Without this the firewall could not be applied
+# (iptables needs NET_ADMIN in the container's network namespace, which only
+# exists at runtime, not at build time).
 
 # Set HOME to /workdir/.system so ~/.claude resolves to /workdir/.system/.claude
 ENV HOME="/workdir/.system"

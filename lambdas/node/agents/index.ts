@@ -2254,13 +2254,25 @@ const handleShareAgent = async (
       },
     })
   );
+  // BUG-172: structured audit log for agent share grants
+  console.log(
+    JSON.stringify({
+      _name: 'AGENT_SHARE_GRANTED',
+      agentId,
+      principalId: body.principalId,
+      role: body.role,
+      sharedBy: auth.sub,
+      clientName: CLIENT_NAME,
+    })
+  );
   return jsonResponse(201, { ok: true });
 };
 
 const handleUpdateSharing = async (
   agentId: string,
   principalId: string,
-  body: { role?: string } | null
+  body: { role?: string } | null,
+  auth: AuthContext
 ): Promise<ReturnType<typeof jsonResponse>> => {
   if (!SHARING_TABLE) return errorResponse(500, 'Sharing not configured');
   if (!body?.role || !['co-owner', 'editor', 'viewer'].includes(body.role)) {
@@ -2279,14 +2291,41 @@ const handleUpdateSharing = async (
       Item: { ...existing, role: body.role as SharingItem['role'] },
     })
   );
+  // BUG-172: structured audit log for agent share role changes
+  console.log(
+    JSON.stringify({
+      _name: 'AGENT_SHARE_UPDATED',
+      agentId,
+      principalId,
+      role: body.role,
+      sharedBy: auth.sub,
+      clientName: CLIENT_NAME,
+    })
+  );
   return jsonResponse(200, { ok: true });
 };
 
-const handleRevokeSharing = async (agentId: string, principalId: string): Promise<ReturnType<typeof jsonResponse>> => {
+const handleRevokeSharing = async (
+  agentId: string,
+  principalId: string,
+  auth: AuthContext
+): Promise<ReturnType<typeof jsonResponse>> => {
   if (!SHARING_TABLE) return errorResponse(500, 'Sharing not configured');
 
   await dynamo.send(
     new DeleteCommand({ TableName: SHARING_TABLE, Key: { agent_id: agentId, principal_id: principalId } })
+  );
+  // BUG-172: structured audit log for agent share revocations.
+  // role omitted: the share row is gone; principalId + agentId identify the grant.
+  console.log(
+    JSON.stringify({
+      _name: 'AGENT_SHARE_REVOKED',
+      agentId,
+      principalId,
+      role: null,
+      sharedBy: auth.sub,
+      clientName: CLIENT_NAME,
+    })
   );
   return jsonResponse(200, { ok: true });
 };
@@ -2463,9 +2502,9 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => {
       if (actionSegments.length === 3) {
         const principalId = decodeURIComponent(actionSegments[2]);
         if (method === 'PUT') {
-          return await handleUpdateSharing(agentId, principalId, parseJsonBody(event.body));
+          return await handleUpdateSharing(agentId, principalId, parseJsonBody(event.body), auth);
         }
-        if (method === 'DELETE') return await handleRevokeSharing(agentId, principalId);
+        if (method === 'DELETE') return await handleRevokeSharing(agentId, principalId, auth);
       }
       return errorResponse(404, 'Sharing route not found');
     }
