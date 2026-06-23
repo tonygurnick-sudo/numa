@@ -81,6 +81,15 @@ def _validate_kb_id(kb_id: Any, field_name: str = "kb_id") -> str:
 
 def _get_s3_prefix(kb_id: str, user_sub: str = "") -> str:
     """Get S3 prefix for a knowledge base."""
+    # SECURITY: Synergy is a cross-job search corpus with per-document allowed_users
+    # ACL enforced ONLY in the Bedrock query path. Listing its S3 prefix here has no
+    # such ACL and would leak every crawled job's file names across users — block it
+    # (verify_kb_access permits synergy as a system KB, so this guard is load-bearing).
+    if kb_id == "synergy":
+        raise ValueError(
+            "Synergy is a cross-job search corpus, not a browsable folder. "
+            "Use query_knowledgebase instead (e.g. `numa files search --folder synergy`)."
+        )
     s3_kb_id = _get_s3_kb_id(kb_id, user_sub)
     return f"documents/{s3_kb_id}/"
 

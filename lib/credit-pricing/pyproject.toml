@@ -20,3 +20,4 @@ python = "^3.13"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0.0"
+pyright = "1.1.403"

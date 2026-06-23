@@ -137,6 +137,13 @@ function buildPickerEntries(
       // registers metadata, the chat card captures the login, the backend
       // sends Basic auth.
       if (c.selfService === false) continue;
+      // Hidden-by-default flag gate: a connector declaring `featureFlag` only
+      // appears when that flag is deployed (DEPLOY_*) AND live (getFlag). A bare
+      // getFlag() defaults true on absent flags, which would wrongly surface the
+      // connector on clients where the flag was never deployed.
+      if (c.featureFlag && !(sessionStorage.getItem(`DEPLOY_${c.featureFlag}`) === 'true' && getFlag(c.featureFlag))) {
+        continue;
+      }
       out.push({
         key: c.id,
         name: c.displayName,

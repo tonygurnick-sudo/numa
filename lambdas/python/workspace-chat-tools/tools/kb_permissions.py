@@ -18,8 +18,22 @@ logger = structlog.get_logger()
 REGION = os.getenv("AWS_REGION", "us-east-1")
 CLIENT_NAME = os.getenv("CLIENT_NAME", "")
 
-# System KBs that are accessible to all authenticated users.
-SYSTEM_KB_IDS = {"company", "numa-support"}
+# System KBs that are accessible to all authenticated users (read path).
+#
+# "synergy" is a crawler-managed Bedrock KB shared tenant-wide: every user is
+# allowed to *query* it, and real per-user isolation is enforced downstream by
+# the per-document `listContains(allowed_users, user_sub)` ACL applied inside
+# `_query_bedrock`. Without it here, the dispatch gate (verify_kb_access in
+# lambda_function.py) falls through to a numa-{client}-knowledge-bases get_item
+# for KB#synergy — which has no record — and fail-closes every Synergy query.
+#
+# This is read-only: verify_kb_write_access does NOT special-case "synergy", so
+# uploads/deletes against it still fail closed (no KB#synergy record → denied).
+#
+# NOTE: tools/knowledge_base.py defines its own SYSTEM_KB_IDS (already includes
+# "synergy") for the read/write paths there. The duplication is intentional to
+# keep this module dependency-free; keep the two in sync, do not refactor here.
+SYSTEM_KB_IDS = {"company", "numa-support", "synergy"}
 
 # Cognito user sub pattern (UUID v4)
 _UUID_PATTERN_LEN = 36  # e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890"

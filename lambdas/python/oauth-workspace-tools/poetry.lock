@@ -503,6 +503,18 @@ files = [
 ]
 
 [[package]]
+name = "snowballstemmer"
+version = "2.2.0"
+description = "This package provides 29 stemmers for 28 languages generated from Snowball algorithms."
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "snowballstemmer-2.2.0-py2.py3-none-any.whl", hash = "sha256:c8e1716e83cc398ae16824e5572ae04e0d9fc2c6b985fb0f900f5f0c96ecba1a"},
+    {file = "snowballstemmer-2.2.0.tar.gz", hash = "sha256:09b16deb8547d3412ad7b590689584cd0fe25ec8db3be37788be3810cbf19cb1"},
+]
+
+[[package]]
 name = "structlog"
 version = "25.5.0"
 description = "Structured Logging for Python"
@@ -513,6 +525,23 @@ files = [
     {file = "structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f"},
     {file = "structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98"},
 ]
+
+[[package]]
+name = "synergy-tokenize"
+version = "0.1.0"
+description = "Shared Synergy term tokenizer — identical at index time (crawler) and query time (chat). Drift = stored terms stop matching queries."
+optional = false
+python-versions = "^3.13"
+groups = ["main"]
+files = []
+develop = true
+
+[package.dependencies]
+snowballstemmer = "^2.2.0"
+
+[package.source]
+type = "directory"
+url = "../../../lib/synergy-tokenize"
 
 [[package]]
 name = "tomlkit"
@@ -559,4 +588,4 @@ zstd = ["backports-zstd (>=1.0.0) ; python_version < \"3.14\""]
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.13.0"
-content-hash = "63878f1fc15c962d49f7411655d3f34991ee7b26000badd339b11a6f7acc5493"
+content-hash = "1efdddb4c30d4672762ea047e67350615893dc601c03a6d792d66c65ba36e752"

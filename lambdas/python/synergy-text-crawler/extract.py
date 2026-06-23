@@ -6,9 +6,10 @@ password-protected file raises and the caller records an error rather than
 killing the whole job.
 
 This is ported from ``tools/synergy_text_crawler.py`` and trimmed for the Lambda
-runtime. The optional extractor libraries (pdfplumber, python-docx, openpyxl,
-python-pptx) are baked into the container image, so the ImportError fallbacks in
-the original script are unnecessary here — but we keep PyPDF2 as a PDF fallback.
+runtime. The extractor libraries (pdfplumber, python-docx, openpyxl,
+python-pptx) are bundled into the deployment zip (manylinux wheels), so the
+ImportError fallbacks in the original script are unnecessary here — but we keep
+the pypdf fallback for PDFs.
 """
 
 from __future__ import annotations
@@ -35,6 +36,9 @@ TEXT_EXTS = {
     "htm",
     "html",
     "log",
+    # Emails are text-like but never a .txt extension — index them too.
+    "eml",
+    "msg",
 }
 
 # Legacy binary Office (need LibreOffice/textract) — skipped but counted so we
@@ -70,6 +74,10 @@ def extract_text(data: bytes, ext: str) -> str:
         return _xlsx(data)
     if ext == "pptx":
         return _pptx(data)
+    if ext == "eml":
+        return _eml(data)
+    if ext == "msg":
+        return _msg(data)
     if ext == "rtf":
         # Crude RTF strip; good enough for indexing.
         txt = data.decode("latin-1", errors="replace")
@@ -126,6 +134,65 @@ def _xlsx(data: bytes) -> str:
             if cells:
                 out.append("\t".join(cells))
     return "\n".join(out)
+
+
+def _eml(data: bytes) -> str:
+    """RFC-822 email (.eml) — headers + the plain-text body (HTML stripped).
+    Pure stdlib, no dependency."""
+    from email import policy
+    from email.parser import BytesParser
+
+    msg = BytesParser(policy=policy.default).parsebytes(data)
+    parts = [
+        f"Subject: {msg.get('subject', '')}",
+        f"From: {msg.get('from', '')}",
+        f"To: {msg.get('to', '')}",
+        f"Date: {msg.get('date', '')}",
+        "",
+    ]
+    try:
+        body = msg.get_body(preferencelist=("plain", "html"))
+    except Exception:  # noqa: BLE001 — malformed MIME; fall back to raw decode
+        body = None
+    if body is not None:
+        content = body.get_content()
+        if body.get_content_type() == "text/html":
+            try:
+                from bs4 import BeautifulSoup
+
+                content = BeautifulSoup(content, "html.parser").get_text(
+                    " ", strip=True
+                )
+            except ImportError:
+                content = re.sub(r"<[^>]+>", " ", content)
+        parts.append(content)
+    else:
+        parts.append(data.decode("utf-8", errors="replace"))
+    return "\n".join(parts)
+
+
+def _msg(data: bytes) -> str:
+    """Outlook email (.msg) — headers + body via extract-msg."""
+    try:
+        import extract_msg
+    except ImportError as exc:
+        raise SkipType("msg (extract-msg not available)") from exc
+    message = extract_msg.openMsg(io.BytesIO(data))
+
+    # openMsg's declared return type is the base MSGFile; the header/body
+    # attributes live on the concrete subclass, so read them via getattr.
+    def _f(attr: str) -> str:
+        return str(getattr(message, attr, "") or "")
+
+    parts = [
+        f"Subject: {_f('subject')}",
+        f"From: {_f('sender')}",
+        f"To: {_f('to')}",
+        f"Date: {_f('date')}",
+        "",
+        _f("body"),
+    ]
+    return "\n".join(parts)
 
 
 def _pptx(data: bytes) -> str:

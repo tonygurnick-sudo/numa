@@ -340,6 +340,7 @@ def build_assistant_prompt(context: AssistantContext) -> str:
 | web-search | "search online", "google", "latest news", "current" | Find recent/external info, look up things not in the user's Numa Files |
 | agents | "agent", "agents", "numa agent", "saved agent", "my agent" | List, create, update, configure, or do ANYTHING with Numa agents |
 | integrations | "integration", "connected app", "slack", "google drive", "gmail", app names | Use connected integrations to run actions, search data, or make API calls to external apps |
+| synergy-metadata | "synergy", "12d", "jobs", "which jobs", "how many jobs", "job type", "job attributes", "portfolio" | Answer cross-job Synergy questions — counts, the job attribute schema, exact-term/portfolio/similar-jobs search across all crawled 12d jobs |
 
 Here are a list of current integrations in Numa a user may use:
 'gmail',

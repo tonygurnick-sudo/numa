@@ -9,6 +9,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { AwsCredentialIdentity } from '@aws-sdk/types';
 import axios from 'axios';
 import { sanitizeS3Filename } from '../utils/sanitizeFilename';
+import { getFlag } from '../utils/featureFlags';
 import type {
   SDKEvent,
   WorkspaceChatRequest,
@@ -237,6 +238,12 @@ async function streamWorkspaceChatAttempt(
       // are the only thing that auto-write secrets into the vault, so the two
       // travel together.
       DATA_CONNECTORS_ENABLED: sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true',
+      // Synergy cross-job KB search — hidden-by-default. When on, the agent makes
+      // the synergy KB queryable + tells the model it exists, so cross-job
+      // questions work without the user manually enabling a folder. Gated on the
+      // KB-search sub-capability; the child flags are false in config.json
+      // whenever Synergy itself is off, so this implies the parent.
+      SYNERGY: sessionStorage.getItem('DEPLOY_SYNERGY_KB_SEARCH') === 'true' && getFlag('SYNERGY_KB_SEARCH'),
     },
     // Model selection (global cross-region inference profile)
     modelId: request.modelId,
@@ -1068,6 +1075,12 @@ export async function invokeWorkspaceAgentSync(
       // are the only thing that auto-write secrets into the vault, so the two
       // travel together.
       DATA_CONNECTORS_ENABLED: sessionStorage.getItem('DATA_CONNECTORS_ENABLED') === 'true',
+      // Synergy cross-job KB search — hidden-by-default. When on, the agent makes
+      // the synergy KB queryable + tells the model it exists, so cross-job
+      // questions work without the user manually enabling a folder. Gated on the
+      // KB-search sub-capability; the child flags are false in config.json
+      // whenever Synergy itself is off, so this implies the parent.
+      SYNERGY: sessionStorage.getItem('DEPLOY_SYNERGY_KB_SEARCH') === 'true' && getFlag('SYNERGY_KB_SEARCH'),
     },
     modelId: request.modelId,
     attachments: request.attachments,

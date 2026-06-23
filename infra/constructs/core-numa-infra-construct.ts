@@ -99,14 +99,22 @@ export class CoreNumaInfra extends Construct {
   readonly mfaSettingsTable: DynamodbTable;
   readonly webCrawler: WebCrawlerConstruct;
   readonly synergyKbCrawler?: SynergyKbCrawlerConstruct;
-  /** Synergy crawl Step Function ARN (empty string when the crawler is disabled). */
-  readonly synergyCrawlStateMachineArn: string;
+  /** Synergy extraction SQS FIFO queue URL/ARN ('' when the crawler is disabled)
+   *  — the on-visit hook enqueues a per-job message onto it. */
+  readonly synergyExtractQueueUrl: string;
+  readonly synergyExtractQueueArn: string;
   /** Synergy crawl-state table name/ARN ('' when disabled) — sync-config/status API + on-visit sync. */
   readonly synergyCrawlStateTableName: string;
   readonly synergyCrawlStateTableArn: string;
-  /** Synergy crawl worker Lambda name/ARN ('' when disabled) — on-visit async invoke. */
-  readonly synergyTextCrawlerFunctionName: string;
-  readonly synergyTextCrawlerFunctionArn: string;
+  /** Synergy coordinator Lambda name/ARN ('' when disabled) — manual "Sync now"
+   *  invokes it to enumerate + enqueue. */
+  readonly synergyCoordinatorFunctionName: string;
+  readonly synergyCoordinatorFunctionArn: string;
+  /** Synergy per-run/per-query credit-debit Lambda name/ARN ('' when disabled) —
+   *  the workspace-tools query handlers fire-and-forget it to meter portfolio /
+   *  exact-term query read-capacity under the real caller. */
+  readonly synergyCreditDebitFunctionName: string;
+  readonly synergyCreditDebitFunctionArn: string;
   readonly cognitoGroups!: CognitoGroupsConstruct;
   readonly pipedreamRelayLambdaArn?: string;
   readonly connectorEventsTable!: DynamodbTable;
@@ -1328,12 +1336,15 @@ export class CoreNumaInfra extends Construct {
     // Synergy 12d → Bedrock KB crawler (only when explicitly enabled). Gated so
     // clients without it never create the ECR repo / container Lambda / SFN, and
     // synth never needs the worker image.tar.
-    let synergyCrawlStateMachineArn = '';
+    let synergyExtractQueueUrl = '';
+    let synergyExtractQueueArn = '';
     let synergyCrawlStateTableName = '';
     let synergyCrawlStateTableArn = '';
-    let synergyTextCrawlerFunctionName = '';
-    let synergyTextCrawlerFunctionArn = '';
-    if (props.synergyKbCrawlEnabled) {
+    let synergyCoordinatorFunctionName = '';
+    let synergyCoordinatorFunctionArn = '';
+    let synergyCreditDebitFunctionName = '';
+    let synergyCreditDebitFunctionArn = '';
+    if (props.synergyEnabled) {
       const synergyCrawlLogGroup = new CloudwatchLogGroup(this, 'synergy-kb-crawl-log-group', {
         name: `/numa/${props.clientName}-synergy-kb-crawl`,
       });
@@ -1343,19 +1354,31 @@ export class CoreNumaInfra extends Construct {
         dataBucket: this.dataBucket,
         logGroup: synergyCrawlLogGroup,
         region: props.region,
-        deployerRoleArn: props.deployerRoleArn!,
+        creditLedgerTableName: this.creditLedgerTable.name,
+        // Live credit metering is fleet-wide ON (see numa-client-stack) — the
+        // per-crawl ingestion debit follows the same policy.
+        creditMeteringEnabled: true,
+        // Exact-term index follows the single Synergy flag — it provisions
+        // whenever the rest of the Synergy surface does.
+        termIndexEnabled: props.synergyEnabled ?? false,
       });
-      synergyCrawlStateMachineArn = this.synergyKbCrawler.stateMachine.arn;
+      synergyExtractQueueUrl = this.synergyKbCrawler.extractQueueUrl;
+      synergyExtractQueueArn = this.synergyKbCrawler.extractQueue.arn;
       synergyCrawlStateTableName = this.synergyKbCrawler.stateTable.name;
       synergyCrawlStateTableArn = this.synergyKbCrawler.stateTable.arn;
-      synergyTextCrawlerFunctionName = this.synergyKbCrawler.workerLambda.functionName;
-      synergyTextCrawlerFunctionArn = this.synergyKbCrawler.workerLambda.arn;
+      synergyCoordinatorFunctionName = this.synergyKbCrawler.coordinatorLambda.functionName;
+      synergyCoordinatorFunctionArn = this.synergyKbCrawler.coordinatorLambda.arn;
+      synergyCreditDebitFunctionName = this.synergyKbCrawler.creditDebitLambda.functionName;
+      synergyCreditDebitFunctionArn = this.synergyKbCrawler.creditDebitLambda.arn;
     }
-    this.synergyCrawlStateMachineArn = synergyCrawlStateMachineArn;
+    this.synergyExtractQueueUrl = synergyExtractQueueUrl;
+    this.synergyExtractQueueArn = synergyExtractQueueArn;
     this.synergyCrawlStateTableName = synergyCrawlStateTableName;
     this.synergyCrawlStateTableArn = synergyCrawlStateTableArn;
-    this.synergyTextCrawlerFunctionName = synergyTextCrawlerFunctionName;
-    this.synergyTextCrawlerFunctionArn = synergyTextCrawlerFunctionArn;
+    this.synergyCoordinatorFunctionName = synergyCoordinatorFunctionName;
+    this.synergyCoordinatorFunctionArn = synergyCoordinatorFunctionArn;
+    this.synergyCreditDebitFunctionName = synergyCreditDebitFunctionName;
+    this.synergyCreditDebitFunctionArn = synergyCreditDebitFunctionArn;
 
     // We'll create the Cognito IDP construct after determining Q Business configuration
     let qBusinessApplicationIdForIdp: string | undefined = undefined;
@@ -2235,12 +2258,14 @@ const _coreNumaInfraPropsSchema = z
     createServiceLinkedRole: z.boolean().optional(),
     webCrawlerConfigs: z.array(webCrawlerDataSourcePropsSchema).optional(),
     /**
-     * When **true**, provision the Synergy 12d → Bedrock KB crawler (state table,
-     * coordinator/worker/restart Lambdas, Step Function). Gated on data connectors.
+     * Single Synergy gate. When **true**, provision the entire Synergy 12d
+     * surface — the → Bedrock KB crawler (state table, coordinator/worker/restart
+     * Lambdas, Step Function) AND the exact-term inverted index. Already gated on
+     * data connectors by the caller.
      *
      * @default false
      */
-    synergyKbCrawlEnabled: z.boolean().optional(),
+    synergyEnabled: z.boolean().optional(),
     temporaryPasswordValidityDays: z.number().optional(),
     passwordLength: z.number().optional(),
     mfa: z.boolean().optional(),

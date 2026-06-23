@@ -176,11 +176,11 @@ def classify(
     )
     if bedrock is None:
         try:
-            from prm import client as prm_client
+            from prm import client as prm_client  # type: ignore
 
             bedrock = prm_client("bedrock-runtime", region=region)
         except Exception:
-            import boto3
+            import boto3  # type: ignore
 
             bedrock = boto3.client("bedrock-runtime", region_name=region)
     try:
@@ -231,11 +231,11 @@ def generate_title(
         return fallback
     if bedrock is None:
         try:
-            from prm import client as prm_client
+            from prm import client as prm_client  # type: ignore
 
             bedrock = prm_client("bedrock-runtime", region=region)
         except Exception:
-            import boto3
+            import boto3  # type: ignore
 
             bedrock = boto3.client("bedrock-runtime", region_name=region)
     try:
@@ -324,11 +324,11 @@ def generate_receipt(
     actions_block = f"\n<work_done>\n{actions}\n</work_done>" if actions else ""
     if bedrock is None:
         try:
-            from prm import client as prm_client
+            from prm import client as prm_client  # type: ignore
 
             bedrock = prm_client("bedrock-runtime", region=region)
         except Exception:
-            import boto3
+            import boto3  # type: ignore
 
             bedrock = boto3.client("bedrock-runtime", region_name=region)
     try:

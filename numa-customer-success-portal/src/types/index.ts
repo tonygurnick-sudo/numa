@@ -109,7 +109,10 @@ export const clientConfigSchema = z.object({
   allowBedrockQuotaSharing: z.boolean().optional(), // default: false
   pipedreamIntegrations: z.boolean().optional(), // default: false
   dataConnectorsEnabled: z.boolean().optional(), // default: false
-  synergyFileParity: z.boolean().optional(), // default: false — Synergy 12d file-interface parity (sub-flag of data connectors)
+  synergy: z.boolean().optional(), // default: false — single flag gating ALL Synergy 12d functionality (file browser, read chat tools, cross-job crawl, exact-term index, KB search); effective only when dataConnectorsEnabled is also true
+  synergyFileParity: z.boolean().optional(), // @deprecated → use synergy
+  synergyKbCrawl: z.boolean().optional(), // @deprecated → use synergy
+  synergyTermIndex: z.boolean().optional(), // @deprecated → use synergy
   agents: z.boolean().optional(), // default: false
   brandingProviderEnabled: z.boolean().optional(), // default: false
   brandingAssetsBucketArn: z.string().optional(),
@@ -242,6 +245,17 @@ export const clientConfigSchema = z.object({
           contactLensPerMin: z.number().min(0).optional(),
         })
         .optional(),
+      // Synergy KB crawl ingestion rates. The crawl's embedding cost (+ a small
+      // overhead uplift for S3/SQS/Lambda) metered into the same ledger via
+      // numa-synergy-credit-debit. embedUsdPerMtoken is the dominant lever.
+      synergyRates: z
+        .object({
+          embedUsdPerMtoken: z.number().min(0).optional(),
+          charsPerToken: z.number().min(0).optional(),
+          avgTokensPerDoc: z.number().min(0).optional(),
+          overheadMult: z.number().min(0).optional(),
+        })
+        .optional(),
     })
     .optional(),
 });
@@ -321,6 +335,11 @@ export const getDefaultClientConfigValues = () => ({
   allowBedrockQuotaSharing: false,
   pipedreamIntegrations: false,
   dataConnectorsEnabled: false,
+  // Master switch for ALL Synergy 12d functionality (file browser, cross-job
+  // AI search, crawl, exact-term index, KB search). Effective only when
+  // dataConnectorsEnabled is also true. Replaces the deprecated
+  // synergyFileParity/synergyKbCrawl/synergyTermIndex flags.
+  synergy: false,
   agents: false,
   brandingProviderEnabled: false,
   numaWorkspaceChat: true,

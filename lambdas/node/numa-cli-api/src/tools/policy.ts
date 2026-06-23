@@ -22,6 +22,8 @@
  * same `nolia` type-id prefix rule; `policy.test.ts` pins the behaviour.
  */
 
+import { SYNERGY_TOOLS } from './registry.js';
+
 export type CliCategory = 'files' | 'web' | 'docs' | 'agents' | 'memory' | 'integrations' | 'ops' | 'render' | 'vision';
 
 /**
@@ -72,10 +74,12 @@ const TOOL_CATEGORY: Record<string, CliCategory> = {
   pipedream_proxy_request: 'integrations',
   connect_status: 'integrations',
   connect_request: 'integrations',
-  // native-connector file browsing (Synergy + OAuth cloud storage)
-  connect_synergy_list: 'integrations',
-  connect_synergy_search: 'integrations',
-  connect_synergy_download: 'integrations',
+  // native-connector file browsing (Synergy + OAuth cloud storage). The
+  // Synergy tools come from the shared SYNERGY_TOOLS list (registry.ts) so the
+  // category map and the routing registry stay in lockstep — every Synergy
+  // tool is explicitly bucketed rather than leaning on the `connect_` prefix
+  // fallback, so enforcement never silently mis-buckets a renamed/odd tool.
+  ...Object.fromEntries(SYNERGY_TOOLS.map((tool) => [tool, 'integrations' as CliCategory])),
   oauth_list_files: 'integrations',
   oauth_search_files: 'integrations',
   oauth_download_file: 'integrations',

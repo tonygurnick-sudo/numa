@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -73,6 +73,54 @@ def search_jobs(  # pylint: disable=too-many-arguments
         "total_pages": data.get("TotalPages") or data.get("totalPages"),
         "items": jobs,
     }
+
+
+def count_all_jobs(server: str, token: str, timeout: float = 8.0) -> Optional[int]:
+    """Total number of jobs the crawl would index — ALL jobs incl sub-jobs.
+
+    Mirrors the coordinator's enumeration scope (TopLevel = False, NOT search_jobs'
+    top-level-only default) so the count matches what a full sync actually indexes.
+    One cheap call: PageSize=1 → TotalRows is the exact count (and TotalPages == the
+    row count at PageSize=1, used as a fallback). Best-effort — returns None on any
+    error so the index overview never blocks or fails on the live count.
+    """
+    base_url = _build_base_url(server)
+    url = f"{base_url}/api/v1/jobs/search"
+    payload = {
+        "QuickSearchTerm": "",
+        "Name": "",
+        "Page": 1,
+        "PageSize": 1,
+        "Attributes": [
+            {
+                "Attribute": {
+                    "Name": "TopLevel",
+                    "DisplayName": "Restrict to top level?",
+                },
+                "Type": "SynergyServerWeb.API.Models.SelectableProgrammaticAttribute",
+                "Value": False,
+                "SearchQueryType": 4,
+                "Operation": 0,
+                "Name": "Restrict to top level?",
+                "OperationName": "=",
+            }
+        ],
+    }
+    headers = {
+        "Authorization": _normalize_token(token),
+        "Content-Type": "application/json",
+    }
+    try:
+        response = httpx.post(url, json=payload, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        data = response.json()
+        total = data.get("TotalRows") or data.get("Total") or data.get("total")
+        if total is None:
+            # PageSize=1 → TotalPages equals the row count.
+            total = data.get("TotalPages") or data.get("totalPages")
+        return int(total) if total is not None else None
+    except Exception:  # noqa: BLE001 — best-effort live count; never break the overview
+        return None
 
 
 def list_job_folders(

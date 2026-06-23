@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -196,6 +197,7 @@ def test_cache_creation_split_priced_per_tier() -> None:
         cache_creation_5m_tokens=0,
         cache_creation_1h_tokens=100_000,
     )
+    assert c5 is not None and c1 is not None
     assert abs(c5 - 0.375) < 1e-9 and abs(c1 - 0.60) < 1e-9
 
 
@@ -622,7 +624,7 @@ def test_known_anthropic_ignores_total_cost_usd_fallback() -> None:
 
 def test_agent_id_flows_to_meta() -> None:
     turns, _, _, _ = processing.process_trace_events(iter(EVENTS), cache_ttl="1h")
-    common = dict(
+    common: dict[str, Any] = dict(
         conversation_id="c1",
         user_sub="u1",
         month="2026-06",

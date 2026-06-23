@@ -37,9 +37,9 @@ export interface ConnectorEventType {
   defaultEnabled: boolean;
 }
 
-// Per-connector cache TTL — controls how long `useRemoteBrowse` keeps a folder
-// listing in the in-memory + sessionStorage cache before refetching. Picked per
-// connector by data-change frequency.
+// Per-connector cache TTL — controls how long the remote folder cache keeps a
+// folder listing in the in-memory + sessionStorage cache before refetching.
+// Picked per connector by data-change frequency.
 export interface CachingPolicy {
   ttl: number; // seconds
 }
@@ -136,6 +136,13 @@ export interface ConnectorTemplate {
   // only exposes itself from chat. Default is ['chat'] — explicitly opt a connector in to
   // files surfacing by including 'files'.
   surfaces?: ('files' | 'chat')[];
+
+  // Hidden-by-default feature flag gating the connector's existence. When set, the
+  // connector is only offered in the Add-Integration picker when sessionStorage
+  // `DEPLOY_<featureFlag>` === 'true' AND getFlag(featureFlag) is true (matches the
+  // SynergyKbSyncPanel hidden-by-default rule — a bare getFlag() defaults true on
+  // absent flags, which would wrongly surface the connector on un-flagged clients).
+  featureFlag?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,8 +155,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     id: 'synergy',
     displayName: 'Synergy 12d',
     icon: 'bi-building',
-    description: 'Data connector for Synergy 12d job data',
+    description: 'Search and browse your Synergy 12d jobs, folders and files from inside Numa',
     category: 'Project Management',
+    // Synergy connector existence is gated on the Synergy Connector flag.
+    featureFlag: 'SYNERGY',
     authType: 'token',
     surfaces: ['files', 'chat'],
     cachingPolicy: CACHING_PRESETS.projectManagement,

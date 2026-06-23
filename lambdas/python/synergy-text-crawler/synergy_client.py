@@ -15,6 +15,7 @@ IDString) — there is no global file search on 12d.
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -53,6 +54,25 @@ class Synergy:
             "Content-Type": "application/json",
         }
         self.client = httpx.Client(timeout=timeout)
+        # Proactive pacing: enforce a floor between outbound requests so a full
+        # corpus crawl doesn't flood the customer's (typically on-prem) 12d
+        # server. The per-request retry/backoff below only reacts AFTER the
+        # server starts returning 429/5xx; this caps the steady-state rate. Set
+        # SYNERGY_CRAWL_MIN_REQUEST_INTERVAL_MS=0 to disable.
+        self._min_interval = max(
+            0.0,
+            float(os.getenv("SYNERGY_CRAWL_MIN_REQUEST_INTERVAL_MS", "100")) / 1000.0,
+        )
+        self._last_request_at = 0.0
+
+    def _throttle(self) -> None:
+        """Sleep just enough to honour the minimum inter-request interval."""
+        if self._min_interval <= 0:
+            return
+        elapsed = time.monotonic() - self._last_request_at
+        if elapsed < self._min_interval:
+            time.sleep(self._min_interval - elapsed)
+        self._last_request_at = time.monotonic()
 
     def close(self) -> None:
         self.client.close()
@@ -62,6 +82,7 @@ class Synergy:
         resp: Optional[httpx.Response] = None
         for attempt in range(retries):
             try:
+                self._throttle()
                 resp = self.client.post(url, headers=self.h, json=body)
             except httpx.HTTPError:
                 if attempt == retries - 1:
@@ -161,6 +182,7 @@ class Synergy:
     def get_weblink(self, file_id: str) -> str:
         """Best-effort shareable web link for a file ('' on any failure)."""
         try:
+            self._throttle()
             r = self.client.get(
                 f"{self.base}/api/v1/files/{file_id}/weblink/true", headers=self.h
             )
@@ -190,6 +212,7 @@ class Synergy:
         r: Optional[httpx.Response] = None
         for attempt in range(retries):
             try:
+                self._throttle()
                 r = self.client.post(
                     url,
                     headers={**self.h, "Content-Type": "application/octet-stream"},

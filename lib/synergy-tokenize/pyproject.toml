@@ -1,0 +1,26 @@
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "synergy-tokenize"
+version = "0.1.0"
+description = "Shared Synergy term tokenizer — identical at index time (crawler) and query time (chat). Drift = stored terms stop matching queries."
+authors = ["Arcanum AI"]
+readme = "README.md"
+include = ["synergy_tokenize/py.typed"]
+packages = [{ include = "synergy_tokenize" }]
+
+[tool.poetry.dependencies]
+python = "^3.13"
+# Snowball (English) stemmer — the LOCKED choice for word-like tokens. Pure-python,
+# tiny. Changing the stemmer requires a full re-crawl (stored terms would no longer
+# match new queries), so this dep is effectively immutable post-launch.
+snowballstemmer = "^2.2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pyright = "1.1.403"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

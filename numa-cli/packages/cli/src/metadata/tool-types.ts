@@ -65,6 +65,18 @@ export interface QueryKnowledgebaseParams {
    * Defaults to false.
    */
   all_kbs?: boolean;
+  /**
+   * Synergy only: which corpus to search. Omit/"document" = per-document content
+   * (default); "job_rollup" = per-job similarity records ("find similar jobs").
+   */
+  doc_type?: string;
+  /**
+   * Synergy only: structured metadata filters combined with the semantic query
+   * for breadth search. Whitelisted server-side (anything else ignored). Keys:
+   * `created_after` / `created_before` (ISO dates), `parent_job_id` (string),
+   * `is_template` (boolean).
+   */
+  structured_filters?: Record<string, unknown>;
 }
 
 /**
@@ -1123,6 +1135,449 @@ export interface ConnectSynergyListParams extends HitlParams {
   page_size?: number;
 }
 
+/** Read-only Synergy metadata: structural counts + attributes for one job. */
+export interface ConnectSynergyJobMetaParams extends HitlParams {
+  /** Bare job IDString (e.g. "8_1"), from list-files / search. */
+  job_id: string;
+}
+
+/** Read-only Synergy metadata: subfolder + file counts for one folder. */
+export interface ConnectSynergyFolderSummaryParams extends HitlParams {
+  /** Bare folder id, from a job's folder listing. */
+  folder_id: string;
+}
+
+/**
+ * Read-only Synergy metadata: the attribute / type / enum / category vocabulary.
+ *
+ * Wave 2 EXTENSION (instead of a separate `connect_synergy_vocab`): the original
+ * zero-arg behaviour (standard + standard-search JOB attributes) stays the
+ * default mode, so existing callers are unaffected. New modes expose the
+ * per-entity searchable+system attribute sets, the decode enums
+ * (attributeTypes / matchOperations / entityTypes / file / folder / folderStates
+ * / noteTargetTypes + a named enum), the category taxonomy, single-attribute
+ * resolution by name+context, and an attribute's valid enum choices. Read-only.
+ */
+export interface ConnectSynergySchemaParams extends HitlParams {
+  /**
+   * Which slice of the vocabulary to return. `job` (default when omitted →
+   * standard + standard-search job attributes, the original behaviour; explicit
+   * `job` also adds default-search + defined-search + system job attributes),
+   * `file` / `contact` (per-entity searchable + system attributes), `types`
+   * (decode enums + a named enum via type_name), `categories` (taxonomy),
+   * `find` (one attribute by name + context), `choices` (valid enum choices for
+   * an attribute). Omitted → `job` default for backward compatibility.
+   */
+  mode?: 'job' | 'file' | 'contact' | 'types' | 'categories' | 'find' | 'choices';
+  /** Entity scope for attribute lookups (drives file/contact, maps to search_context for find). Default `job`. */
+  entity?: 'job' | 'file' | 'contact';
+  /** Attribute name to resolve (mode=find) or the attribute ref (mode=choices). */
+  name?: string;
+  /** Named enum to resolve via GET /types?type_name=… (mode=types). Omitted → the fixed decode-enum set. */
+  type_name?: string;
+  /** File extension (e.g. `dwg`) for the system file-attributes call (mode=file). Omitted → skipped. */
+  extension?: string;
+}
+
+/** Read-only Synergy metadata: detail for one file (powers `file-info synergy`) + Wave 3 access / by-name / version-N modes. */
+export interface ConnectSynergyFileInfoParams extends HitlParams {
+  /**
+   * Wave 3: info (default — file metadata, existing behaviour) | permission
+   * (caller's permission on the file) | access (users + groups, merged) |
+   * by-name (lookup by name within a folder, needs name+folder_id) | version
+   * (one historical version's metadata, needs version). Inferred from
+   * name/folder_id/version when omitted.
+   */
+  mode?: 'info' | 'permission' | 'access' | 'by-name' | 'version';
+  /** File IDString — required for info / permission / access / version modes. */
+  file_id?: string;
+  /** Wave 3 (mode=by-name): file name to look up — URL-encoded server-side. */
+  name?: string;
+  /** Wave 3 (mode=by-name): the folder id to look the name up within. */
+  folder_id?: string;
+  /** Wave 3 (mode=version): the version number to fetch metadata for. */
+  version?: number;
+  /** Wave 3: include custom attributes in by-name/version reads (default true). */
+  retrieve_attributes?: boolean;
+  /** Wave 3 (mode=by-name): also flatten parent-folder attributes (default false). */
+  retrieve_flatten_parent_attributes?: boolean;
+}
+
+/** Read-only Synergy aggregate: counts + file-type mix + size buckets for a job. */
+export interface ConnectSynergyJobStatsParams extends HitlParams {
+  job_id: string;
+}
+
+/** Read-only Synergy aggregate: a job's folder outline (depth-bounded). */
+export interface ConnectSynergyJobTreeParams extends HitlParams {
+  job_id: string;
+  max_depth?: number;
+}
+
+/**
+ * Exact-term search (4th mode): which jobs contain these literal words/codes,
+ * ACL-enforced + exhaustive. Reads the crawl TERM index. `terms` are normalized
+ * server-side with the same tokenizer the crawler indexed with.
+ */
+export interface ConnectSynergyExactTermParams extends HitlParams {
+  terms: string[];
+  /** AND (all terms) or OR (any term). Default AND. */
+  mode?: 'AND' | 'OR';
+  limit?: number;
+}
+
+/**
+ * Exhaustive structured/portfolio query over crawled jobs (counts + list by
+ * attribute, ACL-enforced). Reads the crawl JOB# table, not the semantic KB —
+ * flag-gated on synergyKbCrawl. `attrs` keys are stamped `attr_<snake>` keys.
+ */
+export interface ConnectSynergyPortfolioParams extends HitlParams {
+  attrs?: Record<string, string>;
+  created_after?: string;
+  created_before?: string;
+  exclude_templates?: boolean;
+  /** A stamped key to facet-count by, e.g. `attr_status` / `is_template`. */
+  group_by?: string;
+  limit?: number;
+}
+
+// ── Wave 1 read-only Synergy tools (PAT-scoped live reads; no Numa ACL, no
+//    metering). 12d enforces permissions on the user's PAT. Each mirrors the
+//    `connect_synergy_job_meta` pattern: defensively-parsed live 12d responses,
+//    standard {status,result,error} envelope server-side. Several response
+//    schemas are `[UNKNOWN]` (Swagger-200-only) and parsed defensively. ──────
+
+/** Read-only Synergy: tasks on a job (owner, state, due dates) + Wave 3 single-task detail / task vocab. */
+export interface ConnectSynergyTasksParams extends HitlParams {
+  /**
+   * Wave 3: list (default — job tasks, existing behaviour) | detail (one task +
+   * children/history, needs task_id) | vocab (task types + states, needs
+   * task_type_id). Inferred from task_id / task_type_id when omitted.
+   */
+  mode?: 'list' | 'detail' | 'vocab';
+  /** Job id — accepts bare `8_1` or `job:`/`folder:` prefixed. Required for list mode. */
+  job_id?: string;
+  /** Filter by assignee EntityID — forces the POST /tasks/search path (list mode). */
+  assignee_id?: string;
+  /** Include closed tasks (default false = open only); any value forces search (list mode). */
+  include_closed?: boolean;
+  /** Wave 3: single-task id → detail mode (one task + children/history). */
+  task_id?: string;
+  /** Wave 3: task-type id → vocab mode (states/types for a task type). */
+  task_type_id?: string;
+  /** Client-side truncation cap (default 200). */
+  limit?: number;
+}
+
+/** Read-only Synergy: people on a job / directory lookup (Wave 3 adds full directory + global lists). */
+export interface ConnectSynergyContactsParams extends HitlParams {
+  /**
+   * job = contacts on a job; search = directory lookup; get = single contact;
+   * Wave 3: directory = the full paged address book; global-lists = the global
+   * contact lists. Inferred if omitted.
+   */
+  mode?: 'job' | 'search' | 'get' | 'directory' | 'global-lists';
+  /** Required for mode=job (accepts bare or `job:`/`folder:` prefixed). */
+  job_id?: string;
+  /** Required for mode=get — a contact id (reject `job:`/`folder:` prefixes). */
+  contact_id?: string;
+  /** Free-text directory search (simpleSearch path). */
+  query?: string;
+  /** Structured search fields (Contacts/search path). */
+  first_name?: string;
+  last_name?: string;
+  email?: string;
+  /** Restrict to 12d user contacts only (default false). */
+  users_only?: boolean;
+  /** Wave 3 (mode=directory): 1-based start page for the paged address-book walk (default 1). */
+  page?: number;
+  /** Page size for structured search / directory walk (default 50). */
+  page_size?: number;
+}
+
+/** Read-only Synergy: issues / RFIs on a job, or detail for one issue. */
+export interface ConnectSynergyIssuesParams extends HitlParams {
+  /** List mode — job id (accepts bare or `job:`/`folder:` prefixed). Exactly one of job_id/issue_id. */
+  job_id?: string;
+  /** Detail mode — issue ticket id. Exactly one of job_id/issue_id. */
+  issue_id?: string;
+  /** List paging (default 1). */
+  page?: number;
+  /** List page size (default 50; walk bounded + truncated). */
+  page_size?: number;
+  /** Detail: retrieve full issue details (default true). */
+  retrieve_details?: boolean;
+  /** Detail: also fetch the issue change log (default false). */
+  include_changes?: boolean;
+}
+
+/** Read-only Synergy: workflow status (definitions / live instance / log / diagram). */
+export interface ConnectSynergyWorkflowParams extends HitlParams {
+  /** definitions = all workflows; definition = one; instance = live state; transition_log; diagram = staged image. Default definitions (or instance if entity_id present). */
+  mode?: 'definitions' | 'definition' | 'instance' | 'transition_log' | 'diagram';
+  /** Workflow id (definition / instance / diagram modes). */
+  workflow_id?: string;
+  /** The entity the workflow runs on (job / issue / task) — instance mode. */
+  entity_id?: string;
+  /** Entity kind — encoding UNVERIFIED against live 12d. */
+  entity_type?: 'job' | 'issue' | 'task';
+  /** Workflow instance id (transition_log / instance secondaries). */
+  instance_id?: string;
+  /** Current state id — required for the diagram image. */
+  current_state_id?: string;
+  /** Return all states/transitions on a definition (default true). */
+  return_all?: boolean;
+}
+
+/** Read-only Synergy: file version history. 1:1 port of the proven get_file_history. */
+export interface ConnectSynergyFileHistoryParams extends HitlParams {
+  /** MUST be a FILE id — reject `job:`/`folder:` prefixes with a hint. */
+  file_id: string;
+  /** 1-based page (default 1). */
+  page?: number;
+  /** Page size (default 50). */
+  page_size?: number;
+}
+
+/** Read-only Synergy: what changed recently on a job or folder (polling, no webhooks). */
+export interface ConnectSynergyRecentParams extends HitlParams {
+  /** Job scope (XOR folder_id). */
+  job_id?: string;
+  /** Folder scope (wins if both supplied). */
+  folder_id?: string;
+  /** Look-back window in days (default 7). */
+  days?: number;
+  /** ISO-UTC lower bound — overrides days. */
+  since?: string;
+  /** Result cap (default 100). */
+  limit?: number;
+}
+
+// ── Wave 2 read-only Synergy tools (PAT-scoped live 12d reads; no Numa ACL, no
+//    metering). Same defensively-parsed `[UNKNOWN]`-schema handling as Wave 1. ──
+
+/** Read-only Synergy: forum / discussion drill (forums → categories → topics → posts). */
+export interface ConnectSynergyForumsParams extends HitlParams {
+  /** list|forum|categories|category|topics|topic|posts. Inferred from the deepest id supplied. */
+  mode?: 'list' | 'forum' | 'categories' | 'category' | 'topics' | 'topic' | 'posts';
+  /** Job id (mode=list) — accepts bare or `job:`/`folder:` prefixed. */
+  job_id?: string;
+  /** Forum id (mode=forum/categories/category) — reject `job:`/`folder:` prefixes. */
+  forum_id?: string;
+  /** Category id (mode=category/topics). */
+  category_id?: string;
+  /** Topic / thread id (mode=topic/posts). */
+  topic_id?: string;
+  /** Start page for the paged modes (topics, posts). Default 1. */
+  page?: number;
+  /** Page size for paged modes. Default 50. */
+  page_size?: number;
+  /** mode=forum only: also fetch the caller's permission on the forum (best-effort). */
+  include_permission?: boolean;
+}
+
+/** Read-only Synergy: 12d Projects (the 12d Model software projects embedded inside jobs/folders). */
+export interface ConnectSynergyProjectsParams extends HitlParams {
+  /** find|list|get|folders|file-info|associations|notes|permission|history|changed-elements|latest-change|preview. Inferred when omitted. */
+  mode?:
+    | 'find'
+    | 'list'
+    | 'get'
+    | 'folders'
+    | 'file-info'
+    | 'associations'
+    | 'notes'
+    | 'permission'
+    | 'history'
+    | 'changed-elements'
+    | 'latest-change'
+    | 'preview';
+  /** 12d Project IDString (NOT a job id). Required for the per-project modes. */
+  project_id?: string;
+  /** Synergy JOB id to list 12d projects under (mode=list, job scope). */
+  job_id?: string;
+  /** Synergy FOLDER id to list under (mode=list, folder scope) OR a sub-folder scope for mode=history. */
+  folder_id?: string;
+  /** Project name to locate (mode=find). */
+  name?: string;
+  /** Name of a file/folder inside the project (mode=file-info). */
+  file_name?: string;
+  /** mode=file-info: treat file_name as a folder. Default false. */
+  is_folder?: boolean;
+  /** Version for changed-elements / preview. Omitted → resolved via latest-change. */
+  version?: number;
+  /** 1-based start page (mode=history). Default 1. */
+  page?: number;
+  /** Page size (mode=history). Default 50. */
+  page_size?: number;
+  /** Pull custom attributes on get/folders/file-info. Default true. */
+  retrieve_attributes?: boolean;
+}
+
+/** Read-only Synergy: Issued Files / transmittals (file-set types → sets → issues → published files + recipients). */
+export interface ConnectSynergyTransmittalsParams extends HitlParams {
+  /** types|sets|set|issue|discover|attributes. Inferred from the deepest id supplied. */
+  mode?: 'types' | 'sets' | 'set' | 'issue' | 'discover' | 'attributes';
+  /** Job id (modes types / sets / discover) — accepts bare or `job:`/`folder:` prefixed. */
+  job_id?: string;
+  /** File-set TYPE id (required for mode=sets; optional for one type's definition in mode=types). */
+  type_id?: string;
+  /** Issued file-SET id (required for mode=set). */
+  set_id?: string;
+  /** mode=set: include the set's issues (publish events). Default true. */
+  get_issues?: boolean;
+  /** mode=set: when supplied, also fetch that set version's files. */
+  version?: number;
+  /** Issue (publish/transmittal EVENT) id (mode=issue). NOT an issue-tracking RFI id. */
+  issue_id?: string;
+}
+
+/** Read-only Synergy: companies / organisations (list / get / jobs / staff / schema). */
+export interface ConnectSynergyCompaniesParams extends HitlParams {
+  /** list|get|jobs|staff|schema. Inferred when omitted (company_id → get, else list). */
+  mode?: 'list' | 'get' | 'jobs' | 'staff' | 'schema';
+  /** Company IDString (required for get/jobs/staff). */
+  company_id?: string;
+  /** Client-side cap for list/jobs/staff (default 200). */
+  limit?: number;
+}
+
+/** Read-only Synergy: web forms — definitions + fills/submissions. */
+export interface ConnectSynergyWebformsParams extends HitlParams {
+  /** enabled|definitions|fills. Inferred from the supplied id/scope. */
+  mode?: 'enabled' | 'definitions' | 'fills';
+  /** Job id — default scope for both definitions and fills. */
+  job_id?: string;
+  /** Task id — scopes definitions (by-task) and fills (by-task). */
+  task_id?: string;
+  /** Task-type id — scopes definitions to a task type. */
+  task_type_id?: string;
+  /** File id — scopes fills to a file. */
+  file_id?: string;
+  /** Form-definition change id (fetch one definition's structure). */
+  definition_id?: string;
+  /** Definition fetch: the {for_view} path segment (default true). */
+  for_view?: boolean;
+  /** Form-fill id (fetch one submission). */
+  fill_id?: string;
+  /** fills + fill_id: return the submission's output-file-list instead of its body. */
+  output_files?: boolean;
+  /** fills: use the POST /form-fills/search body endpoint instead of a path-scoped list. */
+  search?: boolean;
+  /** fills by-job / by-task: filter to one Synergy user (path segment; absent → all users). */
+  user_id?: string;
+  /** 1-based start page for the fills walk (default 1). */
+  page?: number;
+  /** Page size for the fills walk / search (default 50). */
+  page_size?: number;
+  /** Client-side cap on total fills returned across the bounded walk (default 100). */
+  limit?: number;
+}
+
+/** Read-only Synergy: job/entity extras — Teams, Reports, ClashDetection + Wave 3 job-header reads (dashboard / categories / job-file-attributes). */
+export interface ConnectSynergyJobExtrasParams extends HitlParams {
+  /**
+   * team|roles|reports|report|report_inputs|clashes|clash_items|clash_report;
+   * Wave 3 job-header reads: dashboard | job-roles | categories | job-file-attributes.
+   * `roles` is the GLOBAL role-definition reference; `job-roles` is the per-job
+   * role assignments (jobs/{id}/roles, honours users_only) — they are distinct.
+   */
+  section:
+    | 'team'
+    | 'roles'
+    | 'reports'
+    | 'report'
+    | 'report_inputs'
+    | 'clashes'
+    | 'clash_items'
+    | 'clash_report'
+    | 'dashboard'
+    | 'job-roles'
+    | 'categories'
+    | 'job-file-attributes';
+  /** Job id (section=team / dashboard / job-roles / categories / job-file-attributes) — accepts bare or `job:`/`folder:` prefixed. */
+  job_id?: string;
+  /** Wave 3 (section=job-roles): restrict to users only (GET jobs/{id}/roles/{users_only}). Default false. */
+  users_only?: boolean;
+  /** Entity id for entity-scoped reports (section=reports). */
+  entity_id?: string;
+  /** Entity-type discriminator for entity-scoped reports — encoding UNVERIFIED, passed verbatim. */
+  entity_type?: string;
+  /** Report type filter (section=reports). Absent → the entityTypeReports catalog. */
+  report_type?: string;
+  /** Report GUID (section=report / report_inputs). NOT an N_N IDString. */
+  report_id?: string;
+  /** Folder holding the federated model (section=clashes) — accepts `folder:`/`job:` prefixed. */
+  folder_id?: string;
+  /** Clash-detection run id (section=clash_items / clash_report). */
+  clash_id?: string;
+  /** Clash report format (section=clash_report; default `csv`). */
+  report_format?: string;
+  /** Clash report delimiter for delimited formats (section=clash_report; default `,`). */
+  delimiter?: string;
+  /** Client-side cap for clash_items (default 200). */
+  limit?: number;
+}
+
+/** Read-only Synergy: notes + associations on any entity (cross-cutting annotations/links). */
+export interface ConnectSynergyNotesParams extends HitlParams {
+  /** notes (default) | associations. Inferred: an expected_type → associations, else notes. */
+  section?: 'notes' | 'associations';
+  /** The entity the notes/associations hang off — accepts bare or `job:`/`folder:`/`file:` prefixed. */
+  target_id: string;
+  /** Entity-type enum (noteTargetTypes / entityTypes). Required unless `scope` lets a convenience path be used. */
+  target_type?: string;
+  /** job|file|folder|project — routes to a scoped convenience path so the enum isn't needed. */
+  scope?: 'job' | 'file' | 'folder' | 'project';
+  /** section=notes: fetch one note's message body. */
+  note_id?: string;
+  /** section=notes: hydrate each header's body via getMessage (default true). */
+  include_message?: boolean;
+  /** section=associations: optional filter to one associated-entity type. */
+  expected_type?: string;
+  /** Use the cheap count endpoint and return just the count. */
+  count_only?: boolean;
+}
+
+/** Read-only Synergy: connection health / identity probe (no params). */
+export type ConnectSynergyStatusParams = HitlParams;
+
+/** Read-only Synergy: users — lookup by id, the caller's job checkouts, license-module access. */
+export interface ConnectSynergyUsersParams extends HitlParams {
+  /** lookup|checkouts|module. Inferred: user_id → lookup, job_id → checkouts, module → module. */
+  mode?: 'lookup' | 'checkouts' | 'module';
+  /** User IDString (mode=lookup) — reject `job:`/`folder:` prefixes. */
+  user_id?: string;
+  /** Job id (mode=checkouts) — accepts bare or `job:`/`folder:` prefixed. */
+  job_id?: string;
+  /** License-module name (mode=module). Vocabulary UNVERIFIED — 404 surfaces a verify hint. */
+  module?: string;
+  /** mode=lookup: pull the user's attributes (the required path segment). Default true. */
+  retrieve_attributes?: boolean;
+}
+
+// ── Wave 3 read-only Synergy tool (PAT-scoped live 12d reads; no Numa ACL, no
+//    metering). Same defensively-parsed `[UNKNOWN]`-schema handling as Waves 1/2.
+//    The 4 fold-ins (tasks / file_info / contacts / job_extras) EXTEND their
+//    existing param shapes above with optional Wave 3 fields — no new tool ids. ──
+
+/**
+ * Read-only Synergy: turn a pasted 12d link / path into an entity (+ a clickable
+ * URL). Wraps the admin-controller link/path lookups — non-mutating reads.
+ */
+export interface ConnectSynergyResolveParams extends HitlParams {
+  /** link = parse a synergy:// or web link → entity ref (+ best-effort getWebLink); path = find entity by its 12d path; weblink = entity_id+entity_type → URL. Inferred when omitted. */
+  mode?: 'link' | 'path' | 'weblink';
+  /** A pasted `synergy://` or web link to parse (mode=link). */
+  link?: string;
+  /** A 12d entity path to resolve (mode=path) — URL-encoded server-side. */
+  path?: string;
+  /** Entity IDString to build a web link for (mode=weblink, or the parsed ref). */
+  entity_id?: string;
+  /** Entity-type discriminator (mode=weblink) — encoding UNVERIFIED, passed verbatim. */
+  entity_type?: string;
+}
+
 export interface ConnectSynergySearchParams extends HitlParams {
   query: string;
   page_size?: number;
@@ -1266,6 +1721,30 @@ export type ToolCall =
   | { tool: 'connect_synergy_list'; params: ConnectSynergyListParams }
   | { tool: 'connect_synergy_search'; params: ConnectSynergySearchParams }
   | { tool: 'connect_synergy_download'; params: ConnectSynergyDownloadParams }
+  | { tool: 'connect_synergy_job_meta'; params: ConnectSynergyJobMetaParams }
+  | { tool: 'connect_synergy_folder_summary'; params: ConnectSynergyFolderSummaryParams }
+  | { tool: 'connect_synergy_schema'; params: ConnectSynergySchemaParams }
+  | { tool: 'connect_synergy_file_info'; params: ConnectSynergyFileInfoParams }
+  | { tool: 'connect_synergy_job_stats'; params: ConnectSynergyJobStatsParams }
+  | { tool: 'connect_synergy_job_tree'; params: ConnectSynergyJobTreeParams }
+  | { tool: 'connect_synergy_portfolio'; params: ConnectSynergyPortfolioParams }
+  | { tool: 'connect_synergy_exact_term'; params: ConnectSynergyExactTermParams }
+  | { tool: 'connect_synergy_tasks'; params: ConnectSynergyTasksParams }
+  | { tool: 'connect_synergy_contacts'; params: ConnectSynergyContactsParams }
+  | { tool: 'connect_synergy_issues'; params: ConnectSynergyIssuesParams }
+  | { tool: 'connect_synergy_workflow'; params: ConnectSynergyWorkflowParams }
+  | { tool: 'connect_synergy_file_history'; params: ConnectSynergyFileHistoryParams }
+  | { tool: 'connect_synergy_recent'; params: ConnectSynergyRecentParams }
+  | { tool: 'connect_synergy_forums'; params: ConnectSynergyForumsParams }
+  | { tool: 'connect_synergy_projects'; params: ConnectSynergyProjectsParams }
+  | { tool: 'connect_synergy_transmittals'; params: ConnectSynergyTransmittalsParams }
+  | { tool: 'connect_synergy_companies'; params: ConnectSynergyCompaniesParams }
+  | { tool: 'connect_synergy_webforms'; params: ConnectSynergyWebformsParams }
+  | { tool: 'connect_synergy_job_extras'; params: ConnectSynergyJobExtrasParams }
+  | { tool: 'connect_synergy_notes'; params: ConnectSynergyNotesParams }
+  | { tool: 'connect_synergy_status'; params: ConnectSynergyStatusParams }
+  | { tool: 'connect_synergy_users'; params: ConnectSynergyUsersParams }
+  | { tool: 'connect_synergy_resolve'; params: ConnectSynergyResolveParams }
   | { tool: 'oauth_list_files'; params: OauthListFilesParams }
   | { tool: 'oauth_search_files'; params: OauthSearchFilesParams }
   | { tool: 'oauth_download_file'; params: OauthDownloadFileParams }
@@ -1354,17 +1833,101 @@ export type ToolResult<T extends ToolName> = T extends 'query_knowledgebase'
                                                                     ? ConnectorListResult
                                                                     : T extends 'connect_synergy_download'
                                                                       ? ConnectorDownloadResult
-                                                                      : T extends 'oauth_list_files'
-                                                                        ? ConnectorListResult
-                                                                        : T extends 'oauth_search_files'
-                                                                          ? ConnectorListResult
-                                                                          : T extends 'oauth_download_file'
-                                                                            ? ConnectorDownloadResult
-                                                                            : T extends 'oauth_get_file_metadata'
+                                                                      : T extends 'connect_synergy_job_meta'
+                                                                        ? Record<string, unknown>
+                                                                        : T extends 'connect_synergy_folder_summary'
+                                                                          ? Record<string, unknown>
+                                                                          : T extends 'connect_synergy_schema'
+                                                                            ? Record<string, unknown>
+                                                                            : T extends 'connect_synergy_file_info'
                                                                               ? ConnectorFileMetadataResult
-                                                                              : T extends `ops_${string}`
-                                                                                ? OpsOperationResult
-                                                                                : never;
+                                                                              : T extends 'connect_synergy_job_stats'
+                                                                                ? Record<string, unknown>
+                                                                                : T extends 'connect_synergy_job_tree'
+                                                                                  ? Record<string, unknown>
+                                                                                  : T extends 'connect_synergy_portfolio'
+                                                                                    ? Record<string, unknown>
+                                                                                    : T extends 'connect_synergy_exact_term'
+                                                                                      ? Record<string, unknown>
+                                                                                      : T extends 'connect_synergy_tasks'
+                                                                                        ? Record<string, unknown>
+                                                                                        : T extends 'connect_synergy_contacts'
+                                                                                          ? Record<string, unknown>
+                                                                                          : T extends 'connect_synergy_issues'
+                                                                                            ? Record<string, unknown>
+                                                                                            : T extends 'connect_synergy_workflow'
+                                                                                              ? Record<string, unknown>
+                                                                                              : T extends 'connect_synergy_file_history'
+                                                                                                ? Record<
+                                                                                                    string,
+                                                                                                    unknown
+                                                                                                  >
+                                                                                                : T extends 'connect_synergy_recent'
+                                                                                                  ? Record<
+                                                                                                      string,
+                                                                                                      unknown
+                                                                                                    >
+                                                                                                  : T extends 'connect_synergy_forums'
+                                                                                                    ? Record<
+                                                                                                        string,
+                                                                                                        unknown
+                                                                                                      >
+                                                                                                    : T extends 'connect_synergy_projects'
+                                                                                                      ? Record<
+                                                                                                          string,
+                                                                                                          unknown
+                                                                                                        >
+                                                                                                      : T extends 'connect_synergy_transmittals'
+                                                                                                        ? Record<
+                                                                                                            string,
+                                                                                                            unknown
+                                                                                                          >
+                                                                                                        : T extends 'connect_synergy_companies'
+                                                                                                          ? Record<
+                                                                                                              string,
+                                                                                                              unknown
+                                                                                                            >
+                                                                                                          : T extends 'connect_synergy_webforms'
+                                                                                                            ? Record<
+                                                                                                                string,
+                                                                                                                unknown
+                                                                                                              >
+                                                                                                            : T extends 'connect_synergy_job_extras'
+                                                                                                              ? Record<
+                                                                                                                  string,
+                                                                                                                  unknown
+                                                                                                                >
+                                                                                                              : T extends 'connect_synergy_notes'
+                                                                                                                ? Record<
+                                                                                                                    string,
+                                                                                                                    unknown
+                                                                                                                  >
+                                                                                                                : T extends 'connect_synergy_status'
+                                                                                                                  ? Record<
+                                                                                                                      string,
+                                                                                                                      unknown
+                                                                                                                    >
+                                                                                                                  : T extends 'connect_synergy_users'
+                                                                                                                    ? Record<
+                                                                                                                        string,
+                                                                                                                        unknown
+                                                                                                                      >
+                                                                                                                    : T extends 'connect_synergy_resolve'
+                                                                                                                      ? Record<
+                                                                                                                          string,
+                                                                                                                          unknown
+                                                                                                                        >
+                                                                                                                      : T extends 'oauth_list_files'
+                                                                                                                        ? ConnectorListResult
+                                                                                                                        : T extends 'oauth_search_files'
+                                                                                                                          ? ConnectorListResult
+                                                                                                                          : T extends 'oauth_download_file'
+                                                                                                                            ? ConnectorDownloadResult
+                                                                                                                            : T extends 'oauth_get_file_metadata'
+                                                                                                                              ? ConnectorFileMetadataResult
+                                                                                                                              : T extends `ops_${string}`
+                                                                                                                                ? OpsOperationResult
+                                                                                                                                : never;
 
 /**
  * Extracts the params type for a given tool name. Useful for typing

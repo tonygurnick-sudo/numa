@@ -491,6 +491,32 @@ def _resolve_s3_prefix(
     return template.format(user_sub=user_sub, conversation_id=conversation_id)
 
 
+def _maybe_add_synergy_kb(
+    available_kbs: list[dict] | None,
+    feature_flags: dict | None,
+    restrict_kbs: bool,
+) -> list[dict] | None:
+    """Make the cross-job Synergy KB available to the agent when the feature is on.
+
+    Synergy cross-job search is a capability of the assistant, not a Numa Files
+    folder the user toggles per conversation. So whenever ``SYNERGY`` is
+    on we add the ``synergy`` KB to the queryable set (it flows into
+    ``NUMA_ALLOWED_KBS`` and ``build_kb_context``) regardless of the user's folder
+    selection — otherwise a fresh conversation sends no KBs and the agent is
+    fail-closed denied from ever querying it. Skipped for ``restrict_kbs`` agent
+    types (locked-down pipelines), which only get their explicit ``default_kbs``.
+    """
+    if restrict_kbs:
+        return available_kbs
+    if not (feature_flags or {}).get("SYNERGY"):
+        return available_kbs
+    kbs = list(available_kbs or [])
+    if any(kb.get("id") == "synergy" for kb in kbs):
+        return kbs
+    kbs.append({"id": "synergy", "name": "Synergy (all jobs)"})
+    return kbs
+
+
 # NOTE: per-folder file listings are no longer injected into the system prompt
 # (BUG-375). The agent finds files by searching/traversing folders on demand, so
 # the old `_fetch_kb_listings` / `_get_cached_kb_listings` machinery (and its S3
@@ -1971,6 +1997,12 @@ async def _handle_chat(
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
+    # Cross-job Synergy search: make the synergy KB queryable + advertised when
+    # the feature flag is on, independent of the user's per-conversation folders.
+    available_kbs = _maybe_add_synergy_kb(
+        available_kbs, feature_flags, agent_type_config.restrict_kbs
+    )
+
     # Attachment handling - now supports both files and folders
     # Frontend sends: {files: [{path, filename, size}], folders?: [{name, path, fileCount, totalSize}]}
     attachments_data = body.get("attachments")
@@ -2501,6 +2533,12 @@ async def _handle_sync(
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
 
+    # Cross-job Synergy search: mirror _handle_chat so sync/scheduled runs can
+    # query the synergy KB when the feature flag is on.
+    available_kbs = _maybe_add_synergy_kb(
+        available_kbs, body.get("featureFlags", {}), agent_type_config.restrict_kbs
+    )
+
     # Integrations — unified payload via the shared adapter
     enabled_unified, available_unified = _normalise_integrations_payload(body)
     enabled_integrations = [
@@ -2852,6 +2890,12 @@ async def _handle_fire_and_forget(
         accessible_kbs = available_kbs
     elif agent_type_config.default_kbs and not available_kbs:
         available_kbs = agent_type_config.default_kbs
+
+    # Cross-job Synergy search: mirror _handle_chat/_handle_sync so V2-app
+    # (fire-and-forget) runs can query the synergy KB when the feature flag is on.
+    available_kbs = _maybe_add_synergy_kb(
+        available_kbs, feature_flags, agent_type_config.restrict_kbs
+    )
 
     enabled_unified, available_unified = _normalise_integrations_payload(body)
     enabled_integrations = [

@@ -60,6 +60,54 @@ export interface OauthWorkspaceToolsRoute {
 export type ToolRoute = WorkspaceChatToolsRoute | KbManagerRoute | OauthWorkspaceToolsRoute;
 
 /**
+ * Native-connector Synergy tool names. Single source of truth shared across
+ * the routing registry (below), the policy category map (`policy.ts`), and
+ * their tests — so adding a Synergy tool in one place can't silently miss the
+ * route or the category bucket. All route to `oauth_workspace_tools` and all
+ * bucket as the `integrations` CLI category.
+ *   - list/search/download: file browsing (MCP→CLI re-exposure, 6bebe5603).
+ *   - the metadata/structure/stats group + the 4th `exact_term` search mode
+ *     (commit 00d7edd48) — without explicit routes these default to
+ *     workspace_chat_tools and the agent reports them "not available".
+ */
+export const SYNERGY_TOOLS = [
+  'connect_synergy_list',
+  'connect_synergy_search',
+  'connect_synergy_download',
+  'connect_synergy_job_meta',
+  'connect_synergy_folder_summary',
+  'connect_synergy_schema',
+  'connect_synergy_file_info',
+  'connect_synergy_job_stats',
+  'connect_synergy_job_tree',
+  'connect_synergy_portfolio',
+  'connect_synergy_exact_term',
+  // Wave 1 read-only live-read tools (PAT-scoped; no Numa ACL, no metering).
+  'connect_synergy_tasks',
+  'connect_synergy_contacts',
+  'connect_synergy_issues',
+  'connect_synergy_workflow',
+  'connect_synergy_file_history',
+  'connect_synergy_recent',
+  // Wave 2 read-only live-read tools (PAT-scoped; no Numa ACL, no metering).
+  // connect_synergy_schema is already present above (its vocab extension adds
+  // modes, not a new tool id).
+  'connect_synergy_forums',
+  'connect_synergy_projects',
+  'connect_synergy_transmittals',
+  'connect_synergy_companies',
+  'connect_synergy_webforms',
+  'connect_synergy_job_extras',
+  'connect_synergy_notes',
+  'connect_synergy_status',
+  'connect_synergy_users',
+  // Wave 3 read-only live-read tool (PAT-scoped; no Numa ACL, no metering).
+  // The Wave 3 fold-ins extend existing tool params (no new tool ids) — only
+  // this link/path resolver is a brand-new id.
+  'connect_synergy_resolve',
+] as const;
+
+/**
  * Explicit routing entries. Anything NOT in here defaults to
  * workspace_chat_tools (pass-through).
  */
@@ -100,9 +148,15 @@ export const TOOL_REGISTRY: Record<string, ToolRoute> = {
   // Synergy 12d uses dedicated handlers (jobs-as-folders); the OAuth
   // cloud-storage providers (Google Drive / Gmail / OneDrive / Dropbox)
   // share the generic `oauth_*` ops with a `provider` param. All read-only.
-  connect_synergy_list: { target: 'oauth_workspace_tools' },
-  connect_synergy_search: { target: 'oauth_workspace_tools' },
-  connect_synergy_download: { target: 'oauth_workspace_tools' },
+  //
+  // Synergy file browsing + metadata / structure / stats + the 4th search mode
+  // are routed from the shared SYNERGY_TOOLS list so a new Synergy tool can't
+  // be added without a route — without one, numa-cli-api defaults it to
+  // workspace_chat_tools (no such handler) and the agent reports it "not
+  // available".
+  ...Object.fromEntries(
+    SYNERGY_TOOLS.map((tool) => [tool, { target: 'oauth_workspace_tools' } as OauthWorkspaceToolsRoute])
+  ),
   oauth_list_files: { target: 'oauth_workspace_tools' },
   oauth_search_files: { target: 'oauth_workspace_tools' },
   oauth_download_file: { target: 'oauth_workspace_tools' },

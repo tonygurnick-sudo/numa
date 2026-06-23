@@ -43,6 +43,24 @@ export interface OAuthIntegrationConstructProps extends ApiGatewayLambdaCollecti
   outputsBucketName?: string;
   /** Outputs bucket ARN (for IAM permissions) */
   outputsBucketArn?: string;
+  /**
+   * Synergy crawl state (JOB#) table — powers the exhaustive structured /
+   * portfolio query. Empty string when `synergy` is off, so the env +
+   * IAM are only wired when the flag is enabled (the table doesn't exist otherwise).
+   */
+  synergyCrawlStateTableName?: string;
+  /** Synergy crawl state table ARN (for the flag-gated scan IAM). */
+  synergyCrawlStateTableArn?: string;
+  /**
+   * Synergy per-query credit-debit Lambda name — the workspace-tools query
+   * handlers fire-and-forget it to meter portfolio / exact-term read-capacity
+   * under the real caller. Empty string when `synergy` is off (the
+   * debit lambda doesn't exist), so the env + InvokeFunction IAM are only wired
+   * when the flag is enabled.
+   */
+  synergyCreditDebitFunctionName?: string;
+  /** Synergy credit-debit Lambda ARN (for the flag-gated InvokeFunction IAM). */
+  synergyCreditDebitFunctionArn?: string;
 }
 
 export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
@@ -216,6 +234,34 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
             },
           ]
         : []),
+      // Synergy crawl state (JOB#) table — read-only scan/query for the exhaustive
+      // structured/portfolio query. Only present when synergy is on (the
+      // ARN is '' otherwise, so this whole statement drops out — flag-gated).
+      ...(props.synergyCrawlStateTableArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              // BatchGetItem: the exact_term_search ACL probe fetches JOB#/META
+              // rows in batches (≤100 keys/call) against the base table ARN.
+              actions: ['dynamodb:Scan', 'dynamodb:Query', 'dynamodb:GetItem', 'dynamodb:BatchGetItem'],
+              resources: [props.synergyCrawlStateTableArn, `${props.synergyCrawlStateTableArn}/index/*`],
+            },
+          ]
+        : []),
+      // Synergy per-query credit debit — fire-and-forget the debit lambda to
+      // meter portfolio / exact-term read-capacity under the real caller. Only
+      // present when synergy is on (the ARN is '' otherwise, so this
+      // statement drops out — flag-gated, mirrors the crawler/coordinator wiring
+      // in synergy-kb-crawler-construct.ts).
+      ...(props.synergyCreditDebitFunctionArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.synergyCreditDebitFunctionArn],
+            },
+          ]
+        : []),
     ];
 
     const workspaceToolsLambda = new NumaLambda(this, 'oauth-workspace-tools', {
@@ -236,6 +282,13 @@ export class OAuthIntegrationConstruct extends ApiGatewayLambdaCollection {
         DATA_BUCKET_NAME: props.dataBucketName ?? '',
         // Outputs bucket for staging large connector downloads (presigned URLs)
         OUTPUTS_BUCKET_NAME: props.outputsBucketName ?? '',
+        // Synergy crawl state table for the structured/portfolio query. Empty
+        // when synergy is off → the handler returns a clear "not enabled".
+        SYNERGY_STATE_TABLE_NAME: props.synergyCrawlStateTableName ?? '',
+        // Synergy per-query credit-debit lambda — the query handlers fire-and-
+        // forget it to meter read-capacity under the real caller. Empty when
+        // synergy is off → the handler skips metering silently.
+        SYNERGY_CREDIT_DEBIT_FUNCTION_NAME: props.synergyCreditDebitFunctionName ?? '',
       },
       additionalPolicyStatements: workspaceToolsPolicy,
     });

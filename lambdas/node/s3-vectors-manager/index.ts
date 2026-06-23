@@ -86,9 +86,31 @@ async function handleCreate(
         metadataConfiguration: {
           // All metadata keys are filterable by default except those listed as non-filterable
           // tenant_id, kb_id, uploader_id, uploaded_at will be filterable
+          //
+          // S3 Vectors caps FILTERABLE metadata at 2 KB/vector and allows at most 10
+          // NON-filterable keys per index. nonFilterableMetadataKeys is IMMUTABLE after
+          // index creation, so this list only takes effect on a NEWLY created index — an
+          // existing synergy index keeps whatever it was created with until it is recreated
+          // (full re-embed). The 5 synergy display-only keys below (job_name, job_path,
+          // file_name, file_path, source_weblink) are NEVER used in any query filter — the
+          // only synergy filters are tenant_id, kb_id, doc_type, allowed_users[listContains],
+          // is_template, created_date, parent_job_id, attr_* — so moving them off the
+          // filterable budget is LOSSLESS for retrieval: the crawler still WRITES them and
+          // Bedrock still RETURNS them in results, they're just not indexed for filtering.
+          // Keeping them off the 2 KB filterable budget lets the per-doc allowed_users ACL
+          // hold more users. They only exist on synergy docs, so listing them is harmless
+          // for other KBs sharing this construct. Total non-filterable = 7, under the 10
+          // limit — short keys are deliberately kept filterable to preserve headroom.
           nonFilterableMetadataKeys: [
             'AMAZON_BEDROCK_TEXT', // Bedrock stores parsed text here - can be large
             'AMAZON_BEDROCK_METADATA', // Bedrock stores document metadata here
+            // Synergy display-only keys — off the 2 KB filterable budget (immutable; new
+            // indexes only). Lossless for retrieval; frees budget for the allowed_users ACL.
+            'job_name',
+            'job_path',
+            'file_name',
+            'file_path',
+            'source_weblink',
           ],
         },
       })
