@@ -46,12 +46,12 @@ from numa_workspace_agent.s3_workspace import (
     restore_trace_from_s3,
 )
 from numa_workspace_agent.sdk_config import (
-    DEFAULT_MODEL,
     FALLBACK_MODEL,
     LOCAL_ROOT,
     _regionalize,
     _strip_prefix,
     create_agent_options,
+    platform_default_model,
     validate_model_id,
 )
 from numa_workspace_agent.stream_logger import StreamLog
@@ -806,9 +806,11 @@ async def stream_claude_sdk(
     )
 
     # 4. Create SDK options with validated model (with quota fallback pre-check)
-    # Precedence: request override > agent_type_config.default_model > DEFAULT_MODEL.
-    # The type-config consultation is also done inside create_agent_options, but
-    # we need a concrete model here to feed resolve_model_with_fallback.
+    # Precedence: request override > agent_type_config.default_model > platform
+    # default (Standard when the model-selection flag is on, else DEFAULT_MODEL —
+    # FEAT-247). The type-config consultation is also done inside
+    # create_agent_options, but we need a concrete model here to feed
+    # resolve_model_with_fallback.
     validated_model = validate_model_id(model_id)
     if (
         validated_model is None
@@ -816,7 +818,7 @@ async def stream_claude_sdk(
         and agent_type_config.default_model
     ):
         validated_model = _regionalize(_strip_prefix(agent_type_config.default_model))
-    effective_model = validated_model or DEFAULT_MODEL
+    effective_model = validated_model or platform_default_model()
     effective_model, _is_fallback = resolve_model_with_fallback(effective_model)
     validated_model = effective_model
 
@@ -1531,9 +1533,11 @@ async def run_claude_sdk(
     )
 
     # 4. Create SDK options (with quota fallback pre-check)
-    # Precedence: request override > agent_type_config.default_model > DEFAULT_MODEL.
-    # The type-config consultation is also done inside create_agent_options, but
-    # we need a concrete model here to feed resolve_model_with_fallback.
+    # Precedence: request override > agent_type_config.default_model > platform
+    # default (Standard when the model-selection flag is on, else DEFAULT_MODEL —
+    # FEAT-247). The type-config consultation is also done inside
+    # create_agent_options, but we need a concrete model here to feed
+    # resolve_model_with_fallback.
     validated_model = validate_model_id(model_id)
     if (
         validated_model is None
@@ -1541,7 +1545,7 @@ async def run_claude_sdk(
         and agent_type_config.default_model
     ):
         validated_model = _regionalize(_strip_prefix(agent_type_config.default_model))
-    effective_model = validated_model or DEFAULT_MODEL
+    effective_model = validated_model or platform_default_model()
     effective_model, _is_fallback = resolve_model_with_fallback(effective_model)
     validated_model = effective_model
 

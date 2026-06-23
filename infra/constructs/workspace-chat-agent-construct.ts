@@ -124,6 +124,15 @@ export interface WorkspaceChatAgentConstructProps {
    */
   numaStandardModelRelayUrl?: string;
   /**
+   * Whether the WORKSPACE_CHAT_MODEL_SELECTION flag is on for this client. When
+   * true, the container's request-time model default becomes the Numa Standard
+   * Model (the cheap everyday tier) instead of the Anthropic platform default —
+   * so callers that send no model (scheduled / trigger runs, API consumers) and
+   * agents with no per-agent model inherit Standard (FEAT-247). Flag off → keep
+   * today's default (Premium / Sonnet). An explicit per-request model always wins.
+   */
+  workspaceChatModelSelection?: boolean;
+  /**
    * Bedrock model id used by the `numa vision view` tool to read images the
    * primary model can't see natively. Defaults to Haiku 4.5 (the bench A/B
    * showed Nova reads layouts backwards — see contracts.md §6).
@@ -916,6 +925,12 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
         // forwards to (cross-account, STS-proof header) when on the standard model.
         ...(props.numaStandardModelRelayUrl && {
           NUMA_STANDARD_MODEL_RELAY_URL: props.numaStandardModelRelayUrl,
+        }),
+        // Model-selection flag — when on, the request-time model default becomes
+        // the Numa Standard Model so no-model callers (scheduled/trigger runs,
+        // agents with no per-agent model) inherit the cheap tier (FEAT-247).
+        ...(props.workspaceChatModelSelection && {
+          WORKSPACE_CHAT_MODEL_SELECTION: 'true',
         }),
         // Vision model for the `numa vision view` tool (Haiku 4.5, not Nova).
         VISION_MODEL_ID: props.visionModelId ?? 'global.anthropic.claude-haiku-4-5-20251001-v1:0',

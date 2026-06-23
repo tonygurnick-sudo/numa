@@ -161,6 +161,30 @@ DEFAULT_MODEL = os.environ.get(
     "ANTHROPIC_MODEL", _regionalize("anthropic.claude-sonnet-4-6")
 )
 
+# Model-selection flag (FEAT-247). Set by the infra construct as the env var
+# WORKSPACE_CHAT_MODEL_SELECTION='true' only when the per-client flag is on. When
+# on, the everyday platform default becomes the Numa Standard Model (the cheap
+# tier) instead of DEFAULT_MODEL — so callers that send no model (scheduled /
+# trigger runs, API consumers, agents with no per-agent model) inherit Standard.
+WORKSPACE_CHAT_MODEL_SELECTION = (
+    os.environ.get("WORKSPACE_CHAT_MODEL_SELECTION", "").lower() == "true"
+)
+
+
+def platform_default_model() -> str:
+    """Model to use when neither the request nor the agent/type config sets one.
+
+    With WORKSPACE_CHAT_MODEL_SELECTION on, the everyday default is the Numa
+    Standard Model (opaque cheap tier, FEAT-247); otherwise the Anthropic
+    platform default (Premium / Sonnet). An explicit per-request model or an
+    agent-type ``default_model`` always takes precedence over this — it is only
+    the final fallback in the resolution chain.
+    """
+    if WORKSPACE_CHAT_MODEL_SELECTION:
+        return NUMA_STANDARD_MODEL_ID
+    return DEFAULT_MODEL
+
+
 # Fallback model for when a model's daily Bedrock quota is exhausted (429 "per day")
 FALLBACK_MODEL_BARE = "anthropic.claude-sonnet-4-5-20250929-v1:0"
 FALLBACK_MODEL = _regionalize(FALLBACK_MODEL_BARE)
@@ -1117,11 +1141,14 @@ def create_agent_options(
         numa_external_user_id=env.get("NUMA_EXTERNAL_USER_ID", "NOT SET"),
     )
 
-    # Resolve effective model: request override > type config default > global default
+    # Resolve effective model: request override > type config default > platform default
+    # (Standard when the model-selection flag is on, else DEFAULT_MODEL — FEAT-247).
     # Regionalize type_config.default_model since it may use bare IDs (e.g. without us. prefix)
-    raw_model = model or type_config.default_model or DEFAULT_MODEL
+    raw_model = model or type_config.default_model or platform_default_model()
     effective_model = (
-        _regionalize(_strip_prefix(raw_model)) if raw_model else DEFAULT_MODEL
+        _regionalize(_strip_prefix(raw_model))
+        if raw_model
+        else platform_default_model()
     )
 
     # ── Numa Standard Model branch (contract §3, §5, §8) ────────────────────
