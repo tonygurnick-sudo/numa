@@ -1155,6 +1155,10 @@ export class NumaClientStack extends TerraformStack {
         NUMA_OPS: clientConfig.numaOps ?? false,
         SITE_WIDE_SEARCH: clientConfig.siteWideSearch ?? false,
         MFA_ENABLED: clientConfig.mfa ?? false,
+        // FEAT-129 — Connector Access Review admin panel (Settings → Users).
+        // Emitted explicitly (default false) so getFlag() does NOT default-true
+        // on older deployments; opt-in per client.
+        CONNECTOR_ACCESS_REVIEW: clientConfig.connectorAccessReview ?? false,
         NUMA_DROP_ZONES: clientConfig.numaDropZones ?? false,
         NUMA_SHARING: clientConfig.numaSharing ?? false,
         WORKSPACE_CHAT_MODEL_SELECTION:
@@ -1815,6 +1819,17 @@ export const clientConfigSchema = coreNumaInfraPropsSchema
          * @default false
          */
         siteWideSearch: z.boolean().optional().default(false),
+
+        /**
+         * FEAT-129 — Connector Access Review admin panel. When on, the
+         * Settings → Users tab shows a security panel listing every native
+         * connector authorization in the tenant with a per-row revoke.
+         * Opt-in per client; the admin-connector-access Lambda + routes are
+         * always deployed (cheap), the flag only gates the UI.
+         *
+         * @default false
+         */
+        connectorAccessReview: z.boolean().optional().default(false),
 
         /**
          * Whether to enable the Racetech external data feed upload endpoint.

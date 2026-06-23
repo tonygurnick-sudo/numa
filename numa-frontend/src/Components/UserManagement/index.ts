@@ -13,3 +13,5 @@ export { UserRoleSection } from './UserRoleSection';
 export { UserTableView } from './UserTableView';
 
 export { SecuritySettingsPanel } from './SecuritySettingsPanel';
+
+export { ConnectorAccessPanel } from './ConnectorAccessPanel';

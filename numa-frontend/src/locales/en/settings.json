@@ -153,6 +153,32 @@
       "mfaDuration": "MFA remember duration must be between 0 and {{max}} {{unit}}."
     }
   },
+  "connectorAccess": {
+    "title": "Connector Access Review",
+    "description": "Every connector your users have authorised, with the access method and scopes granted. Revoke a connection to immediately clear its stored credentials — the user can re-authorise later if needed.",
+    "pipedreamNotice": "Pipedream-backed integrations are not yet shown here. Only native connectors (OAuth, PAT, and API-key) appear in this list.",
+    "loading": "Loading connector authorizations…",
+    "loadError": "Failed to load connector authorizations.",
+    "empty": "No connector authorizations found.",
+    "revoke": "Revoke",
+    "revokeConfirm": "Revoke {{email}}'s access to {{connector}}? Their stored credentials will be cleared immediately.",
+    "revokeError": "Failed to revoke access. Please try again.",
+    "method": {
+      "oauth": "OAuth",
+      "pat": "Token",
+      "apikey": "API Key",
+      "unknown": "Unknown"
+    },
+    "columns": {
+      "user": "User",
+      "connector": "Connector",
+      "method": "Method",
+      "scopes": "Scopes",
+      "connectedAt": "Connected",
+      "lastUsedAt": "Last used",
+      "actions": "Actions"
+    }
+  },
   "schedulingSettings": {
     "title": "Automation Minimum Interval",
     "description": "Set the minimum interval between scheduled automation runs for your organisation. This prevents automations from being scheduled too frequently. You cannot set a value lower than what your platform administrator has configured.",
