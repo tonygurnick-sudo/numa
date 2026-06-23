@@ -637,6 +637,9 @@ export class NumaClientStack extends TerraformStack {
         // per-client config. visionModelId falls back to the construct default
         // (Haiku 4.5), so it isn't wired here.
         numaStandardModelRelayUrl: clientConfig.workspaceChatModelSelection ? NUMA_STANDARD_MODEL_RELAY_URL : undefined,
+        // Flag gating the request-time Standard-model default in the container
+        // (FEAT-247). Same per-client flag that drives the frontend model picker.
+        workspaceChatModelSelection: clientConfig.workspaceChatModelSelection ?? false,
       });
 
       // Create the proxy Lambda that bridges CloudFront to AgentCore SDK

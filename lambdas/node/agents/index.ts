@@ -311,7 +311,8 @@ const normaliseIntegrationRows = (rows: unknown): IntegrationListItem[] | undefi
 // Premium / Expert). Mirrors WORKSPACE_MODEL_OPTIONS_CURATED in
 // numa-frontend/src/types/workspaceChatTypes.ts (the source of truth); the workspace agent's
 // validate_model_id() is the final backstop. An unknown / retired id normalises to undefined, so the
-// agent falls back to the platform default (Premium / Sonnet 4.6) at runtime — no behaviour change.
+// agent falls back to the platform default at runtime — Standard when the model-selection flag is on
+// for the client, else Premium / Sonnet 4.6 (FEAT-247).
 const VALID_AGENT_MODEL_IDS = new Set<string>([
   'numa-standard-model', // Standard — cheap non-Anthropic model
   'anthropic.claude-sonnet-4-6@medium-thinking', // Premium — Sonnet 4.6 (default)
