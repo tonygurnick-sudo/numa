@@ -14,6 +14,7 @@ can reach the ops Lambdas directly.
 
 import json
 import os
+import time
 from typing import Any, Dict
 
 import structlog
@@ -30,11 +31,18 @@ OPS_CRM_API_LAMBDA = os.environ.get("OPS_CRM_API_LAMBDA_NAME", "")
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 USER_POOL_ID = os.environ.get("USER_POOL_ID", "")
 
-# Per-container cache of {user_sub: [group, ...]} so admin checks for the
-# same user don't re-hit Cognito on every tool call. Lifetime is the Lambda
-# container; long enough to batch a conversation, short enough to pick up
-# group changes on a cold start.
-_USER_GROUPS_CACHE: dict[str, list[str]] = {}
+# Per-container cache of {user_sub: (expires_at_monotonic, [group, ...])} so
+# admin checks for the same user don't re-hit Cognito on every tool call.
+#
+# SECURITY (BUG-262): the cache key is strictly the caller's own ``user_sub``
+# and every entry carries a short TTL. A warm container is reused across
+# invocations for *different* users, so an entry must never outlive its TTL —
+# otherwise one user's Cognito groups could be served to another user who
+# happens to share the (re-randomised) container. The TTL bounds any window in
+# which stale group membership could be returned to ~_USER_GROUPS_CACHE_TTL_S
+# seconds while still batching the calls within a single conversation turn.
+_USER_GROUPS_CACHE: dict[str, tuple[float, list[str]]] = {}
+_USER_GROUPS_CACHE_TTL_S = 60.0
 
 
 def _get_lambda_client():
@@ -55,9 +63,16 @@ def _resolve_user_groups(user_sub: str, hint: list | None) -> list[str]:
         return [str(g) for g in hint]
     if not user_sub or not USER_POOL_ID:
         return []
+    # Only ever serve a cache entry stored under this exact user_sub, and only
+    # while it is still within its TTL — never return another user's groups,
+    # and never return stale groups on a long-lived warm container (BUG-262).
     cached = _USER_GROUPS_CACHE.get(user_sub)
     if cached is not None:
-        return cached
+        expires_at, groups = cached
+        if time.monotonic() < expires_at:
+            return groups
+        # Expired — drop it and fall through to a fresh Cognito lookup.
+        del _USER_GROUPS_CACHE[user_sub]
     try:
         cognito = prm_client("cognito-idp", region=AWS_REGION)
         response = cognito.admin_list_groups_for_user(
@@ -72,7 +87,7 @@ def _resolve_user_groups(user_sub: str, hint: list | None) -> list[str]:
             error=str(e),
         )
         groups = []
-    _USER_GROUPS_CACHE[user_sub] = groups
+    _USER_GROUPS_CACHE[user_sub] = (time.monotonic() + _USER_GROUPS_CACHE_TTL_S, groups)
     logger.info(
         "Resolved user groups",
         user_sub=user_sub[:8] + "...",

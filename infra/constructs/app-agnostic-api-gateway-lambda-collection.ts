@@ -2709,6 +2709,15 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         REGION: props.region,
         NOTIFICATIONS_TABLE_NAME: props.notificationsTableName,
         CLOUDFRONT_SHARED_SECRET: props.cloudfrontSharedSecret,
+        // Cognito config for in-Lambda JWT verification. This Lambda has
+        // addAuthorizer: false (CloudFront secret + JWT), so it must verify the
+        // bearer token's signature itself — accepting the same client-ID set the
+        // api-gateway-authorizer does. Without these it fails closed (401).
+        COGNITO_USER_POOL_ID: props.userPoolId,
+        COGNITO_USER_POOL_CLIENT_ID: props.userPoolClientId,
+        ...(props.additionalCognitoClientIds
+          ? { ADDITIONAL_COGNITO_CLIENT_IDS: props.additionalCognitoClientIds }
+          : {}),
       },
       additionalPolicyStatements: [
         {

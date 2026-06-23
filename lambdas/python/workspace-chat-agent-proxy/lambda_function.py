@@ -40,7 +40,11 @@ from jwt import algorithms
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
+# redirect_slashes=False: a trailing-slash mismatch on a route otherwise yields
+# a 307 redirect whose Location header echoes the Lambda Function URL origin,
+# leaking it past CloudFront (BUG-178). Disabling redirects turns those into a
+# plain 404 instead.
+app = FastAPI(redirect_slashes=False)
 
 # Route prefix - CloudFront forwards the full path, so we must match it
 PREFIX = "/api/workspace-chat-agent"
@@ -56,8 +60,14 @@ AGENTCORE_REGION = os.environ.get("AGENTCORE_REGION", AWS_REGION)
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
 _additional_ids = os.environ.get("ADDITIONAL_COGNITO_CLIENT_IDS", "")
-ALLOWED_CLIENT_IDS = {COGNITO_CLIENT_ID} | {
-    s.strip() for s in _additional_ids.split(",") if s.strip()
+# Filter out empty strings: an unset COGNITO_CLIENT_ID would otherwise leave the
+# set holding only "", and passing audience=[""] to jwt.decode makes PyJWT SKIP
+# audience validation entirely (BUG-259). We require at least one real client id
+# and only ever pass non-empty values as the audience.
+ALLOWED_CLIENT_IDS = {
+    cid
+    for cid in ({COGNITO_CLIENT_ID} | {s.strip() for s in _additional_ids.split(",")})
+    if cid
 }
 FILE_REDIRECT_SECRET = os.environ.get("FILE_REDIRECT_SECRET", "")
 OUTPUTS_BUCKET_NAME = os.environ.get("OUTPUTS_BUCKET_NAME", "")
@@ -265,11 +275,17 @@ def _verify_jwt_token(token: str) -> Dict[str, Any]:
 
     token_use = payload_check.get("token_use")
     if token_use == "id":
+        # Fail closed: an empty audience list makes PyJWT skip aud validation
+        # entirely (BUG-259). If no client id is configured we can't validate
+        # the audience, so reject rather than accept any id token.
+        allowed_audiences = list(ALLOWED_CLIENT_IDS)
+        if not allowed_audiences:
+            raise ValueError("No allowed client id configured for audience check")
         payload = jwt.decode(
             token,
             rsa_key,  # type: ignore[arg-type]
             algorithms=["RS256"],
-            audience=list(ALLOWED_CLIENT_IDS),
+            audience=allowed_audiences,
             issuer=f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{COGNITO_USER_POOL_ID}",
             options={"verify_exp": True},
         )
@@ -322,13 +338,13 @@ def extract_user_sub(
         return schedule_runner_sub
 
     if not COGNITO_USER_POOL_ID:
-        # Dev mode: fall back to unverified (log warning)
-        logger.warning("COGNITO_USER_POOL_ID not set - JWT verification DISABLED")
-        try:
-            decoded = jwt.decode(token, options={"verify_signature": False})
-            return decoded.get("sub", "anonymous")
-        except jwt.DecodeError:
-            return "anonymous"
+        # Fail closed (BUG-007): without the pool id we cannot fetch JWKS to
+        # verify the signature. Previously this fell back to an unverified
+        # decode, which accepted ANY token. Reject instead.
+        logger.error(
+            "COGNITO_USER_POOL_ID not set - cannot verify JWT, rejecting request"
+        )
+        raise HTTPException(status_code=401, detail="JWT verification not configured")
 
     try:
         payload = _verify_jwt_token(authorization)
