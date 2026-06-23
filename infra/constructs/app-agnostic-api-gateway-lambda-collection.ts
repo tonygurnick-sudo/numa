@@ -476,16 +476,30 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
     });
 
     // Connector Access Review API (FEAT-129) — admin-only surface that lists
-    // every NATIVE connector authorization in the tenant (which user authorised
-    // which connector, with what method/scopes/when) and revokes one per row.
-    // Gated in the FE by the CONNECTOR_ACCESS_REVIEW flag. The source of truth
-    // is the per-user consolidated Secrets Manager vault
-    // (`{client}/vault/users/{sub}`); revoke clears the credential fields in
-    // place (same mutation as oauth-files-api vault_integration.revoke_oauth_token).
-    // Pipedream-backed authorizations are intentionally out of this MVP.
+    // every connector authorization in the tenant (which user authorised which
+    // connector, with what method/scopes/when/last-used) and revokes one or many
+    // per row. Gated in the FE by the CONNECTOR_ACCESS_REVIEW flag.
+    //
+    // Two sources of truth: NATIVE connectors live in the per-user consolidated
+    // Secrets Manager vault (`{client}/vault/users/{sub}`) — revoke clears the
+    // credential fields in place (same mutation as oauth-files-api
+    // vault_integration.revoke_oauth_token). PIPEDREAM connectors live in
+    // Pipedream — the GET fans out per external_user_id to the relay's
+    // `get_integration_status` op (isolating per-user failures) and revoke routes
+    // through the relay's `disconnect_integration` op. `lastUsedAt` is hydrated
+    // best-effort from the connector-usage table (written by workspace-chat-tools).
     const adminConnectorAccessEnv = {
       CLIENT_NAME: props.clientName,
       USER_POOL_ID: props.userPoolId,
+      // Relay + usage-table wiring — both optional. When the relay isn't
+      // deployed (PIPEDREAM_INTEGRATIONS off) the lambda skips the pipedream
+      // fan-out; when the usage table is absent, lastUsedAt stays null.
+      ...(props.pipedreamRelayLambdaArn && {
+        PIPEDREAM_RELAY_LAMBDA_ARN: props.pipedreamRelayLambdaArn,
+      }),
+      ...(props.connectorUsageTableName && {
+        CONNECTOR_USAGE_TABLE: props.connectorUsageTableName,
+      }),
     } as Record<string, string>;
     const adminConnectorAccessPolicy = [
       {
@@ -502,6 +516,29 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
         actions: ['cognito-idp:ListUsers'],
         resources: [`arn:aws:cognito-idp:*:*:userpool/${props.userPoolId}`],
       },
+      // Invoke the Pipedream relay to list/disconnect a user's connected
+      // accounts. Only attached when the relay exists for this client; empty
+      // resources list otherwise and the lambda skips the pipedream surface.
+      ...(props.pipedreamRelayLambdaArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['lambda:InvokeFunction'],
+              resources: [props.pipedreamRelayLambdaArn],
+            },
+          ]
+        : []),
+      // Read the connector-usage table to hydrate lastUsedAt. Read-only — the
+      // rows are written by workspace-chat-tools.
+      ...(props.connectorUsageTableArn
+        ? [
+            {
+              effect: 'Allow' as const,
+              actions: ['dynamodb:GetItem', 'dynamodb:Query'],
+              resources: [props.connectorUsageTableArn],
+            },
+          ]
+        : []),
     ];
     this.addLambdaFunction(this, 'admin-connector-access-get', {
       addAuthorizer: true,
@@ -3405,4 +3442,9 @@ export interface AppAgnosticApiGatewayLambdaCollectionProps extends Omit<
   integrationsApprovalTableName?: string;
   /** Integrations approval table ARN — IAM grant for DDB read/write. */
   integrationsApprovalTableArn?: string;
+  /** Connector-usage table name (FEAT-129) — admin-connector-access reads it to
+   *  hydrate each row's `lastUsedAt`. Written by workspace-chat-tools. */
+  connectorUsageTableName?: string;
+  /** Connector-usage table ARN — IAM GetItem/Query grant for admin-connector-access. */
+  connectorUsageTableArn?: string;
 }

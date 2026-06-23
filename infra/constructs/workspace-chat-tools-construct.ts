@@ -69,6 +69,12 @@ export interface WorkspaceChatToolsConstructProps {
   browserLambdaArn?: string;
   /** Crawl-page Lambda name for web search fetch_url operation */
   browserLambdaName?: string;
+  /** Connector-usage table name (FEAT-129) — workspace-chat-tools writes a
+   *  last-used row (PK=`USER#{sub}`, SK=`CONN#{provider}#{connector}`,
+   *  `lastUsedAt` ISO8601) whenever a connector is used in chat. */
+  connectorUsageTableName?: string;
+  /** Connector-usage table ARN — IAM PutItem grant for the last-used writes. */
+  connectorUsageTableArn?: string;
 }
 
 /**
@@ -290,6 +296,17 @@ export class WorkspaceChatToolsConstruct extends Construct {
       });
     }
 
+    // DynamoDB permission for the connector-usage table (FEAT-129) — write a
+    // last-used row whenever a connector is invoked in chat. PutItem only.
+    if (props.connectorUsageTableArn) {
+      policyStatements.push({
+        sid: 'DynamoDBConnectorUsage',
+        effect: 'Allow',
+        actions: ['dynamodb:PutItem'],
+        resources: [props.connectorUsageTableArn],
+      });
+    }
+
     // Secrets Manager permission for consolidated vault access
     policyStatements.push({
       sid: 'SecretsManagerVaultAccess',
@@ -407,6 +424,10 @@ export class WorkspaceChatToolsConstruct extends Construct {
         // Consolidated vault configuration
         ...(props.vaultAuditLogTableName && {
           VAULT_AUDIT_LOG_TABLE_NAME: props.vaultAuditLogTableName,
+        }),
+        // Connector-usage table (FEAT-129) — last-used writes per connector.
+        ...(props.connectorUsageTableName && {
+          CONNECTOR_USAGE_TABLE: props.connectorUsageTableName,
         }),
         VAULT_SECRETS_PREFIX: `${props.clientName}/vault`,
         // Pipedream integrations (optional)

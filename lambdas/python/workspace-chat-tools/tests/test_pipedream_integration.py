@@ -1,9 +1,14 @@
 """Tests for _preprocess_file_paths and _resolve_workdir_path."""
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tools.pipedream_integration import _preprocess_file_paths
+from tools.pipedream_integration import (
+    _preprocess_file_paths,
+    _record_connector_usage,
+    handle_run_action,
+)
 
 
 class TestPreprocessFilePaths(unittest.TestCase):
@@ -172,3 +177,95 @@ class TestPreprocessFilePaths(unittest.TestCase):
                 user_sub="user1",
                 conversation_id="conv1",
             )
+
+
+class TestRecordConnectorUsage(unittest.TestCase):
+    """FEAT-129: lastUsedAt usage stamping on successful connector actions."""
+
+    @patch.dict(os.environ, {"CONNECTOR_USAGE_TABLE": "usage-table"}, clear=False)
+    @patch("tools.pipedream_integration.prm_client")
+    def test_writes_usage_row(self, mock_prm):
+        """A usage row is written with the agreed PK/SK/lastUsedAt shape."""
+        dynamodb = MagicMock()
+        mock_prm.return_value = dynamodb
+
+        _record_connector_usage("user-123", "gmail")
+
+        dynamodb.put_item.assert_called_once()
+        kwargs = dynamodb.put_item.call_args.kwargs
+        self.assertEqual(kwargs["TableName"], "usage-table")
+        item = kwargs["Item"]
+        self.assertEqual(item["PK"], {"S": "USER#user-123"})
+        self.assertEqual(item["SK"], {"S": "CONN#pipedream#gmail"})
+        # lastUsedAt is an ISO8601 UTC string (…Z); just assert shape.
+        last_used = item["lastUsedAt"]["S"]
+        self.assertTrue(last_used.endswith("Z"))
+        self.assertIn("T", last_used)
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch("tools.pipedream_integration.prm_client")
+    def test_missing_table_env_is_silent_noop(self, mock_prm):
+        """No CONNECTOR_USAGE_TABLE env → no DynamoDB client, no write, no raise."""
+        _record_connector_usage("user-123", "gmail")
+        mock_prm.assert_not_called()
+
+    @patch.dict(os.environ, {"CONNECTOR_USAGE_TABLE": "usage-table"}, clear=False)
+    @patch("tools.pipedream_integration.prm_client")
+    def test_write_failure_is_swallowed(self, mock_prm):
+        """A DynamoDB error must never propagate — usage is best-effort."""
+        dynamodb = MagicMock()
+        dynamodb.put_item.side_effect = RuntimeError("throttled")
+        mock_prm.return_value = dynamodb
+
+        # Must not raise.
+        _record_connector_usage("user-123", "gmail")
+
+    @patch.dict(os.environ, {"CONNECTOR_USAGE_TABLE": "usage-table"}, clear=False)
+    @patch("tools.pipedream_integration.prm_client")
+    def test_empty_connector_is_noop(self, mock_prm):
+        """Missing connector slug → no write."""
+        _record_connector_usage("user-123", "")
+        mock_prm.assert_not_called()
+
+
+class TestRunActionRecordsUsage(unittest.TestCase):
+    """handle_run_action stamps usage only on real success (auto-approved path)."""
+
+    def _run(self, relay_result):
+        """Drive handle_run_action through the auto-approved success path with
+        the relay and idempotency guard stubbed out, returning the captured
+        _record_connector_usage call args (or None)."""
+        with patch(
+            "tools.pipedream_integration._invoke_relay",
+            return_value=relay_result,
+        ), patch(
+            "tools.pipedream_integration._execute_with_idempotency",
+            side_effect=lambda _approval_id, fn: fn(),
+        ), patch(
+            "tools.pipedream_integration._audit_pipedream_action"
+        ), patch(
+            "tools.pipedream_integration._record_connector_usage"
+        ) as mock_usage:
+            result = handle_run_action(
+                {
+                    "action_key": "gmail-send-email",
+                    "configured_props": {},
+                    "external_user_id": "ext-1",
+                    "__user_sub": "user-123",
+                    "auto_approved": True,
+                }
+            )
+        return result, mock_usage
+
+    def test_usage_recorded_on_success(self):
+        result, mock_usage = self._run({"ok": True})
+        self.assertEqual(result["status"], "success")
+        mock_usage.assert_called_once_with("user-123", "gmail")
+
+    def test_usage_not_recorded_on_upstream_error(self):
+        """A Pipedream 200 carrying an os[] error is action_error, not usage."""
+        result, mock_usage = self._run(
+            {"os": [{"k": "error", "err": {"message": "boom"}}]}
+        )
+        self.assertEqual(result["status"], "action_error")
+        mock_usage.assert_not_called()
