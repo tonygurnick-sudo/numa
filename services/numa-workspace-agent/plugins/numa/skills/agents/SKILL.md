@@ -1,11 +1,13 @@
 ---
 name: agents
-description: Manage Numa agents - list, create, update, and duplicate custom AI agents. Use when the user wants to work with saved agents or create new ones. Supports attaching workspace files as reference documents.
+description: Manage Numa agents - list, show, create, update, patch-prompt, duplicate, and delete custom AI agents. Use when the user wants to work with saved agents or create new ones. Supports attaching workspace files as reference documents.
 ---
 
 # Agent Management Skill
 
-Create, list, update, and duplicate Numa agents from the workspace. Supports attaching reference files from the workspace.
+Create, list, show, update, patch, duplicate, and delete Numa agents from the workspace. Supports attaching reference files from the workspace.
+
+The CLI surface below is the real `numa agents` command tree (seven commands: `list`, `show`, `create`, `update`, `patch-prompt`, `duplicate`, `delete`). Only the flags documented here exist — do not invent flags.
 
 ## Quick Reference
 
@@ -13,17 +15,20 @@ Create, list, update, and duplicate Numa agents from the workspace. Supports att
 # List your agents
 Bash("numa agents list --scope owned --json -m 'List my agents'")
 
-# Get agent details
-Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
+# Show full agent details (includes the complete systemPrompt)
+Bash("numa agents show agt_abc123 --json -m 'Show agent details'")
 
 # Create a new agent
-Bash("numa agents create --title 'Customer Support Agent' --prompt 'You are a helpful customer support assistant...' --visibility personal --json -m 'Create customer support agent'")
+Bash("numa agents create 'Customer Support Agent' --prompt 'You are a helpful customer support assistant...' --visibility personal --json -m 'Create customer support agent'")
 
-# Create an agent with file attachments
-Bash("numa agents create --title 'Policy Expert' --prompt 'You help answer questions about company policies.' --attach-files '/workdir/uploads/handbook.pdf,/workdir/uploads/policies.docx' --json -m 'Create policy expert agent'")
+# Create an agent with reference files (--attach is repeatable, one per file, max 5)
+Bash("numa agents create 'Policy Expert' --prompt 'You help answer questions about company policies.' --attach /workdir/uploads/handbook.pdf --attach /workdir/uploads/policies.docx --json -m 'Create policy expert agent'")
 
-# Patch a phrase in an existing agent's system prompt (cheap — only the diff travels)
-Bash("numa agents patch-prompt agt_abc123 --old-text 'Client Content' --new-text 'Receive Content' -m 'Rename a phrase in agent prompt'")
+# Patch a phrase in an existing agent's system prompt — positional args, only the diff travels
+Bash("numa agents patch-prompt agt_abc123 'Client Content' 'Receive Content' -m 'Rename a phrase in agent prompt'")
+
+# Delete an agent
+Bash("numa agents delete agt_abc123 -y -m 'Delete the obsolete agent'")
 ```
 
 ## Operations
@@ -31,28 +36,42 @@ Bash("numa agents patch-prompt agt_abc123 --old-text 'Client Content' --new-text
 | Operation      | Purpose                                                                         |
 | -------------- | ------------------------------------------------------------------------------- |
 | `list`         | List agents (owned, public, or all)                                             |
-| `get`          | Get details of a specific agent                                                 |
+| `show`         | Show full details of a specific agent (includes systemPrompt)                   |
 | `create`       | Create a new agent                                                              |
 | `update`       | Replace any fields on an existing agent (full-value writes)                     |
 | `patch-prompt` | Edit the system prompt in place via find/replace — cheap for small text changes |
 | `duplicate`    | Copy an agent to your personal library                                          |
+| `delete`       | Permanently delete an agent                                                     |
+
+---
+
+## Conventions that apply to every command
+
+- **`-m "<caption>"` is required on every command.** It's the short caption shown to the user in chat (`Numa <cat>: <msg>`) and the approval-card text on HITL writes. A command without `-m` fails before it does anything.
+- **Add `--json` for machine-readable output.** In the workspace you almost always want `--json` so you can parse the result with `jq`. (Other output flags exist for completeness: `--standard` forces the LLM-friendly envelope, `--pretty` forces a human table.)
+- **`-y` / `--yes` skips the local confirmation prompt.** This is a no-op inside the non-TTY workspace agent (there's no interactive prompt to skip) — it only matters when driving the CLI from a laptop. It's harmless to include on write commands.
+- **Check the response of every write.** Create/update/delete return the affected agent under `agent`, and file attaches surface partial failures under `fileWarnings` — read them.
 
 ---
 
 ## List Operation
 
+`numa agents list [options]`
+
 List agents with scope filtering, title/search filtering, and optional pagination.
 
-### Parameters
+### Flags
 
-| Parameter      | Required | Default   | Description                                       |
-| -------------- | -------- | --------- | ------------------------------------------------- |
-| `--scope`      | No       | `"owned"` | `owned`, `public`, or `all`                       |
-| `--agent-type` | No       | -         | Filter by agent type                              |
-| `--title`      | No       | -         | Filter by title (case-insensitive contains match) |
-| `--search`     | No       | -         | Search across title, description, and tags        |
-| `--limit`      | No       | -         | Max results to return (1-200). Enables pagination |
-| `--offset`     | No       | `0`       | Number of results to skip (use with `--limit`)    |
+| Flag       | Required | Default | Description                                                         |
+| ---------- | -------- | ------- | ------------------------------------------------------------------- |
+| `--scope`  | No       | `owned` | `owned`, `public`, or `all` (any other value returns a clear error) |
+| `--type`   | No       | -       | Filter by agent type                                                |
+| `--search` | No       | -       | Substring match across title, description, and tags                 |
+| `--title`  | No       | -       | Substring match against title only                                  |
+| `--limit`  | No       | -       | Max results (server caps at 200). Enables pagination                |
+| `--offset` | No       | `0`     | Pagination offset (use with `--limit`)                              |
+
+> `--scope` accepts only `owned`, `public`, `all`. An invalid scope returns an explicit error — it does not silently return an empty list.
 
 ### Examples
 
@@ -67,15 +86,16 @@ Bash("numa agents list --scope public --json -m 'List public agents'")
 Bash("numa agents list --scope all --json -m 'List all agents'")
 
 # Filter by agent type
-Bash("numa agents list --scope owned --agent-type task --json -m 'List task agents'")
+Bash("numa agents list --scope owned --type task --json -m 'List task agents'")
 
-# Find an agent by name
+# Find an agent by name (matches title/description/tags)
 Bash("numa agents list --search sales --json -m 'Find sales agent'")
 
-# Search with pagination (first page of 10 results)
-Bash("numa agents list --scope all --limit 10 --json -m 'List agents page 1'")
+# Match the title only
+Bash("numa agents list --title 'Weekly Report' --json -m 'Find weekly report agent'")
 
-# Get next page
+# Paginate (first page of 10, then the next page)
+Bash("numa agents list --scope all --limit 10 --json -m 'List agents page 1'")
 Bash("numa agents list --scope all --limit 10 --offset 10 --json -m 'List agents page 2'")
 ```
 
@@ -83,214 +103,217 @@ Bash("numa agents list --scope all --limit 10 --offset 10 --json -m 'List agents
 
 JSON response with:
 
-- `agents` - Array of agent summaries, each containing:
-  - `agentId` - Unique agent ID
-  - `title` - Agent display name
-  - `description` - Brief description
-  - `systemPrompt` - **Truncated** to first ~200 characters (use `get` operation for full prompt)
-  - `referenceFiles` - **File names only** (use `get` operation for full file metadata)
-  - `scope` - "user" (personal) or "workspace" (public)
-  - `visibility` - "personal" or "public"
-  - `agentType` - Agent type (e.g., "task")
-  - `createdBy` - Creator info
-  - `updatedAt` - Last update timestamp
-- `pagination` - Present when `--limit` is used:
-  - `total` - Total number of matching agents
-  - `limit` - Page size used
-  - `offset` - Current offset
-  - `hasMore` - Whether more results exist beyond this page
+- `agents` — array of agent summaries, each containing:
+  - `agentId` — unique agent ID
+  - `title` — display name
+  - `description` — brief description
+  - `systemPrompt` — **truncated** to the first ~200 characters (use `show` for the full prompt)
+  - `referenceFiles` — **file names only** (use `show` for full file metadata)
+  - `scope` — `user` (personal) or `workspace` (public)
+  - `visibility` — `personal` or `public`
+  - `agentType` — agent type (e.g. `task`)
+  - `createdBy` — creator info
+  - `updatedAt` — last update timestamp
+- `pagination` — present when `--limit` is used: `total`, `limit`, `offset`, `hasMore`
 
-**Note:** The list operation returns lightweight summaries. Use the `get` operation with a specific `agent_id` to retrieve full agent details including the complete system prompt and reference file metadata.
+**Note:** `list` returns lightweight summaries. Use `show <id>` to retrieve full details including the complete system prompt and reference-file metadata.
 
 ---
 
-## Get Operation
+## Show Operation
 
-Get detailed information about a specific agent.
+`numa agents show <id>`
 
-### Parameters
+Show full details of a single agent — including the complete `systemPrompt`.
 
-| Parameter  | Required | Description          |
-| ---------- | -------- | -------------------- |
-| `agent_id` | Yes      | Agent ID to retrieve |
+### Arguments
+
+| Argument | Required | Description      |
+| -------- | -------- | ---------------- |
+| `<id>`   | Yes      | Agent ID to show |
 
 ### Examples
 
 ```
-Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
+Bash("numa agents show agt_abc123 --json -m 'Show agent details'")
 ```
 
 ### Output Format
 
-JSON response with full agent details including:
+JSON response under `agent` with full details including:
 
 - `agentId`, `title`, `description`
-- `systemPrompt` - The agent's instructions
-- `userWelcomeMessage` - Welcome message shown to users
-- `toolsConfig` - Which tools the agent can use
-- `referenceFiles` - Attached reference documents
+- `systemPrompt` — the agent's full instructions
+- `userWelcomeMessage` — welcome message shown to users
+- `toolsConfig` — which tools the agent can use (see Tools Configuration below)
+- `referenceFiles` — attached reference documents (full metadata)
+
+> There is **no** `numa agents get` command. Use `show`.
 
 ---
 
 ## Create Operation
 
-Create a new agent with custom instructions.
+`numa agents create <title> [options]`
 
-### Parameters
+The title is a **positional argument**, not a flag. The system prompt is required (via `--prompt` or `--prompt-file`).
 
-| Parameter                | Required | Default      | Description                                  |
-| ------------------------ | -------- | ------------ | -------------------------------------------- |
-| `--title`                | Yes      | -            | Agent display name                           |
-| `--prompt`               | Yes      | -            | Core instructions for the agent              |
-| `--visibility`           | No       | `"personal"` | `personal` or `public`                       |
-| `--description`          | No       | -            | One-line description                         |
-| `--agent-type`           | No       | `"task"`     | Agent type label                             |
-| `--welcome-message`      | No       | -            | Greeting shown when agent starts             |
-| `--estimated-time-saved` | No       | -            | Estimated time saved in minutes              |
-| `--tools-config`         | No       | -            | Tools configuration JSON object              |
-| `--attach-files`         | No       | -            | Comma-separated workspace file paths (max 5) |
+### Core flags
+
+| Flag            | Required | Default    | Description                                                                                   |
+| --------------- | -------- | ---------- | --------------------------------------------------------------------------------------------- |
+| `<title>`       | Yes      | -          | Agent display name (positional)                                                               |
+| `--prompt`      | Yes\*    | -          | System prompt, inline                                                                         |
+| `--prompt-file` | Yes\*    | -          | Read the system prompt from a local file (use for long prompts)                               |
+| `--visibility`  | No       | `personal` | `personal` or `public` (workspace-shared)                                                     |
+| `--type`        | No       | `task`     | Agent type                                                                                    |
+| `--description` | No       | -          | One-line description                                                                          |
+| `--welcome`     | No       | -          | User-facing welcome message shown when the agent opens                                        |
+| `--time-saved`  | No       | -          | Estimated minutes saved per use (integer)                                                     |
+| `--icon`        | No       | -          | Icon class name (e.g. a Lucide icon)                                                          |
+| `--attach`      | No       | -          | Workspace file to attach as a reference. **Repeatable**, max 5                                |
+| `--integration` | No       | -          | Required-integration slug (repeatable) — a "user should connect this" hint, not a tool enable |
+
+\* Exactly one of `--prompt` / `--prompt-file` is required.
+
+Plus all the **capability flags** (web search, KB scoping, integrations as tools, approval modes, tags, persona/industry, full toolsConfig) — see [Capability Flags](#capability-flags) below.
 
 ### Examples
 
 ```
 # Create a personal agent
-Bash("numa agents create --title 'Sales Report Generator' --prompt 'You help create weekly sales reports from CRM data. Always include YoY comparisons and highlight significant changes.' --description 'Generates weekly sales reports with insights' --json -m 'Create sales report agent'")
+Bash("numa agents create 'Sales Report Generator' --prompt 'You help create weekly sales reports from CRM data. Always include YoY comparisons and highlight significant changes.' --description 'Generates weekly sales reports with insights' --time-saved 20 --json -m 'Create sales report agent'")
 
 # Create a public/company agent
-Bash("numa agents create --title 'Onboarding Assistant' --prompt 'You help new employees navigate company resources and policies.' --visibility public --description 'Helps new hires get started' --json -m 'Create onboarding assistant'")
+Bash("numa agents create 'Onboarding Assistant' --prompt 'You help new employees navigate company resources and policies.' --visibility public --description 'Helps new hires get started' --json -m 'Create onboarding assistant'")
 
-# Create with file attachments
-Bash("numa agents create --title 'Policy Expert' --prompt 'You help answer questions about company policies using the attached documents.' --attach-files '/workdir/uploads/employee_handbook.pdf,/workdir/uploads/benefits_guide.docx' --json -m 'Create policy expert agent'")
+# Create with reference files (--attach once per file)
+Bash("numa agents create 'Policy Expert' --prompt 'You help answer questions about company policies using the attached documents.' --attach /workdir/uploads/employee_handbook.pdf --attach /workdir/uploads/benefits_guide.docx --json -m 'Create policy expert agent'")
 
-# Create with tools configuration
-Bash("numa agents create --title 'Research Agent' --prompt 'You help with research tasks using web search and Company Files.' --tools-config '{\"webSearchEnabled\":true,\"allowedKnowledgeBases\":[\"company\"],\"enabledConnections\":[],\"approvalModes\":{\"integrations\":\"non_destructive\",\"agents\":\"never\",\"memories\":\"never\",\"knowledgeBases\":\"never\",\"ops\":\"never\"}}' --json -m 'Create research agent'")
+# Create with capabilities via individual flags (preferred over raw --tools-config)
+Bash("numa agents create 'Research Agent' --prompt 'You help with research using web search and Company Files.' --web-search --knowledge-base company --approval-mode non_destructive --json -m 'Create research agent'")
+
+# Long prompt from a file
+Bash("numa agents create 'Compliance Reviewer' --prompt-file /workdir/tmp/compliance_prompt.txt --visibility public --json -m 'Create compliance reviewer'")
 ```
 
-### Tools Configuration Options
+### Output
 
-```json
-{
-  "autoToolsEnabled": true,
-  "webSearchEnabled": true,
-  "allowedKnowledgeBases": ["company", "kb-uuid"],
-  "enabledConnections": ["google_drive", "slack"],
-  "approvalModes": {
-    "integrations": "non_destructive",
-    "agents": "never",
-    "memories": "never",
-    "knowledgeBases": "never",
-    "ops": "never"
-  }
-}
-```
-
-- `autoToolsEnabled` - Enable automatic tool selection (default: true)
-- `webSearchEnabled` - Allow web search (default: false)
-- `allowedKnowledgeBases` - Which Numa Files folders this agent may search (null = all, [] = none, array = specific). Field name kept for backward compatibility — semantically this gates folder access.
-- `enabledConnections` - Which integrations the agent can use ([] = none, array of slugs = specific)
-- `approvalModes` - Per-category approval mode overrides. Categories: `integrations`, `agents`, `memories`, `knowledgeBases` (gates Numa Files actions), `ops`. Values:
-  - `"always"` - Require user approval for every action in this category
-  - `"non_destructive"` - Auto-approve read-only actions, require approval for writes/mutations
-  - `"never"` - Auto-approve all actions in this category
+`agent` (the created agent), and `fileWarnings` if any attachments were skipped. The pretty/standard output also echoes the new `agentId` — capture it for follow-up commands.
 
 ### Visibility Rules
 
-- **personal** - Only you can see and use the agent
-- **public** - All company members can use the agent
+- **personal** — only you can see and use the agent.
+- **public** — all company members can use the agent.
 
 ### Policy Restrictions
 
 Admin policies may restrict agent creation:
 
-- **off** - Agent creation disabled for all users
-- **personal_only** - Only personal agents allowed (public blocked)
-- **full** - Both personal and public allowed
+- **off** — agent creation disabled for all users.
+- **personal_only** — only personal agents allowed (public blocked).
+- **full** — both personal and public allowed.
 
 ---
 
 ## Update Operation
 
-Update an existing agent you own or have permission to edit.
+`numa agents update <id> [options]`
 
-### Parameters
+Update fields on an existing agent. Use `patch-prompt` instead when you're only changing part of the system prompt (much cheaper — see below).
 
-| Parameter                | Required | Description                                |
-| ------------------------ | -------- | ------------------------------------------ |
-| `agent_id`               | Yes      | Agent ID to update                         |
-| `--title`                | No       | New title                                  |
-| `--prompt`               | No       | New instructions                           |
-| `--visibility`           | No       | Change visibility (`personal` or `public`) |
-| `--description`          | No       | New description                            |
-| `--agent-type`           | No       | New agent type                             |
-| `--welcome-message`      | No       | New welcome message                        |
-| `--estimated-time-saved` | No       | New time saved estimate                    |
-| `--tools-config`         | No       | New tools configuration JSON object        |
-| `--attach-files`         | No       | Workspace files to attach (max 5 total)    |
+### Core flags
+
+| Flag            | Required | Description                                                                 |
+| --------------- | -------- | --------------------------------------------------------------------------- |
+| `<id>`          | Yes      | Agent ID to update (positional)                                             |
+| `--title`       | No       | New title                                                                   |
+| `--prompt`      | No       | New system prompt, inline                                                   |
+| `--prompt-file` | No       | Read a new system prompt from a local file                                  |
+| `--visibility`  | No       | `personal` or `public`                                                      |
+| `--type`        | No       | New agent type                                                              |
+| `--description` | No       | New description                                                             |
+| `--welcome`     | No       | New user welcome message                                                    |
+| `--time-saved`  | No       | New estimated minutes saved per use (integer)                               |
+| `--icon`        | No       | New icon class name                                                         |
+| `--integration` | No       | Required-integration slug (repeatable; **replaces** existing)               |
+| `--attach`      | No       | Workspace file to attach (repeatable; **appends** to existing, max 5 total) |
+| `--favorite`    | No       | Mark as favorite (update only)                                              |
+| `--no-favorite` | No       | Clear favorite (update only)                                                |
+
+Plus all the **capability flags** — see [Capability Flags](#capability-flags) below.
 
 ### Examples
 
 ```
-# Update agent title and description
+# Update title and description
 Bash("numa agents update agt_abc123 --title 'Sales Report Generator v2' --description 'Updated with quarterly projections' -m 'Update agent title'")
 
-# Update system prompt
+# Replace the system prompt wholesale (prefer patch-prompt for partial edits)
 Bash("numa agents update agt_abc123 --prompt 'Improved instructions...' -m 'Update agent prompt'")
 
-# Add file attachments to an existing agent
-Bash("numa agents update agt_abc123 --attach-files '/workdir/uploads/new_policy.pdf' -m 'Attach file to agent'")
+# Append a reference file
+Bash("numa agents update agt_abc123 --attach /workdir/uploads/new_policy.pdf -m 'Attach file to agent'")
 
-# Enable web search for an agent
-Bash("numa agents update agt_abc123 --tools-config '{\"webSearchEnabled\":true}' -m 'Enable web search for agent'")
+# Enable web search
+Bash("numa agents update agt_abc123 --web-search -m 'Enable web search for agent'")
+
+# Mark as favorite
+Bash("numa agents update agt_abc123 --favorite -m 'Favorite this agent'")
 ```
 
 ### Permissions
 
-- You can update your own personal agents
-- You can update company agents you created
-- Admins can update any company agent
+- You can update your own personal agents.
+- You can update public agents you created.
+- Admins can update any public agent.
 
 ---
 
 ## Patch Prompt Operation
 
-Edit an agent's `systemPrompt` in place via find/replace. The DynamoDB record is the source of truth — you send only the substring to find and its replacement, not the full prompt.
+`numa agents patch-prompt <id> <old-text> <new-text> [--replace-all]`
 
-**Prefer `patch-prompt` over `update` when changing part of a system prompt.** The `update` operation requires sending the entire new `systemPrompt` as output tokens — for a prompt of any meaningful size (more than a few hundred chars), this is dramatically more expensive than `patch-prompt`, which only ships the diff. Reserve `update` for full rewrites or for changing non-prompt fields.
+Edit an agent's `systemPrompt` in place via find/replace. The DynamoDB record is the source of truth — you send only the substring to find and its replacement, **not** the full prompt.
 
-If you don't already know the current prompt body, call `get` first to read it.
+**All three are positional arguments** (id, old-text, new-text) — there are no `--old-text` / `--new-text` flags.
 
-### Parameters
+**Prefer `patch-prompt` over `update` when changing part of a system prompt.** `update` requires re-sending the entire new `systemPrompt` as output tokens — for any prompt of meaningful size (more than a few hundred chars) that is dramatically more expensive than `patch-prompt`, which only ships the diff. Reserve `update` for full rewrites or for changing non-prompt fields.
 
-| Parameter       | Required | Default | Description                                                                      |
+If you don't already know the current prompt body, call `show` first to read it.
+
+### Arguments & flags
+
+| Argument / flag | Required | Default | Description                                                                      |
 | --------------- | -------- | ------- | -------------------------------------------------------------------------------- |
-| `agent_id`      | Yes      | -       | Agent ID to patch                                                                |
-| `--old-text`    | Yes      | -       | Exact substring to find in the current `systemPrompt`. Must match exactly.       |
-| `--new-text`    | Yes      | -       | Replacement text. Use `""` to delete the matched text.                           |
-| `--replace-all` | No       | `false` | If `false`, requires `old_text` to appear exactly once. If `true`, replaces all. |
+| `<id>`          | Yes      | -       | Agent ID to patch (positional)                                                   |
+| `<old-text>`    | Yes      | -       | Exact substring to find (whitespace + case sensitive) (positional)               |
+| `<new-text>`    | Yes      | -       | Replacement text. Use `''` to delete the match (positional)                      |
+| `--replace-all` | No       | `false` | If `false`, requires `old-text` to appear exactly once. If `true`, replaces all. |
 
 ### Match rules
 
 - Match is **exact** — whitespace, punctuation, and casing all matter.
-- Default behaviour requires `old_text` to appear **exactly once** in the prompt. If it appears zero times you get an error; if it appears multiple times you get an error reporting the count.
-- To resolve a multi-match error: either extend `old_text` with 1-2 lines of surrounding context until it's unique, or set `--replace-all` to replace every occurrence.
+- Default behaviour requires `old-text` to appear **exactly once** in the prompt. Zero matches → error; multiple matches → error reporting the count.
+- To resolve a multi-match error: either extend `old-text` with 1-2 lines of surrounding context until it's unique, or set `--replace-all` to replace every occurrence.
+- `old-text` and `new-text` must differ (identical → error, nothing to patch).
 
 ### Examples
 
 ```
 # Rename a phrase that appears once in the prompt
-Bash("numa agents patch-prompt agt_abc123 --old-text 'Client Content' --new-text 'Receive Content' -m 'Rename phrase in agent prompt'")
-
-# Fix a regex literal bug (raw \d that should be a real escape)
-Bash("numa agents patch-prompt agt_abc123 --old-text 'pattern = r'\\''invoice-\\d'\\''' --new-text 'pattern = r'\\''invoice-\\d+'\\''' -m 'Fix regex literal in agent prompt'")
+Bash("numa agents patch-prompt agt_abc123 'Client Content' 'Receive Content' -m 'Rename phrase in agent prompt'")
 
 # Replace every occurrence of a term (e.g. branding rename)
-Bash("numa agents patch-prompt agt_abc123 --old-text 'AcmeCorp' --new-text 'ArcanumCorp' --replace-all -m 'Brand rename across prompt'")
+Bash("numa agents patch-prompt agt_abc123 'AcmeCorp' 'ArcanumCorp' --replace-all -m 'Brand rename across prompt'")
 
-# Delete a sentence from the prompt
-Bash("numa agents patch-prompt agt_abc123 --old-text '\n\nAlways CC legal@example.com on outbound emails.' --new-text '' -m 'Remove outdated instruction'")
+# Delete a sentence from the prompt (empty new-text)
+Bash("numa agents patch-prompt agt_abc123 'Always CC legal@example.com on outbound emails. ' '' -m 'Remove outdated instruction'")
 ```
 
-> **Renumber when you edit a numbered list.** If you insert or delete a step in a numbered sequence in the prompt (`1.`, `2.`, `3.` …), patch the surrounding numbers too so the list stays consecutive — don't leave a duplicate "step 3" or a gap. A second patch covering the affected numbers is fine.
+> **Shell quoting matters — both texts are positional args.** Wrap each in single quotes so the shell passes them through verbatim. If a value itself contains a single quote, close the quote, add an escaped quote, and reopen — `'it'\''s'` → `it's`. If a value contains a literal newline, prefer enclosing it with `$'...'` and `\n`, or do the edit via `update --prompt-file` instead.
+
+> **Renumber when you edit a numbered list.** If you insert or delete a step in a numbered sequence (`1.`, `2.`, `3.` …), patch the surrounding numbers too so the list stays consecutive — don't leave a duplicate "step 3" or a gap. A second `patch-prompt` covering the affected numbers is fine.
 
 ### Permissions
 
@@ -298,66 +321,212 @@ Bash("numa agents patch-prompt agt_abc123 --old-text '\n\nAlways CC legal@exampl
 
 ---
 
-## File Attachments
-
-Agents can have reference files attached that provide context for answering questions. Files are copied to permanent agent storage when attached.
-
-### Supported Locations
-
-Files can be attached from these workspace locations:
-
-- `/workdir/uploads/` - User-uploaded files
-- `/workdir/outputs/` - Files created during the conversation
-- `/workdir/chat-workflows/` - Workflow output files
-
-### How It Works
-
-1. **Upload/Create files first** - Files must exist in the workspace before attaching
-2. **Use `--attach-files`** - Provide a comma-separated list of full workspace paths
-3. **Files are copied** - Files are copied to permanent agent storage (original files remain)
-4. **Extracted content included** - If the file has been processed with `numa docs extract`, the extracted text is also attached
-
-### Limits
-
-- Maximum 5 reference files per agent
-- When updating, new attachments are added to existing files (up to the 5 file limit)
-
-### Example Workflow
-
-```
-# 1. User uploads files to workspace (via UI or prior steps)
-# Files are now at /workdir/uploads/handbook.pdf, /workdir/uploads/policies.docx
-
-# 2. Optionally extract content for better search
-Bash("numa docs extract /workdir/uploads/handbook.pdf -m 'Extract content from handbook'")
-
-# 3. Create agent with file attachments
-Bash("numa agents create --title 'HR Assistant' --prompt 'You help employees with HR questions using the attached handbook and policies.' --attach-files '/workdir/uploads/handbook.pdf,/workdir/uploads/policies.docx' --json -m 'Create HR assistant agent'")
-```
-
----
-
 ## Duplicate Operation
 
-Create a personal copy of any agent you can access.
+`numa agents duplicate <id>`
 
-### Parameters
+Create a personal copy of any agent you can access. The duplicate **always** lands in your personal library.
 
-| Parameter  | Required | Description           |
-| ---------- | -------- | --------------------- |
-| `agent_id` | Yes      | Agent ID to duplicate |
+### Arguments
+
+| Argument | Required | Description                             |
+| -------- | -------- | --------------------------------------- |
+| `<id>`   | Yes      | Source agent ID (personal or workspace) |
 
 ### Examples
 
 ```
-# Duplicate a company agent to your personal library
+# Duplicate a company agent into your personal library
 Bash("numa agents duplicate agt_company123 --json -m 'Duplicate company agent'")
 
 # Duplicate your own agent to make a variant
 Bash("numa agents duplicate agt_personal456 --json -m 'Duplicate my agent'")
 ```
 
-The duplicate is always created as a **personal** agent with "(Copy)" appended to the title. If a copy already exists, it becomes "(Copy 2)", "(Copy 3)", etc.
+The duplicate is created as a **personal** agent with `(Copy)` appended to the title (`(Copy 2)`, `(Copy 3)`, … if a copy already exists). Output includes the new `agentId` under `agent`.
+
+---
+
+## Delete Operation
+
+`numa agents delete <id>`
+
+Permanently delete an agent. **Destructive** — this cannot be undone. Personal agents are gone; public/workspace agents are removed for everyone.
+
+### Arguments & flags
+
+| Argument / flag | Required | Description                                                                        |
+| --------------- | -------- | ---------------------------------------------------------------------------------- |
+| `<id>`          | Yes      | Agent ID to delete (positional)                                                    |
+| `-y`, `--yes`   | No       | Skip the destructive-op confirmation prompt (laptop only — no-op in the workspace) |
+
+### Examples
+
+```
+# Delete an agent
+Bash("numa agents delete agt_abc123 -y -m 'Delete the obsolete agent'")
+```
+
+### Output
+
+Returns the **full deleted agent object** under `agent` (same shape as `show`) — useful for confirmation/audit, so you can report exactly what was removed:
+
+```json
+{ "agent": { "agentId": "agt_abc123", "title": "Obsolete Agent", "scope": "user", "...": "..." } }
+```
+
+Deleting a non-existent ID errors (it never silently succeeds), so always check the response.
+
+### Permissions
+
+- You can delete your own personal agents.
+- You can delete public agents you created.
+- Admins can delete any public agent.
+
+---
+
+## Capability Flags
+
+These flags work on both `create` and `update`. They each set a field in the agent's `toolsConfig` (see the next section for the resulting JSON shape). Prefer these individual flags over hand-writing `--tools-config` JSON.
+
+Each boolean capability has a `--no-` variant to turn it off explicitly.
+
+| Flag                                               | Effect                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `--web-search` / `--no-web-search`                 | Enable / disable web search (`webSearchEnabled`)                                                                                                                                                                                                                                                       |
+| `--query-data-sources` / `--no-query-data-sources` | Enable / disable knowledge-base querying (`queryDataSources`)                                                                                                                                                                                                                                          |
+| `--create-agent` / `--no-create-agent`             | Allow / disallow this agent creating sub-agents (`createAgentEnabled`)                                                                                                                                                                                                                                 |
+| `--auto-tools` / `--no-auto-tools`                 | Let the agent auto-select tools / disable it (`autoToolsEnabled`)                                                                                                                                                                                                                                      |
+| `--memories` / `--no-memories`                     | Enable / disable memories (`memoriesEnabled`)                                                                                                                                                                                                                                                          |
+| `--numa-ops` / `--no-numa-ops`                     | Enable / disable Numa Ops tools (`numaOpsEnabled`)                                                                                                                                                                                                                                                     |
+| `--knowledge-base <id>`                            | Scope to a specific KB id (**repeatable** — pass once per KB) → `allowedKnowledgeBases: [ids]`                                                                                                                                                                                                         |
+| `--all-kbs`                                        | Allow all knowledge bases (clears KB scoping) → `allowedKnowledgeBases: null`                                                                                                                                                                                                                          |
+| `--no-kbs`                                         | Allow no knowledge bases → `allowedKnowledgeBases: []`                                                                                                                                                                                                                                                 |
+| `--enable-integration <slug>`                      | **Enable an integration as a tool** (repeatable). Resolves the method from your connected integrations and writes a `{slug,method,name}` row into `enabledIntegrations`. Errors if the slug isn't a connected/enabled integration in the session, or has multiple methods (use `--tools-config` then). |
+| `--integration <slug>`                             | **Different from `--enable-integration`.** Sets `requiredIntegrations` only — a "user should connect this" hint, NOT a tool enable. Repeatable.                                                                                                                                                        |
+| `--approval-mode <mode>`                           | **Global** integration approval default: `always` \| `non_destructive` \| `never` → `approvalMode`                                                                                                                                                                                                     |
+| `--approval-modes <json>`                          | **Per-category** approval JSON → `approvalModes`. Keys: `integrations`, `agents`, `memories`, `knowledgeBases`, `ops`, `connectors`. Values: `always` \| `non_destructive` \| `never`                                                                                                                  |
+| `--tag <tag>`                                      | Categorisation tag (repeatable, max 20)                                                                                                                                                                                                                                                                |
+| `--persona <persona>`                              | Persona tag (repeatable): `CEO` \| `Finance` \| `HR` \| `Operations` \| `Commercial`                                                                                                                                                                                                                   |
+| `--industry <industry>`                            | Industry tag (repeatable): `Manufacturing` \| `Construction` \| `Engineering` \| `Professional Services` \| `Franchise`                                                                                                                                                                                |
+| `--icon <name>`                                    | Icon class name                                                                                                                                                                                                                                                                                        |
+| `--tools-config <json>`                            | Full `toolsConfig` JSON escape hatch. Individual flags above are **merged on top** (they override the JSON after parse).                                                                                                                                                                               |
+
+### KB scoping is tri-state
+
+`--all-kbs` (→ `null`, all KBs) **>** `--no-kbs` (→ `[]`, none) **>** `--knowledge-base <id>` (→ specific list). If you pass more than one, the higher-priority flag wins.
+
+### `--enable-integration` vs `--integration` — don't confuse them
+
+- `--enable-integration <slug>` turns the integration into a **callable tool** for the agent (writes `enabledIntegrations` / mirrors `enabledConnections`).
+- `--integration <slug>` only records the slug in `requiredIntegrations` — a soft prompt to the user to connect it. It does **not** give the agent the tool.
+
+### `--approval-mode` (singular) vs `--approval-modes` (plural) — different keys, by design
+
+These are **two distinct keys** that coexist intentionally — this is not a bug:
+
+- `--approval-mode <mode>` sets `approvalMode` — the **single global** integration approval default.
+- `--approval-modes '<json>'` sets `approvalModes` — the **per-category** map (`integrations`, `agents`, `memories`, `knowledgeBases`, `ops`, `connectors`).
+
+Both can be present on the same agent. A category in `approvalModes` overrides the global `approvalMode` for that category.
+
+Example using per-category modes:
+
+```
+Bash("numa agents create 'Ops Helper' --prompt '...' --numa-ops --approval-modes '{\"integrations\":\"non_destructive\",\"agents\":\"never\",\"memories\":\"never\",\"knowledgeBases\":\"never\",\"ops\":\"never\"}' --json -m 'Create ops helper'")
+```
+
+---
+
+## Tools Configuration (the `toolsConfig` object)
+
+`toolsConfig` is what the capability flags assemble. You can also pass it whole with `--tools-config '<json>'` (individual flags override after merge). The real, complete shape:
+
+```json
+{
+  "autoToolsEnabled": true,
+  "queryDataSources": false,
+  "webSearchEnabled": false,
+  "createAgentEnabled": false,
+  "memoriesEnabled": true,
+  "numaOpsEnabled": false,
+  "allowedKnowledgeBases": null,
+  "enabledIntegrations": [{ "slug": "google_drive", "method": "...", "name": "Google Drive" }],
+  "enabledConnections": ["google_drive"],
+  "approvalMode": "non_destructive",
+  "approvalModes": {
+    "integrations": "non_destructive",
+    "agents": "never",
+    "memories": "never",
+    "knowledgeBases": "never",
+    "ops": "never",
+    "connectors": "never"
+  }
+}
+```
+
+Field-by-field:
+
+- `autoToolsEnabled` — let the agent auto-select tools (default: `true`).
+- `queryDataSources` — allow knowledge-base querying (default: `false`).
+- `webSearchEnabled` — allow web search (default: `false`).
+- `createAgentEnabled` — allow the agent to create sub-agents (default: `false`).
+- `memoriesEnabled` — allow memories (default: `true`).
+- `numaOpsEnabled` — allow Numa Ops tools (default: `false`).
+- `allowedKnowledgeBases` — which KBs the agent may search. Tri-state: `null` = **all**, `[]` = **none**, `["id1","id2"]` = **specific**.
+- `enabledIntegrations` — **canonical source of truth** for which integrations are enabled as tools. An array of method-tagged rows: `[{ "slug", "method", "name" }]`. Set this via `--enable-integration`.
+- `enabledConnections` — **legacy flat-slug mirror** of `enabledIntegrations`, written in parallel for backward compatibility. Treat it as derived — do not present it as canonical; prefer `enabledIntegrations`.
+- `approvalMode` — **global** integration approval default. One of `always` | `non_destructive` | `never`. (Set via `--approval-mode`.)
+- `approvalModes` — **per-category** approval map (different key from `approvalMode`). Keys: `integrations`, `agents`, `memories`, `knowledgeBases`, `ops`, `connectors`. (Set via `--approval-modes`.)
+
+Approval mode values, in every place they appear:
+
+- `"always"` — require user approval for **every** action in this category.
+- `"non_destructive"` — auto-approve read-only actions; require approval for writes/mutations ("Writes only").
+- `"never"` — auto-approve all actions in this category.
+
+---
+
+## File Attachments
+
+Agents can have reference files attached that provide context for answering questions. Files are **copied** to permanent agent storage when attached (originals stay put).
+
+### Supported workspace locations
+
+- `/workdir/uploads/` — user-uploaded files
+- `/workdir/outputs/` — files created during the conversation
+- `/workdir/chat-workflows/` — workflow output files
+
+### How it works
+
+1. **The file must exist in the workspace first** (uploaded or created by a prior step).
+2. **Pass `--attach <path>` once per file** (it's repeatable; max 5). There is **no** comma-separated form — `--attach 'a.pdf,b.pdf'` will try to attach a single file literally named `a.pdf,b.pdf` and fail.
+3. **Files are copied** to permanent agent storage. If a file was processed with `numa docs extract`, the extracted text is attached alongside it.
+4. On `update`, new attachments **append** to existing reference files (up to the 5-file total).
+
+### `--attach` requires a conversation context
+
+`--attach` resolves the workspace path against the current conversation to copy the file into agent storage, so it needs a conversation context. Inside the workspace agent that context is always present. (From a laptop you'd set it via `numa-dev context set --conversation-id`.) Without it, the command errors before writing anything.
+
+### Always check the response
+
+- Partial failures (a file that doesn't resolve / isn't in S3) surface as warnings under `fileWarnings` — the rest still attach.
+- If **every** requested attachment fails to resolve, the command **errors** rather than silently returning an empty `referenceFiles` list.
+
+So after any create/update with `--attach`, read `fileWarnings` (and confirm the expected `referenceFiles` count via `show`) before telling the user the files were attached.
+
+### Example workflow
+
+```
+# 1. User uploads files to the workspace (UI or prior steps).
+#    Files are now at /workdir/uploads/handbook.pdf and /workdir/uploads/policies.docx
+
+# 2. (Optional) extract content for better search
+Bash("numa docs extract /workdir/uploads/handbook.pdf -m 'Extract content from handbook'")
+
+# 3. Create the agent, one --attach per file
+Bash("numa agents create 'HR Assistant' --prompt 'You help employees with HR questions using the attached handbook and policies.' --attach /workdir/uploads/handbook.pdf --attach /workdir/uploads/policies.docx --json -m 'Create HR assistant agent'")
+```
 
 ---
 
@@ -369,6 +538,7 @@ Use this skill when the user:
 - Wants to "see my agents" or "list agents"
 - Asks to "update/modify/edit an agent"
 - Wants to "copy/duplicate an agent"
+- Wants to "delete/remove an agent"
 - Asks about "my saved agents" or "company agents"
 
 ### Creation Trigger Phrases
@@ -399,14 +569,15 @@ When in doubt, default to Context-Aware — users asking mid-chat almost always 
 
 - User is chatting WITH an agent (the agent is already loaded)
 - User is asking ABOUT agents conceptually (general questions)
-- User wants to DELETE an agent (deletion must be done via the web UI)
 - User wants to SCHEDULE an agent to run automatically (see capability boundaries below)
+
+> Note: deleting an agent **is** supported here — use `numa agents delete <id>`. (Earlier guidance that deletion was UI-only was wrong.)
 
 ### Capability boundaries — don't hallucinate these
 
 - **You cannot schedule an agent to run itself.** Recurring/automated runs are configured by the user in the web UI only (the agent schedule modal). There is no chat command, `/loop`, or cron you can invoke to put an agent on a schedule — never claim a schedule is "live", and never invent a mechanism. If the user wants a scheduled agent, tell them to set the schedule from the agent's settings in the UI.
-- **Warn about unattended approvals when scheduling comes up.** A scheduled agent runs unattended, so any integration _write_ it performs under a "writes need approval" mode silently stalls on the approval gate (~180s timeout, then fails). When a user sets up or asks about a scheduled agent that uses integrations, proactively flag this and recommend they set the agent's integration approval to **auto-approve all** for unattended runs.
-- **Re-query before confirming existence.** When asked to confirm an agent (or its files/config) exists or was created, re-read it — don't confirm from memory of having just done it.
+- **Warn about unattended approvals when scheduling comes up.** A scheduled agent runs unattended, so any integration _write_ it performs under a "writes need approval" mode silently stalls on the approval gate (~180s timeout, then fails). When a user sets up or asks about a scheduled agent that uses integrations, proactively flag this and recommend they set the agent's integration approval to **auto-approve all** (`--approval-mode never`, or `integrations: "never"` in `--approval-modes`) for unattended runs.
+- **Re-query before confirming existence.** When asked to confirm an agent (or its files/config) exists or was created, re-read it with `show` — don't confirm from memory of having just done it.
 
 ---
 
@@ -424,8 +595,8 @@ Before asking anything, read the transcript and extract:
 - **The approach / style.** How did Numa structure the answer? Output format (bullets, tables, sections), tone, length, constraints, any steps Numa took that worked well. The system prompt needs to capture not just _what_ the agent does but _how_ it does it.
 - **Inputs.** What kind of input does the task take (a CSV, a CV, a meeting transcript, a free-text brief)? How should the agent ask for it if the user doesn't provide it?
 - **Outputs / artifacts.** What did Numa deliver? Files, inline tables, a summary? The agent should reproduce this.
-- **Tools used.** Which tools did Numa actually use in the conversation (web search, a specific KB, a specific integration, code execution)? These become the agent's `toolsConfig`.
-- **Reference files.** Anything under `/workdir/uploads/`, `/workdir/outputs/`, or `/workdir/chat-workflows/` that the task depends on is a candidate for `--attach-files`. Prefer source material (templates, policies, guidelines) over one-off outputs.
+- **Tools used.** Which tools did Numa actually use in the conversation (web search, a specific KB, a specific integration, code execution)? These become the agent's capability flags / `toolsConfig`.
+- **Reference files.** Anything under `/workdir/uploads/`, `/workdir/outputs/`, or `/workdir/chat-workflows/` that the task depends on is a candidate for `--attach`. Prefer source material (templates, policies, guidelines) over one-off outputs.
 
 #### Step 2: Draft everything you can infer
 
@@ -434,8 +605,8 @@ Pre-fill as much of the draft as the conversation supports:
 - `title` — short, descriptive, reflects the task (e.g. "Weekly Sales Summary Agent", "CV Screening Agent")
 - `description` — one line
 - `systemPrompt` — written from the conversation. Include the task, the input shape, the output format, the style/tone observed, and any constraints the user applied. Do not copy-paste the transcript; distil it into reusable instructions. If helpful, include a short "How to respond" block that mirrors what worked in the conversation.
-- `toolsConfig` — set `webSearchEnabled`, `allowedKnowledgeBases`, `enabledConnections` to match what was actually used. Default `approvalModes` to the recommended set (see Step 3 of the Discovery Path).
-- `attach_files` — list any obvious reference files from the conversation
+- capabilities — set `--web-search`, `--knowledge-base`/`--all-kbs`/`--no-kbs`, `--enable-integration`, and approval modes to match what was actually used. Default approval modes to the recommended set (see Step 3 of the Discovery Path).
+- attachments — list any obvious reference files from the conversation (one `--attach` each)
 
 #### Step 3: Ask ONLY about gaps
 
@@ -454,7 +625,7 @@ Use the same draft layout as the Discovery Path (see Step 6 there). Lead with: _
 
 #### Step 5: Confirm and create
 
-Wait for explicit approval. On confirmation, call the `create` operation with the full payload (see Create Operation section for the exact parameter shape).
+Wait for explicit approval. On confirmation, call `create` with the full payload (see Create Operation for the exact flag shape).
 
 #### Example — Context-Aware creation
 
@@ -504,14 +675,19 @@ Numa: Great. Ready to create?
 
 User: Yes.
 
-Numa: [executes create call]
+Numa: [executes:
+       numa agents create 'Quarterly Sales Summary Agent' \
+         --prompt '...' --description '...' --visibility personal --time-saved 20 \
+         --no-web-search --no-kbs \
+         --approval-modes '{"integrations":"non_destructive","agents":"never","memories":"never","knowledgeBases":"never","ops":"never"}' \
+         --json -m 'Create quarterly sales summary agent']
 ```
 
 ---
 
 ### Interactive Agent Creation Process (cold start only)
 
-Use this path **only when there is no useful conversation context** — the user's first message of the conversation is "create an agent" and there is nothing to mine. Follow this structured flow and gather requirements one step at a time. **NEVER skip directly to creating an agent - always gather requirements first.**
+Use this path **only when there is no useful conversation context** — the user's first message of the conversation is "create an agent" and there is nothing to mine. Follow this structured flow and gather requirements one step at a time. **NEVER skip directly to creating an agent — always gather requirements first.**
 
 #### Step 1: Use Case Discovery (Open-ended)
 
@@ -536,39 +712,34 @@ Once you understand the use case, determine who should have access:
 
 Based on the use case, ask about the tools and capabilities the agent needs:
 
-- **Web Search:** "Will this agent need to search the web for current information?"
-- **Numa Files:** "Should it have access to your Numa Files folders (Personal, Company Files, shared folders)?"
+- **Web Search:** "Will this agent need to search the web for current information?" → `--web-search` / `--no-web-search`
+- **Numa Files / Knowledge Bases:** "Should it have access to your Numa Files folders (Personal, Company Files, shared folders)?"
   - Check the **Available Numa Files folders** section in your context. If folders are listed, present them by name so the user can choose specific ones.
-  - If yes: "All folders, or specific ones?" (list the available folder names)
+  - All folders → `--all-kbs`. Specific ones → one `--knowledge-base <id>` per folder. None → `--no-kbs`.
   - If no folders are available in your context, inform the user: "No Numa Files folders are currently configured."
 - **Integrations:** "Should this agent be able to use any connected integrations?"
-  - Check the **Connected Integrations** section in your context. It shows all integrations the user has connected, with their status (Enabled for this conversation, or Available). Present ALL connected integrations by name so the user can choose which ones to enable on the agent -- not just the ones enabled for this conversation.
-  - If no integrations are listed in your context, inform the user: "No integrations are currently connected." and move on.
-- **Approval Modes (REQUIRED - do NOT skip this):** You MUST ask about approval modes before proceeding to the next step. Present the options clearly:
-  - "What level of approval should be required when this agent takes actions? Here are the recommended defaults:"
+  - Check the **Connected Integrations** section in your context. Present ALL connected integrations by name so the user can choose which to enable on the agent — not just the ones enabled for this conversation.
+  - To enable one as a tool: `--enable-integration <slug>` (repeatable).
+  - If no integrations are listed, inform the user: "No integrations are currently connected." and move on.
+- **Approval Modes (REQUIRED — do NOT skip):** You MUST ask about approval modes before proceeding. Present the recommended defaults:
   - **Integrations:** Writes only (auto-approve reads, require approval for writes)
   - **Agents:** Auto-approve
   - **Memories:** Auto-approve
-  - **Numa Files:** Auto-approve
+  - **Numa Files (knowledgeBases):** Auto-approve
   - **Ops:** Auto-approve
   - "Would you like to use these defaults, or customise any category?"
-  - The three options per category are: **Always** (approve every action), **Writes only** (approve writes/mutations only), **Auto-approve** (no approval needed)
-  - If the user accepts defaults, use the recommended values. If they want to customise, walk through each category.
+  - The three options per category: **Always** (approve every action), **Writes only** (`non_destructive`), **Auto-approve** (`never`).
+  - If the user accepts defaults, use the recommended values via `--approval-modes`. If they want to customise, walk through each category.
 
-Build the `toolsConfig` based on their answers:
+The recommended default approval-modes JSON:
 
 ```json
 {
-  "webSearchEnabled": true/false,
-  "allowedKnowledgeBases": null,
-  "enabledConnections": ["google_drive", "slack"],
-  "approvalModes": {
-    "integrations": "non_destructive",
-    "agents": "never",
-    "memories": "never",
-    "knowledgeBases": "never",
-    "ops": "never"
-  }
+  "integrations": "non_destructive",
+  "agents": "never",
+  "memories": "never",
+  "knowledgeBases": "never",
+  "ops": "never"
 }
 ```
 
@@ -580,16 +751,16 @@ Check if the agent needs reference materials:
 
 - "Are there any documents the agent should use as reference material?"
 - If yes:
-  - Check if files are already in the workspace (`/workdir/uploads/`)
-  - Or guide them to upload files first
-  - Remind about the **5 file maximum**
+  - Check if files are already in the workspace (`/workdir/uploads/`).
+  - Or guide them to upload files first.
+  - Remind about the **5-file maximum**. Each file goes in via its own `--attach <path>`.
 
 #### Step 5: Time Saved Estimate
 
 Gather the value metric:
 
 - "Roughly how much time do you think this agent will save per use? (in minutes)"
-- This helps track the agent's value and can be adjusted later
+- This maps to `--time-saved <minutes>` and can be adjusted later.
 
 #### Step 6: Draft Presentation
 
@@ -634,12 +805,12 @@ Before creating anything, present a complete draft for review:
   1. Update the draft
   2. Present the updated draft
   3. Ask for confirmation again
-- Only proceed to creation after receiving clear approval
+- Only proceed to creation after receiving clear approval.
 
-Once confirmed, execute the create call:
+Once confirmed, execute the create call (title positional, one `--attach` per file, capability flags for tools):
 
 ```
-Bash("numa agents create --title 'Agent Title' --prompt 'The complete system prompt...' --description 'One-line description' --visibility personal --estimated-time-saved 15 --tools-config '{\"webSearchEnabled\":true,\"allowedKnowledgeBases\":null,\"enabledConnections\":[\"google_drive\"],\"approvalModes\":{\"integrations\":\"non_destructive\",\"agents\":\"never\",\"memories\":\"never\",\"knowledgeBases\":\"never\",\"ops\":\"never\"}}' --json -m 'Create agent'")
+Bash("numa agents create 'Agent Title' --prompt 'The complete system prompt...' --description 'One-line description' --visibility personal --time-saved 15 --web-search --enable-integration google_drive --approval-modes '{\"integrations\":\"non_destructive\",\"agents\":\"never\",\"memories\":\"never\",\"knowledgeBases\":\"never\",\"ops\":\"never\"}' --json -m 'Create agent'")
 ```
 
 ---
@@ -726,7 +897,7 @@ Numa: Here's the draft:
 
       **Tools Configuration:**
       - Web Search: disabled
-      - Knowledge Bases: Company KB
+      - Knowledge Bases: Company Files
       - Integrations: none
 
       **Approval Modes:**
@@ -755,39 +926,48 @@ Numa: Updated draft:
 
 User: Yes, create it
 
-Numa: [Executes create call and confirms success]
+Numa: [Executes:
+       numa agents create 'Weekly Report Helper' --prompt '...' \
+         --description 'Helps write weekly status reports...' --visibility personal \
+         --time-saved 15 --no-web-search --knowledge-base company-files \
+         --approval-modes '{"integrations":"non_destructive","agents":"never","memories":"never","knowledgeBases":"never","ops":"never"}' \
+         --json -m 'Create weekly report helper'
+       then confirms success]
 ```
 
 ---
 
 ### Find and use an agent
 
-When user asks about available agents:
+When the user asks about available agents:
 
-1. List agents to show options
-2. Get details of specific agent if needed
-3. The user can select the agent via the UI
+1. List agents to show options.
+2. `show` a specific agent's details if needed.
+3. The user can select the agent via the UI.
 
 ```
 # Show available agents
 Bash("numa agents list --scope all --json -m 'List all agents'")
 
-# Get details about a specific one
-Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
+# Show details about a specific one
+Bash("numa agents show agt_abc123 --json -m 'Show agent details'")
 ```
 
 ### Improve an existing agent
 
-When user wants to enhance an agent:
+When the user wants to enhance an agent:
 
-1. Get current agent details
-2. Discuss improvements with user
-3. Update with new instructions
+1. `show` the current agent details.
+2. Discuss improvements with the user.
+3. For small wording changes, use `patch-prompt`. For larger changes or non-prompt fields, use `update`.
 
 ```
-# Get current state
-Bash("numa agents get agt_abc123 --json -m 'Get agent details'")
+# Read the current state (full prompt)
+Bash("numa agents show agt_abc123 --json -m 'Show agent details'")
 
-# Update with improvements
+# Small, targeted prompt edit (cheap — only the diff travels)
+Bash("numa agents patch-prompt agt_abc123 'old phrasing' 'new phrasing' -m 'Tweak agent prompt'")
+
+# Larger rewrite or non-prompt field change
 Bash("numa agents update agt_abc123 --prompt 'Improved instructions...' -m 'Update agent instructions'")
 ```

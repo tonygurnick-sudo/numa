@@ -1,6 +1,6 @@
 ---
 name: numa-files-search
-description: Search, retrieve, upload, download, and delete files in the user's Numa Files folders (Personal, Company Files, and any shared folders the user has access to). Use whenever the user asks about their files, company documents, policies, procedures, or anything stored in Numa.
+description: Search, find, retrieve, upload, download, organise (move/rename/mkdir/rmdir), and delete files in the user's Numa Files folders (Personal, Company Files, and any shared folders the user has access to). Use whenever the user asks about their files, company documents, policies, procedures, or anything stored in Numa.
 ---
 
 # Numa Files Search Skill
@@ -19,15 +19,29 @@ Bash("numa files search 'search terms' --json -m 'Searching files'")
 
 All Numa Files operations use the `numa files` command:
 
-| Operation         | Purpose                                            |
-| ----------------- | -------------------------------------------------- |
-| `search`          | RAG search across folders (raw matches by default) |
-| `upload`          | Add files to a folder                              |
-| `download`        | Download a file by `<folder>/<file>`               |
-| `list`            | List the folders you have access to                |
-| `show`            | List the files inside a folder                     |
-| `download-folder` | Download a folder (or sub-path) as zip             |
-| `delete`          | Delete files from a folder                         |
+| Operation         | Purpose                                                      |
+| ----------------- | ------------------------------------------------------------ |
+| `list`            | List the **folders** you have access to (no files)           |
+| `show`            | List the **files inside** a folder (`-R` = recursive tree)   |
+| `search`          | **Semantic/RAG** search across folders (raw matches default) |
+| `find`            | Find files **by name** (glob), recursively                   |
+| `download`        | Download a file by `<folder>/<file>`                         |
+| `download-folder` | Download a folder (or sub-path) as zip                       |
+| `upload`          | Add files to a folder                                        |
+| `delete`          | Delete a file from a folder                                  |
+| `mv`              | Move a file (across folders or into a subfolder)             |
+| `rename`          | Rename a file in place                                       |
+| `mkdir`           | Create an (empty) subfolder                                  |
+| `rmdir`           | Delete a subfolder and its contents                          |
+
+## Choosing the right command (read this first)
+
+The two mistakes that waste the most turns:
+
+1. **`list` vs `show`.** `list` returns the **folders** you can access and takes **no folder argument**. To see the **files in** a folder, use `show <folder>`. `show <folder> -R` walks the whole tree; `show <folder>/<subpath>` drills into a subfolder.
+2. **`search` vs `find`.** `search` is **semantic/RAG** — it matches by _meaning_, not filename. Searching `"titanic"` can surface content about _Titans_ before the file `titanic.csv`, and it fails **silently** (wrong results, no error). To locate a file **by its name**, always use `find` (a recursive filename glob). Reach for `search` only when you want content by topic.
+
+Folders are containers; inside them files live at the root or in **subfolders** (`reports/2024/q3.pdf`). Subfolders are addressed as path segments after the folder name everywhere except `list`.
 
 ---
 
@@ -121,12 +135,12 @@ Add files from the workspace to a folder for future retrieval.
 
 ### Parameters
 
-| Parameter    | Required | Default  | Description                                                                                                                                                                                                                                                                                           |
-| ------------ | -------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `file`       | Yes      | -        | Local path to file in workspace (positional arg)                                                                                                                                                                                                                                                      |
-| `--to`       | Yes      | -        | Destination folder (name or id). `--folder` is an accepted alias for `--to` — prefer `--to`.                                                                                                                                                                                                          |
-| `--path`     | No       | root     | Subfolder prefix within the destination folder, e.g. `"reports/2024/"`. Omit to upload to the folder root. This is a directory path, NOT a filename. **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
-| `--filename` | No       | basename | Override the destination filename (defaults to the local file's basename).                                                                                                                                                                                                                            |
+| Parameter    | Required | Default  | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------ | -------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `file`       | Yes      | -        | Local path to file in workspace (positional arg)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--to`       | Yes      | -        | Destination folder (name or id). `--folder` is an accepted alias for `--to` — prefer `--to`.                                                                                                                                                                                                                                                                                                                                                                                                |
+| `--path`     | No       | root     | Subfolder prefix within the destination folder, e.g. `"reports/2024/"`. Omit to upload to the folder root. This is a directory path, NOT a filename. Any subfolders in the path are created on the fly, but are **ephemeral** — they vanish if emptied (use `mkdir` first for a folder that persists when empty; see the `mkdir` section). **If this file came from a sub-path earlier in the conversation, the updated version must go back to the same sub-path — do not drift to root.** |
+| `--filename` | No       | basename | Override the destination filename (defaults to the local file's basename).                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### Examples
 
@@ -146,6 +160,8 @@ Bash("numa files upload /workdir/outputs/q3.pdf --to company --path 'reports/202
 
 - **Company Files**: Only admins can upload
 - **User folders**: Only editors/owners can upload
+
+**Overwrite**: Uploading a file whose name already exists in the destination **replaces it silently**. The response sets `"overwritten": true` when this happened — check it if you didn't intend to replace anything (run `show`/`find` first if unsure). The `size_bytes` field reports the actual stored size.
 
 **Indexing**: Files are indexed within ~30 minutes and become searchable via folder queries.
 
@@ -206,25 +222,61 @@ Bash("numa files list --json -m 'Listing accessible folders'")
 
 ## numa files show
 
-List the **files inside** a folder. Pass the folder name or id as a positional argument.
+List the **files inside** a folder. Pass the folder name or id as a positional argument. By default this lists one level (root of the folder) plus the names of any immediate subfolders.
 
 ### Parameters
 
-| Parameter | Required | Default | Description       |
-| --------- | -------- | ------- | ----------------- |
-| `folder`  | Yes      | -       | Folder name or id |
+| Parameter         | Required | Default | Description                                                                |
+| ----------------- | -------- | ------- | -------------------------------------------------------------------------- |
+| `folder`          | Yes      | -       | Folder name or id. Append a sub-path to drill in: `Personal/reports/2024`. |
+| `-R, --recursive` | No       | false   | List **every** file at all depths (like `ls -R`) instead of one level.     |
 
 ### Examples
 
 ```
-# List files in Company Files
+# List files at the root of Company Files
 Bash("numa files show company --json -m 'Listing files in Company Files'")
 
-# List files in a user folder
-Bash("numa files show abc-123-uuid --json -m 'Listing files in a user folder'")
+# Drill into a subfolder
+Bash("numa files show 'company/reports/2024' --json -m 'Listing the 2024 reports subfolder'")
+
+# Full recursive tree of a folder (file paths are relative to the folder)
+Bash("numa files show company -R --json -m 'Listing every file in Company Files'")
 ```
 
-> To match files by glob pattern (e.g. `*.pdf`), use `numa files find '<pattern>'` instead.
+> `show` lists files; to match files by glob pattern across subfolders (e.g. `*.pdf`), use `numa files find '<pattern>'` (documented below).
+
+---
+
+## numa files find
+
+Find files **by name** using a glob pattern, recursively across all subfolders. This is the right tool to locate a file when you know (part of) its name — `search` will not do this reliably because it matches meaning, not filenames.
+
+### Parameters
+
+| Parameter  | Required | Default | Description                                                                                               |
+| ---------- | -------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `pattern`  | Yes      | -       | Glob matched against the file's path. `*.pdf` finds PDFs at any depth; `reports/*.csv` scopes by subpath. |
+| `--folder` | No       | all     | Narrow to a single folder by name or id. Omit to search every accessible folder.                          |
+
+### Behaviour notes
+
+- The match is **recursive** — a bare `*.csv` finds CSVs in the root _and_ every subfolder. Each result carries its `relpath` (e.g. `reports/q3.csv`) so you can see where it lives, plus `key`/`s3_uri` for downloading.
+- `*` spans `/`, so `reports/*.csv` matches CSVs anywhere under `reports/` (at any depth), not just its direct children. Use the path prefix to scope a search, not to pin an exact depth.
+- Matching is case-insensitive.
+
+### Examples
+
+```
+# Find every PDF in Company Files (root + all subfolders)
+Bash("numa files find '*.pdf' --folder company --json -m 'Finding PDFs in Company Files'")
+
+# Find a file by name across every folder you can access
+Bash("numa files find 'titanic*' --json -m 'Locating the titanic file'")
+
+# Scope to files under a subfolder
+Bash("numa files find 'reports/*.xlsx' --folder company --json -m 'Finding spreadsheets under reports/'")
+```
 
 ---
 
@@ -343,6 +395,73 @@ Bash("numa files delete 'abc-123-uuid/3 - Agency Reports/duplicate.docx' -m 'Rem
 - Use `show <folder>` first to see the exact filenames/paths before deleting
 - Deleting a file also removes its metadata sidecar
 - The folder index will update within ~30 minutes after deletion
+
+---
+
+## numa files mv
+
+Move a file to a different folder, or into a subfolder of the same folder. The file keeps its name (use `rename` to change the name).
+
+### Parameters
+
+| Parameter | Required | Description                                                          |
+| --------- | -------- | -------------------------------------------------------------------- |
+| `src`     | Yes      | Source `folder/file` (or `folder/subpath/file`)                      |
+| `dst`     | Yes      | Destination `folder`, or `folder/subpath` to land inside a subfolder |
+
+**Access model:** a move needs **edit rights on the destination folder** (and the source). Cross-folder moves are _allowed_ — they only fail (HTTP 403 "Access denied on destination KB") when you lack edit access on the destination, e.g. moving into a read-only folder like Numa Support. Moving between two folders you can edit works fine.
+
+### Examples
+
+```
+# Move a file into a subfolder of the same folder
+Bash("numa files mv 'Personal/draft.pdf' 'Personal/archive' -y --json -m 'Archiving the draft'")
+
+# Move a file to a different folder (needs edit rights on the destination)
+Bash("numa files mv 'Personal/report.pdf' 'company/reports' -y --json -m 'Publishing the report to Company Files'")
+```
+
+---
+
+## numa files rename
+
+Rename a file in place — same folder and subpath, new filename only.
+
+| Parameter      | Required | Description                                                             |
+| -------------- | -------- | ----------------------------------------------------------------------- |
+| `src`          | Yes      | Source `folder/file` (or `folder/subpath/file`)                         |
+| `new-filename` | Yes      | New filename only — **no path separators** (use `mv` to change folders) |
+
+```
+Bash("numa files rename 'Personal/reports/q3-draft.pdf' 'q3-final.pdf' -y --json -m 'Finalising the Q3 report'")
+```
+
+---
+
+## numa files mkdir
+
+Create an (empty) subfolder inside a folder. Creates the full path, including any missing parent subfolders (`mkdir -p` semantics), so an explicitly created folder persists even after its children are removed.
+
+```
+Bash("numa files mkdir 'Personal/projects/2026' -y --json -m 'Creating the 2026 projects subfolder'")
+```
+
+You can also create subfolders implicitly by uploading with `--path`; use `mkdir` when you want an empty folder to exist first.
+
+**Persistent vs ephemeral folders (important):** a subfolder created with `mkdir` is **persistent** — it survives even after all its files are removed. A subfolder created **implicitly by `upload --path`** is **ephemeral** — it exists only while it still contains files, and disappears once the last file inside it is moved or deleted (standard object-store behaviour: a folder is just a prefix on its files). If you need a folder to stick around when empty, `mkdir` it first rather than relying on `upload --path`.
+
+---
+
+## numa files rmdir
+
+Delete a subfolder and everything inside it.
+
+```
+Bash("numa files rmdir 'Personal/projects/2026' -y --json -m 'Removing the 2026 projects subfolder'")
+```
+
+- Removes the subfolder and all files/sub-subfolders beneath it. Destructive — confirm the path with `show`/`find` first.
+- Deleting a subfolder does **not** remove a parent that was created with `mkdir` (those have their own marker and persist). A parent that only ever existed because a file was uploaded into it (no `mkdir`) **will** disappear once it is emptied — see the persistent-vs-ephemeral note under `mkdir`.
 
 ---
 

@@ -287,10 +287,7 @@ DATA_ANALYSIS_V2 = AgentTypeConfig(
         "extract_content",
         "convert_document",
     ],
-    # No Numa tool reference docs needed (skills/plugins handle tool usage guidance)
-    enabled_numa_tools=[],
-    tools_source_dirs=[],
-    # Still use default plugins for basic skills
+    # Use default plugins for basic skills
     plugins_path="/app/plugins/numa",
     # KBs and integrations: driven by request (user-configurable per run via workspace settings)
     restrict_kbs=False,

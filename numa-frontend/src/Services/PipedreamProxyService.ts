@@ -13,9 +13,11 @@ import type {
   PipedreamRemoteOption,
   AuthUserMinimal,
   DisconnectIntegrationData,
+  ReconcileAccountsData,
 } from '../types/pipedream';
 import i18n from '../i18n';
 import { getSwrCache, setSwrCache, clearSwrCache } from '../utils/swrCache';
+import { dedupeConnectionAccounts } from '../utils/pipedreamDedupe';
 
 export class PipedreamProxyService {
   /**
@@ -112,9 +114,12 @@ export class PipedreamProxyService {
         throw new Error(response.error || i18n.t('errors:pipedream.getStatusFailed'));
       }
 
-      // Transform response to match frontend expectations
+      // Transform response to match frontend expectations.
+      // BUG-380: collapse same-identity duplicate accounts (same email shown
+      // 2-3x) before anything caches or renders this. The proxy dedupes too;
+      // this guards stale/older cached responses and any non-proxy path.
       const data: IntegrationStatusResult = {
-        connections: response.data.connections || [],
+        connections: dedupeConnectionAccounts(response.data.connections || []),
         external_user_id: response.data.external_user_id,
         connected_apps: response.data.connected_apps || [],
       };
@@ -250,6 +255,40 @@ export class PipedreamProxyService {
 
     if (!response.success) {
       throw new Error(response.error || i18n.t('errors:pipedream.disconnectFailed'));
+    }
+    return response.data;
+  }
+
+  /**
+   * BUG-380: collapse an app's duplicate accounts (same email) down to one,
+   * server-side. Call right after a connect completes to roll back a re-added
+   * mailbox. Server-authoritative: it reads the live Pipedream account list
+   * (no client cache), keeps one account per email (healthy → oldest), and
+   * deletes the rest. Idempotent — no duplicates means nothing is deleted, and
+   * genuinely distinct mailboxes are never touched.
+   *
+   * @param accountId the freshly-connected account id, if known. Lets the
+   *   proxy wait for Pipedream to populate that account's name before it
+   *   dedupes (the name often lags the connect by a second or two).
+   */
+  static async reconcileAccounts(
+    lambdaClient: AwsLambdaClient,
+    externalUserId: string,
+    params: { appName: string; accountId?: string }
+  ): Promise<ReconcileAccountsData> {
+    const payload: PipedreamProxyRequest = {
+      operation: 'reconcile_accounts',
+      external_user_id: externalUserId,
+      parameters: {
+        app_name: params.appName,
+        ...(params.accountId ? { account_id: params.accountId } : {}),
+      },
+    };
+
+    const response = await this.invokePipedreamProxy<ReconcileAccountsData>(lambdaClient, payload);
+
+    if (!response.success) {
+      throw new Error(response.error || i18n.t('errors:pipedream.reconcileFailed'));
     }
     return response.data;
   }

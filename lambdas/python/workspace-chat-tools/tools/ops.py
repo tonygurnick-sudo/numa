@@ -2025,6 +2025,29 @@ def handle_ops_operation(event: Dict[str, Any]) -> Dict[str, Any]:
         # if a future API change forgets to wire something through dbToApi.
         result = _translate_response_keys(result)
 
+        # Pagination guard: the ops API only returns a `cursor` when MORE
+        # tickets exist beyond the page just returned (a `limit` was in
+        # effect). Surface that loudly in the payload the model reads — a bare
+        # cursor field is easy to overlook, and silently dropping the tail of a
+        # "give me everything" query corrupts any count/report built from it
+        # (observed on HQ: 4 deals sat past a 175-row page and were nearly
+        # missed). Omit `limit` entirely to have the API auto-paginate instead.
+        if (
+            operation == "list_tickets"
+            and isinstance(result, dict)
+            and result.get("cursor")
+        ):
+            returned = len(result.get("tickets") or [])
+            result["_pagination"] = (
+                f"INCOMPLETE RESULT: {returned} tickets returned, but MORE exist "
+                "beyond this page. To get them, either re-run list_tickets with "
+                'the SAME filters plus params {"cursor": "<the cursor value '
+                'above>"} and merge each page until no cursor comes back, OR '
+                "omit `limit` to let the API return every ticket in one call. Do "
+                "not compute totals or draw conclusions until the cursor is "
+                "exhausted."
+            )
+
         return result
 
     except Exception as e:

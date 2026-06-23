@@ -625,7 +625,7 @@ The React frontend connects via `numa-frontend/src/Services/workspaceChatAgentSe
 
 ### Session Management
 
-Session routing is handled by the **proxy Lambda**, not the frontend. The proxy extracts the `conversationId` from the request body and maps it to an AgentCore session ID (`conv-{conversationId}`). Each conversation gets its own MicroVM.
+Session routing is handled by the **proxy Lambda**, not the frontend. The proxy extracts the `conversationId` from the request body and maps it to an AgentCore session ID (`conv-{conversationId}-{imageTag}`, see [Image versioning & session rotation](#image-versioning--session-rotation)). Each conversation gets its own MicroVM.
 
 The frontend simply sends authenticated requests with a `conversationId` — no session headers needed.
 
@@ -858,10 +858,30 @@ See `/infra/constructs/`:
 
 ### Session Lifecycle
 
-- **Idle timeout:** 1 hour
-- **Max lifetime:** 8 hours
-- **Scoping:** Per-conversation (`conv-{conversationId}`) — each conversation gets its own MicroVM
-- **Deploy behavior:** New conversations get the latest image; warm sessions continue on old image until idle timeout
+- **Idle timeout:** 30 min (Nolia clients: 3 hr — long fire-and-forget pipelines, see NUMA-1209)
+- **Max lifetime:** 4 hours
+- **Scoping:** Per-conversation (`conv-{conversationId}-{imageTag}`) — each conversation gets its own MicroVM
+- **Deploy behavior:** the image tag in the session ID changes on every deploy, so every conversation rotates onto the new image on its next request (see below) — not just new conversations
+
+#### Image versioning & session rotation
+
+AgentCore **pins a session ID to the runtime image version that was DEFAULT when the session was first created.** That binding survives the MicroVM being idle-recycled — it lives until the session's _max lifetime_ (4 hr), not just the idle timeout. So without intervention, a conversation resumed within 4 hr of starting keeps running the **old** image even after a deploy and even after going cold (fresh MicroVM, old image). Warmth is irrelevant; the session→version binding is what governs which image you get.
+
+To make a deploy take effect promptly, the proxy appends a **deploy-generation token** to the session ID:
+
+```
+conv-{conversationId}-{imageTag}
+```
+
+`imageTag` is the content hash of the deployed image (`WorkspaceChatAgentConstruct.imageTag`, the first 12 chars of the image tar's SHA256), injected into the proxy Lambda as the `WORKSPACE_IMAGE_GENERATION` env var. Because the tag changes on every image deploy:
+
+- After a deploy, each conversation's **next request** produces a new session ID → binds to the new DEFAULT version → runs the new image. Cold or warm, it rotates.
+- This is **deploy-triggered, not time-triggered** — with no deploy, nothing rotates and warm sessions stay cheap.
+- It applies uniformly to **chat, scheduled agents, and V2 apps**, because all three build their session ID via the proxy's `build_session_id()`. (The separate `public-demo-proxy` uses its own `public-{conversationId}` format and is unaffected.)
+
+Safe because the session ID is a pure routing/isolation token — nothing parses it back. `conversation_id` is recovered from the request body and `user_sub` from the `x-user-sub` header, never from the session ID. Persisted workspace state is keyed by `conversation_id` in S3, so a rotated session rehydrates the same `/workdir`; only ephemeral in-VM state is lost on the one-time cold start. **Backwards compatible:** if `WORKSPACE_IMAGE_GENERATION` is unset, the session ID falls back to the legacy `conv-{conversationId}`.
+
+> One-time cost: the deploy that first introduces the env var (or any later image deploy) rotates every in-flight conversation once — a single cold-start blip on the next request, mid-conversation if the user is active. State rehydrates from S3, so nothing is lost. This is inherent to refreshing a running MicroVM's image.
 
 ---
 

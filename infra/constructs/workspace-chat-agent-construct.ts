@@ -137,6 +137,15 @@ export class WorkspaceChatAgentConstruct extends Construct {
   readonly logGroup: CloudwatchLogGroup;
   readonly agentRuntime: BedrockagentcoreAgentRuntime;
   /**
+   * Content-based container image tag (first 12 chars of the image tar's
+   * SHA256, or props.imageVersion). Changes on every image deploy. Surfaced
+   * so the proxy Lambda can append it to the AgentCore session ID as a
+   * deploy-generation token (WORKSPACE_IMAGE_GENERATION) — this is what forces
+   * conversations to rotate onto the new image after a deploy instead of
+   * staying pinned to the version their session was created under.
+   */
+  readonly imageTag: string;
+  /**
    * Active-runs mirror table (BUG-140). The container upserts a heartbeat
    * record per in-flight run; the proxy Lambda reads it to answer
    * /runs/{id}/status without an AgentCore invocation (which would queue
@@ -248,6 +257,8 @@ export class WorkspaceChatAgentConstruct extends Construct {
     // Note: filebase64sha256 can produce +/= which are invalid in Docker tags
     const imageTarHash = Fn.filesha256(imageTarPath);
     const imageTag = props.imageVersion || Fn.substr(imageTarHash, 0, 12);
+    // Surface for the proxy Lambda's deploy-generation session token (see field docs).
+    this.imageTag = imageTag;
 
     // =========================================================================
     // ECR REPOSITORY (per-client)
@@ -773,8 +784,15 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
       // 30-60+ min after the 202 response, and the heartbeat subprocess isn't
       // reliably deferring idle kills (see NUMA-1209).
       // Standard chat clients use shorter timeouts to reduce costs.
-      // Defaults: idleRuntimeSessionTimeout=900s (15 min), maxLifetime=28800s (8 hrs)
+      // AgentCore platform defaults (if unset) are 900s idle / 28800s (8 hr) max;
+      // we override to the values below.
       // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-lifecycle-settings.html
+      //
+      // NOTE: a session ID stays bound to the image version it was created under
+      // for its whole lifetime (it survives idle-recycling), so these timeouts
+      // also bound how long a resumed conversation can keep running a stale image
+      // after a deploy. The proxy's WORKSPACE_IMAGE_GENERATION session suffix is
+      // what actually breaks that pinning on deploy; the timeouts are the fallback.
       lifecycleConfiguration: [
         {
           idleRuntimeSessionTimeout: props.clientName.startsWith('nolia') ? 10800 : 1800, // Nolia: 3hrs, others: 30min
@@ -944,9 +962,18 @@ echo "Successfully pushed image to ${this.ecrRepository.repositoryUrl}:${imageTa
     // =========================================================================
     // SESSION LIFECYCLE ON DEPLOY
     // =========================================================================
-    // Sessions are conversation-scoped (conv-{conversationId}), so each new chat
-    // automatically gets a fresh MicroVM with the latest container image.
-    // Existing conversations keep their warm sessions until the idle timeout (1hr)
-    // or max lifetime (8hr) expires. No active session cleanup is needed on deploy.
+    // Sessions are conversation-scoped. The proxy builds the AgentCore session
+    // ID as conv-{conversationId}-{imageTag}, where imageTag is this deploy's
+    // image generation (injected into the proxy as WORKSPACE_IMAGE_GENERATION,
+    // sourced from this.imageTag). Because the tag changes on every image
+    // deploy, the session ID changes too — so after a deploy each conversation
+    // rotates onto a fresh MicroVM running the new image on its very next
+    // request, whether it was warm or cold. This deliberately overrides
+    // AgentCore's default behaviour, where a session stays pinned to the image
+    // version it was created under until its idle (30 min) / max-lifetime (4 hr)
+    // window expires — pinning that otherwise lets a resumed conversation keep
+    // running a stale image for hours after a deploy. No active session cleanup
+    // is needed: stale-tag sessions simply idle out; persisted workspace state
+    // is conversation-keyed in S3, so the rotated session rehydrates it.
   }
 }

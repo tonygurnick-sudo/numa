@@ -50,6 +50,7 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.600.0",
     "@aws-sdk/client-lambda": "^3.600.0",
+    "@aws-sdk/client-s3": "^3.600.0",
     "cognito-srp-helper": "^2.2.3",
     "commander": "^12.1.0"
   },

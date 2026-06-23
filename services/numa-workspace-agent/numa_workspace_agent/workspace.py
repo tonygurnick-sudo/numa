@@ -6,7 +6,6 @@ Session is tied to conversation - each conversation gets its own MicroVM contain
 """
 
 import json
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, TypedDict
@@ -17,6 +16,36 @@ from .atomic_io import atomic_write_text
 from .sdk_config import LOCAL_ROOT
 
 logger = structlog.get_logger()
+
+# FEAT-243 — agent-scoped saved-workflow library. The active agent_id for this
+# request is captured once at request entry (MicroVMs are conversation-pinned,
+# so it's constant for the container's life) and read by the S3 sync layer +
+# prompt builder, avoiding threading agent_id through every sync signature.
+_active_agent_id: Optional[str] = None
+
+
+def set_active_agent_id(agent_id: Optional[str]) -> None:
+    """Record the agent_id for the current request (None for agent-less chat).
+
+    Called at request entry, before any S3 sync, so the agent-workflows scope is
+    available to ``get_agent_workflows_scope()`` for the whole request.
+    """
+    global _active_agent_id
+    _active_agent_id = agent_id or None
+
+
+def get_active_agent_id() -> Optional[str]:
+    """The agent_id captured for the current request, or None."""
+    return _active_agent_id
+
+
+def get_agent_workflows_scope() -> Optional[str]:
+    """The agent_id to scope the agent-workflow library under, or None when this
+    isn't an agent conversation. When None, the agent-workflows directory is
+    neither created nor synced — callers fall back to the user-level
+    chat-workflows library. Agent-scoped workflows are always on for agent
+    conversations — the same primitive as user-level chat-workflows."""
+    return get_active_agent_id()
 
 
 class WorkspacePaths(TypedDict):
@@ -30,7 +59,12 @@ class WorkspacePaths(TypedDict):
     claude_dir: Path  # /workdir/.system/.claude - CLI settings
     trace_file: Path  # /workdir/.system/trace.jsonl - current conversation trace
     conv_meta: Path  # /workdir/.system/current_conv.json - active conversation tracking
-    workflows: Path  # /workdir/chat-workflows - persistent workflows (GLOBAL)
+    workflows: (
+        Path  # /workdir/chat-workflows - persistent workflows (GLOBAL, user-level)
+    )
+    agent_workflows: (
+        Path  # /workdir/agent-workflows - per-(user,agent) workflows (FEAT-243)
+    )
     uploads: Path  # /workdir/uploads - conversation uploads
     outputs: Path  # /workdir/outputs - conversation output files
     agent_files: Path  # /workdir/agent-files - agent reference files (per-conversation)
@@ -65,6 +99,7 @@ def get_workspace_paths() -> WorkspacePaths:
         trace_file=system_dir / "trace.jsonl",
         conv_meta=system_dir / "current_conv.json",
         workflows=root / "chat-workflows",
+        agent_workflows=root / "agent-workflows",
         uploads=root / "uploads",
         outputs=root / "outputs",
         agent_files=root / "agent-files",
@@ -88,6 +123,11 @@ def ensure_directories() -> WorkspacePaths:
     paths["workflows"].mkdir(parents=True, exist_ok=True)
     paths["uploads"].mkdir(parents=True, exist_ok=True)
     paths["outputs"].mkdir(parents=True, exist_ok=True)
+    # agent-workflows/ — created ONLY for agent conversations with FEAT-243 on.
+    # Its mere existence is the signal (to the agent + scheduled-run preamble)
+    # that an agent-scoped library is available, so don't create it otherwise.
+    if get_agent_workflows_scope():
+        paths["agent_workflows"].mkdir(parents=True, exist_ok=True)
 
     logger.debug("Ensured workspace directories")
     return paths
@@ -223,10 +263,12 @@ def clear_conversation_files() -> int:
             logger.warning("Failed to delete trace", error=str(e))
 
     # Clear root-level files and non-protected directories
-    # Protected: .system, chat-workflows, uploads, outputs, agent-files, tools
+    # Protected: .system, chat-workflows, agent-workflows, uploads, outputs,
+    # agent-files, tools
     protected_dirs = {
         ".system",
         "chat-workflows",
+        "agent-workflows",
         "uploads",
         "outputs",
         "agent-files",
@@ -341,139 +383,3 @@ def cleanup_session_files() -> int:
 
     logger.info("Cleaned up output files", deleted=deleted)
     return deleted
-
-
-# ── Selective Tool Copy ───────────────────────────────────────────────────────
-
-# Source directory where all tool scripts are baked into the Docker image
-# (read-only, copied from tools/ at build time via Dockerfile)
-_TOOLS_IMAGE_ROOT = (
-    Path("/app/tools") if Path("/app/tools").exists() else Path("/workdir/tools")
-)
-
-# Destination directory where Claude can access tools
-_TOOLS_WORKSPACE_ROOT = LOCAL_ROOT / "tools"
-
-
-def setup_agent_tools(
-    enabled_numa_tools: list[str],
-    tools_source_dirs: list[str],
-    tool_file_map: dict[str, list[str]],
-    always_copy: list[str],
-) -> dict:
-    """
-    Selectively copy tool reference docs to /workdir/tools/ based on agent type config.
-
-    Only docs for tools listed in enabled_numa_tools get copied. Claude reads
-    these for parameter reference when using the numa_tool MCP tool. The files
-    are documentation only — direct bash execution is blocked by security hooks.
-
-    The Dockerfile bakes ALL tool docs into the image (at /workdir/tools/ with
-    chmod 555). This function clears /workdir/tools/ and re-copies only what
-    the agent type needs.
-
-    Args:
-        enabled_numa_tools: List of tool names to enable (e.g. ["web_search", "knowledge_search"])
-        tools_source_dirs: Source directories under /app/tools/ (e.g. ["numa", "quoting"])
-        tool_file_map: Maps tool names to file paths relative to source dir
-        always_copy: Paths that are always copied when any tool is enabled (e.g. ["helpers/"])
-
-    Returns:
-        Dict with summary: {"copied": [...], "skipped": [...], "source": str}
-    """
-    copied: list[str] = []
-    skipped: list[str] = []
-
-    # Determine source root - in production /app/tools/ is separate from /workdir/tools/
-    # In current Docker setup, tools are baked directly into /workdir/tools/
-    # We work with the existing /workdir/tools/ contents
-    source_root = _TOOLS_IMAGE_ROOT
-
-    # If no tools are enabled, clear the tools workspace entirely
-    if not enabled_numa_tools and not tools_source_dirs:
-        if _TOOLS_WORKSPACE_ROOT.exists():
-            # Remove entire tools dir and recreate empty
-            shutil.rmtree(_TOOLS_WORKSPACE_ROOT, ignore_errors=True)
-            _TOOLS_WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
-        logger.info(
-            "Agent tools cleared (no tools enabled)",
-            _name="AGENT_TOOLS_CLEARED",
-            phase="init",
-        )
-        return {"copied": [], "skipped": [], "source": str(source_root)}
-
-    # For each source directory, rebuild dest with only enabled tools.
-    # Strategy: remove dest dir entirely, then copy only what's needed from source.
-    # This avoids chmod issues (Dockerfile bakes tools with chmod 555).
-    for source_dir_name in tools_source_dirs:
-        source_dir = source_root / source_dir_name
-        dest_dir = _TOOLS_WORKSPACE_ROOT / source_dir_name
-
-        if not source_dir.exists():
-            logger.warning(
-                "Tools source directory not found",
-                source_dir=str(source_dir),
-            )
-            continue
-
-        # Build the set of files/dirs to copy
-        files_to_keep: set[str] = set()
-
-        # Always copy shared utilities (e.g. helpers/)
-        for always_path in always_copy:
-            files_to_keep.add(always_path.rstrip("/"))
-
-        # Add files for each enabled tool
-        for tool_name in enabled_numa_tools:
-            tool_files = tool_file_map.get(tool_name, [])
-            for tf in tool_files:
-                files_to_keep.add(tf)
-
-        # Determine what exists at source to know what we're skipping
-        source_items = (
-            {item.name for item in source_dir.iterdir()}
-            if source_dir.exists()
-            else set()
-        )
-        skipped.extend(
-            f"{source_dir_name}/{name}" for name in source_items - files_to_keep
-        )
-
-        # Remove existing dest dir (handles chmod 555 files from Dockerfile)
-        if dest_dir.exists():
-            shutil.rmtree(dest_dir, ignore_errors=True)
-
-        # Recreate and selectively copy from source
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        for item_name in files_to_keep:
-            src = source_dir / item_name
-            dst = dest_dir / item_name
-            if src.exists():
-                if src.is_dir():
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(src, dst)
-                copied.append(f"{source_dir_name}/{item_name}")
-
-    # Remove source dirs that aren't in the config
-    if _TOOLS_WORKSPACE_ROOT.exists():
-        enabled_dirs = set(tools_source_dirs)
-        for child in list(_TOOLS_WORKSPACE_ROOT.iterdir()):
-            if child.is_dir() and child.name not in enabled_dirs:
-                # Don't remove integrations dir (managed separately by _sync_integration_schemas)
-                if child.name == "integrations":
-                    continue
-                shutil.rmtree(child, ignore_errors=True)
-                skipped.append(f"{child.name}/ (entire directory)")
-
-    logger.info(
-        "Agent tools configured",
-        _name="AGENT_TOOLS_SETUP",
-        phase="init",
-        enabled_tools=enabled_numa_tools,
-        copied=copied,
-        skipped=skipped,
-        source_dirs=tools_source_dirs,
-    )
-
-    return {"copied": copied, "skipped": skipped, "source": str(source_root)}

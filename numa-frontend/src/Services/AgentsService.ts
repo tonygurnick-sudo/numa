@@ -104,9 +104,21 @@ export const duplicateAgent = async (
 
 // ─── Per-user preferences ────────────────────────────────────────────────────
 
+const PREFS_CACHE_KEY = 'agent_prefs';
+
+/** Read cached agent prefs from localStorage (instant, synchronous). */
+export const getCachedAgentPrefs = (): AgentUserPref[] | null => getSwrCache<AgentUserPref[]>(PREFS_CACHE_KEY);
+
+/** Persist agent prefs to the SWR cache (keeps favourites instant across reloads). */
+export const setCachedAgentPrefs = (prefs: AgentUserPref[]): void => setSwrCache(PREFS_CACHE_KEY, prefs);
+
 export const getAgentPrefs = async (numaGet: NumaGet): Promise<AgentUserPref[]> => {
   const response = (await numaGet(`${BASE_URL}/prefs`)) as { prefs: AgentUserPref[] };
-  return response?.prefs ?? [];
+  const prefs = response?.prefs ?? [];
+  // Persist to localStorage so favourites render instantly on next page load
+  // (SWR pattern — eliminates the favourites section popping in and shifting layout).
+  setCachedAgentPrefs(prefs);
+  return prefs;
 };
 
 export const setAgentPref = async (

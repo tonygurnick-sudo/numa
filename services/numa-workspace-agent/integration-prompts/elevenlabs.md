@@ -7,10 +7,10 @@ ElevenLabs is a voice-AI platform: text-to-speech, voice cloning, and Conversati
 `elevenlabs-make-outbound-call` places a **real phone call to a real person** via the user's ElevenLabs Conversational AI agent (Twilio-backed). It needs three things, and the first two are NOT raw values you can guess:
 
 1. **`agent_id`** — the Conversational AI agent that will speak. If the user doesn't already have one, create it first with `elevenlabs-create-agent` (you'll define its system prompt / first message). Confirm the agent's script with the user.
-2. **`phone_number_id`** — NOT the phone number itself. It's the ID of a number already provisioned in the user's ElevenLabs account. Resolve it with `elevenlabs-list-phone-number-id-options` (use `configure_props`).
+2. **`phone_number_id`** — NOT the phone number itself. It's the ID of a number already provisioned in the user's ElevenLabs account. Resolve it with `numa integrations pipedream-props-options elevenlabs elevenlabs-make-outbound-call phone_number_id --elevenlabs '{"authProvisionId":"auto"}' -m "Listing ElevenLabs phone numbers"`.
 3. **The recipient's phone number** — in E.164 format (e.g. `+6421234567`).
 
-Because this dials a real person and consumes ElevenLabs + Twilio credits, **always confirm the recipient number, the agent, and the call's purpose/script with the user before calling.** `run_action` already requires approval, but state plainly what you're about to do so the approval is informed.
+Because this dials a real person and consumes ElevenLabs + Twilio credits, **always confirm the recipient number, the agent, and the call's purpose/script with the user before calling.** `numa integrations pipedream-call` already requires approval, but state plainly what you're about to do so the approval is informed.
 
 ## Text to speech
 

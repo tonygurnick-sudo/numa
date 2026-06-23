@@ -6,7 +6,7 @@ Establish context first:
 
 - Use `notion-search` to find available pages and databases — filter by `"page"` or `"data_source"` via the `filter` prop
 - For database operations, use `notion-retrieve-database-schema` to understand the property schema before creating/updating entries
-- Use `configure_props` to resolve dynamic IDs for `parent`, `parentDataSource`, `pageId`, `blockId`, etc.
+- Use `numa integrations pipedream-props-options notion <action> <prop> --notion '{"authProvisionId":"auto"}'` to resolve dynamic IDs for `parent`, `parentDataSource`, `pageId`, `blockId`, etc.
 
 ## Key Gotchas
 
@@ -19,30 +19,21 @@ Establish context first:
 **"Database" props are named `dataSourceId`/`parentDataSource`:** Notion calls them "databases" in their UI, but Pipedream uses "data source" terminology. Use `dataSourceId` not `databaseId`:
 
 ```json
-{ "notion": { "authProvisionId": "auto" }, "dataSourceId": "afee9835-099d-..." }
+{ "notion": { "authProvisionId": "auto" }, "dataSourceId": "<data-source-uuid>" }
 ```
 
-**Select properties use plain strings:** When creating/updating database entries via `create-page-from-database`, pass select values as strings, NOT objects:
+**Database-entry property formats vary by type** (the `properties` object in `create-page-from-database` / `update-page`) — match each property's Notion type or the action throws `Error converting property … to Notion format`. Always check the schema first (`notion-retrieve-database-schema`):
 
 ```json
-// Correct
-{"properties": {"Status": "In Progress", "Priority": "High"}}
-
-// Wrong - will fail
-{"properties": {"Status": {"name": "In Progress"}}}
+{
+  "Name": "Entry title", // title  → plain string
+  "Notes": "Some text", // rich_text → plain string
+  "Tag": ["Team 1", "CS"], // multi_select → ARRAY of strings (a bare string fails: "Must be of type string[]")
+  "Due Date": { "start": "2026-03-01" } // date → object
+}
 ```
 
-**Date properties use object format:**
-
-```json
-{ "properties": { "Due Date": { "start": "2026-02-06" } } }
-```
-
-**Rich text properties are plain strings:**
-
-```json
-{ "properties": { "Notes": "Plain text content here" } }
-```
+(When writing via `request` instead of the action, use Notion's **native** nested format — see "Direct API requests" below.)
 
 **`retrieve-block` vs `retrieve-page`:** Use `notion-retrieve-block` to get page content (blocks, children, markdown). Use `notion-retrieve-page` only for page metadata (properties, timestamps). The naming is counterintuitive — `blockId` accepts page IDs.
 
@@ -62,15 +53,36 @@ Establish context first:
 - `"markdownContents"` — create new blocks from Markdown
 - `"imageUrls"` — create image blocks
 
-**`query-database` filter is a JSON string:** The `filter` prop expects a stringified JSON object:
+**`query-database` mis-serializes omitted optional props (verified bug):**
+
+- Omitting `sorts` sends `null` → `400 body.sorts should be an array or undefined, instead was null`.
+- Passing `sorts: []` but omitting `filter` sends an empty filter → `400 body.filter.* should be defined`.
+
+So the action only works when you pass **both** a valid `filter` (a **stringified** JSON object) **and** `sorts: []`:
 
 ```json
-{ "filter": "{\"property\":\"Name\",\"title\":{\"contains\":\"search term\"}}" }
+{ "filter": "{\"property\":\"Name\",\"title\":{\"contains\":\"search term\"}}", "sorts": [] }
+```
+
+Easier paths that sidestep the bug: for **all rows unfiltered**, use **`notion-retrieve-database-content`**; for **filtered** queries, use **`request`** (no serialization quirks — and note it takes the real `database_id`, not the `dataSourceId`):
+
+```bash
+numa integrations request notion POST "https://api.notion.com/v1/databases/{database_id}/query" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"filter":{"property":"Name","title":{"contains":"x"}},"page_size":100}' -m "Query database"
 ```
 
 **`update-page` requires `parentDataSource` first:** To update a database entry, you must provide both `parentDataSource` (the database ID) and `pageId` (the entry ID). The `archived` prop can be used to move pages to Trash.
 
-**`delete-block` archives, doesn't delete:** The `notion-delete-block` action moves items to Notion's Trash (sets `archived: true`). Items can be restored from Trash in Notion's UI.
+**`delete-block` is slow on pages — prefer `request` to archive:** `notion-delete-block` "deletes" by archiving to Trash (`archived: true`, restorable — Notion has no true-delete via API). But on a **page-level block** it's slow (~30s even for a tiny page) and recurses through children, so it risks the **300s Lambda timeout** on large/nested pages. To archive a page reliably and instantly, use `request`:
+
+```bash
+numa integrations request notion PATCH "https://api.notion.com/v1/pages/{page_id}" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"archived":true}' -m "Archive (trash) page"
+```
+
+Likewise `retrieve-block` with `retrieveChildren: "All Children"` + `retrieveMarkdown: true` can hit the 300s limit on large pages — paginate via `request GET /v1/blocks/{id}/children?page_size=100` (follow `next_cursor`) instead.
 
 ## Common Filter Examples for `query-database`
 
@@ -111,7 +123,7 @@ The `markdownContents` prop in `append-block` converts markdown to native Notion
 | `` `code` ``  | `annotations.code: true`          |                        |
 | `[text](url)` | `text.link`                       |                        |
 
-Not supported via markdown: Callouts, toggles, embeds, synced blocks. Use `proxy_request` with the `Notion-Version` header for these.
+Not supported via markdown: Callouts, toggles, embeds, synced blocks. Use `numa integrations request` with the `Notion-Version` header for these (see "Direct API requests" below).
 
 ## Updating Blocks
 
@@ -147,7 +159,7 @@ Use `notion-update-block` with a JSON string in the `content` prop. The JSON mus
 
 ## File Uploads
 
-File uploads require a three-step process using Pipedream actions plus `proxy_request`:
+File uploads require a three-step process using Pipedream actions plus a direct `numa integrations request`:
 
 ### Step 1: Create Upload Session
 
@@ -181,25 +193,13 @@ Use `notion-send-file-upload`:
 
 ### Step 3: Attach File to Page
 
-Use `proxy_request` with PATCH — the `Notion-Version` header is required:
+Use `numa integrations request` with PATCH — the `Notion-Version` header is required:
 
-```python
-mcp__integrations__proxy_request(
-  method="PATCH",
-  upstream_url="https://api.notion.com/v1/blocks/{page_id}/children",
-  integration_slug="notion",
-  headers={"x-pd-proxy-Notion-Version": "2022-06-28"},
-  body={
-    "children": [{
-      "type": "file",
-      "file": {
-        "type": "file_upload",
-        "file_upload": {"id": "file-upload-uuid-here"}
-      }
-    }]
-  },
-  description="Attach uploaded file to page"
-)
+```bash
+numa integrations request notion PATCH "https://api.notion.com/v1/blocks/{page_id}/children" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"children":[{"type":"file","file":{"type":"file_upload","file_upload":{"id":"file-upload-uuid-here"}}}]}' \
+  -m "Attach uploaded file to page"
 ```
 
 ### External URL Mode (Simplest for Public Files)
@@ -219,37 +219,39 @@ For publicly accessible files, skip the send step:
 
 - **Content-Type mismatch:** If you specify `contentType` in `create-file-upload`, the sent file must match exactly. Omit `contentType` to let it auto-detect.
 - **File prop name:** Use `file`, not `filePath` in `send-file-upload`.
-- **Notion-Version header required:** All `proxy_request` calls to Notion require the header `{"x-pd-proxy-Notion-Version": "2022-06-28"}`.
+- **Notion-Version header required:** All `numa integrations request` calls to Notion require the header `{"x-pd-proxy-Notion-Version": "2022-06-28"}`.
 
-## Using `proxy_request` for Notion
+## Direct API requests (`numa integrations request`)
 
-Notion's API requires a version header on all requests. When using `proxy_request`, always include:
+Notion's API requires a version header on all requests. When using `numa integrations request`, always include:
 
 ```
-headers={"x-pd-proxy-Notion-Version": "2022-06-28"}
+--headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}'
 ```
 
 The `x-pd-proxy-` prefix tells Pipedream to forward the header as `Notion-Version` to the upstream API.
 
+**`request` uses the real Notion `database_id`, NOT the Pipedream `dataSourceId`.** The `id` returned by `notion-search` / `notion-retrieve-database-schema` is a **data-source** id (the actions run Notion's newer data-source API). It returns **404** ("Could not find database with ID") on raw `/v1/databases/{id}` calls. The real `database_id` is in the schema's **`parent.database_id`** field (NOT the root `id`). So to move from an action-discovered DB to a `request` call, read `parent.database_id` from `retrieve-database-schema` first. (Actions keep using `dataSourceId`; only `request` needs the translation.)
+
+**Search via `request` is POST, not GET** — `GET /v1/search` returns `400 Invalid request URL`:
+
+```bash
+numa integrations request notion POST "https://api.notion.com/v1/search" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"query":"text","filter":{"value":"page","property":"object"},"page_size":50}' -m "Search Notion"
+```
+
+**Property format via `request` is Notion-native** (nested objects), unlike the action's simplified shape: `{"properties":{"Tag":{"multi_select":[{"name":"CS"}]}}}` — not `{"Tag":["CS"]}`.
+
+**Rate limit:** Notion allows ~3 requests/sec; back-to-back writes can return `429`. Space rapid write sequences out.
+
 Example — Create a callout block (not supported via markdown):
 
-```python
-mcp__integrations__proxy_request(
-  method="PATCH",
-  upstream_url="https://api.notion.com/v1/blocks/{page_id}/children",
-  integration_slug="notion",
-  headers={"x-pd-proxy-Notion-Version": "2022-06-28"},
-  body={
-    "children": [{
-      "type": "callout",
-      "callout": {
-        "icon": {"type": "emoji", "emoji": "💡"},
-        "rich_text": [{"type": "text", "text": {"content": "Important note here"}}]
-      }
-    }]
-  },
-  description="Add callout block to page"
-)
+```bash
+numa integrations request notion PATCH "https://api.notion.com/v1/blocks/{page_id}/children" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"children":[{"type":"callout","callout":{"icon":{"type":"emoji","emoji":"💡"},"rich_text":[{"type":"text","text":{"content":"Important note here"}}]}}]}' \
+  -m "Add callout block to page"
 ```
 
 ## Workflow Examples
@@ -264,7 +266,7 @@ mcp__integrations__proxy_request(
   "templateType": "none",
   "properties": {
     "Name": "Entry Title",
-    "Status": "To Do",
+    "Tags": ["To Do"],
     "Due Date": { "start": "2026-03-01" },
     "Notes": "Description text"
   }
@@ -306,8 +308,9 @@ notion-create-file-upload: mode="single_part", filename="report.pdf"
 notion-send-file-upload: fileUploadId="...", file="/workdir/uploads/report.pdf"
 # Wait for status: "uploaded"
 
-# 3. Attach to page via proxy
-proxy_request: PATCH /v1/blocks/{page_id}/children
-  headers: {"x-pd-proxy-Notion-Version": "2022-06-28"}
-  body: {"children": [{"type": "file", "file": {"type": "file_upload", "file_upload": {"id": "..."}}}]}
+# 3. Attach to page via direct request
+numa integrations request notion PATCH "https://api.notion.com/v1/blocks/{page_id}/children" \
+  --headers '{"x-pd-proxy-Notion-Version":"2022-06-28"}' \
+  --body '{"children":[{"type":"file","file":{"type":"file_upload","file_upload":{"id":"..."}}}]}' \
+  -m "Attach file to page"
 ```

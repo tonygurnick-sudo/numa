@@ -1,14 +1,11 @@
 """
 Tests for agent type configurations and base dataclass.
 
-Covers AgentTypeConfig defaults, TOOL_FILE_MAP structure, ALWAYS_COPY
-entries, and the built-in type configurations.
+Covers AgentTypeConfig defaults and the built-in type configurations.
 """
 
 import pytest
 from numa_workspace_agent.agent_types import (
-    ALWAYS_COPY,
-    TOOL_FILE_MAP,
     AgentTypeConfig,
     get_agent_type_config,
 )
@@ -45,11 +42,6 @@ class TestAgentTypeConfigDefaults:
     def test_default_allowed_numa_operations_is_none(self):
         config = AgentTypeConfig(type_id="test", display_name="Test")
         assert config.allowed_numa_operations is None  # None = all allowed
-
-    def test_default_numa_tools(self):
-        config = AgentTypeConfig(type_id="test", display_name="Test")
-        assert config.enabled_numa_tools == []
-        assert config.tools_source_dirs == ["numa"]
 
     def test_default_plugins_path(self):
         config = AgentTypeConfig(type_id="test", display_name="Test")
@@ -107,52 +99,6 @@ class TestAgentTypeConfigDefaults:
 
 
 # ---------------------------------------------------------------------------
-# TOOL_FILE_MAP and ALWAYS_COPY
-# ---------------------------------------------------------------------------
-
-
-class TestToolFileMap:
-    """Test the tool name → file mapping."""
-
-    def test_all_known_tools_present(self):
-        expected_tools = [
-            "numa_files_search",
-            "web_search",
-            "agents",
-            "convert_document",
-            "extract_content",
-        ]
-        for tool in expected_tools:
-            assert tool in TOOL_FILE_MAP, f"Tool {tool!r} missing from TOOL_FILE_MAP"
-
-    def test_legacy_knowledge_search_alias(self):
-        """The legacy `knowledge_search` key still resolves to the renamed reference doc."""
-        assert "knowledge_search" in TOOL_FILE_MAP
-        assert TOOL_FILE_MAP["knowledge_search"] == ["numa_files.py"]
-        assert TOOL_FILE_MAP["numa_files_search"] == ["numa_files.py"]
-
-    def test_all_values_are_lists(self):
-        for tool_name, files in TOOL_FILE_MAP.items():
-            assert isinstance(files, list), f"{tool_name} value should be a list"
-            assert len(files) > 0, f"{tool_name} should have at least one file"
-
-    def test_all_file_values_are_strings(self):
-        for tool_name, files in TOOL_FILE_MAP.items():
-            for f in files:
-                assert isinstance(f, str), f"{tool_name} file entry should be string"
-                assert f.endswith(".py"), f"{tool_name} file {f!r} should be a .py file"
-
-
-class TestAlwaysCopy:
-    """Test the always-copy list."""
-
-    def test_always_copy_is_empty(self):
-        # helpers/ was removed when tool files became documentation-only.
-        # ALWAYS_COPY should be empty since there are no shared modules.
-        assert len(ALWAYS_COPY) == 0
-
-
-# ---------------------------------------------------------------------------
 # Built-in agent types
 # ---------------------------------------------------------------------------
 
@@ -189,11 +135,6 @@ class TestNumaChatType:
         config = get_agent_type_config("numa-chat")
         for tool in ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]:
             assert tool in config.tools
-
-    def test_has_numa_tool_docs(self):
-        config = get_agent_type_config("numa-chat")
-        assert "agents" in config.enabled_numa_tools
-        assert "memories" in config.enabled_numa_tools
 
     def test_numa_operations_unrestricted(self):
         # Phase 6: enable_numa_mcp is now False everywhere (MCP layer removed),
@@ -290,11 +231,6 @@ class TestNumaSupportType:
         )
         assert "Offer to send it for them" in prompt
 
-    def test_tool_docs_resolve_in_tool_file_map(self):
-        config = get_agent_type_config("numa-chat-support")
-        for tool_name in config.enabled_numa_tools:
-            assert tool_name in TOOL_FILE_MAP
-
 
 class TestResearchAgentType:
     """Tests for the research-agent built-in type."""
@@ -312,11 +248,6 @@ class TestResearchAgentType:
         # Phase 6: the MCP tool layer was removed; enable_numa_mcp is now False.
         config = get_agent_type_config("research-agent")
         assert config.enable_numa_mcp is False
-
-    def test_no_tool_docs(self):
-        config = get_agent_type_config("research-agent")
-        # Research agent copies no reference docs
-        assert config.enabled_numa_tools == []
 
 
 class TestDocumentSummariserType:
@@ -342,11 +273,6 @@ class TestDocumentSummariserType:
         config = get_agent_type_config("document-summariser")
         assert config.enable_scripts_mcp is False
         assert config.enable_integrations_mcp is False
-
-    def test_no_numa_tools(self):
-        config = get_agent_type_config("document-summariser")
-        assert config.enabled_numa_tools == []
-        assert config.tools_source_dirs == []
 
     def test_result_file_mode(self):
         config = get_agent_type_config("document-summariser")

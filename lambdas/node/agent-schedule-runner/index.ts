@@ -354,6 +354,8 @@ type ScheduledRunConfig = {
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   allKBsAllowed?: boolean;
 };
 
@@ -362,6 +364,8 @@ type AgentToolsConfig = {
   queryDataSources?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  memoriesEnabled?: boolean;
+  numaOpsEnabled?: boolean;
   enabledConnections?: string[];
   /** Future-shape: agents storing method-tagged integrations directly. */
   enabledIntegrations?: IntegrationListItem[];
@@ -532,6 +536,10 @@ type AgentStatus = {
   // Optional — the Numa Voice post-call agent writes the CRM customer id it
   // created/updated so the hand-off notification can deep-link to that customer.
   customerId?: string;
+  // Optional (FEAT-243) — workflows/memories the agent created or updated this
+  // run as part of REFLECT & COMPOUND. One string per item; "memory: ..." for
+  // saved memories. Empty/absent when nothing was worth saving (the common case).
+  optimised?: string[];
 };
 
 /**
@@ -539,8 +547,16 @@ type AgentStatus = {
  *
  * Tells the agent it's running autonomously and MUST write a status.json file
  * summarising the outcome — regardless of whether the task succeeded or failed.
+ *
+ * FEAT-243 — also carries the REFLECT & COMPOUND contract: the agent considers
+ * (mandatory) whether anything was deterministic enough to script, or durable
+ * enough to remember, so the schedule gets cheaper and more reliable over time.
+ * Acting on it is optional — judgment is never scripted. `agentId` scopes saved
+ * memories to this agent.
  */
-const SCHEDULED_RUN_PREAMBLE = `<scheduled-run>
+export const buildScheduledRunPreamble = (agentId?: string | null, priorRunSummary?: string | null): string => {
+  const memoryScope = agentId ? `agent:${agentId}` : 'general';
+  return `<scheduled-run>
 You are running as a SCHEDULED AGENT — not in an interactive chat session.
 
 Key behaviour differences:
@@ -550,17 +566,21 @@ Key behaviour differences:
 - Do not use the TodoWrite tool — there is no user watching your progress.
 - If you get an error like "Approval timed out for proxy request to integration API — human-in-the-loop approval is required but no user was available to respond." then you need to let the user know they need to update their agent config to enable auto-approval for the relevant integration.
 
+STAY ON GOAL:
+This is a recurring job with a fixed purpose, defined by your agent description/instructions and this schedule's prompt — that goal is the source of truth. Your saved workflows are tools *derived* from the goal, not the definition of it. Each run, produce a result consistent with that goal — the scope and shape the goal calls for. If a saved workflow has drifted from what the goal requires, fix the workflow to match the goal; never follow a workflow off-course or quietly redefine the job. The data changes each run; the goal does not.${priorRunSummary ? `\nFor consistency, your previous run reported: "${priorRunSummary}" — produce something comparable unless the data genuinely changed.` : ''}
+
 MANDATORY — STATUS REPORT:
 After completing your work — whether successful, partially successful, or failed — you MUST write a JSON status report as the VERY LAST action before your final response. This is required on EVERY scheduled run, no exceptions.
 
 Write the file to: /workdir/outputs/status.json
 
-The file must contain valid JSON with exactly these fields:
+The file must contain valid JSON with these fields:
 - "status" (string): one of "success", "partial", or "failed"
 - "summary" (string): one sentence describing what you accomplished or why you failed
 - "artifacts" (array of strings): filenames of any files you created (empty array if none)
 - "errors" (array of strings): any error messages encountered (empty array if none)
 - "warnings" (array of strings): non-fatal issues or assumptions you made (empty array if none)
+- "optimised" (array of strings, OPTIONAL): workflows or memories you saved/updated this run (see REFLECT & COMPOUND below); omit or use [] when nothing qualified
 
 Success example:
 {
@@ -568,7 +588,8 @@ Success example:
   "summary": "Generated daily progress report with 15 KPIs from the sales dashboard",
   "artifacts": ["report.pdf", "summary.csv"],
   "errors": [],
-  "warnings": ["Could not access marketing API — used cached data from yesterday"]
+  "warnings": ["Could not access marketing API — used cached data from yesterday"],
+  "optimised": []
 }
 
 Failure example:
@@ -582,9 +603,33 @@ Failure example:
 
 This status report is used to notify the user of the outcome. Be honest and specific in your summary.
 Even if the task failed entirely, you MUST still write status.json with status "failed" and an explanation.
+
+REFLECT & COMPOUND (after writing status.json):
+This schedule runs repeatedly — you can make the next run better than this one.
+Considering the two questions below is mandatory on every run. Acting on them is NOT — on many runs the right answer is to save nothing, and that's fine.
+Earlier runs may have already done the optimising. If the deterministic work is already captured in a saved workflow that's running well, you don't need to script anything new this run — just reuse it. Only script or remember when there's genuinely something new and durable to capture. Some agents keep finding improvements; others reach a steady state fast and mostly just run — both are healthy. Never optimise for its own sake, and never let optimising pull you off the goal.
+
+1) SCRIPT — was anything in this run deterministic mechanics?
+- Worth scripting: steps that are identical run-over-run — fixed data pulls, file/format transformations, rendering with fixed parameters, posting results to a fixed destination.
+- If a saved workflow for this schedule already exists, prefer repairing or extending it over writing a new one. If it has gone stale, fix or retire it.
+- NEVER script judgment: reading, weighing, or interpreting; choosing what matters; writing prose; deciding what to escalate; handling unusual input. That thinking is the job — keep doing it fresh each run. Scripts are accelerators, not contracts: verify their output every run and deviate without hesitation when inputs look unusual or the task has drifted. Never trade correctness for speed or lower cost.
+- Surface what you bake in: if a step can only be scripted by assuming a weighting, a threshold, a definition of "what matters", or a default pick, that part is judgment, not mechanics. Don't bury it — document the assumption in the script header AND record it in the "optimised" note so the owner can review it (there's no user to confirm with mid-run). Better still, leave that part out of the script. Either way, do the reasoning and judgment calls yourself AFTER the script runs: you are an LLM and excel at natural-language reasoning, so let the script gather the facts and structure, then make the call live each run. A workflow that prints a verdict ("Recommended: X") has frozen the judgment — have it print the facts instead and you decide.
+- Save to /workdir/agent-workflows/<kebab-name>.py if that directory exists, otherwise /workdir/chat-workflows/<schedule-slug>/<kebab-name>.py. Load the saved-workflows skill for the header format. Parameterise dates/IDs — never hardcode this run's values. Scripts must fail loudly so a future run can't silently ship wrong output. The rhythm once a workflow exists: run script → verify output → handle exceptions with fresh thinking.
+
+2) REMEMBER — did this run teach you something durable?
+- Your saved memories for this agent are already provided in your context above (the User Memories section) — apply them this run so you don't re-learn the same things. That is the payoff of remembering: each run starts smarter than the last.
+- Worth remembering: integration gotchas (IDs, formats, quirks you had to work out), data-source facts, recurring exceptions and how you handled them, owner preferences evident from the task.
+- Save with: numa memory add "<short factual note>" --scope ${memoryScope} -m "remembering for next run" -y
+- No user is present, so the usual confirm-first rule doesn't apply. Apply this bar instead: would the next run be slower or wrong without it? Keep each memory short and factual; update or delete a stale one rather than piling up near-duplicates.
+
+When you create or update a workflow or memory, record it in the OPTIONAL "optimised" field of status.json — one string per item, e.g.:
+  "optimised": ["agent-workflows/fetch-pipeline-data.py (created — pulls this week's closed-won deals; summary writing deliberately NOT scripted)", "memory: the CRM export mislabels the 'owner' column as 'rep'"]
+
+IMPORTANT: Always reflect before finishing. Scripting and remembering make you more efficient and save the user money on every future run — but don't script things that require reasoning, and don't force it when this run genuinely had nothing worth keeping.
 </scheduled-run>
 
 `;
+};
 
 const isApiEvent = (event: unknown): event is APIGatewayProxyEventV2 => {
   const requestContext = (event as { requestContext?: { http?: { method?: unknown } } })?.requestContext;
@@ -1779,11 +1824,23 @@ const executeRun = async ({
     // Refresh agent snapshot from DynamoDB so scheduled runs use the latest
     // agent config (integrations, KBs, tools) rather than the frozen snapshot
     // stored at schedule creation time.
-    const freshSnapshot = await refreshAgentSnapshot(agentMeta?.agentId, auth.sub);
-    const effectiveSnapshot = freshSnapshot ?? agentMeta;
+    // Resolve the agentId from the authoritative top-level schedule.agent_id when the snapshot lacks
+    // it. A schedule can be created without an agent_snapshot (e.g. programmatically), leaving
+    // agentMeta null — without this, requestBody.agentId is undefined, so the container emits the
+    // credit event with no agent_id and the ledger row never gets agentId/GSI3 keys (invisible to
+    // per-agent credit analytics, FEAT-246). Also lets the agent's real config/system-prompt load.
+    const resolvedAgentId = agentMeta?.agentId ?? schedule.agent_id;
+    const freshSnapshot = await refreshAgentSnapshot(resolvedAgentId, auth.sub);
+    const effectiveSnapshot: AgentSnapshot | undefined =
+      freshSnapshot ??
+      (agentMeta
+        ? { ...agentMeta, agentId: resolvedAgentId }
+        : resolvedAgentId
+          ? { agentId: resolvedAgentId }
+          : undefined);
 
     console.info('[SCHEDULE_RUNNER] Snapshot resolution', {
-      agentId: agentMeta?.agentId,
+      agentId: resolvedAgentId,
       usedFreshSnapshot: !!freshSnapshot,
       frozenToolsConfig: JSON.stringify(agentMeta?.toolsConfig),
       freshToolsConfig: freshSnapshot ? JSON.stringify(freshSnapshot.toolsConfig) : 'N/A',
@@ -1814,6 +1871,8 @@ const executeRun = async ({
       mergedAutoToolsEnabled: mergedRunConfig?.autoToolsEnabled,
     });
 
+    // Anti-drift: give a scheduled run the previous run's summary so it stays consistent (FEAT-243).
+    const priorRunSummary = adHoc ? null : await fetchPriorRunSummary(schedule);
     assistantText = await invokeWorkspaceAgent({
       prompt: apiPrompt,
       conversationId: runConversationId,
@@ -1821,6 +1880,7 @@ const executeRun = async ({
       agentSnapshot: effectiveSnapshot,
       auth,
       scheduledRun: !adHoc,
+      priorRunSummary,
     });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : 'Agent invocation failed';
@@ -1972,6 +2032,23 @@ const executeRun = async ({
         runLogKey
       );
       statusMarked = true;
+
+      // FEAT-243 — self-optimisation telemetry: this run's optimised[]
+      // (workflows/memories saved) + status. The credits/run trend is
+      // reconstructed offline (measure-trend.py) by joining these lines'
+      // conversationId with the credit ledger.
+      const optimised = agentStatus?.optimised ?? [];
+      console.info('[SELF_OPTIMISE]', {
+        _name: 'SELF_OPTIMISE',
+        clientName: CLIENT_NAME,
+        scheduleId: schedule.schedule_id,
+        runId,
+        agentId: schedule.agent_id,
+        conversationId: runConversationId,
+        status: effectiveStatus,
+        optimised,
+        optimisedCount: optimised.length,
+      });
 
       // FEAT-105 round-2 — auto-pause if this run pushed us past the consecutive-fail threshold.
       if (effectiveStatus === 'failed') {
@@ -2710,6 +2787,8 @@ const readWorkspaceStatus = async (userId: string, conversationId: string): Prom
         errors: Array.isArray(parsed.errors) ? parsed.errors.map(String) : [],
         warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
         ...(typeof customerId === 'string' && customerId ? { customerId } : {}),
+        // FEAT-243 — optional; lenient parse (absent on legacy/non-reflecting runs).
+        optimised: Array.isArray(parsed.optimised) ? parsed.optimised.map(String).slice(0, 10) : [],
       };
     } catch (err: unknown) {
       const errorName = err instanceof Error ? (err as { name?: string }).name : undefined;
@@ -2749,6 +2828,26 @@ const readWorkspaceStatus = async (userId: string, conversationId: string): Prom
  * header for user identity (the proxy recognises this auth pattern for
  * server-to-server calls).
  */
+/**
+ * Best-effort one-line summary of this schedule's PREVIOUS run, read from its stored run log
+ * (`schedule.last_run_s3_key`). Injected into the scheduled-run preamble so the agent stays
+ * consistent with what the job produced last time — the anti-drift anchor (FEAT-243). Returns
+ * null on any miss (first run, no key, unreadable); consistency context is a nicety, never a blocker.
+ */
+const fetchPriorRunSummary = async (schedule: ScheduleRecord): Promise<string | null> => {
+  const key = schedule.last_run_s3_key;
+  if (!OUTPUTS_BUCKET || !key) return null;
+  try {
+    const response = await s3.send(new GetObjectCommand({ Bucket: OUTPUTS_BUCKET, Key: key }));
+    const body = await response.Body?.transformToString();
+    if (!body) return null;
+    const summary = (JSON.parse(body) as { agentStatus?: { summary?: unknown } })?.agentStatus?.summary;
+    return typeof summary === 'string' && summary.trim() ? summary.trim().slice(0, 300) : null;
+  } catch {
+    return null; // no readable prior run — fine, the preamble just omits the consistency line
+  }
+};
+
 const invokeWorkspaceAgent = async ({
   prompt: runPrompt,
   conversationId,
@@ -2756,6 +2855,7 @@ const invokeWorkspaceAgent = async ({
   agentSnapshot,
   auth,
   scheduledRun,
+  priorRunSummary,
 }: {
   prompt: string;
   conversationId: string;
@@ -2763,15 +2863,20 @@ const invokeWorkspaceAgent = async ({
   agentSnapshot?: AgentSnapshot;
   auth: AuthContext;
   scheduledRun?: boolean;
+  priorRunSummary?: string | null;
 }): Promise<string> => {
   if (!WORKSPACE_AGENT_PROXY_URL || !SCHEDULE_RUNNER_SECRET) {
     throw new Error('Workspace agent invocation unavailable');
   }
 
   // For scheduled runs, prepend instructions so the agent knows to complete
-  // autonomously and write a structured status report when finished.
-  // V2 handles the agent's system prompt natively via agentId — we only add the scheduled-run context.
-  const prompt = scheduledRun ? `${SCHEDULED_RUN_PREAMBLE}${runPrompt}` : runPrompt;
+  // autonomously, write a structured status report, and reflect on what to
+  // script/remember (FEAT-243). V2 handles the agent's system prompt natively
+  // via agentId — we only add the scheduled-run context (+ the prior run's
+  // summary so it stays consistent run-to-run).
+  const prompt = scheduledRun
+    ? `${buildScheduledRunPreamble(agentSnapshot?.agentId, priorRunSummary)}${runPrompt}`
+    : runPrompt;
 
   // FEAT-143 — build the unified integrations payload server-side. Resolves
   // per-slug method (native vs Pipedream) from the user's live auth state +
@@ -3119,6 +3224,8 @@ const mergeRunConfig = (
   const autoToolsEnabled = base.autoToolsEnabled ?? toolsConfig.autoToolsEnabled;
   const webSearchEnabled = base.webSearchEnabled ?? toolsConfig.webSearchEnabled;
   const createAgentEnabled = base.createAgentEnabled ?? toolsConfig.createAgentEnabled;
+  const memoriesEnabled = base.memoriesEnabled ?? toolsConfig.memoriesEnabled;
+  const numaOpsEnabled = base.numaOpsEnabled ?? toolsConfig.numaOpsEnabled;
   // Model: an explicit per-schedule run_config.modelId wins (none is set today — there's no
   // scheduler model picker), else inherit the agent's live model from the refreshed snapshot so an
   // existing schedule follows the agent's current model. Undefined on both → backend default (Premium).
@@ -3154,6 +3261,8 @@ const mergeRunConfig = (
     autoToolsEnabled,
     webSearchEnabled,
     createAgentEnabled,
+    memoriesEnabled,
+    numaOpsEnabled,
     enabledKBIds,
     allKBsAllowed,
     kbFieldSet,
@@ -3231,6 +3340,8 @@ export const buildEnabledTools = ({
   autoToolsEnabled,
   webSearchEnabled,
   createAgentEnabled,
+  memoriesEnabled = true,
+  numaOpsEnabled = false,
   enabledKBIds,
   allKBsAllowed,
   kbFieldSet,
@@ -3239,6 +3350,10 @@ export const buildEnabledTools = ({
   autoToolsEnabled?: boolean;
   webSearchEnabled?: boolean;
   createAgentEnabled?: boolean;
+  /** Per-agent memories toggle. Defaults on (preserves historical always-on). */
+  memoriesEnabled?: boolean;
+  /** Per-agent Numa Ops toggle. Defaults off. */
+  numaOpsEnabled?: boolean;
   enabledKBIds: string[];
   allKBsAllowed?: boolean;
   kbFieldSet?: boolean;
@@ -3269,17 +3384,20 @@ export const buildEnabledTools = ({
   });
 
   if (auto) {
-    // Auto mode = all standard tools on, individual toggles ignored
-    // (mirrors the chat UI rendering these switches ON+disabled).
+    // Auto mode = standard tools on (mirrors the chat UI rendering these
+    // switches ON+disabled). memories is always-on in auto; numa_ops still
+    // honours the per-agent toggle (it has no always-on default).
     if (hasKBs) enabledTools.push('knowledge_base');
     enabledTools.push('web_search');
     enabledTools.push('create_agent_tool');
     enabledTools.push('memories_tool');
+    if (numaOpsEnabled) enabledTools.push('numa_ops_tool');
   } else {
     if (hasKBs) enabledTools.push('knowledge_base');
     if (webSearchEnabled) enabledTools.push('web_search');
     if (createAgentEnabled) enabledTools.push('create_agent_tool');
-    enabledTools.push('memories_tool');
+    if (memoriesEnabled) enabledTools.push('memories_tool');
+    if (numaOpsEnabled) enabledTools.push('numa_ops_tool');
   }
 
   console.info('[SCHEDULE_RUNNER] buildEnabledTools result', { enabledTools });

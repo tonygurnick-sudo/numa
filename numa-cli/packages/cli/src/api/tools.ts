@@ -14,6 +14,7 @@
 import type { ParamsForTool, ToolName, ToolResult } from '../metadata/tool-types.js';
 import { apiCall } from './client.js';
 import { isOversizedEnvelope, resolveOversizedResult } from './integrity.js';
+import { flushWorkspacePathsForTool } from './workspace-flush.js';
 
 export interface ToolInvokeContext {
   /**
@@ -138,6 +139,12 @@ export async function invokeTool<T extends ToolName>(
   const body: ToolInvokeRequest<T> = agentType
     ? { ...request, context: { ...request.context, agent_type: agentType } }
     : request;
+  // Flush this command's file-path arguments to S3 before invoking. The Lambda
+  // reads target files from the conversation S3 prefix; agent-generated files
+  // created in the SAME Bash command aren't on disk when the PreToolUse
+  // workspace_sync hook fires, so the CLI (which runs after they land) flushes
+  // them here. Best-effort and conversation-scoped — see workspace-flush.ts.
+  await flushWorkspacePathsForTool(request.tool, request.params, request.context?.conversation_id);
   const resp = await apiCall<ToolInvokeResponse<T>>({
     account,
     accessToken,

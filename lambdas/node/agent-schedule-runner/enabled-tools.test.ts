@@ -91,4 +91,44 @@ describe('buildEnabledTools — Manual mode', () => {
     expect(tools).toContain('web_search');
     expect(tools).not.toContain('create_agent_tool');
   });
+
+  it('omits memories_tool when memoriesEnabled is false', () => {
+    const tools = buildEnabledTools({
+      autoToolsEnabled: false,
+      memoriesEnabled: false,
+      enabledKBIds: [],
+    });
+    expect(tools).not.toContain('memories_tool');
+  });
+
+  it('includes memories_tool by default (toggle unset)', () => {
+    const tools = buildEnabledTools({ autoToolsEnabled: false, enabledKBIds: [] });
+    expect(tools).toContain('memories_tool');
+  });
+
+  it('includes numa_ops_tool when numaOpsEnabled is true', () => {
+    const tools = buildEnabledTools({
+      autoToolsEnabled: false,
+      numaOpsEnabled: true,
+      enabledKBIds: [],
+    });
+    expect(tools).toContain('numa_ops_tool');
+  });
+
+  it('omits numa_ops_tool by default', () => {
+    const tools = buildEnabledTools({ autoToolsEnabled: false, enabledKBIds: [] });
+    expect(tools).not.toContain('numa_ops_tool');
+  });
+});
+
+describe('buildEnabledTools — Auto mode toggles', () => {
+  it('includes numa_ops_tool in auto mode when numaOpsEnabled is true', () => {
+    const tools = buildEnabledTools({
+      autoToolsEnabled: true,
+      numaOpsEnabled: true,
+      enabledKBIds: [],
+    });
+    expect(tools).toContain('numa_ops_tool');
+    expect(tools).toContain('memories_tool');
+  });
 });

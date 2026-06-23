@@ -119,6 +119,7 @@ pre-commit:
         - lambdas/node/agent-schedules
         - lambdas/node/agents
         - lambdas/node/api-gateway-authorizer
+        - lambdas/node/arcanum-agent-deployer
         - lambdas/node/bedrock-cleanup-failed-files
         - lambdas/node/budget-forwarder
         - lambdas/node/branding-config

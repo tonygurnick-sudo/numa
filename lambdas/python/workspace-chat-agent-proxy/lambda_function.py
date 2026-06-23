@@ -401,7 +401,32 @@ def build_session_id(conversation_id: str) -> str:
 
     Each conversation gets its own MicroVM container, eliminating
     conversation-switching complexity and solving concurrency issues.
+
+    AgentCore pins a session ID to the runtime image version that was DEFAULT
+    when the session was first created, and that binding outlives idle-recycling
+    of the MicroVM (it persists until the session's maxLifetime). So a session
+    resumed after going cold would keep running the OLD image until maxLifetime
+    expires — image skew that can linger for hours after a deploy.
+
+    To make a deploy actually take effect, we append a deploy-generation token
+    (the container image tag, injected by the infra as WORKSPACE_IMAGE_GENERATION).
+    The token changes on every image deploy, so after a deploy each conversation
+    rotates to a fresh session ID on its next request and lands on the new image —
+    cold or warm, and consistently across chat, scheduled agents, and V2 apps
+    (all of which build their session ID here).
+
+    The suffix is purely a routing/isolation token: nothing parses it back. The
+    container recovers conversation_id from the request body and user_sub from
+    the x-user-sub header, never from the session ID. Persisted workspace state
+    is keyed by conversation_id in S3, so a rotated session rehydrates the same
+    workspace — only ephemeral in-VM state is lost on the one-time cold start.
+
+    Backwards compatible: if WORKSPACE_IMAGE_GENERATION is unset, the session ID
+    is identical to the legacy ``conv-{conversation_id}`` format.
     """
+    image_generation = os.environ.get("WORKSPACE_IMAGE_GENERATION", "")
+    if image_generation:
+        return f"conv-{conversation_id}-{image_generation}"
     return f"conv-{conversation_id}"
 
 

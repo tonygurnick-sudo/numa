@@ -324,8 +324,9 @@ function parseFolderFilePath(
  */
 function createFilesShowCommand(): Command {
   return new Command('show')
-    .description('List files inside a folder')
-    .argument('<folder>', 'Folder name or id')
+    .description('List files inside a folder (optionally a sub-path; -R for the full tree)')
+    .argument('<folder>', "Folder name or id, optionally with a sub-path: 'Personal' or 'Personal/reports/2024'")
+    .option('-R, --recursive', 'List every file at all depths (like `ls -R`) instead of one level')
     .option(
       '-m, --user-message <text>',
       'Short caption shown to the user in chat ("Numa <cat>: <msg>"); also the approval card text on HITL writes'
@@ -333,17 +334,31 @@ function createFilesShowCommand(): Command {
     .option('--pretty', 'Force human-readable output')
     .option('--standard', 'Force standard envelope output (LLM-friendly)')
     .option('--json', 'Force raw JSON output')
-    .action(async (folderRef: string, options: StandardOptions) => {
+    .action(async (folderRef: string, options: { recursive?: boolean } & StandardOptions) => {
       const account = activeProfile();
       if (!account) fail('no active profile — run `numa login` first');
       const scope = resolveScopingContext(account);
-      const folder = pickFolder(folderRef, scope);
-      if (!folder) fail(`could not resolve folder '${folderRef}'`);
+
+      // Split "<folder>/<subpath>" — first segment is the folder (name or id),
+      // the rest drills into a subfolder. Folder names/ids never contain '/'.
+      const slash = folderRef.indexOf('/');
+      const folderPart = slash === -1 ? folderRef : folderRef.slice(0, slash);
+      const subpath = slash === -1 ? '' : folderRef.slice(slash + 1).replace(/^\/+|\/+$/g, '');
+      const folder = pickFolder(folderPart, scope);
+      if (!folder) fail(`could not resolve folder '${folderPart}'`);
 
       const { accessToken, request } = await buildToolRequest(
         account,
         'list_kb_files',
-        { kb_ids: [folder.id] },
+        {
+          kb_ids: [folder.id],
+          ...(subpath ? { subpath } : {}),
+          ...(options.recursive ? { recursive: true } : {}),
+          // An explicit `show` should not silently hide files at the 30-item
+          // prompt-context cap; ask for a generous page (the handler spills to
+          // S3 if the listing is genuinely huge).
+          max_items: 1000,
+        },
         folder,
         options.userMessage
       );
@@ -365,7 +380,8 @@ function createFilesShowCommand(): Command {
             const listing = listings[kbId]!;
             const files = listing.files ?? [];
             const folders = listing.folders ?? [];
-            const header = `${folder.name ?? kbId} — ${listing.total_count} file${listing.total_count === 1 ? '' : 's'}${listing.truncated ? ' (truncated)' : ''}`;
+            const scopeLabel = `${folder.name ?? kbId}${subpath ? `/${subpath}` : ''}${options.recursive ? ' (recursive)' : ''}`;
+            const header = `${scopeLabel} — ${listing.total_count} file${listing.total_count === 1 ? '' : 's'}${listing.truncated ? ' (truncated)' : ''}`;
             process.stdout.write(`${header}\n`);
             if (files.length === 0 && folders.length === 0) {
               process.stdout.write('  (empty)\n');
@@ -762,8 +778,13 @@ function createFilesDownloadFolderCommand(): Command {
  */
 function createFilesFindCommand(): Command {
   return new Command('find')
-    .description('Search by filename pattern (glob). For content search use `numa files search`.')
-    .argument('<pattern>', "Filename pattern, e.g. '*.pdf' or '**/notes-*.md'")
+    .description(
+      'Search by filename pattern (glob), recursively across all subfolders. For content search use `numa files search`.'
+    )
+    .argument(
+      '<pattern>',
+      "Glob pattern matched against the file path. '*.pdf' finds PDFs at any depth; 'reports/*.csv' and '**/notes-*.md' scope by sub-path."
+    )
     .option('--folder <name-or-id>', 'Narrow to a single folder (defaults to all allowed)')
     .option(
       '-m, --user-message <text>',
@@ -788,7 +809,7 @@ function createFilesFindCommand(): Command {
           const { request } = await buildToolRequest(
             account,
             'retrieve_kb_file',
-            { mode: 'list', kb_id: folder.id, pattern, auto_approved: true },
+            { mode: 'list', kb_id: folder.id, pattern, recursive: true, auto_approved: true },
             folder,
             options.userMessage
           );
@@ -823,8 +844,11 @@ function createFilesFindCommand(): Command {
             if (!Array.isArray(m.files) || m.files.length === 0) continue;
             process.stdout.write(`\n${m.folder.name ?? m.folder.id}:\n`);
             for (const f of m.files) {
-              const entry = f as { name?: string; size?: number; size_formatted?: string };
-              process.stdout.write(`  ${entry.name}${entry.size_formatted ? `  (${entry.size_formatted})` : ''}\n`);
+              const entry = f as { name?: string; relpath?: string; size?: number; size_formatted?: string };
+              // Show the sub-path of nested hits so the user can tell where a
+              // match lives; falls back to the basename at the folder root.
+              const label = entry.relpath ?? entry.name;
+              process.stdout.write(`  ${label}${entry.size_formatted ? `  (${entry.size_formatted})` : ''}\n`);
             }
           }
         },

@@ -41,8 +41,6 @@ from .agent_config import (
     resolve_per_integration_approval_modes,
 )
 from .agent_types import (
-    ALWAYS_COPY,
-    TOOL_FILE_MAP,
     AgentTypeConfig,
     get_agent_type_config,
 )
@@ -90,6 +88,7 @@ from .workspace import (
     get_active_conversation,
     get_workspace_files,
     get_workspace_paths,
+    set_active_agent_id,
     set_active_conversation,
 )
 
@@ -1411,6 +1410,10 @@ async def invocations(request: Request):
     user_sub = _extract_user_sub(request, payload_headers)
     conversation_id = body.get("conversationId") or str(uuid.uuid4())
     user_email = body.get("userEmail", "unknown")
+    # FEAT-243 — capture the agent scope for this request before any S3 sync, so
+    # the agent-workflows library (per-user-per-agent) is synced + injected.
+    # MicroVMs are conversation-pinned, so this is stable for the container life.
+    set_active_agent_id(body.get("agentId"))
 
     # Pull the raw Cognito JWT (already signature-verified by the proxy). Downstream
     # tools that hit identity-aware AWS services — currently Q Business via
@@ -1527,22 +1530,14 @@ async def invocations(request: Request):
             errors=len(sync_result["errors"]),
         )
 
-    # Ensure directories exist + copy enabled tool scripts.
+    # Ensure directories exist.
     # If the workspace filesystem is full or otherwise unwritable, surface the
     # OS error as a structured response (HTTP 200) rather than letting it
     # propagate as an uncaught exception → AgentCore RuntimeClientError 500.
     # The most common case is ENOSPC after a conversation processed multi-GB
     # files; the user has no recourse from a raw RuntimeClientError 500.
-    from .workspace import setup_agent_tools
-
     try:
         ensure_directories()
-        setup_agent_tools(
-            enabled_numa_tools=agent_type_config.enabled_numa_tools,
-            tools_source_dirs=agent_type_config.tools_source_dirs,
-            tool_file_map=TOOL_FILE_MAP,
-            always_copy=ALWAYS_COPY,
-        )
     except OSError as e:
         return _workspace_setup_error_response(
             e, body=body, agent_type_config=agent_type_config
@@ -2471,6 +2466,15 @@ async def _handle_sync(
         agent_type=agent_type_config.type_id,
     )
 
+    # Record the active conversation before the SDK runs. The interactive path
+    # (_handle_chat) does this; sync/scheduled runs must too, or the eager
+    # pre-tool workspace->S3 sync hook (hooks/workspace_sync.py) reads a null
+    # get_active_conversation() and silently no-ops — leaving agent-generated
+    # files un-synced until the post-turn sync, so integration file uploads
+    # (e.g. Slack attach) 404 on a file the agent just created. (BUG-376)
+    if not get_active_conversation():
+        set_active_conversation(conversation_id)
+
     # Extract the same parameters as _handle_chat for SDK options
     feature_flags = body.get("featureFlags", {})
     timezone = body.get("timezone")
@@ -2797,6 +2801,16 @@ async def _handle_fire_and_forget(
         prompt_length=len(prompt),
         agent_type=agent_type_config.type_id,
     )
+
+    # Record the active conversation before the background SDK run starts. The
+    # interactive path (_handle_chat) does this; fire-and-forget (scheduled
+    # agents, V2 apps) must too, or the eager pre-tool workspace->S3 sync hook
+    # (hooks/workspace_sync.py) reads a null get_active_conversation() and
+    # silently no-ops — leaving agent-generated files un-synced until the
+    # post-turn sync, so integration file uploads (e.g. Slack attach) 404 on a
+    # file the agent just created. (BUG-376)
+    if not get_active_conversation():
+        set_active_conversation(conversation_id)
 
     # Extract the same parameters as _handle_chat
     feature_flags = body.get("featureFlags", {})

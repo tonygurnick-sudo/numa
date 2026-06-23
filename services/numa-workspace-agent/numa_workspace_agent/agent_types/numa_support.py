@@ -195,8 +195,6 @@ NUMA_SUPPORT = AgentTypeConfig(
     # in-chat approval prompt before anything leaves the user's mailbox.
     allowed_cli_commands=["files", "web", "integrations"],
     # Reference docs for KB search + web search
-    enabled_numa_tools=["knowledge_search", "web_search"],
-    tools_source_dirs=["numa"],
     plugins_path="/app/plugins/numa",
     # Always and only the per-client Numa Support system KB — ignore whatever
     # folders the request enables so support answers come from support docs.

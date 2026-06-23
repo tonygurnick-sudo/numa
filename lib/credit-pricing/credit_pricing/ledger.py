@@ -16,6 +16,7 @@ Table ``numa-<client>-credit-ledger``:
   PK=CLIENT#<name>  SK=CONFIG                  pushed pricing config (incl. monthlyAllocations)
   GSI1 GSI1PK=USER#<sub>      GSI1SK=TS#<last_ts>  (META rows only — user's convs, newest first)
   GSI2 GSI2PK=MONTH#<YYYY-MM> GSI2SK=CONV#<id>     (META rows only — per-client monthly rollup)
+  GSI3 GSI3PK=AGENT#<agentId> GSI3SK=TS#<last_ts>  (META rows WITH an agentId only — per-agent analytics, FEAT-246)
 
 Top-up balance is an EVENT LOG (no decrementing scalar): balance = sum of TXN ``credits`` (signed).
 ``topup`` (+) and ``adjustment`` (±) are appended; ``settlement`` (−overflow) is written once per
@@ -141,6 +142,12 @@ def meta_item(
         item["tokenCostUsd"] = token_cost_usd
     if agent_id:
         item["agentId"] = agent_id
+        # Sparse GSI3 (per-agent credit analytics, FEAT-246): ONLY rows that carry an agentId — agent
+        # chats + scheduled runs — get GSI3 keys, so plain chat conversations never land in the index.
+        # NOTE: historical rows written before this change have NO GSI3 keys (no v1 backfill), so the
+        # per-agent card view only reflects runs metered after this ships.
+        item["GSI3PK"] = f"AGENT#{agent_id}"
+        item["GSI3SK"] = f"TS#{last_ts or first_ts or ''}"
     if agent_name:
         item["agentName"] = agent_name
     if bedrock_region:

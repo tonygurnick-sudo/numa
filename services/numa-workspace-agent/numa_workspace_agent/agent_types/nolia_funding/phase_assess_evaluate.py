@@ -82,8 +82,6 @@ NOLIA_FUNDING_ASSESS_EVALUATE = AgentTypeConfig(
     enable_numa_mcp=False,
     enable_connect_mcp=False,
     enable_vault_mcp=False,
-    enabled_numa_tools=["extract_content"],
-    tools_source_dirs=["numa"],
     restrict_kbs=True,
     restrict_integrations=True,
     # Evaluate phase iterates over every rule + queries supporting data;

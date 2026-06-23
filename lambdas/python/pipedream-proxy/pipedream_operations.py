@@ -504,32 +504,10 @@ class PipedreamOperations:
 
         Returns a result describing what was deleted or why nothing changed.
         """
-        credentials = self.get_credentials()
-        access_token = self.get_access_token()
-
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "x-pd-environment": credentials["environment"],
-        }
-
-        base_url = f"https://api.pipedream.com/v1/connect/{credentials['project_id']}"
 
         def _delete_single_account(acc_id: str) -> int:
             """Attempt to delete a single account. Returns HTTP status code."""
-            try:
-                resp = requests.delete(
-                    f"{base_url}/accounts/{acc_id}", headers=headers, timeout=15
-                )
-                # Do not raise for status - we interpret 204/404 specially
-                return resp.status_code
-            except Exception as e:  # network or other errors
-                logger.error(
-                    "Delete account request failed",
-                    error=str(e),
-                    account_id=acc_id,
-                    external_user_id=external_user_id,
-                )
-                raise Exception(f"Pipedream delete account error: {str(e)}") from e
+            return self._delete_pipedream_account(acc_id, external_user_id)
 
         # Case 1: Direct by account_id
         if account_id:
@@ -630,6 +608,161 @@ class PipedreamOperations:
 
         # Neither account_id nor app_name provided
         raise ValueError("disconnect_integration requires account_id or app_name")
+
+    def _delete_pipedream_account(self, account_id: str, external_user_id: str) -> int:
+        """DELETE a single Pipedream Connect account; return the HTTP status.
+
+        Callers interpret 204 (deleted now) and 404 (already gone) as success
+        — the operation is idempotent. Any other status is the caller's to
+        handle. Raises only on transport-level failure.
+        """
+        credentials = self.get_credentials()
+        access_token = self.get_access_token()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "x-pd-environment": credentials["environment"],
+        }
+        base_url = f"https://api.pipedream.com/v1/connect/{credentials['project_id']}"
+        try:
+            resp = requests.delete(
+                f"{base_url}/accounts/{account_id}", headers=headers, timeout=15
+            )
+            # Do not raise for status - we interpret 204/404 specially.
+            return resp.status_code
+        except Exception as e:  # network or other errors
+            logger.error(
+                "Delete account request failed",
+                error=str(e),
+                account_id=account_id,
+                external_user_id=external_user_id,
+            )
+            raise Exception(f"Pipedream delete account error: {str(e)}") from e
+
+    def reconcile_app_accounts(
+        self,
+        external_user_id: str,
+        app_name: str,
+        new_account_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Collapse an app's duplicate accounts down to one per identity.
+
+        BUG-380: Pipedream mints a fresh account id (``apn_...``) on every
+        OAuth completion and never dedupes by identity, so connecting the same
+        mailbox twice leaves two live accounts. This deletes the duplicates,
+        keeping ONE account per email (a healthy account beats an
+        unhealthy/dead one; on a tie the oldest by ``created_at`` wins —
+        identical keep-rule to the display dedupe in ``_build_connection_status``).
+
+        Designed to run right after a connect completes, but it is also a valid
+        backlog sweep: it is idempotent (no duplicates → deletes nothing) and
+        never touches genuinely distinct identities, so a user's separate
+        mailboxes are preserved. Accounts with no resolvable identity
+        (empty/``None`` name) are never deleted — we cannot prove they are
+        duplicates.
+
+        When ``new_account_id`` is given we briefly retry the account list
+        until that account exposes a usable name. Pipedream often hasn't
+        populated the name in the first second after connect, and without it we
+        couldn't tell the new account apart from an existing duplicate (the
+        exact failure mode of the old frontend-only guard).
+        """
+        app_connections: List[Dict[str, Any]] = []
+        attempts = 3 if new_account_id else 1
+        for attempt in range(attempts):
+            connections = self._get_user_connections(
+                external_user_id, force_refresh=True
+            )
+            app_connections = [
+                c
+                for c in connections
+                if self._get_app_name_from_pipedream(c) == app_name
+            ]
+            if not new_account_id:
+                break
+            target = next(
+                (c for c in app_connections if c.get("id") == new_account_id),
+                None,
+            )
+            # Stop once the new account is present with a usable name, or we've
+            # run out of attempts.
+            if (target and (target.get("name") or "").strip()) or (
+                attempt == attempts - 1
+            ):
+                break
+            time.sleep(1.0)
+
+        # Oldest first so ties keep the oldest account.
+        app_connections.sort(key=lambda c: c.get("created_at") or "")
+
+        def health_rank(conn: Dict[str, Any]) -> int:
+            if conn.get("dead"):
+                return 0
+            if conn.get("healthy"):
+                return 2
+            return 1
+
+        keeper_by_identity: Dict[str, Dict[str, Any]] = {}
+        to_delete: List[Dict[str, Any]] = []
+        for conn in app_connections:
+            identity = (conn.get("name") or "").strip().lower()
+            if not identity:
+                # Unknown identity — never delete; can't prove it's a dup.
+                continue
+            current = keeper_by_identity.get(identity)
+            if current is None:
+                keeper_by_identity[identity] = conn
+                continue
+            # Duplicate identity: keep the better one, delete the other.
+            if health_rank(conn) > health_rank(current):
+                to_delete.append(current)
+                keeper_by_identity[identity] = conn
+            else:
+                to_delete.append(conn)
+
+        deleted: List[str] = []
+        failed: List[str] = []
+        for conn in to_delete:
+            acc_id = conn.get("id")
+            if not acc_id:
+                continue
+            try:
+                status = self._delete_pipedream_account(acc_id, external_user_id)
+            except Exception:
+                failed.append(acc_id)
+                continue
+            if status in (204, 404):
+                deleted.append(acc_id)
+            else:
+                logger.warning(
+                    "Reconcile failed to delete duplicate account",
+                    external_user_id=external_user_id,
+                    app_name=app_name,
+                    account_id=acc_id,
+                    status=status,
+                )
+                failed.append(acc_id)
+
+        if deleted or failed:
+            # Next status read must reflect the deletions.
+            _USER_CONNECTIONS_CACHE.pop(external_user_id, None)
+
+        logger.info(
+            "Reconciled duplicate accounts",
+            _name="RECONCILE_ACCOUNTS",
+            external_user_id=external_user_id,
+            app_name=app_name,
+            kept=len(keeper_by_identity),
+            deleted=len(deleted),
+            failed=len(failed),
+        )
+
+        return {
+            "external_user_id": external_user_id,
+            "app_name": app_name,
+            "kept_account_ids": [c.get("id") for c in keeper_by_identity.values()],
+            "deleted_account_ids": deleted,
+            "failed_account_ids": failed,
+        }
 
     def list_mcp_tools(
         self, external_user_id: str, app_name: str
@@ -827,6 +960,14 @@ class PipedreamOperations:
                 # Order accounts by creation time (oldest first) so the
                 # "primary" / first-listed account is stable across refreshes.
                 app_connections.sort(key=lambda c: c.get("created_at") or "")
+                # BUG-380: one upstream mailbox can show up 2-3x for a single
+                # user (Pipedream mints a fresh account id on every OAuth
+                # completion and never dedupes by identity). Collapse
+                # same-identity duplicates so the status we report — and the
+                # account count the UI renders — reflects real mailboxes, not
+                # connection attempts. Non-destructive: the dup accounts still
+                # exist in Pipedream; removing them is a separate operation.
+                app_connections = self._dedupe_connections_by_identity(app_connections)
                 accounts = [
                     {
                         "account_id": c.get("id"),
@@ -875,10 +1016,63 @@ class PipedreamOperations:
 
         return connection_status
 
+    @staticmethod
+    def _dedupe_connections_by_identity(
+        connections: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Collapse connections that point at the same upstream identity.
+
+        BUG-380: Pipedream mints a new account id (``apn_...``) on every OAuth
+        completion and never dedupes by identity, so a single mailbox can show
+        up multiple times for one user — and FEAT-019 (multi-account) surfaced
+        the whole backlog that the old single-account view used to hide.
+
+        We key on the account ``name`` (the connected email for OAuth apps),
+        normalized (trimmed + lowercased), and keep ONE entry per identity: a
+        healthy account beats an unhealthy/dead one, and on a tie the earlier
+        entry wins (callers pass the list oldest-first). Connections with no
+        resolvable identity (empty/``None`` name) are passed through untouched
+        — we cannot prove they are duplicates, so we never drop them. Input
+        order is otherwise preserved.
+
+        Display-only and non-destructive: the duplicate accounts still exist
+        in Pipedream; this only collapses them in the status we report.
+        Actually deleting them is a separate, deliberate operation.
+        """
+
+        def health_rank(conn: Dict[str, Any]) -> int:
+            if conn.get("dead"):
+                return 0
+            if conn.get("healthy"):
+                return 2
+            return 1
+
+        result: List[Dict[str, Any]] = []
+        index_by_identity: Dict[str, int] = {}
+        for conn in connections:
+            identity = (conn.get("name") or "").strip().lower()
+            if not identity:
+                # Unknown identity — never collapse; keep as-is.
+                result.append(conn)
+                continue
+            existing_idx = index_by_identity.get(identity)
+            if existing_idx is None:
+                index_by_identity[identity] = len(result)
+                result.append(conn)
+                continue
+            if health_rank(conn) > health_rank(result[existing_idx]):
+                result[existing_idx] = conn
+        return result
+
     def list_actions(self, app_slug: str) -> List[Dict[str, Any]]:
         """List all available actions for an app from the Pipedream Connect API.
 
         Paginates through results to get all actions with their configurable_props.
+
+        Fetches the default (public-registry) listing plus the workspace's
+        privately published custom tools (``registry=private``) — Pipedream
+        excludes custom tools from the default listing, so without the second
+        fetch keys like ``~/pipedrive-add-file`` are undiscoverable.
 
         Args:
             app_slug: The app slug (e.g., "google_drive")
@@ -891,20 +1085,22 @@ class PipedreamOperations:
         project_id = credentials["project_id"]
         environment = credentials["environment"]
 
-        all_actions: List[Dict[str, Any]] = []
-        after_cursor: Optional[str] = None
-        limit = 100
+        def _fetch_all_pages(registry: Optional[str]) -> List[Dict[str, Any]]:
+            collected: List[Dict[str, Any]] = []
+            after_cursor: Optional[str] = None
+            limit = 100
 
-        while True:
-            params: Dict[str, Any] = {
-                "app": app_slug,
-                "component_type": "action",
-                "limit": limit,
-            }
-            if after_cursor:
-                params["after"] = after_cursor
+            while True:
+                params: Dict[str, Any] = {
+                    "app": app_slug,
+                    "component_type": "action",
+                    "limit": limit,
+                }
+                if registry:
+                    params["registry"] = registry
+                if after_cursor:
+                    params["after"] = after_cursor
 
-            try:
                 response = requests.get(
                     f"https://api.pipedream.com/v1/connect/{project_id}/components",
                     headers={
@@ -916,31 +1112,68 @@ class PipedreamOperations:
                 )
                 response.raise_for_status()
                 data = response.json()
-            except Exception as e:
-                logger.error(
-                    "Failed to list actions",
-                    error=str(e),
-                    app_slug=app_slug,
-                    exc_info=True,
-                )
-                raise Exception(
-                    f"Failed to list actions for {app_slug}: {str(e)}"
-                ) from e
 
-            actions = data.get("data", [])
-            all_actions.extend(actions)
+                collected.extend(data.get("data", []))
 
-            page_info = data.get("page_info", {})
-            if page_info.get("count", 0) < limit:
-                break
-            after_cursor = page_info.get("end_cursor")
-            if not after_cursor:
-                break
+                page_info = data.get("page_info", {})
+                if page_info.get("count", 0) < limit:
+                    break
+                after_cursor = page_info.get("end_cursor")
+                if not after_cursor:
+                    break
+
+            return collected
+
+        try:
+            all_actions = _fetch_all_pages(None)
+        except Exception as e:
+            logger.error(
+                "Failed to list actions",
+                error=str(e),
+                app_slug=app_slug,
+                exc_info=True,
+            )
+            raise Exception(f"Failed to list actions for {app_slug}: {str(e)}") from e
+
+        # The registry param is undocumented — if Pipedream changes it, custom
+        # tools drop out but the public listing must keep working.
+        try:
+            private_actions = _fetch_all_pages("private")
+        except Exception as e:
+            logger.warning(
+                "Failed to list private-registry actions",
+                error=str(e),
+                app_slug=app_slug,
+            )
+            private_actions = []
+
+        seen_keys = {a.get("key") for a in all_actions}
+        all_actions.extend(a for a in private_actions if a.get("key") not in seen_keys)
+
+        # Hide Pipedream's private-component "~/" namespace from callers: present
+        # custom tools under their bare key (e.g. "pipedrive-add-file") so the
+        # agent treats them identically to public actions and can't fumble the
+        # "~/" vs filename-sanitized "~_" forms. run_action / configure_props
+        # re-add "~/" at the Pipedream boundary. Guard the (theoretical) case
+        # where a public action already owns the bare key — keep "~/" there to
+        # preserve disambiguation.
+        public_keys = {
+            a.get("key")
+            for a in all_actions
+            if not str(a.get("key", "")).startswith("~/")
+        }
+        for action in all_actions:
+            key = action.get("key", "")
+            if isinstance(key, str) and key.startswith("~/"):
+                bare = key[2:]
+                if bare and bare not in public_keys:
+                    action["key"] = bare
 
         logger.info(
             "Listed actions",
             app_slug=app_slug,
             count=len(all_actions),
+            private_count=len(private_actions),
         )
         return all_actions
 
@@ -1321,6 +1554,45 @@ class PipedreamOperations:
         )
         return all_triggers
 
+    def _post_action_with_namespace_fallback(
+        self,
+        url: str,
+        headers: Dict[str, str],
+        body: Dict[str, Any],
+        timeout: int,
+    ) -> Dict[str, Any]:
+        """POST to a Pipedream actions endpoint, retrying under the private-
+        component ``~/`` namespace if the bare id is not found.
+
+        We hide Pipedream's ``~/`` custom-tool prefix from callers (see
+        ``list_actions``) so the agent treats custom tools like any public
+        action. Pipedream currently resolves a bare custom key (e.g.
+        ``pipedrive-add-file``) to its private component directly, so the first
+        call normally succeeds. This retry is a safety net: if that undocumented
+        bare-key resolution ever regresses to a 404, fall back to the explicit
+        ``~/`` id. Keys already carrying ``~/`` (a stale cached index mid-
+        rollout) also succeed first try since that is Pipedream's real id.
+        """
+        response = requests.post(url, headers=headers, json=body, timeout=timeout)
+        action_id = body.get("id")
+        if (
+            response.status_code == 404
+            and isinstance(action_id, str)
+            and not action_id.startswith("~/")
+        ):
+            logger.info(
+                "Retrying action under private-component namespace",
+                action_key=action_id,
+            )
+            response = requests.post(
+                url,
+                headers=headers,
+                json={**body, "id": f"~/{action_id}"},
+                timeout=timeout,
+            )
+        response.raise_for_status()
+        return response.json()
+
     def run_action(
         self,
         external_user_id: str,
@@ -1374,18 +1646,16 @@ class PipedreamOperations:
                 has_stash_id=bool(stash_id),
             )
 
-            response = requests.post(
+            result = self._post_action_with_namespace_fallback(
                 f"https://api.pipedream.com/v1/connect/{project_id}/actions/run",
-                headers={
+                {
                     "Authorization": f"Bearer {access_token}",
                     "Content-Type": "application/json",
                     "x-pd-environment": environment,
                 },
-                json=body,
+                body,
                 timeout=60,
             )
-            response.raise_for_status()
-            result = response.json()
 
             logger.info(
                 "Action completed",
@@ -1440,7 +1710,13 @@ class PipedreamOperations:
             allowed_account_ids=allowed_account_ids,
         )
 
-        body = {
+        url = f"https://api.pipedream.com/v1/connect/{project_id}/components/configure"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "x-pd-environment": environment,
+        }
+        base_body = {
             "id": action_key,
             "external_user_id": external_user_id,
             "prop_name": prop_name,
@@ -1448,28 +1724,95 @@ class PipedreamOperations:
         }
 
         try:
-            response = requests.post(
-                f"https://api.pipedream.com/v1/connect/{project_id}/components/configure",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Content-Type": "application/json",
-                    "x-pd-environment": environment,
-                },
-                json=body,
-                timeout=30,
+            first = self._post_action_with_namespace_fallback(
+                url, headers, base_body, timeout=30
             )
-            response.raise_for_status()
-            result = response.json()
+
+            # Remote prop options are paginated by Pipedream. The Slack
+            # `conversation` picker returns ~150 per page with channels/DMs
+            # spread across pages, so in a large workspace a target channel
+            # like #sales lands on page 3+ and is invisible to a single-page
+            # fetch. When the response carries a `context.cursor`, follow it
+            # (passing the cursor back as `prev_context`) and merge every page
+            # so callers see the full option set from one call.
+            #
+            # Backwards-compat: if there is NO cursor — the overwhelming
+            # majority of props (drives, small dropdowns, string options,
+            # error envelopes) — return Pipedream's response untouched, exactly
+            # as before. Only genuinely-paginated option lists are merged.
+            cursor = (first.get("context") or {}).get("cursor")
+            if isinstance(first.get("options"), list):
+                opt_key: Optional[str] = "options"
+            elif isinstance(first.get("stringOptions"), list):
+                opt_key = "stringOptions"
+            else:
+                opt_key = None
+
+            if not cursor or opt_key is None:
+                logger.info(
+                    "Configure props completed",
+                    action_key=action_key,
+                    prop_name=prop_name,
+                    external_user_id=external_user_id,
+                    options_count=len(first.get(opt_key, [])) if opt_key else 0,
+                    pages=1,
+                    truncated=False,
+                )
+                return first
+
+            max_pages = 10
+
+            def _val(opt: Any) -> Any:
+                return opt.get("value") if isinstance(opt, dict) else opt
+
+            merged = list(first.get(opt_key) or [])
+            seen: set = set()
+            for opt in merged:
+                try:
+                    seen.add(_val(opt))
+                except TypeError:  # unhashable value → can't dedupe, keep it
+                    pass
+
+            pages = 1
+            while cursor and pages < max_pages:
+                body = {**base_body, "prev_context": {"cursor": cursor}}
+                page = self._post_action_with_namespace_fallback(
+                    url, headers, body, timeout=30
+                )
+                pages += 1
+                for opt in page.get(opt_key) or []:
+                    key = _val(opt)
+                    try:
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                    except TypeError:
+                        pass
+                    merged.append(opt)
+                cursor = (page.get("context") or {}).get("cursor")
+
+            truncated = bool(cursor) and pages >= max_pages
+
+            first[opt_key] = merged
+            # Reflect the true end-state: clear the cursor when exhausted,
+            # preserve it when we stopped at the cap so a caller could resume.
+            ctx = first.get("context")
+            if isinstance(ctx, dict):
+                ctx["cursor"] = cursor if truncated else None
+            if truncated:
+                first["options_truncated"] = True
 
             logger.info(
                 "Configure props completed",
                 action_key=action_key,
                 prop_name=prop_name,
                 external_user_id=external_user_id,
-                options_count=len(result.get("options", [])),
+                options_count=len(merged),
+                pages=pages,
+                truncated=truncated,
             )
 
-            return result
+            return first
 
         except Exception as e:
             logger.error(
@@ -1965,9 +2308,15 @@ class PipedreamOperations:
         if cached and cached[1] > now:
             return cached[0]
 
+        # Custom tools are keyed "~/{app_slug}-{action}" — strip the private-
+        # registry prefix so app-slug derivation works for them; list_actions
+        # includes registry=private results, and the schema match below still
+        # uses the full key.
+        lookup_key = action_key[2:] if action_key.startswith("~/") else action_key
+
         # Extract app_slug from action_key (e.g., "jira-create-issue" -> "jira")
         # Handle compound slugs like "microsoft_outlook_calendar-list-events"
-        parts = action_key.split("-")
+        parts = lookup_key.split("-")
         if not parts:
             return None
 

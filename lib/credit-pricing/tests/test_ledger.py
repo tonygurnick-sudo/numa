@@ -36,6 +36,30 @@ def test_meta_item_keys_and_margin() -> None:
     assert it["creditsCharged"] == 10
     # marginVsConsumption = (10 credits x US$0.30 default) / US$2.50 = 1.2
     assert abs(it["marginVsConsumption"] - 1.2) < 1e-9
+    # plain chat (no agent_id) -> NO GSI3 keys, so it stays out of the per-agent sparse index
+    assert "GSI3PK" not in it and "GSI3SK" not in it
+
+
+def test_meta_item_agent_run_carries_gsi3() -> None:
+    # FEAT-246: an agent / scheduled run (agent_id present) gets sparse GSI3 keys for per-agent analytics
+    it = ledger.meta_item(
+        conversation_id="conv-1",
+        user_sub="u1",
+        month="2026-06",
+        title="Daily revenue digest",
+        msg_count=2,
+        tiers={"medium": 2},
+        dominant_tier="medium",
+        credits_charged=3,
+        credits_value=3,
+        credits_floor=3,
+        consumption_cost_usd=0.5,
+        source="agent",
+        agent_id="agent-xyz",
+        last_ts="2026-06-10T00:00:00Z",
+    )
+    assert it["GSI3PK"] == "AGENT#agent-xyz"
+    assert it["GSI3SK"] == "TS#2026-06-10T00:00:00Z"
 
 
 def test_msg_item_carries_no_content() -> None:
@@ -125,6 +149,7 @@ def test_txn_item_topup_and_settlement() -> None:
 
 if __name__ == "__main__":
     test_meta_item_keys_and_margin()
+    test_meta_item_agent_run_carries_gsi3()
     test_msg_item_carries_no_content()
     test_month_aggregate_margins()
     test_overflow_and_available_balance()

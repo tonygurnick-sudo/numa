@@ -26,11 +26,10 @@ from typing import Any, Optional
 
 import structlog
 
-from .agent_types import ALWAYS_COPY, TOOL_FILE_MAP, get_agent_type_config
+from .agent_types import get_agent_type_config
 from .agent_types.base import AgentTypeConfig
 from .sdk_config import LOCAL_ROOT
 from .sdk_runner import run_claude_sdk
-from .workspace import setup_agent_tools
 
 logger = structlog.get_logger()
 
@@ -275,15 +274,6 @@ async def run_pipeline(
         step_kb_listings = kb_listings
         if step_kbs != available_kbs:
             step_kb_listings = None  # Will be fetched inside run_claude_sdk
-
-        # Set up Numa CLI tools for this step (each step may need different
-        # tools — e.g. researcher needs web_search, validator doesn't)
-        setup_agent_tools(
-            enabled_numa_tools=step_config.enabled_numa_tools,
-            tools_source_dirs=step_config.tools_source_dirs,
-            tool_file_map=TOOL_FILE_MAP,
-            always_copy=ALWAYS_COPY,
-        )
 
         try:
             result = await run_claude_sdk(

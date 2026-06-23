@@ -86,6 +86,12 @@ override.tf.json
 .terraformrc
 terraform.rc
 
+# Terraform provider plugin cache (TF_PLUGIN_CACHE_DIR) — local, large, regenerable
+.tf-plugin-cache/
+
+# numa-cli integration test output artifacts (binaries from tester runs)
+numa-cli/integrations-results/
+
 # Ignore git (& pre-commit) created files
 *.bak
 *.orig

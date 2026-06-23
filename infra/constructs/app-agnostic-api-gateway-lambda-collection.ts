@@ -664,6 +664,18 @@ export class AppAgnosticApiGatewayLambdaCollection extends ApiGatewayLambdaColle
       additionalPolicyStatements: adminCreditsPolicy,
       route: { verb: 'GET', path: 'credits/ledger' },
     });
+    // Per-agent credit analytics for the agent card's Credits section (FEAT-246). NOT billing-admin
+    // gated at the route — the handler returns the caller's OWN agent usage to any user, and the
+    // all-users aggregate + per-user breakdown ONLY when the caller is a billing admin.
+    this.addLambdaFunction(this, 'admin-credits-agent-stats', {
+      addAuthorizer: true,
+      lambdaDirectory: 'node/admin-credits',
+      runtime: 'nodejs22.x',
+      handler: 'index.handler',
+      environment: adminCreditsEnv,
+      additionalPolicyStatements: adminCreditsPolicy,
+      route: { verb: 'GET', path: 'credits/agent-stats' },
+    });
     this.addLambdaFunction(this, 'admin-credits-topup', {
       addAuthorizer: true,
       lambdaDirectory: 'node/admin-credits',

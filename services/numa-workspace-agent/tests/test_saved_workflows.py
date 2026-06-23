@@ -133,3 +133,36 @@ class TestGuardHook:
     def test_noop_for_non_write_edit_tools(self):
         ev = {"tool_name": "Bash", "tool_input": {"command": "ls"}}
         assert _run(workflow_guard_hook(ev, "id", None)) == {}
+
+
+class TestAgentWorkflowsGuard:
+    """FEAT-243 — the guard also validates the agent-scoped library."""
+
+    def test_path_detection_covers_both_libraries(self):
+        from numa_workspace_agent.hooks.workflow_guard import _is_workflow_path
+
+        assert _is_workflow_path("/workdir/chat-workflows/x.py")
+        assert _is_workflow_path("/workdir/agent-workflows/x.py")
+        assert _is_workflow_path("/workdir/agent-workflows/sub/x.py")
+        assert not _is_workflow_path("/workdir/tmp/x.py")
+
+    def test_denies_malformed_agent_workflow_write(self):
+        ev = {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "/workdir/agent-workflows/x.py",
+                "content": "print(1)",
+            },
+        }
+        r = _run(workflow_guard_hook(ev, "id", None))
+        assert r["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+    def test_allows_valid_agent_workflow_write(self):
+        ev = {
+            "tool_name": "Write",
+            "tool_input": {
+                "file_path": "/workdir/agent-workflows/x.py",
+                "content": GOOD,
+            },
+        }
+        assert _run(workflow_guard_hook(ev, "id", None)) == {}

@@ -16,24 +16,30 @@ Bash("numa memory list --json -m 'List all memories'")
 # List memories filtered by scope
 Bash("numa memory list --scope general --json -m 'List general memories'")
 
+# Show a single memory by id
+Bash("numa memory show mem_abc123 --json -m 'Show memory details'")
+
 # Add a general memory
 Bash("numa memory add 'Prefers concise responses' -m 'Save user preference'")
 
 # Add an integration-scoped memory
 Bash("numa memory add 'Jira Cloud ID: abc123-def456' --scope 'integration:jira' -m 'Save Jira config'")
 
-# Update a memory
+# Update a memory (content only — scope cannot be changed)
 Bash("numa memory update mem_abc123 'Prefers concise bullet-point responses' -m 'Update preference'")
 
 # Delete a memory (list first to get the id)
 Bash("numa memory delete mem_abc123 -m 'Delete memory'")
 ```
 
+`numa memory` and `numa memories` are interchangeable. All commands require `-m "..."`. Add `--json` when processing output programmatically. On the write commands (`add`, `update`, `delete`) a `-y` / `--yes` flag skips the local confirmation prompt — only relevant when driving the CLI from a laptop or script; inside the workspace agent (non-TTY) the prompt never fires, so you don't need it.
+
 ## Operations
 
 | Operation | Purpose                                      |
 | --------- | -------------------------------------------- |
 | `list`    | List memories (optionally filtered by scope) |
+| `show`    | Fetch a single memory by id                  |
 | `add`     | Add a new memory                             |
 | `update`  | Update an existing memory's content          |
 | `delete`  | Delete a memory by id                        |
@@ -71,11 +77,35 @@ Bash("numa memory list --scope 'agent:agt_abc123' --json -m 'List agent memories
 JSON response with:
 
 - `memories` - Array of memory objects, each containing:
-  - `id` - Memory ID (e.g., `mem_abc123def456`)
+  - `id` - Memory ID. Two formats in the wild: `mem_<hex>` (AI-created) and bare UUID like `bcde0ba7-4721-...` (older, user-created). Both work in every command — take the id verbatim from this output, never assume a `mem_` prefix when iterating.
   - `content` - The memory text (max 300 characters)
   - `scope` - Scope string (`general`, `integration:jira`, `agent:agt_xyz`)
   - `createdAt` - ISO 8601 timestamp
   - `source` - `"user"` (added via Profile page) or `"ai"` (added by Numa)
+- `total_count` - count of **all** memories regardless of any `--scope` filter — use this to track proximity to the 50-memory cap.
+- `filtered_count` - count after the `--scope` filter is applied (equals `total_count` when no scope is given). Report this when answering a scope-specific "how many" question. An empty/unknown scope returns `filtered_count: 0` and no error.
+
+---
+
+## Show Operation
+
+Fetch a single memory by its id.
+
+### Examples
+
+```
+# Show by mem_ id
+Bash("numa memory show mem_abc123def456 --json -m 'Show memory details'")
+
+# Show a legacy-format (bare UUID) memory
+Bash("numa memory show bcde0ba7-4721-4663-97c2-b775099821e3 --json -m 'Show memory details'")
+```
+
+### Notes
+
+- Returns the **same fields** as a single `list` item — there is no extended detail, history, or metadata beyond what `list` already gives you.
+- Useful only when you already hold an id and want to confirm content without listing everything. Don't call `show` just to verify an `add` succeeded — the `add` response already returns the full memory object.
+- Accepts both id formats. Errors cleanly with `memory 'X' not found` for an unknown id.
 
 ---
 
@@ -108,9 +138,11 @@ Bash("numa memory add 'User wants weekly summaries from this agent' --scope 'age
 
 ### Limits
 
-- Maximum 300 characters per memory
-- Maximum 50 memories total per user
-- All memories added via this tool are tagged with `source: "ai"`
+- Maximum 300 characters per memory. Enforced server-side; the error includes the actual count (`Memory content exceeds 300 characters (got 301)`), so you can surface a clean message instead of counting client-side.
+- Maximum 50 memories total per user (across all scopes). Watch `total_count` in the response.
+- `--scope` defaults to `general` if omitted.
+- Returns the new memory object plus the updated `total_count`.
+- All memories added via this tool are tagged with `source: "ai"`.
 
 ---
 
@@ -134,9 +166,12 @@ Bash("numa memory update mem_abc123def456 'Prefers concise bullet-point response
 
 ### Notes
 
-- You can only update the content; scope and createdAt are preserved
-- Updated memories are tagged with `source: "ai"`
-- To find a memory's ID, use `list` first
+- You can only update the **content**; `scope` and `createdAt` are preserved.
+- **Scope is immutable — there is no `--scope` flag on `update`.** Passing it errors with `unknown option '--scope'`. To move a memory to a different scope, `delete` it and `add` it again with the new scope.
+- Updated memories are tagged with `source: "ai"`.
+- Returns the updated memory object — but **no `total_count`** (unlike `add` and `delete`).
+- The 300-character limit applies to the updated content too.
+- To find a memory's ID, use `list` first.
 
 ---
 
@@ -162,7 +197,7 @@ Bash("numa memory delete mem_abc123def456 -m 'Forget the old reporting cadence'"
 
 - Delete by **ID only** — there is no delete-by-content, so always `list` first to resolve the ID
 - Destructive and irreversible: the command confirms before removing. If there's any ambiguity about which memory, confirm with the user in chat first
-- Returns the remaining memory count on success
+- Returns the **deleted memory object** (handy for confirmation logging) plus the remaining `total_count`
 
 ---
 
@@ -175,6 +210,14 @@ Bash("numa memory delete mem_abc123def456 -m 'Forget the old reporting cadence'"
 | `agent:{agentId}`    | Agent-specific user preferences              | "Wants weekly summaries"    |
 
 Common integration slugs: `jira`, `slack`, `google_drive`, `gmail`, `notion`, `sharepoint`, `hubspot`, `xero`, `outlook`, `teams`
+
+**Scope is fixed at creation.** `update` can't change it — to re-scope a memory, delete it and re-add with the correct scope.
+
+---
+
+## ID Format Note
+
+Memory ids come in two formats: `mem_<hex>` for AI-created memories (e.g. `mem_4584eb8a96eb`) and a bare UUID for older, user-created ones (e.g. `bcde0ba7-4721-4663-97c2-b775099821e3`). Both are accepted by every command. Always take the id straight from `list`/`show` output — never assume a `mem_` prefix or you'll silently skip the legacy-format ones when iterating.
 
 ---
 
@@ -196,6 +239,15 @@ Examples of good confirmation:
 
 Only run the add/update command **after the user confirms**.
 
+### Exception — autonomous (scheduled / agent) runs
+
+When you're running as a scheduled agent, **no user is present to confirm**, so
+the confirm-first rule doesn't apply — saving silently is correct. Apply a higher
+bar instead: _would the next run be slower or wrong without this memory?_ If yes,
+save it (scope it to the agent: `--scope agent:<id>`); if it's marginal, skip it.
+Keep each one short and factual, and update or delete a stale one rather than
+letting near-duplicates pile up toward the 50-memory cap.
+
 ### When to Suggest Adding Memories
 
 **DO suggest adding memories when:**
@@ -203,6 +255,8 @@ Only run the add/update command **after the user confirms**.
 - The user explicitly says "remember this", "keep this in mind", "save this for next time", or semantically similar
 - Working with integrations and discovering useful operational details (cloud IDs, channel IDs, project boards, preferred settings)
 - The user shares a persistent preference about how they like to work
+- The user **corrects you or re-states something you should already have known** ("no, always use the AU entity", "like I told you last time…") — that correction is exactly what a memory prevents next time
+- The user supplies the **same context, IDs, or preferences a second time**, or you **hit an integration gotcha the hard way** (a pagination quirk, a required format, a magic ID) — capture it so the next run doesn't re-learn it
 
 **DO NOT suggest adding memories when:**
 

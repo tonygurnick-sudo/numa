@@ -1,79 +1,161 @@
 # Microsoft Outlook Integration Tips
 
+All Outlook calls go through the `numa integrations` CLI. Pass
+`"microsoft_outlook": {"authProvisionId": "auto"}` as the auth prop — the proxy
+accepts it for every action (the auth key is normalised, so casing doesn't
+matter). Action keys follow `microsoft_outlook-<name>` (run
+`numa integrations pipedream-actions microsoft_outlook` to list them).
+Prop names below are verified against the live schemas — if unsure,
+`numa integrations pipedream-props microsoft_outlook <action>`.
+
+## Account Type Caveat (personal vs M365)
+
+Works with both personal Microsoft accounts (outlook.com/hotmail.com/live.com)
+and organisational Exchange/M365 accounts. **Org-directory features need M365:**
+on a personal account, `find-shared-folder-email` errors (its `userId`
+props-options returns `bad options response for prop: userId` — verified), and
+`list-important-mail` comes back empty (no Focused Inbox scoring). Don't retry
+these on a personal account — they can't work without a tenant directory.
+
 ## Multiple Connected Mailboxes (FEAT-019)
 
-If the **Connected Integrations** section above lists more than one account under `microsoft_outlook`, each one is a separate Outlook mailbox.
+If the **Connected Integrations** section lists more than one `microsoft_outlook` account:
 
-- `"authProvisionId": "auto"` resolves to ONE account only (the oldest). Use it only when context implies "any" / "my Outlook".
-- When the user references multiple mailboxes ("each", "all", "from work and personal", etc.) or names a specific one, iterate by calling `run_action` once per account with the explicit `apn_xxx` from the multi-account list. Don't claim "only one mailbox is connected" without checking.
-- Use the account display name (e.g. "tom@arcanum.ai") when reporting results back, not the apn_xxx.
+- `"authProvisionId": "auto"` resolves to ONE account (the oldest). Use it only when context implies "any" / "my Outlook".
+- When the user references multiple mailboxes ("each", "all", "work and personal") or names a specific one, iterate — call once per account with the explicit `apn_xxx` (passed as `authProvisionId`). Don't claim "only one mailbox is connected" without checking.
+- Report results with the account display name (e.g. "tom@arcanum.ai"), not the apn_xxx.
 
-## Establishing Context
+## Prefer the Consolidated Actions
 
-Before performing Outlook operations, establish context:
+The set includes newer consolidated actions — prefer them over the legacy ones:
 
-- Use `list-folders` to get folder IDs (`Inbox`, `Archive`, `Deleted Items`, etc.) — needed for move operations
-- Use `list-labels` to get available categories — needed for `add-label` operations (`configure_props` returns empty for labels)
+| Prefer                                    | Over                                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| `send-email` (with `isDraft: true`)       | `create-draft-email`                                                    |
+| `send-email` (with `inReplyToMessageId`)  | `reply-to-email`, `create-draft-reply`                                  |
+| `modify-email`                            | `move-email-to-folder`, `add-label-to-email`, `remove-label-from-email` |
+| `save-contact` (with/without `contactId`) | `create-contact`, `update-contact`                                      |
+| `find-contacts`                           | `list-contacts` (when searching by name/email)                          |
 
-## Search vs Filter
+The legacy actions still work and are fine for single-purpose calls.
 
-The `find-email` action supports both `search` and `filter` params, but they **cannot be used together**. Additionally, combining `filter` with `orderBy` causes `InefficientFilter` errors. Use `search` for keyword lookups (supports `subject:`, `from:`, `to:` prefixes), or `filter` alone for OData queries like `contains(subject, 'keyword')`.
+## `modify-email` — multi-op in one call
 
-## Pagination — Follow `@odata.nextLink`, Never Iterate `$skip`
+Applies any combination of mutations in a single Graph call — pass only the props you want to change. Props: `messageId`, `isRead`, `addCategories`, `removeCategories`, `destinationFolderId`, `flagStatus`.
 
-For bulk fetches that span more than one page, use `proxy_request` against the raw Graph endpoint (e.g. `https://graph.microsoft.com/v1.0/me/messages`) and follow the `@odata.nextLink` URL returned in each response. Keep following until the field is absent.
+```bash
+numa integrations pipedream-call microsoft_outlook microsoft_outlook-modify-email \
+  --props '{"microsoft_outlook":{"authProvisionId":"auto"},"messageId":"AAMk...","isRead":true,"addCategories":["Blue category"],"destinationFolderId":"archive","flagStatus":"flagged"}' \
+  -m "Mark read + categorise + archive + flag"
+```
 
-- **Never iterate `$skip=0, 100, 200, ...` manually.** That's a linear scan that costs one approval + one round-trip per page (real example: 91 calls to walk one inbox).
-- **Built-in actions (`find-email`, etc.) strip pagination tokens** — `@odata.nextLink` does not survive `run_action`. If the user needs more than `find-email`'s default page, you have to use `proxy_request`.
-- **Decide your full `$select` field set up front** (e.g. `subject,from,receivedDateTime,bodyPreview,hasAttachments`). Re-walking the same window with a different `$select` doubles the cost.
-- **Use `$top` to control page size** (max 1000 for messages).
+`destinationFolderId` accepts well-known names (`inbox`, `archive`, `deleteditems`, `drafts`, `junkemail`, `sentitems`) or a raw folder ID from `list-folders`.
 
-## Attachments Require Two-Step Lookup
+## ⚠️ Message IDs change on every move
 
-The `find-email` response includes `hasAttachments: true/false` but **NOT** the `attachments[]` array. To download attachments:
+When you move an email — via `move-email-to-folder` **OR** `modify-email` with a `destinationFolderId` — the returned message has a **new `id`**, and the old one is immediately invalid (`ErrorItemNotFound`). Always carry the `id` from the move response into subsequent label/reply/modify calls. (This bites multi-step flows: archive-then-label fails if you reuse the pre-move ID.)
 
-1. Get the `messageId` from `find-email` results
-2. Call `configure_props` for `attachmentId` with the `messageId` to get attachment IDs and filenames
-3. Call `download-attachment` with both `messageId` and `attachmentId`, including `stash_id="NEW"`
+## `send-email` — unified send / draft / reply
 
-## Reply Uses `comment`, Not `content`
+One action covers three modes. Props: `recipients`, `ccRecipients`, `bccRecipients` (string[]), `subject`, `content`, `contentType` (`html`/`text`), `inReplyToMessageId`, `isDraft`, `files`.
 
-The `reply-to-email` action uses `comment` for the reply body, while `send-email` and `create-draft-email` use `content`. This is an easy mistake to make.
+- **New email:** set `recipients`, `subject`, `content`.
+- **Reply:** add `inReplyToMessageId` (threads correctly; no need to re-set recipients/subject).
+- **Draft:** add `isDraft: true` to save to Drafts instead of sending.
 
-## Labels Need `displayName` from `list-labels`
+```bash
+numa integrations pipedream-call microsoft_outlook microsoft_outlook-send-email \
+  --props '{"microsoft_outlook":{"authProvisionId":"auto"},"recipients":["you@example.com"],"subject":"Hello","content":"<p>Hi</p>","contentType":"html","isDraft":true}' \
+  -m "Save Outlook draft"
+```
 
-The `configure_props` for the `label` prop returns empty. Instead, call `list-labels` to get available categories, then use the `displayName` value (e.g., `"Red category"`, `"Blue category"`) in `add-label-to-email`.
+All modes accept `files` for attachments — workspace paths convert automatically (`["/workdir/uploads/report.pdf"]`).
 
-## File Attachments
+**Legacy reply actions use `comment`, not `content`:** `reply-to-email` and `create-draft-reply` put the body in `comment` (whereas `send-email`/`create-draft-email` use `content`). Mixing them up sends a silent empty body.
 
-For `send-email`, `create-draft-email`, and `reply-to-email`, pass workspace paths directly in the `files` array (e.g., `["/workdir/uploads/report.pdf"]`). The system converts them to presigned URLs automatically.
+## `find-email` — search vs filter vs count
 
-## Message IDs Change After Move
+Props: `search`, `filter`, `orderBy`, `isRead`, `folderScope`, `countOnly`, `maxResults`.
 
-When you move an email with `move-email-to-folder`, the returned message has a **new** `id`. The old ID becomes invalid. Always use the ID from the move response for subsequent operations.
+- **`search` and `filter` cannot be combined** → `InefficientFilter` (400). **`filter` + `orderBy`** also fails the same way.
+- **`search` + `isRead` is fine** — the action converts `search` to a `contains(subject,...)` filter and joins it with the read condition. Note this narrows to **subject only** (a bare `$search` also matches body/from).
+- **`countOnly` can't combine with `search`.**
+- Use `folderScope: "inbox"` to keep Sent/Drafts/Junk from inflating counts.
 
-## Email Addresses in Contacts
+```bash
+numa integrations pipedream-call microsoft_outlook microsoft_outlook-find-email \
+  --props '{"microsoft_outlook":{"authProvisionId":"auto"},"isRead":false,"folderScope":"inbox","countOnly":true}' \
+  -m "Count unread inbox messages"
+```
 
-The `emailAddresses` prop accepts a simple string array `["email@example.com"]`, but the API stores it as objects `[{"name": "Email #1", "address": "email@example.com"}]`. The conversion is automatic.
+`find-email` returns metadata only (no body). Use `get-message` with a known `messageId` for the full body and/or attachment list.
 
-## No Delete Actions for Contacts/Emails
+## Attachments — two-step via `get-message`
 
-Use `proxy_request` with `DELETE` method to delete contacts (`/me/contacts/{id}`) or emails (`/me/messages/{id}`). Moving to the "Deleted Items" folder is an alternative for emails.
+`find-email` includes `hasAttachments` but **not** the attachment IDs. To download:
 
-## Download Attachment Requires `stash_id`
+1. `get-message` with `includeAttachments: true` — each entry in `attachments[]` has an `id`:
+   ```bash
+   numa integrations pipedream-call microsoft_outlook microsoft_outlook-get-message \
+     --props '{"microsoft_outlook":{"authProvisionId":"auto"},"messageId":"AAMk...","includeAttachments":true}' \
+     -m "Get message + attachments"
+   ```
+2. `download-attachment` with `messageId` + `attachmentId` (+ `filename`), `--stash-id NEW`:
+   ```bash
+   numa integrations pipedream-call microsoft_outlook microsoft_outlook-download-attachment \
+     --props '{"microsoft_outlook":{"authProvisionId":"auto"},"messageId":"AAMk...","attachmentId":"<ATT_ID>","filename":"report.pdf"}' \
+     --stash-id NEW -m "Download attachment"
+   ```
 
-Always include `stash_id: "NEW"` when calling `download-attachment`. Files land in `/workdir/tmp/integrations-results/` (scratch — hidden from the user's Files page). If the user asked for the attachment as a deliverable, `cp` it to `/workdir/outputs/`.
+`--stash-id NEW` is required for downloads. The file is delivered automatically — reference the `downloaded_files` path (default `/workdir/tmp/integrations-results/`); `cp` to `/workdir/outputs/` if the user wants it. For `text/*` and JSON attachments, `download-attachment` also returns the decoded content inline so you can read it without saving. `convertToPdf: true` converts images/HTML/text/DOCX to PDF.
 
-## Business/Organization Accounts
+## Labels (categories)
 
-### Shared Folder Access
+`list-labels` returns the available categories (Red/Orange/Yellow/Green/Blue/Purple by default). Use the `displayName` (e.g. `"Blue category"`) when categorising — via `modify-email`'s `addCategories`/`removeCategories` (preferred) or the legacy `add-label-to-email`.
 
-The `find-shared-folder-email` action allows accessing other users' mailboxes in the organization:
+The `label` prop on `add-label-to-email` **does** resolve options — `pipedream-props-options` returns the category names as a `stringOptions` array (excluding ones already on that message, so the list is message-dependent). Pass the `displayName` string directly: `{"label": "Blue category"}`.
 
-- Use `configure_props` for `userId` to get a list of organization members
-- Use `configure_props` for `sharedFolderId` with the selected `userId` to get their folders
-- **Important:** Accessing another user's folders requires delegation rights. If you don't have access, `configure_props` returns an empty array for `sharedFolderId`.
+## Contacts — `save-contact` upsert
 
-### Organization User Lookup
+`save-contact` is an upsert: omit `contactId` to create, provide it to update (only the props you pass are changed). Get the `contactId` from `find-contacts` (supports `searchString` by name/email). Props: `givenName`, `surname`, `emailAddresses`, `businessPhones`. `emailAddresses` takes a plain string array (`["a@b.com"]`) — the API stores them as `[{"name":"Email #1","address":"a@b.com"}]` objects, conversion handled for you.
 
-The `userId` prop in `find-shared-folder-email` returns all users in the tenant via `configure_props`. This is useful for identifying shared mailboxes or other users to query (if delegation is configured).
+## Deleting (no built-in delete action)
+
+Use `numa integrations request` with `DELETE`:
+
+```bash
+numa integrations request microsoft_outlook DELETE \
+  "https://graph.microsoft.com/v1.0/me/messages/<MESSAGE_ID>" -m "Delete email"
+numa integrations request microsoft_outlook DELETE \
+  "https://graph.microsoft.com/v1.0/me/contacts/<CONTACT_ID>" -m "Delete contact"
+```
+
+A successful DELETE is `204 No Content` — the proxy returns it as `{"binary": true, "base64_body": "", "size": 0}`. That `size: 0` + `binary: true` shape **is success**, not an error.
+
+## Pagination — follow `@odata.nextLink` verbatim
+
+For bulk fetches use `numa integrations request` against the raw Graph endpoint and follow the `@odata.nextLink` URL on each response until it's absent:
+
+```bash
+numa integrations request microsoft_outlook GET \
+  "https://graph.microsoft.com/v1.0/me/messages?\$top=100&\$select=subject,from,receivedDateTime,bodyPreview,hasAttachments" \
+  -m "Walking the inbox"
+```
+
+- **Follow the returned `nextLink` URL verbatim.** It contains `$skip` plus query state — do **not** hand-construct your own `$skip` offsets (a manual linear scan costs one approval + round-trip per page).
+- Built-in actions (`find-email`) strip the pagination token, so `pipedream-call` can't page past its single call — use `request`.
+- Decide your full `$select` set up front (`$top` max 1000 for messages).
+
+## Shared mailboxes (M365/Exchange only)
+
+`find-shared-folder-email` accesses other users' mailboxes — resolve `userId` (org members), then `sharedFolderId` for that user. Requires delegation rights. **Fails on personal accounts** (the `userId` resolver returns `bad options response`). For org accounts:
+
+```bash
+numa integrations pipedream-props-options microsoft_outlook \
+  microsoft_outlook-find-shared-folder-email userId \
+  --configured '{"microsoft_outlook":{"authProvisionId":"auto"}}' -m "List org users"
+```
+
+## `approve-workflow`
+
+A Pipedream workflow-orchestration primitive (suspends a flow until someone clicks an approval link). Not a Numa-native concept — generally not useful here.

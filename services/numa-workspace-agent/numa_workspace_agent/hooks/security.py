@@ -410,8 +410,15 @@ def normalize_path(path: str, cwd: str = WORKSPACE_ROOT) -> str:
 # the full payload here and tells the model to Read it. Pre-allowlist these paths
 # so the SDK and the hook don't contradict each other; everything else under
 # /workdir/.system/ stays blocked (memory paths, trace files, session state).
+#
+# Match ANY single filename component (no extension constraint): the SDK writes
+# `.txt` sidecars for plain-text tool output (e.g. Bash stdout) and `.json` only
+# for JSON payloads. An earlier `\.json$` constraint silently blocked every `.txt`
+# sidecar, so the model was handed a path it then couldn't Read. `[^/]+` still
+# forbids nested subdirs, and is_blocked_path matches against the realpath so `..`
+# traversal out of tool-results/ is already resolved away before we get here.
 SDK_TOOL_RESULT_ALLOWLIST = re.compile(
-    r"^/workdir/\.system/\.claude/projects/[^/]+/tool-results/[^/]+\.json$"
+    r"^/workdir/\.system/\.claude/projects/[^/]+/tool-results/[^/]+$"
 )
 
 # Skill helper scripts ship read-only under /app/plugins/numa/skills/<skill>/helpers/.

@@ -648,6 +648,128 @@ class TestTriggerOperationsMethods(unittest.TestCase):
         self.assertTrue(result.get("already_gone"))
 
 
+class TestPipedreamReconcile(unittest.TestCase):
+    """BUG-380: reconcile_app_accounts collapses same-email duplicates."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:test",
+            "SUPPORTED_INTEGRATIONS": '["slack", "gmail"]',
+            "ENVIRONMENT": "test",
+        }
+        env_patcher = patch.dict(os.environ, self.env_vars)
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+        self.ops = PipedreamOperations()
+
+    @staticmethod
+    def _conn(
+        acc_id: str,
+        name: object,
+        created_at: str,
+        healthy: object = True,
+        dead: object = None,
+        slug: str = "gmail",
+    ) -> dict:
+        return {
+            "id": acc_id,
+            "name": name,
+            "healthy": healthy,
+            "dead": dead,
+            "created_at": created_at,
+            "app": {"name_slug": slug},
+        }
+
+    @patch.object(PipedreamOperations, "_delete_pipedream_account", return_value=204)
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_reconcile_ian_mmrc_gmail_shape(
+        self, mock_conns: Mock, mock_delete: Mock
+    ) -> None:
+        # Two nziandoc@gmail.com (true dup) + one distinct pro@mmrc.org.nz.
+        mock_conns.return_value = [
+            self._conn("apn_arhQxd7", "nziandoc@gmail.com", "2026-05-30T00:33:14.000Z"),
+            self._conn("apn_MGhdolK", "nziandoc@gmail.com", "2026-05-30T01:01:44.000Z"),
+            self._conn("apn_arhZp4A", "pro@mmrc.org.nz", "2026-06-20T22:52:03.000Z"),
+        ]
+        result = self.ops.reconcile_app_accounts("mmrc_user", "gmail")
+        # Newer nziandoc dup deleted; oldest nziandoc + the distinct pro kept.
+        self.assertEqual(result["deleted_account_ids"], ["apn_MGhdolK"])
+        self.assertCountEqual(
+            result["kept_account_ids"], ["apn_arhQxd7", "apn_arhZp4A"]
+        )
+        mock_delete.assert_called_once_with("apn_MGhdolK", "mmrc_user")
+
+    @patch.object(PipedreamOperations, "_delete_pipedream_account", return_value=204)
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_reconcile_rolls_back_newly_connected_duplicate(
+        self, mock_conns: Mock, _mock_delete: Mock
+    ) -> None:
+        mock_conns.return_value = [
+            self._conn("apn_old", "a@b.com", "2026-01-01T00:00:00.000Z"),
+            self._conn("apn_new", "a@b.com", "2026-02-01T00:00:00.000Z"),
+        ]
+        result = self.ops.reconcile_app_accounts(
+            "c_user", "gmail", new_account_id="apn_new"
+        )
+        # The just-connected dup is rolled back; the original is kept.
+        self.assertIn("apn_new", result["deleted_account_ids"])
+        self.assertEqual(result["kept_account_ids"], ["apn_old"])
+
+    @patch.object(PipedreamOperations, "_delete_pipedream_account", return_value=204)
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_reconcile_prefers_healthy_over_dead(
+        self, mock_conns: Mock, _mock_delete: Mock
+    ) -> None:
+        # Oldest is dead; the keep-rule must prefer the healthy one anyway.
+        mock_conns.return_value = [
+            self._conn(
+                "apn_dead",
+                "a@b.com",
+                "2026-01-01T00:00:00.000Z",
+                healthy=False,
+                dead=True,
+            ),
+            self._conn(
+                "apn_live",
+                "a@b.com",
+                "2026-02-01T00:00:00.000Z",
+                healthy=True,
+                dead=False,
+            ),
+        ]
+        result = self.ops.reconcile_app_accounts("c_user", "gmail")
+        self.assertEqual(result["deleted_account_ids"], ["apn_dead"])
+        self.assertEqual(result["kept_account_ids"], ["apn_live"])
+
+    @patch.object(PipedreamOperations, "_delete_pipedream_account", return_value=204)
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_reconcile_never_deletes_unresolvable_identity(
+        self, mock_conns: Mock, mock_delete: Mock
+    ) -> None:
+        # Null/empty names can't be proven duplicates — never delete them.
+        mock_conns.return_value = [
+            self._conn("apn_1", None, "2026-01-01T00:00:00.000Z"),
+            self._conn("apn_2", "", "2026-02-01T00:00:00.000Z"),
+        ]
+        result = self.ops.reconcile_app_accounts("c_user", "gmail")
+        self.assertEqual(result["deleted_account_ids"], [])
+        mock_delete.assert_not_called()
+
+    @patch.object(PipedreamOperations, "_delete_pipedream_account", return_value=204)
+    @patch.object(PipedreamOperations, "_get_user_connections")
+    def test_reconcile_idempotent_when_no_duplicates(
+        self, mock_conns: Mock, mock_delete: Mock
+    ) -> None:
+        mock_conns.return_value = [
+            self._conn("apn_1", "a@b.com", "2026-01-01T00:00:00.000Z"),
+            self._conn("apn_2", "c@d.com", "2026-02-01T00:00:00.000Z"),
+        ]
+        result = self.ops.reconcile_app_accounts("c_user", "gmail")
+        self.assertEqual(result["deleted_account_ids"], [])
+        mock_delete.assert_not_called()
+        self.assertCountEqual(result["kept_account_ids"], ["apn_1", "apn_2"])
+
+
 class TestPipedreamOperations(unittest.TestCase):
     """Test cases for PipedreamOperations class."""
 
@@ -1105,6 +1227,123 @@ class TestGetUserConnectionsPagination(unittest.TestCase):
                 ops._get_user_connections("user123")
 
         self.assertIn("Failed to fetch connections", str(context.exception))
+
+
+class TestConfigurePropsPagination(unittest.TestCase):
+    """configure_props follows Pipedream's remote-option cursor and merges
+    all pages — so large Slack workspaces surface every channel (e.g. #sales
+    living on page 3), not just the first 150."""
+
+    def setUp(self) -> None:
+        self.env_vars = {
+            "SECURITY_MAPPING_TABLE": "pipedream-security-mapping",
+            "ALLOWED_ACCOUNTS_TABLE": "pipedream-allowed-accounts",
+            "PIPEDREAM_SECRET_ARN": "arn:aws:secretsmanager:us-east-1:123456789012:secret:test",
+            "SUPPORTED_INTEGRATIONS": '["slack", "gmail"]',
+            "ENVIRONMENT": "test",
+        }
+
+    def _ops(self) -> "PipedreamOperations":
+        with patch.dict(os.environ, self.env_vars):
+            return PipedreamOperations()
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="t")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch.object(
+        PipedreamOperations,
+        "_inject_auth_provision_id",
+        side_effect=lambda _eu, _ak, props, allowed_account_ids=None: props,
+    )
+    @patch.object(PipedreamOperations, "_post_action_with_namespace_fallback")
+    def test_follows_cursor_and_merges(
+        self, mock_post, _inject, _creds, _token
+    ) -> None:
+        mock_post.side_effect = [
+            {
+                "options": [{"label": "general", "value": "C1"}],
+                "context": {"cursor": "cur1"},
+            },
+            {
+                "options": [{"label": "random", "value": "C2"}],
+                "context": {"cursor": "cur2"},
+            },
+            {
+                "options": [{"label": "sales", "value": "C3"}],
+                "context": {"cursor": None},  # last page
+            },
+        ]
+
+        result = self._ops().configure_props(
+            "hq_user", "slack-send-message", "conversation", {"slack": {}}
+        )
+
+        values = [o["value"] for o in result["options"]]
+        self.assertEqual(values, ["C1", "C2", "C3"])  # #sales (C3) included
+        self.assertEqual(mock_post.call_count, 3)
+        self.assertIsNone(result["context"]["cursor"])  # cleared when exhausted
+        self.assertNotIn("options_truncated", result)
+        # second call must carry the page-1 cursor as prev_context
+        second_body = mock_post.call_args_list[1][0][2]
+        self.assertEqual(second_body.get("prev_context"), {"cursor": "cur1"})
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="t")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch.object(
+        PipedreamOperations,
+        "_inject_auth_provision_id",
+        side_effect=lambda _eu, _ak, props, allowed_account_ids=None: props,
+    )
+    @patch.object(PipedreamOperations, "_post_action_with_namespace_fallback")
+    def test_caps_at_ten_pages(self, mock_post, _inject, _creds, _token) -> None:
+        # Every page returns a fresh cursor → would loop forever without the cap.
+        mock_post.side_effect = [
+            {
+                "options": [{"label": f"c{i}", "value": f"C{i}"}],
+                "context": {"cursor": f"cur{i}"},
+            }
+            for i in range(20)
+        ]
+
+        result = self._ops().configure_props(
+            "hq_user", "slack-send-message", "conversation", {"slack": {}}
+        )
+
+        self.assertEqual(mock_post.call_count, 10)  # max_pages
+        self.assertEqual(len(result["options"]), 10)
+        self.assertTrue(result["options_truncated"])
+        self.assertIsNotNone(result["context"]["cursor"])  # preserved for resume
+
+    @patch.object(PipedreamOperations, "get_access_token", return_value="t")
+    @patch.object(
+        PipedreamOperations,
+        "get_credentials",
+        return_value={"project_id": "prj_123", "environment": "development"},
+    )
+    @patch.object(
+        PipedreamOperations,
+        "_inject_auth_provision_id",
+        side_effect=lambda _eu, _ak, props, allowed_account_ids=None: props,
+    )
+    @patch.object(PipedreamOperations, "_post_action_with_namespace_fallback")
+    def test_single_page_no_cursor(self, mock_post, _inject, _creds, _token) -> None:
+        mock_post.side_effect = [
+            {"options": [{"label": "general", "value": "C1"}], "context": {}}
+        ]
+
+        result = self._ops().configure_props(
+            "hq_user", "slack-send-message", "conversation", {"slack": {}}
+        )
+
+        self.assertEqual(mock_post.call_count, 1)
+        self.assertEqual(len(result["options"]), 1)
 
 
 class TestBuildConnectionStatusNewFields(unittest.TestCase):

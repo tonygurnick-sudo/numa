@@ -13,6 +13,7 @@ import {
   FolderOpen,
   Pencil,
   Search,
+  ShieldCheck,
   Star,
   Store,
   Trash2,
@@ -26,6 +27,8 @@ import { useKnowledgeBase } from '../../Providers/KnowledgeBaseProvider';
 import AgentAvatar from './AgentAvatar';
 import { CollapsibleTagRow } from '../Inputs/CollapsibleTagRow';
 import { downloadAgentExport, serializeAgentSummaryToExport } from '../../utils/agentExport';
+import { getFlag } from '../../utils/featureFlags';
+import AgentCreditsSection from './AgentCreditsSection';
 
 type AgentCardProps = {
   agent: AgentSummary;
@@ -134,11 +137,16 @@ export const AgentCard = ({
     return kb?.kb_name || kbId;
   };
 
+  // FEAT-206 — Arcanum-managed (centrally deployed, read-only here).
+  const isManaged = agent.managedBy === 'arcanum';
+
   const autoMode = agent.toolsConfig?.autoToolsEnabled;
   const hasWeb = autoMode || agent.toolsConfig?.webSearchEnabled;
   // In auto mode, the agent creation tool is also available
   const hasAgentCreation = autoMode || agent.toolsConfig?.createAgentEnabled;
   const canFavorite = Boolean(onToggleFavorite);
+  // Per-agent credit analytics (FEAT-246) — a collapsible Credits section, gated on SHOW_CREDITS.
+  const creditsEnabled = getFlag('SHOW_CREDITS');
 
   // Compute allowed KBs for display
   const getAllowedKBs = (): string[] | 'all' | 'none' => {
@@ -254,6 +262,16 @@ export const AgentCard = ({
                   <span className="text-muted small" style={{ fontSize: '0.7rem', flexShrink: 0 }}>
                     <User size={11} className="me-1" />
                     {t('card.visibility.personal')}
+                  </span>
+                )}
+
+                {isManaged && (
+                  <span
+                    className="small d-inline-flex align-items-center"
+                    style={{ fontSize: '0.7rem', flexShrink: 0, color: 'var(--brand-primary, var(--color-primary))' }}
+                  >
+                    <ShieldCheck size={11} className="me-1" />
+                    {t('card.managed.badge')}
                   </span>
                 )}
 
@@ -477,6 +495,20 @@ export const AgentCard = ({
                     <User size={12} className="me-1" />
                     {t('card.visibility.personal')}
                   </span>
+                )}
+                {isManaged && (
+                  <OverlayTrigger
+                    placement="top"
+                    overlay={<Tooltip id={`managed-${agent.agentId}`}>{t('card.managed.tooltip')}</Tooltip>}
+                  >
+                    <span
+                      className="small d-inline-flex align-items-center"
+                      style={{ fontSize: '0.75rem', color: 'var(--brand-primary, var(--color-primary))' }}
+                    >
+                      <ShieldCheck size={12} className="me-1" />
+                      {t('card.managed.badge')}
+                    </span>
+                  </OverlayTrigger>
                 )}
               </div>
             </div>
@@ -707,6 +739,11 @@ export const AgentCard = ({
             </div>
           </div>
         </div>
+
+        {/* Per-agent Credits analytics (FEAT-246) — collapsible, lazy-loaded on expand,
+            gated on SHOW_CREDITS. Shows the caller's own usage; a billing admin viewing a
+            company (public) agent additionally sees the all-users aggregate + top users. */}
+        {creditsEnabled && <AgentCreditsSection agentId={agent.agentId} visibility={agent.visibility} />}
 
         {/* Action buttons — body click on the Card starts chat (see Card onClick),
             so the explicit "Chat" button is no longer rendered. Every button here

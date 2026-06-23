@@ -397,7 +397,7 @@
     "title": "Choose connection method",
     "intro": "This service is available through both Numa's native connector and Pipedream. Pick whichever fits your needs.",
     "switchTitle": "Switch connection method",
-    "switchIntro": "Your existing connection will be disconnected first. Any agents or automations relying on it will need to be reconnected.",
+    "switchIntro": "Your existing connection will be disconnected first, then you'll set up the new method.",
     "nativeHeading": "Connect natively",
     "nativeBody": "Stays in Numa. Numa connects directly to the service — your credentials and the data accessed live in your Numa workspace, with no third party in between.",
     "pipedreamHeading": "Connect via Pipedream",
