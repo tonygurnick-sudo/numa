@@ -388,7 +388,8 @@ type Ticket = {
   sourceAppType?: string | null;
   commentCount: number;
   linkCount: number;
-  archived: boolean;
+  deletedAt?: string | null; // set when soft-deleted (Trash); cleared on restore (BUG-369)
+  deletedBy?: string | null;
   version: number; // optimistic locking
   order: number; // position within stage
   createdBy: string;

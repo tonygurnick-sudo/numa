@@ -24,9 +24,11 @@ import { SaveViewModal, LoadViewDropdown } from './SavedViewsDropdown';
 import { BulkEditPanel } from './BulkEditPanel';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import ContextMenu from '../ContextMenu';
+import { getCompletedWorkUnitIds, isOldOrCompletedWork } from '../opsWorkFilters';
 import { StaffAvatar } from '../Shared/StaffAvatar';
 import type { Ticket, SavedFilter, Customer } from '../../../types/ops';
 import { getTicketTypeIconClass } from '../../../constants/opsConstants';
+import './AllTicketsView.css';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -236,7 +238,8 @@ export function AllTicketsView(): React.JSX.Element {
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>({});
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
+  // Show completed / past-sprint work in the list (off by default). (BUG-369)
+  const [showOldWork, setShowOldWork] = useState(false);
 
   // ── Scope: This Board vs All Boards ────────────────────────────────────
   const [scope, setScope] = useState<ScopeMode>(
@@ -256,7 +259,7 @@ export function AllTicketsView(): React.JSX.Element {
     let cancelled = false;
     setAllBoardsLoading(true);
 
-    Promise.all(boards.map((tm) => OpsService.listTickets(numaGet, { boardId: tm.id, includeArchived: true })))
+    Promise.all(boards.map((tm) => OpsService.listTickets(numaGet, { boardId: tm.id })))
       .then((responses) => {
         if (cancelled) return;
         const combined = responses.flatMap((r) => r.tickets);
@@ -634,16 +637,18 @@ export function AllTicketsView(): React.JSX.Element {
     return map;
   }, [columns, boardColumn]);
 
-  // ── Source tickets (archived filter + scope + my-work filter) ──────────────────────
+  // ── Source tickets (old-work toggle + scope + my-work filter) ──────────────────────
   const sourceTickets: Ticket[] = useMemo(() => {
+    const completedWuIds = getCompletedWorkUnitIds(workUnits);
     let base = scope === 'allBoards' ? allBoardsTickets : tickets;
-    if (!showArchived) base = base.filter((tk) => !tk.archived);
+    // Hide completed / past-sprint work unless the user opts in. (BUG-369)
+    if (!showOldWork) base = base.filter((tk) => !isOldOrCompletedWork(tk, completedWuIds));
     const userSub = user?.decoded_tokens?.idToken?.sub;
     if (myWorkFilter && userSub) {
       base = base.filter((tk) => tk.assigneeId && tk.assigneeId === userSub);
     }
     return base;
-  }, [tickets, allBoardsTickets, scope, showArchived, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
+  }, [tickets, allBoardsTickets, scope, showOldWork, workUnits, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
 
   // ── Search filter ───────────────────────────────────────────────────────
   const searchedTickets = useMemo(() => {
@@ -955,14 +960,6 @@ export function AllTicketsView(): React.JSX.Element {
           case 'copyLink':
             await navigator.clipboard.writeText(`${window.location.origin}/ops?ticket=${ticket.displayId}`);
             break;
-          case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.boardId);
-            await refreshTickets();
-            break;
-          case 'unarchive':
-            await OpsService.unarchiveTicket(numaPut, ticket.id, ticket.version, ticket.boardId);
-            await refreshTickets();
-            break;
           case 'delete':
             await OpsService.deleteTicket(numaDelete, ticket.id, ticket.boardId);
             await refreshTickets();
@@ -1154,13 +1151,14 @@ export function AllTicketsView(): React.JSX.Element {
           {/* Spacer */}
           <div className="flex-grow-1" />
 
-          {/* Show Archived toggle (subtle) */}
+          {/* Show completed/old work toggle (subtle) */}
           <Form.Check
             type="switch"
-            id="show-archived-toggle"
-            label={<span className="text-muted small">{t('archive.showArchived')}</span>}
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
+            id="show-old-work-toggle"
+            className="ops-inline-switch"
+            label={<span className="text-muted small">{t('filters.showOldWork')}</span>}
+            checked={showOldWork}
+            onChange={(e) => setShowOldWork(e.target.checked)}
           />
 
           {/* Selection count */}

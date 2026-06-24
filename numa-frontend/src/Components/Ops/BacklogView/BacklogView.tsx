@@ -19,6 +19,7 @@ import { useAuth } from '../../../Providers/AuthProvider';
 import { useConfirm } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
+import { getCompletedWorkUnitIds, isOldOrCompletedWork } from '../opsWorkFilters';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
 import { CreateWorkUnitModal, StartWorkUnitModal, WorkUnitSuccessModal } from '../Modals/WorkUnitModals';
@@ -777,15 +778,18 @@ const BacklogView = () => {
 
   const firstBacklogZoneId = useMemo(() => zones.find((z) => z.zoneType === 'backlog')?.id ?? '', [zones]);
 
-  // ── All tickets in backlog zones (exclude archived, apply my-work filter) ────────
+  // ── All tickets in backlog zones (exclude completed/past-sprint work, apply my-work filter) ────────
   const backlogTickets = useMemo(() => {
-    let result = tickets.filter((tk) => backlogZoneIds.has(tk.zoneId) && !tk.archived);
+    // The backlog is for upcoming work — never show completed or past-sprint
+    // tickets here. (BUG-369)
+    const completedWuIds = getCompletedWorkUnitIds(workUnits);
+    let result = tickets.filter((tk) => backlogZoneIds.has(tk.zoneId) && !isOldOrCompletedWork(tk, completedWuIds));
     const userSub = user?.decoded_tokens?.idToken?.sub;
     if (myWorkFilter && userSub) {
       result = result.filter((tk) => tk.assigneeId && tk.assigneeId === userSub);
     }
     return result;
-  }, [tickets, backlogZoneIds, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
+  }, [tickets, backlogZoneIds, workUnits, myWorkFilter, user?.decoded_tokens?.idToken?.sub]);
 
   // ── Filtered tickets (search + assignee + type + priority) ────
   const filteredTickets = useMemo(() => {
@@ -1140,20 +1144,6 @@ const BacklogView = () => {
     },
     [selectedTickets, bulkActing, allStages, numaPost, refreshTickets]
   );
-
-  const handleBulkArchive = useCallback(async () => {
-    if (selectedTickets.length === 0 || bulkActing) return;
-    setBulkActing(true);
-    try {
-      await Promise.all(selectedTickets.map((tk) => OpsService.archiveTicket(numaPut, tk.id, tk.version, tk.boardId)));
-      setSelectedIds(new Set());
-      await refreshTickets();
-    } catch (err) {
-      console.error('[BacklogView] Bulk archive failed:', err);
-    } finally {
-      setBulkActing(false);
-    }
-  }, [selectedTickets, bulkActing, numaPut, refreshTickets]);
 
   const handleBulkDelete = useCallback(async () => {
     if (selectedTickets.length === 0 || bulkActing) return;
@@ -1904,11 +1894,6 @@ const BacklogView = () => {
                 )}
               </div>
             )}
-
-            <button type="button" className="bulk-action" disabled={bulkActing} onClick={handleBulkArchive}>
-              <i className="bi bi-archive" />
-              {t('archive.archive')}
-            </button>
 
             <button
               type="button"

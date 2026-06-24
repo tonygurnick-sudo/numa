@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useOps } from './OpsContext';
+import { getCompletedWorkUnitIds, isHiddenFromBoard } from './opsWorkFilters';
 
 /**
  * ZoneSprintStrip — zone navigation pills for OpsHeader Row 2.
@@ -16,12 +17,14 @@ const ZoneSprintStrip = () => {
 
   // ── Zone ticket counts + completion stats ───────────────────────────
   const zoneStats = useMemo(() => {
+    const completedWuIds = getCompletedWorkUnitIds(workUnits);
     const map = new Map<string, { count: number; done: number }>();
     for (const zone of zones) {
       map.set(zone.id, { count: 0, done: 0 });
     }
     for (const tk of tickets) {
-      if (tk.archived) continue;
+      // Past-sprint + legacy-archived work is hidden from the board, so keep it out of counts.
+      if (isHiddenFromBoard(tk, completedWuIds)) continue;
       const entry = map.get(tk.zoneId);
       if (entry) {
         entry.count += 1;
@@ -31,7 +34,7 @@ const ZoneSprintStrip = () => {
       }
     }
     return map;
-  }, [zones, tickets]);
+  }, [zones, tickets, workUnits]);
 
   const workUnitById = useMemo(() => {
     const map = new Map<string, (typeof workUnits)[number]>();

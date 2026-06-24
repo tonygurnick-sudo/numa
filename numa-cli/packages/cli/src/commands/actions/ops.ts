@@ -77,6 +77,7 @@ const VALID_OPS = [
   'create_ticket',
   'update_ticket',
   'delete_ticket',
+  'restore_ticket',
   'bulk_update_tickets',
   'add_comment',
   'upload_attachment',

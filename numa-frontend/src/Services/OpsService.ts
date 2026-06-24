@@ -268,7 +268,8 @@ export const listTickets = async (
     sort?: string;
     limit?: number;
     cursor?: string;
-    includeArchived?: boolean;
+    // Admin/owner-only: include soft-deleted tickets (for the Trash/Deleted view). (BUG-369)
+    includeDeleted?: boolean;
   }
 ): Promise<TicketListResponse> => {
   const params = cleanParams({
@@ -286,7 +287,7 @@ export const listTickets = async (
     sort: options?.sort,
     limit: options?.limit,
     cursor: options?.cursor,
-    includeArchived: options?.includeArchived ? 'true' : undefined,
+    includeDeleted: options?.includeDeleted ? 'true' : undefined,
   });
   const response = (await numaGet(`${BASE_URL}/tickets`, params)) as TicketListResponse;
   return { tickets: response?.tickets ?? [], cursor: response?.cursor ?? null };
@@ -326,27 +327,13 @@ export const deleteTicket = async (numaDelete: NumaDelete, ticketId: string, boa
   await numaDelete(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}${query}`);
 };
 
-export const restoreTicket = async (numaPost: NumaPost, ticketId: string): Promise<Ticket> => {
-  const response = (await numaPost(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/restore`)) as TicketResponse;
+// Restore a soft-deleted ticket. boardId is required — the backend uses it to
+// locate the ticket and to resolve the team's default stage. (BUG-369)
+export const restoreTicket = async (numaPost: NumaPost, ticketId: string, boardId: string): Promise<Ticket> => {
+  const response = (await numaPost(`${BASE_URL}/tickets/${encodeURIComponent(ticketId)}/restore`, {
+    boardId,
+  })) as TicketResponse;
   return response.ticket;
-};
-
-export const archiveTicket = async (
-  numaPut: NumaPut,
-  ticketId: string,
-  version: number,
-  boardId?: string
-): Promise<Ticket> => {
-  return updateTicket(numaPut, ticketId, { archived: true, version, boardId });
-};
-
-export const unarchiveTicket = async (
-  numaPut: NumaPut,
-  ticketId: string,
-  version: number,
-  boardId?: string
-): Promise<Ticket> => {
-  return updateTicket(numaPut, ticketId, { archived: false, version, boardId });
 };
 
 export const bulkUpdateTickets = async (numaPost: NumaPost, payload: BulkUpdateTicketsPayload): Promise<void> => {
