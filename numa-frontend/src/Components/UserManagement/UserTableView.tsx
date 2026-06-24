@@ -45,7 +45,9 @@ export function UserTableView({
         title={isSystemUser ? t('table.systemUserTitle') : ''}
       >
         <td style={{ width: '40%' }}>
-          {user.email}
+          {/* Fall back to username when email is missing (SSO users with no email claim) so the
+              row isn't rendered blank and stays actionable. (BUG-382) */}
+          {user.email || user.username}
           {isSystemUser && <small className="ms-2 fst-italic">{t('table.systemBadge')}</small>}
           {isCurrentUser && <small className="ms-2 fst-italic">{t('table.youBadge')}</small>}
         </td>

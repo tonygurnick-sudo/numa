@@ -318,7 +318,10 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
     // Apply search filter
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      result = result.filter((user) => user.email.toLowerCase().includes(term));
+      // Guard against users with no email (e.g. SSO/federated users whose IdP omitted the
+      // email claim). `?.` short-circuits the whole chain to undefined (falsy) instead of
+      // throwing, so one emailless user can't crash the search filter. (BUG-383)
+      result = result.filter((user) => user.email?.toLowerCase().includes(term));
     }
 
     // Apply role filter
@@ -340,7 +343,8 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
           comparison = new Date(a.created).getTime() - new Date(b.created).getTime();
           break;
         case 'email':
-          comparison = a.email.localeCompare(b.email);
+          // Nullish-coalesce so an emailless user doesn't throw during sort. (BUG-382/383)
+          comparison = (a.email ?? '').localeCompare(b.email ?? '');
           break;
       }
 

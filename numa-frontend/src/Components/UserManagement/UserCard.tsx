@@ -25,8 +25,10 @@ export function UserCard({ user, currentUserSub, onViewUser }: UserCardProps): R
       <Card.Body className="d-flex flex-column">
         <div className="d-flex justify-content-between align-items-start mb-2">
           <div className="text-truncate me-2" style={{ maxWidth: 'calc(100% - 80px)' }}>
-            <Card.Title className="h6 mb-0 text-truncate" title={user.email}>
-              {user.email}
+            {/* Fall back to username when email is missing (SSO users with no email claim) so the
+                card isn't rendered blank. Mirrors the table view. (BUG-382) */}
+            <Card.Title className="h6 mb-0 text-truncate" title={user.email || user.username}>
+              {user.email || user.username}
             </Card.Title>
             {(isSystemUser || isCurrentUser) && (
               <div className="d-flex flex-wrap gap-2">
