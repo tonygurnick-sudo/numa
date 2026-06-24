@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Connector Registry — single source of truth for all 25+ platforms
-// MERGE: kept dev version — adds ConnectorEventType, eventTypes on Gmail,
-//   oauthSetupSteps, and enriched apiReference fields vs base wizard commit.
+// MERGE: kept dev version — adds oauthSetupSteps and enriched apiReference
+//   fields vs base wizard commit.
 // ---------------------------------------------------------------------------
 
 import type { ProviderTemplate } from './wizards/OAuthWizard';
@@ -29,27 +29,6 @@ export interface CredentialFieldDef {
   hostnameSafe?: boolean;
 }
 
-export interface ConnectorEventType {
-  id: string;
-  label: string;
-  description: string;
-  defaultTags: string[];
-  defaultEnabled: boolean;
-}
-
-// Per-connector cache TTL — controls how long the remote folder cache keeps a
-// folder listing in the in-memory + sessionStorage cache before refetching.
-// Picked per connector by data-change frequency.
-export interface CachingPolicy {
-  ttl: number; // seconds
-}
-
-export const CACHING_PRESETS: Record<string, CachingPolicy> = {
-  email: { ttl: 60 },
-  cloudStorage: { ttl: 300 },
-  projectManagement: { ttl: 1800 },
-};
-
 export interface ConnectorTemplate {
   id: string;
   displayName: string;
@@ -65,7 +44,6 @@ export interface ConnectorTemplate {
     scopes: string;
     extraAuthParams?: string;
     discoveryUrl?: string;
-    hideClientSecret?: boolean;
   };
 
   // Non-standard OAuth Authorization header scheme. Defaults to `Bearer`
@@ -136,14 +114,8 @@ export interface ConnectorTemplate {
   // OAuth-specific setup guidance
   oauthSetupSteps?: string[];
 
-  // Event types this connector can produce
-  eventTypes?: ConnectorEventType[];
-
   // OAuth platform family — connectors sharing the same OAuth client ('google' | 'microsoft')
   oauthPlatform?: string;
-
-  // Caching policy — sensible defaults per connector, admin can override in wizard
-  cachingPolicy?: CachingPolicy;
 
   // Where the connector surfaces in the UI. A file-browsing connector (e.g. Google Drive,
   // Dropbox, Gmail) shows up in Files > Remote; an API-only connector (e.g. Fergus, simPRO)
@@ -175,7 +147,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     featureFlag: 'SYNERGY',
     authType: 'token',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
+    instanceUrlRequired: true,
     // Per-user credential: just the PAT. instance_url is admin-level
     // (configured in ApiKeyWizard → connector-config-synergy.fields.instance_url)
     // because Synergy is customer-hosted and the URL is the same for every
@@ -201,7 +173,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     oauthPlatform: 'google',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -226,7 +197,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     oauthPlatform: 'google',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.email,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -241,36 +211,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Add the redirect URI below under "Authorized redirect URIs"',
       'Copy the Client ID and Client Secret',
     ],
-    eventTypes: [
-      {
-        id: 'new_email',
-        label: 'dataConnectors.events.newEmail',
-        description: 'dataConnectors.events.newEmailDesc',
-        defaultTags: ['email', 'incoming'],
-        defaultEnabled: true,
-      },
-      {
-        id: 'email_read',
-        label: 'dataConnectors.events.emailRead',
-        description: 'dataConnectors.events.emailReadDesc',
-        defaultTags: ['email', 'status'],
-        defaultEnabled: false,
-      },
-      {
-        id: 'label_changed',
-        label: 'dataConnectors.events.labelChanged',
-        description: 'dataConnectors.events.labelChangedDesc',
-        defaultTags: ['email', 'organization'],
-        defaultEnabled: false,
-      },
-      {
-        id: 'email_sent',
-        label: 'dataConnectors.events.emailSent',
-        description: 'dataConnectors.events.emailSentDesc',
-        defaultTags: ['email', 'outgoing'],
-        defaultEnabled: true,
-      },
-    ],
   },
   {
     id: 'onedrive',
@@ -281,7 +221,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     oauthPlatform: 'microsoft',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
       tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -303,7 +242,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     icon: 'bi-dropbox',
     description: 'Access and browse Dropbox files',
     category: 'Cloud Storage',
-    cachingPolicy: CACHING_PRESETS.cloudStorage,
     authType: 'oauth2',
     surfaces: ['files', 'chat'],
     oauth: {
@@ -378,10 +316,25 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Field Service',
     authType: 'oauth2',
     oauth: {
-      authUrl: 'https://login.simprogroup.com/oauth2/authorize',
-      tokenUrl: 'https://login.simprogroup.com/oauth2/token',
+      // simPRO OAuth runs on each customer's own build subdomain
+      // (https://<BUILD>.simprosuite.com), NOT a global host — the old
+      // login.simprogroup.com endpoint did not resolve. <BUILD> is interpolated
+      // from the build credentialField below (hostnameSafe).
+      authUrl: 'https://<BUILD>.simprosuite.com/oauth2/login',
+      tokenUrl: 'https://<BUILD>.simprosuite.com/oauth2/token',
       scopes: '',
     },
+    credentialFields: [
+      {
+        key: 'build',
+        label: 'simPRO build (subdomain)',
+        type: 'text',
+        placeholder: 'e.g. yourco — from yourco.simprosuite.com',
+        required: true,
+        hostnameSafe: true,
+        helpText: 'The subdomain you log in to simPRO with. Required for OAuth routing.',
+      },
+    ],
     oauthSetupSteps: [
       'Log in to the simPRO Developer Portal',
       'Register a new application under your company',
@@ -458,7 +411,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     surfaces: ['chat'],
     baseUrl: 'https://api.totalsynergy.com/api/v2',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Total Synergy's OAuth flow is vendor-custom, NOT RFC-6749: the authorize
     // URL uses ApplicationKey/RedirectUri/tenant (no response_type/scope/PKCE),
     // the token endpoint lives on a different host+path, and the access token
@@ -526,12 +478,25 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'ERP',
     authType: 'oauth2',
     oauth: {
-      // Per-instance — admins configure their own endpoint via the wizard.
-      // These defaults are placeholders; auth/token URLs are instance-scoped.
-      authUrl: '',
-      tokenUrl: '',
+      // Per-instance ERP — every customer is on their own host
+      // https://<INSTANCE_HOST>.myobadvanced.com. <INSTANCE_HOST> is
+      // interpolated from the instance_host credentialField below. MYOB
+      // Acumatica (Acumatica IdentityServer) serves OAuth2 at /identity/connect.
+      authUrl: 'https://<INSTANCE_HOST>.myobadvanced.com/identity/connect/authorize',
+      tokenUrl: 'https://<INSTANCE_HOST>.myobadvanced.com/identity/connect/token',
       scopes: 'api',
     },
+    credentialFields: [
+      {
+        key: 'instance_host',
+        label: 'MYOB Acumatica instance',
+        type: 'text',
+        placeholder: 'e.g. yourco — from yourco.myobadvanced.com',
+        required: true,
+        hostnameSafe: true,
+        helpText: 'Your MYOB Acumatica instance subdomain. Required for OAuth routing.',
+      },
+    ],
   },
   {
     id: 'zoho-crm',
@@ -541,7 +506,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'CRM',
     authType: 'oauth2',
     surfaces: ['chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Zoho uses its own Authorization scheme — NOT Bearer.
     authHeaderScheme: 'Zoho-oauthtoken',
     oauth: {
@@ -590,7 +554,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Legal',
     authType: 'oauth2',
     surfaces: ['chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Global OAuth endpoints (production). Authorize is on go.actionstep.com;
     // the token exchange POSTs to api.actionstep.com. Scopes are space-separated
     // resource names — the scope picker (oauthScopeDefinitions.ts:actionstep)
@@ -637,7 +600,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     selfService: false,
     surfaces: ['chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // PMO365 is a Microsoft Power Platform solution — it has no API of its
     // own; its data lives in the customer's Microsoft Dataverse environment
     // and is reached via the Dataverse Web API (OData v4, JSON) at
@@ -750,7 +712,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         label: 'dataConnectors.fields.instanceUrl',
         type: 'url',
         placeholder: 'https://yourcompany.totalsynergy.com',
-        required: true,
+        required: false,
       },
     ],
   },
@@ -792,7 +754,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
       },
     ],
-    cachingPolicy: { ttl: 3600 },
   },
   {
     id: 'workbench',
@@ -912,6 +873,13 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     selfService: false,
     credentialFields: [
       {
+        key: 'instance_url',
+        label: 'dataConnectors.fields.instanceUrl',
+        type: 'url',
+        placeholder: 'https://yourco.printiq.com',
+        required: true,
+      },
+      {
         key: 'username',
         label: 'dataConnectors.fields.username',
         type: 'text',
@@ -950,7 +918,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'username-password',
     baseUrl: 'https://api.proworkflow.net',
     rateLimitRpm: 1000, // API allows 500 requests per 30s per account API key
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // The API requires TWO auth mechanisms on every request: the account-level
     // API key (apikey header, admin-entered below) AND the user's own
     // ProWorkflow login as Basic auth — PWF enforces that user's permissions.
@@ -990,7 +957,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'ERP',
     authType: 'username-password',
     instanceUrlRequired: true,
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Customer-hosted: the Greentree API is its own web server on the
     // customer's box (default port 9000), so the admin sets the instance URL
     // and the API must be internet-reachable over HTTPS. Every request needs
@@ -1034,7 +1000,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'ERP',
     authType: 'token',
     instanceUrlRequired: true,
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Customer-hosted (self-hosted Windows service on the customer's own
     // infrastructure) — there is no fixed cloud base URL. The admin MUST set
     // the instance URL in the wizard, and the API must be reachable from the
@@ -1061,7 +1026,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     baseUrl: 'https://api.cin7.com/api',
     rateLimitRpm: 60, // 3/sec, 60/min, 5,000/day per API connection
     rateLimitDaily: 5000,
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Basic auth: API username + API key (created in Cin7 Omni Settings →
     // Integrations & API). Permissions are per-endpoint on the key — a 403
     // means the key lacks that endpoint's permission, not bad credentials.
@@ -1092,7 +1056,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'api-key',
     baseUrl: 'https://inventory.dearsystems.com/externalapi/v2',
     rateLimitRpm: 60, // 60/min per application key
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Cin7 Core authenticates with TWO custom headers, not Authorization —
     // the map below tells the backend which user credential field rides in
     // which header on every request.
@@ -1126,7 +1089,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Volunteer Management',
     authType: 'username-password',
     baseUrl: 'https://api.betterimpact.com/v1',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // An admin-created API key yields a username + password pair sent as
     // HTTP Basic auth. Key scope is module-based — a key without the
     // Volunteer module checked returns no volunteers.
@@ -1156,7 +1118,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Rental Management',
     authType: 'token',
     baseUrl: 'https://api.rentman.net',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Workspace API token (Configuration → Account → Integrations → API →
     // Show token), sent as a Bearer token. Note: Rentman also runs a
     // first-party MCP server beta (mcp.rentman.net, OAuth 2.1 + PKCE) —
@@ -1180,7 +1141,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Recruitment',
     authType: 'oauth2',
     baseUrl: 'https://api.jobadder.com/v2',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     oauth: {
       authUrl: 'https://id.jobadder.com/connect/authorize',
       tokenUrl: 'https://id.jobadder.com/connect/token',
@@ -1202,7 +1162,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'CRM',
     authType: 'token',
     baseUrl: 'https://services.leadconnectorhq.com',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Private Integration Token ("pit-..."), created per sub-account in
     // HighLevel → Settings → Private Integrations. Sent as a Bearer token.
     // Every request additionally needs a constant `Version` header — injected
@@ -1235,7 +1194,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     baseUrl: 'https://gitlab.com/api/v4',
     surfaces: ['chat'],
     rateLimitRpm: 2000, // GitLab.com authenticated default is ~2,000 req/min/user
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Per-user Personal Access Token (glpat-…), sent as a Bearer token — GitLab
     // accepts a PAT in the Authorization: Bearer header just like an OAuth
     // token. The token carries that user's own GitLab permissions.

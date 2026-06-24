@@ -47,8 +47,6 @@ interface OAuthFormState {
   extraAuthParams: string;
   clientId: string;
   clientSecret: string;
-  rateLimitRpm: string;
-  rateLimitDaily: string;
   customHeaders: CustomHeader[];
   customCredentials: Record<string, string>;
 }
@@ -134,8 +132,6 @@ export const OAuthWizard = ({
     extraAuthParams: '',
     clientId: '',
     clientSecret: '',
-    rateLimitRpm: '',
-    rateLimitDaily: '',
     customHeaders: [],
     customCredentials: {},
   };
@@ -232,8 +228,6 @@ export const OAuthWizard = ({
             displayName: full.fields?.display_name || baseForm.displayName || '',
             icon: full.fields?.icon || baseForm.icon || '',
             description: full.fields?.description || baseForm.description || '',
-            rateLimitRpm: full.fields?.rate_limit_rpm || '',
-            rateLimitDaily: full.fields?.rate_limit_daily || '',
             customHeaders: parseCustomHeaders(full.fields?.custom_headers),
             customCredentials: loadedCustomCredentials,
           });
@@ -395,7 +389,7 @@ export const OAuthWizard = ({
       case 'credentials':
         if (!secretExists) {
           if (form.clientId.trim().length === 0) return false;
-          if (!registryEntry?.oauth?.hideClientSecret && form.clientSecret.trim().length === 0) return false;
+          if (form.clientSecret.trim().length === 0) return false;
 
           if (registryEntry?.credentialFields) {
             for (const field of registryEntry.credentialFields) {
@@ -583,9 +577,6 @@ export const OAuthWizard = ({
         fields.display_name = form.displayName.trim();
         fields.icon = form.icon.trim();
         fields.description = form.description.trim();
-
-        if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
-        if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
       }
 
       const validHeaders = form.customHeaders.filter((h) => h.name.trim() && h.value.trim());
@@ -805,18 +796,16 @@ export const OAuthWizard = ({
                 required
               />
             </Form.Group>
-            {!registryEntry?.oauth?.hideClientSecret && (
-              <Form.Group className={registryEntry?.credentialFields?.length ? 'mb-3' : ''}>
-                <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientSecret')}</Form.Label>
-                <Form.Control
-                  type="password"
-                  placeholder={t('dataConnectors.oauth.clientSecretPlaceholder')}
-                  value={form.clientSecret}
-                  onChange={(e) => updateForm({ clientSecret: e.target.value })}
-                  required
-                />
-              </Form.Group>
-            )}
+            <Form.Group className={registryEntry?.credentialFields?.length ? 'mb-3' : ''}>
+              <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientSecret')}</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder={t('dataConnectors.oauth.clientSecretPlaceholder')}
+                value={form.clientSecret}
+                onChange={(e) => updateForm({ clientSecret: e.target.value })}
+                required
+              />
+            </Form.Group>
 
             {registryEntry?.credentialFields?.map((field, idx) => (
               <Form.Group key={field.key} className={idx < registryEntry.credentialFields!.length - 1 ? 'mb-3' : ''}>
@@ -1137,37 +1126,6 @@ export const OAuthWizard = ({
       {/* ── Docs & Advanced (custom/new flow: step 5) ── */}
       {stepContent === 'advanced' && (
         <Row className="g-3">
-          {/* Rate Limits */}
-          <Col md={12}>
-            <Form.Label className="small fw-semibold">{t('dataConnectors.oauthWizard.rateLimitsLabel')}</Form.Label>
-          </Col>
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label className="small text-muted">{t('dataConnectors.oauthWizard.rateLimitRpmLabel')}</Form.Label>
-              <Form.Control
-                type="number"
-                placeholder={t('dataConnectors.oauthWizard.rateLimitRpmPlaceholder')}
-                value={form.rateLimitRpm}
-                onChange={(e) => updateForm({ rateLimitRpm: e.target.value })}
-                min={0}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label className="small text-muted">
-                {t('dataConnectors.oauthWizard.rateLimitDailyLabel')}
-              </Form.Label>
-              <Form.Control
-                type="number"
-                placeholder={t('dataConnectors.oauthWizard.rateLimitDailyPlaceholder')}
-                value={form.rateLimitDaily}
-                onChange={(e) => updateForm({ rateLimitDaily: e.target.value })}
-                min={0}
-              />
-            </Form.Group>
-          </Col>
-
           {/* Custom Headers */}
           <Col md={12}>
             <Form.Label className="small fw-semibold">{t('dataConnectors.oauthWizard.customHeadersLabel')}</Form.Label>
@@ -1277,26 +1235,6 @@ export const OAuthWizard = ({
               <span className="text-muted">{t('dataConnectors.oauth.tokenUrl')}:</span>{' '}
               <span className="text-break">{form.tokenUrl}</span>
             </div>
-
-            {/* Rate Limits */}
-            {(form.rateLimitRpm || form.rateLimitDaily) && (
-              <>
-                <hr className="my-2" />
-                <h6 className="fw-semibold small text-muted mb-2">
-                  {t('dataConnectors.oauthWizard.reviewRateLimits')}
-                </h6>
-                {form.rateLimitRpm && (
-                  <div className="small">
-                    {t('dataConnectors.oauthWizard.reviewRpm', { count: Number(form.rateLimitRpm) })}
-                  </div>
-                )}
-                {form.rateLimitDaily && (
-                  <div className="small">
-                    {t('dataConnectors.oauthWizard.reviewDaily', { count: Number(form.rateLimitDaily) })}
-                  </div>
-                )}
-              </>
-            )}
 
             {/* Custom Headers */}
             {form.customHeaders.filter((h) => h.name.trim()).length > 0 && (

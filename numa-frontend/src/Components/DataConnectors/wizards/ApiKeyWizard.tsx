@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Col, Collapse, Form, Row } from 'react-bootstrap';
+import { Alert, Col, Form, Row } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { ConnectorWizardModal } from './ConnectorWizardModal';
 import type { WizardStep } from './ConnectorWizardModal';
 import {
@@ -24,8 +23,6 @@ interface ApiKeyFormState {
   displayName: string;
   icon: string;
   description: string;
-  rateLimitRpm: string;
-  rateLimitDaily: string;
   /** Optional admin-configured base URL for connectors whose API lives at a
    *  customer-hosted / per-instance location (e.g. Synergy 12d). If empty,
    *  runtime falls back to whatever the connector registry / backend has
@@ -55,7 +52,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   const [success, setSuccess] = useState<string | null>(null);
   const [existingSecretName, setExistingSecretName] = useState<string | null>(null);
   const [legacySecretName, setLegacySecretName] = useState<string | null>(null);
-  const [customizeExpanded, setCustomizeExpanded] = useState(false);
 
   const configSecretName = `connector-config-${connector.id}`;
   const legacyCredentialSecretName = `connector-${connector.id}`;
@@ -66,8 +62,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       displayName: connector.displayName,
       icon: connector.icon,
       description: connector.description,
-      rateLimitRpm: connector.rateLimitRpm?.toString() || '',
-      rateLimitDaily: connector.rateLimitDaily?.toString() || '',
       // No default — always optional. If the registry has a baseUrl it's used at
       // runtime when this is blank; we don't pre-fill to avoid forking the value.
       instanceUrl: '',
@@ -108,8 +102,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         displayName: fields.display_name || connector.displayName,
         icon: fields.icon || connector.icon,
         description: fields.description || connector.description,
-        rateLimitRpm: fields.rate_limit_rpm || connector.rateLimitRpm?.toString() || '',
-        rateLimitDaily: fields.rate_limit_daily || connector.rateLimitDaily?.toString() || '',
         instanceUrl: fields.instance_url || '',
         adminFields: Object.fromEntries((connector.adminFields ?? []).map((f) => [f.key, fields[f.key] || ''])),
       });
@@ -123,7 +115,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     setStep(1);
     setError(null);
     setSuccess(null);
-    setCustomizeExpanded(false);
     setExistingSecretName(null);
     setLegacySecretName(null);
 
@@ -177,8 +168,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         connector_type: connector.authType,
       };
 
-      if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
-      if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
       // Always write instance_url — company-secret updates MERGE fields, so an
       // omitted key would leave a stale admin URL in place; empty string clears
       // it (the backend resolver skips empty values).
@@ -285,7 +274,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     setSuccess(null);
     setExistingSecretName(null);
     setLegacySecretName(null);
-    setCustomizeExpanded(false);
   };
 
   const handleHide = () => {
@@ -455,56 +443,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               </Form.Text>
             </Form.Group>
           </div>
-
-          <div
-            className="d-flex align-items-center gap-2 cursor-pointer mb-2"
-            onClick={() => setCustomizeExpanded(!customizeExpanded)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setCustomizeExpanded(!customizeExpanded)}
-          >
-            <h6 className="fw-semibold small mb-0">{t('dataConnectors.apiReference.customize')}</h6>
-            {customizeExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </div>
-          <Collapse in={customizeExpanded}>
-            <div>
-              <Row className="g-3">
-                <Col md={12}>
-                  <Form.Label className="small fw-semibold">
-                    {t('dataConnectors.oauthWizard.rateLimitsLabel')}
-                  </Form.Label>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small text-muted">
-                      {t('dataConnectors.oauthWizard.rateLimitRpmLabel')}
-                    </Form.Label>
-                    <Form.Control
-                      type="number"
-                      placeholder={t('dataConnectors.oauthWizard.rateLimitRpmPlaceholder')}
-                      value={form.rateLimitRpm}
-                      onChange={(e) => updateForm({ rateLimitRpm: e.target.value })}
-                      min={0}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small text-muted">
-                      {t('dataConnectors.oauthWizard.rateLimitDailyLabel')}
-                    </Form.Label>
-                    <Form.Control
-                      type="number"
-                      placeholder={t('dataConnectors.oauthWizard.rateLimitDailyPlaceholder')}
-                      value={form.rateLimitDaily}
-                      onChange={(e) => updateForm({ rateLimitDaily: e.target.value })}
-                      min={0}
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
-            </div>
-          </Collapse>
         </div>
       )}
 
