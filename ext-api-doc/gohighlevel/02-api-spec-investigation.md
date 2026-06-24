@@ -19,7 +19,7 @@ Developer reference for the GoHighLevel (HighLevel) REST API — condensed from 
 
 HighLevel Inc. — all-in-one CRM + marketing platform (contacts, conversations, pipelines, calendars, payments, workflows, social, funnels, invoices). REST/JSON, single shared SaaS host. 28+ endpoint families. Every call carries `Authorization: Bearer ...` + `Version`; almost every call is scoped by `locationId`. (Auth → §Authentication; headers → §Required headers; pagination, rate limits, webhooks, MCP → their sections.)
 
-**Numa integration model:** Native data connector (`authType: token`, NOT Pipedream). The workspace agent calls `numa integrations request gohighlevel GET "/contacts/search?locationId=...&limit=100" --headers '{"Version":"2021-07-28"}'`. The backend expands the relative URL against `base_url` and injects `Authorization: Bearer <PIT>` from the user's personal vault (`connector-gohighlevel`, field `api_key`). The agent never sees the token but **must add the Version header itself** (a constant, not a secret). See 03.
+**Numa integration model:** Native data connector (`authType: token`, NOT Pipedream). The workspace agent calls `numa integrations request gohighlevel GET "/contacts/search?locationId=...&limit=100"`. The backend expands the relative URL against `base_url`, injects `Authorization: Bearer <PIT>` from the user's personal vault (`connector-gohighlevel`, field `api_key`), **and** injects the `Version: 2021-07-28` header from the connector's `staticHeaders` (persisted as `static_headers` on the company config secret). The agent never sees the token and does **not** need to set Version — it only passes `--headers '{"Version":"2023-02-21"}'` to override the default for the newest contacts schema. See 03.
 
 ## Authentication
 
@@ -54,11 +54,11 @@ OAuth is required for webhooks and multi-account marketplace installs — out of
 
 ## Required headers (every request)
 
-| Header          | Value              | Notes                                                                                                                                        |
-| --------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Authorization` | `Bearer <token>`   | injected by the Numa backend — agents never set it                                                                                           |
-| `Version`       | e.g. `2021-07-28`  | **mandatory every call**; agents set it per request. `2023-02-21` on contacts, `2021-07-28` elsewhere unless an endpoint documents otherwise |
-| `Content-Type`  | `application/json` | POST/PUT/PATCH bodies                                                                                                                        |
+| Header          | Value              | Notes                                                                                                                                                                           |
+| --------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Authorization` | `Bearer <token>`   | injected by the Numa backend — agents never set it                                                                                                                              |
+| `Version`       | `2021-07-28`       | **mandatory every call** — injected by the Numa backend from `staticHeaders`; agents do NOT set it. `2023-02-21` is a newer schema (contacts); override per-call only to pin it |
+| `Content-Type`  | `application/json` | POST/PUT/PATCH bodies                                                                                                                                                           |
 
 ## Endpoint catalog
 
@@ -179,12 +179,13 @@ Space page-walks (~1s) — rate-limit budget is unknown.
 
 ## Rate limits
 
-| Scope  | Limit         | Notes                                                   |
-| ------ | ------------- | ------------------------------------------------------- |
-| Global | **[UNKNOWN]** | no numeric thresholds published anywhere; 429 on breach |
+| Scope | Limit             | Notes                                                                                             |
+| ----- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| Burst | 100 req / 10s     | per resource (Location or Company), per Marketplace app/client [DOCS marketplace.gohighlevel.com] |
+| Daily | 200,000 req / day | per resource (Location or Company), per Marketplace app/client [DOCS]                             |
 
-- Headers / Retry-After [UNKNOWN] — capture `X-RateLimit-*` on the first credentialed call.
-- Strategy: treat 429 as authoritative; back off 1s → 5s → 30s → 2m with jitter; keep bulk walks conservative; never busy-retry.
+- Response headers (per docs): `X-RateLimit-Max`, `X-RateLimit-Remaining`, `X-RateLimit-Interval-Milliseconds` (burst window); `X-RateLimit-Limit-Daily`, `X-RateLimit-Daily-Remaining`. Confirm presence on the first credentialed call and read them to pace proactively.
+- Strategy: treat the live 429 (and `Retry-After`, if present) as authoritative over the static numbers; back off 1s → 5s → 30s → 2m with jitter; keep bulk walks well under 100/10s; never busy-retry.
 
 ## Error handling
 

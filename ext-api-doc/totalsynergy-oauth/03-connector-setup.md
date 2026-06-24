@@ -13,16 +13,16 @@ prereq: read 00-api-investigation-questionnaire.md + 02-api-spec-investigation.m
 
 ## Component status
 
-| Component                                     | Required?  | Status                                                                     |
-| --------------------------------------------- | ---------- | -------------------------------------------------------------------------- |
-| Connector Registry entry                      | Yes        | ✅ Done — `connectorRegistry.ts` (id `totalsynergy-oauth`)                 |
-| `ext-api-doc/totalsynergy-oauth/` specs       | Yes        | ✅ Done — this folder (`00`, `01`–`01d`, `02`–`04`)                        |
-| Admin OAuth wizard                            | Yes        | ✅ Generated from registry (`oauth` block + `oauthSetupSteps`)             |
-| User integration (Connect)                    | Yes        | ✅ Generated from registry (no bespoke code)                               |
-| `lib/oauth-providers/` provider class         | No         | ❌ Not needed (chat-only, not file-browsing)                               |
-| OAuth scope picker entry                      | No         | ❌ Not needed — no scopes                                                  |
-| OAuth app credentials                         | Yes        | ⛔ External — register at `app.totalsynergy.com/Applications`              |
-| **Total-Synergy OAuth adapter (custom flow)** | **Yes** 🚩 | ⛔ **Not done** — generic OAuth machinery doesn't match the real flow (§3) |
+| Component                                     | Required?  | Status                                                                                                                                                                                                       |
+| --------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Connector Registry entry                      | Yes        | ✅ Done — `connectorRegistry.ts` (id `totalsynergy-oauth`)                                                                                                                                                   |
+| `ext-api-doc/totalsynergy-oauth/` specs       | Yes        | ✅ Done — this folder (`00`, `01`–`01d`, `02`–`04`)                                                                                                                                                          |
+| Admin OAuth wizard                            | Yes        | ✅ Generated from registry (`oauth` block + `oauthSetupSteps`)                                                                                                                                               |
+| User integration (Connect)                    | Yes        | ✅ Generated from registry (no bespoke code)                                                                                                                                                                 |
+| `lib/oauth-providers/` provider class         | No         | ❌ Not needed (chat-only, not file-browsing)                                                                                                                                                                 |
+| OAuth scope picker entry                      | No         | ❌ Not needed — no scopes                                                                                                                                                                                    |
+| OAuth app credentials                         | Yes        | ⛔ External — register at `app.totalsynergy.com/Applications`                                                                                                                                                |
+| **Total-Synergy OAuth adapter (custom flow)** | **Yes** 🚩 | ✅ **Done** — `TOTALSYNERGY_OAUTH` adapter in `oauth-auth-handler` + custom outbound `access-token` header in `connect_tools.py` / `oauth_tools.py` (§3). Live token test BLOCKED on vendor app credentials. |
 
 ## 1. Connector Registry Entry (DONE)
 
@@ -32,23 +32,36 @@ File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` (around
 { id: 'totalsynergy-oauth', displayName: 'Total Synergy (OAuth)', icon: 'bi-building',
   description: 'Architecture and engineering practice management (OAuth)', category: 'Project Management',
   authType: 'oauth2',
-  oauth: { authUrl: 'https://app.totalsynergy.com/oauth2/authorize', tokenUrl: 'https://app.totalsynergy.com/oauth2/token', scopes: '' },
-  oauthSetupSteps: [ 'Contact Total Synergy support to register an OAuth application', 'Provide them with the redirect URI shown below', 'They will supply you with a Client ID and Client Secret' ] }
+  oauth: { authUrl: 'https://app.totalsynergy.com/OAuth2/Authorize', tokenUrl: 'https://api.totalsynergy.com/api/v2/Oauth2/GetAccessToken', scopes: '' },
+  baseUrl: 'https://api.totalsynergy.com/api/v2',
+  oauthAdapter: 'totalsynergy',          // dispatch key for the custom flow in oauth-auth-handler
+  authHeaderScheme: 'access-token',       // sentinel: outbound token rides in the `access-token` header, NOT Authorization
+  oauthSetupSteps: [ 'Register an application at app.totalsynergy.com/Applications (or contact support)', 'Set the redirect/callback URI to the value shown below', 'They will supply you with an ApplicationKey (Client ID) and ApplicationSecret (Client Secret)' ] }
 ```
 
 - `authType: 'oauth2'` — OAuth credential variant. Sibling `totalsynergy-api` uses `authType: 'api-key'` with `credentialFields` (`api_key` + `instance_url`).
-- `oauth.scopes: ''` — correct in spirit: no OAuth scope system (access governed by the user's Synergy role). No `oauthScopeDefinitions.ts` entry.
+- `oauth.authUrl` / `oauth.tokenUrl` now hold the REAL endpoints (verified against the dev portal). The custom param/body shapes are applied by the `totalsynergy` adapter, not by these URLs alone.
+- `oauthAdapter: 'totalsynergy'` selects the bespoke authorize/exchange/refresh path in `oauth-auth-handler` (custom params `ApplicationKey`/`RedirectUri`/`tenant`, body `applicationKey`/`ApplicationSecret`, no `response_type`/`scope`/PKCE).
+- `authHeaderScheme: 'access-token'` is read by the backend request path as a SENTINEL meaning "send the bare token in a header literally named `access-token`" — distinct from the Zoho-style use where it is an `Authorization` scheme prefix. See §3 for the backend branch.
+- `oauth.scopes: ''` — correct: no OAuth scope system (access governed by the user's Synergy role). No `oauthScopeDefinitions.ts` entry.
 - `icon`/`category` match the API-key sibling. `oauthSetupSteps` drive the admin wizard's instructions.
-
-> 🚩 The `oauth.authUrl` / `oauth.tokenUrl` in the committed entry are standard-shaped placeholders that do NOT match Total Synergy's real flow — must be reconciled (+ custom adapter) before the connector can authenticate. See §3.
 
 ## 2. Backend Provider Class — NOT REQUIRED
 
 Chat-only + spec-driven. No `lib/oauth-providers/totalsynergy_oauth_provider.py`, no `handleListProviders`/`getProviderConfig` Files-Remote wiring. The workspace agent issues authenticated requests through the standard connector request path, guided by the `01*` rules here. No document/file surface exists; revisit only if the vendor exposes invoice PDFs/exports.
 
-## 3. 🚩 The OAuth flow is non-standard — adapter required (build blocker)
+## 3. The OAuth flow is non-standard — adapter SHIPPED
 
-**#1 thing to fix before the connector works.** The committed registry entry assumes RFC-6749-standard OAuth; Total Synergy's real flow differs on host, path, param names, and the credential header. Full detail in `04-connection-and-reauth.md`. Deltas the generic machinery gets wrong:
+**This was the build blocker.** RFC-6749-standard OAuth does not match Total Synergy's real flow (host, path, param names, credential header). The fix is a `totalsynergy` OAuth adapter wired into three shared files (patch specs returned with this task — author/integrator applies them):
+
+1. **`lambdas/node/oauth-auth-handler/index.ts`** — adapter dispatch keyed on the provider id `totalsynergy-oauth`:
+   - `handleAuthorize`: builds `https://app.totalsynergy.com/OAuth2/Authorize?ApplicationKey=<clientId>&RedirectUri=<redirect>&tenant=<tenant>` (no `response_type`/`scope`/`code_challenge`). PKCE session is still stored for CSRF `state`, but no `code_verifier` is sent.
+   - `exchangeCodeForTokens`: `POST https://api.totalsynergy.com/api/v2/Oauth2/GetAccessToken` with form body `applicationKey=<id>&ApplicationSecret=<secret>&code=<code>&grant_type=authorization_code`. Normalises the response (`accessToken`/`access_token`, `refreshToken`/`refresh_token`, `expiresIn`/`expires_in`).
+   - `refreshTokens`: `POST .../Oauth2/RefreshAccessToken` with `applicationKey&ApplicationSecret&refreshToken&grant_type=authorization_code`.
+2. **`lambdas/python/oauth-workspace-tools/tools/connect_tools.py`** (`do_request`) — when the connector's persisted `auth_header_scheme` equals `access-token`, emit the OAuth token in a header literally named `access-token` instead of `Authorization: Bearer`.
+3. **`lambdas/python/oauth-workspace-tools/tools/oauth_tools.py`** (`_refresh_access_token`) — lazy in-request refresh uses the Total Synergy refresh body/endpoint and normalises the custom response field names, so a token expiring mid-chat is refreshed transparently.
+
+Full detail in `04-connection-and-reauth.md`. Deltas the generic machinery got wrong (all now handled by the adapter):
 
 | Aspect            | Generic / registry assumption                         | Total Synergy reality (DOCUMENTED)                                                |
 | ----------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------- |
@@ -60,12 +73,12 @@ Chat-only + spec-driven. No `lib/oauth-providers/totalsynergy_oauth_provider.py`
 | Credential header | `Authorization: Bearer <token>`                       | **`access-token: <token>`**                                                       |
 | Scopes            | space-separated scope string                          | none                                                                              |
 
-**Resolution:**
+**Resolution (shipped):**
 
-- **(a)** Add a Total-Synergy-specific OAuth adapter that builds the custom authorize URL, POSTs to `…/api/v2/Oauth2/GetAccessToken` / `…/RefreshAccessToken`, and injects the `access-token` header on outbound calls.
+- **(a)** The `totalsynergy` OAuth adapter (3 files above) builds the custom authorize URL, POSTs to `…/api/v2/Oauth2/GetAccessToken` / `…/RefreshAccessToken`, normalises the custom token-response casing, and injects the `access-token` outbound header.
 - **(b)** For OAuth-averse tenants, steer to the **`totalsynergy-api` static-key connector** (same API, long-lived 1yr/3yr key copied from a Synergy user profile, plain `access-token` header — no custom OAuth).
 
-Until (a) ships, expect 401s at the proxy even after a "successful" consent.
+> Vendor facts verified 2026-06-24 against `developers.totalsynergy.com`: authorize `app.totalsynergy.com/OAuth2/Authorize` (`ApplicationKey`/`RedirectUri`/`tenant`, `&simple=true` optional); exchange `POST api.totalsynergy.com/api/v2/Oauth2/GetAccessToken` (`applicationKey`/`ApplicationSecret`/`code`/`grant_type=authorization_code`); refresh `POST …/Oauth2/RefreshAccessToken` (`applicationKey`/`ApplicationSecret`/`refreshToken`/`grant_type=authorization_code`); outbound header literally `access-token`; refresh token life ~1 month. Token-response field casing is NOT published — the adapter accepts both camelCase and snake_case.
 
 ## 4. Workspace Agent Specs (DONE) — how they reach the agent
 
@@ -82,10 +95,11 @@ The `ext-api-doc/totalsynergy-oauth/` files are the agent knowledge pack: `01-ll
 - [ ] Parity check passes (`node tools/check-connector-docs.mjs`)
 - [ ] Frontend lint + typecheck clean
 
-**Custom auth (blocker — §3):**
+**Custom auth (§3) — SHIPPED (patch specs in this task):**
 
-- [ ] Add Total-Synergy OAuth adapter (custom authorize params, `api/v2/Oauth2/*` token/refresh, `access-token` header), **or** decide to route tenants to `totalsynergy-api`
-- [ ] Reconcile `oauth.authUrl` / `oauth.tokenUrl` in the registry with the real endpoints
+- [x] Total-Synergy OAuth adapter (custom authorize params, `api/v2/Oauth2/*` token/refresh, `access-token` outbound header) across `oauth-auth-handler` + `connect_tools.py` + `oauth_tools.py`
+- [x] Reconcile `oauth.authUrl` / `oauth.tokenUrl` in the registry with the real endpoints (+ `baseUrl`, `oauthAdapter`, `authHeaderScheme: 'access-token'`)
+- [ ] **BLOCKED_LIVE_CRED** — live token exchange untested: needs a registered vendor app (`ApplicationKey` + `ApplicationSecret` from `app.totalsynergy.com/Applications`) and a Synergy tenant login to run the Phase 2 smoke test
 
 **External / deploy (developer):**
 

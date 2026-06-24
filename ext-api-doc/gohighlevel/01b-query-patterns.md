@@ -4,21 +4,21 @@ api_slug: gohighlevel
 base_url: https://services.leadconnectorhq.com
 path_version_segment: none (version is the Version header, never a path)
 auth: Bearer PIT (backend-injected); NEVER set Authorization
-required_on_every_read: Version header (default 2021-07-28; 2023-02-21 for contacts) + locationId query param on most lists
+required_on_every_read: Version header — BACKEND-INJECTED (2021-07-28 via static_headers; override per-call to 2023-02-21 only for the newest contacts schema) + locationId query param on most lists
 field_casing: camelCase
-call_surface: HTTP via `numa integrations request gohighlevel GET <URL> --headers '{"Version":"..."}'`. NOT a file-store connector.
+call_surface: HTTP via `numa integrations request gohighlevel GET <URL>` (Version is backend-injected; add `--headers '{"Version":"2023-02-21"}'` only to override). NOT a file-store connector.
 confidence: docs-derived [DOCS], NOT live-validated. First successful response of each shape in a session is ground truth — prefer it over this file. Non-default markers [UNVERIFIED] inline.
 companions: 01=api-rules, 01a=domain-model, 01c=mutation-patterns, 01d=events+errors
 ---
 
 # GoHighLevel — Query Patterns
 
-URLs are relative paths; backend prepends base_url and injects the Bearer PIT. Pass the Version header on EVERY call (`--headers '{"Version":"2021-07-28"}'`); contacts docs target `2023-02-21` — switch only if a contacts response looks wrong. `locationId` is a required query param on most list/search endpoints.
+URLs are relative paths; backend prepends base_url and injects the Bearer PIT **and** the `Version: 2021-07-28` header (from the connector's `static_headers`). You do NOT pass the Version header — add `--headers '{"Version":"2023-02-21"}'` only to override it for the newest contacts schema. `locationId` is a required query param on most list/search endpoints. (Examples below omit the Version flag because the backend supplies it.)
 
 ## Step 0: resolve locationId (always first)
 
 ```
-numa integrations request gohighlevel GET /locations/search --headers '{"Version":"2021-07-28"}' -m "find location"
+numa integrations request gohighlevel GET /locations/search -m "find location"
 ```
 
 - Returns the location(s) the PIT sees. A PIT lives in one location → expect one result; if several, ask the user which.
@@ -46,14 +46,14 @@ page N:  …until meta cursors absent/null OR the collection array is empty
 - **Pass BOTH cursors** — they work as a pair (timestamp + id tiebreak).
 - Stop: meta cursors absent/null [UNVERIFIED — inferred]; an empty collection array is the unambiguous stop (community-confirmed).
 - No reliable total count [UNVERIFIED whether `meta` carries one] — phrase as "at least N" unless you drained all pages.
-- Pace pages ~1/sec — limits unknown (community guidance: 1000ms between page calls).
+- Pace pages ~1/sec — well under the published 100-req/10s burst limit; a 429 is the live ceiling (01d).
 
 ## Patterns
 
 ### 1: List contacts (paged)
 
 ```
-numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" -m "list contacts"
 ```
 
 `GET /contacts/` is deprecated in favour of `/contacts/search`, but is the path with fully-documented cursor pagination — use it for "list/dump all contacts" until search is validated.
@@ -61,7 +61,7 @@ numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShl
 ### 2: Get one record by id
 
 ```
-numa integrations request gohighlevel GET /contacts/{contactId} --headers '{"Version":"2021-07-28"}' -m "get contact"
+numa integrations request gohighlevel GET /contacts/{contactId} -m "get contact"
 ```
 
 Single-record responses appear wrapped (`{"contact":{...}}` per SDK) [UNVERIFIED for all entities] — unwrap defensively (use the entity key if present, else the body).
@@ -78,8 +78,8 @@ Single-record responses appear wrapped (`{"contact":{...}}` per SDK) [UNVERIFIED
 ### 4: Opportunities — pipelines first, then search
 
 ```
-numa integrations request gohighlevel GET "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT" --headers '{"Version":"2021-07-28"}' -m "list pipelines"
-numa integrations request gohighlevel GET "/opportunities/search?location_id=ve9EPM428h8vShlRW1KT&limit=20" --headers '{"Version":"2021-07-28"}' -m "search deals"
+numa integrations request gohighlevel GET "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT" -m "list pipelines"
+numa integrations request gohighlevel GET "/opportunities/search?location_id=ve9EPM428h8vShlRW1KT&limit=20" -m "search deals"
 ```
 
 - Pipelines give stage ids/names — needed to interpret and later move deals.
@@ -89,8 +89,8 @@ numa integrations request gohighlevel GET "/opportunities/search?location_id=ve9
 ### 5: Conversations and messages
 
 ```
-numa integrations request gohighlevel GET "/conversations/search?locationId=ve9EPM428h8vShlRW1KT&limit=20" --headers '{"Version":"2021-07-28"}' -m "search conversations"
-numa integrations request gohighlevel GET /conversations/{conversationId}/messages --headers '{"Version":"2021-07-28"}' -m "get messages"
+numa integrations request gohighlevel GET "/conversations/search?locationId=ve9EPM428h8vShlRW1KT&limit=20" -m "search conversations"
+numa integrations request gohighlevel GET /conversations/{conversationId}/messages -m "get messages"
 ```
 
 Search supports filter/sort per the MCP tool ("Search/filter/sort conversations"); specific filter params [UNVERIFIED].
@@ -102,7 +102,7 @@ Search supports filter/sort per the MCP tool ("Search/filter/sort conversations"
 ```
 # 1. find calendars (or users) first — calendar listing path [UNVERIFIED]; users family exists
 # 2. then:
-numa integrations request gohighlevel GET "/calendars/events?locationId=ve9EPM428h8vShlRW1KT&calendarId={calId}&startTime=...&endTime=..." --headers '{"Version":"2021-07-28"}' -m "list events"
+numa integrations request gohighlevel GET "/calendars/events?locationId=ve9EPM428h8vShlRW1KT&calendarId={calId}&startTime=...&endTime=..." -m "list events"
 ```
 
 `startTime`/`endTime` are the natural window params but [UNVERIFIED] — expect the 400 message to name the required params.
@@ -110,8 +110,8 @@ numa integrations request gohighlevel GET "/calendars/events?locationId=ve9EPM42
 ### 7: Payments
 
 ```
-numa integrations request gohighlevel GET "/payments/transactions?locationId=ve9EPM428h8vShlRW1KT&limit=20" --headers '{"Version":"2021-07-28"}' -m "list transactions"
-numa integrations request gohighlevel GET /payments/orders/{orderId} --headers '{"Version":"2021-07-28"}' -m "get order"
+numa integrations request gohighlevel GET "/payments/transactions?locationId=ve9EPM428h8vShlRW1KT&limit=20" -m "list transactions"
+numa integrations request gohighlevel GET /payments/orders/{orderId} -m "get order"
 ```
 
 Transactions are "paginated list, supports filtering"; filter params [UNVERIFIED].
@@ -119,7 +119,7 @@ Transactions are "paginated list, supports filtering"; filter params [UNVERIFIED
 ### 8: Contact sub-resources
 
 ```
-numa integrations request gohighlevel GET /contacts/{contactId}/tasks --headers '{"Version":"2021-07-28"}' -m "list tasks"
+numa integrations request gohighlevel GET /contacts/{contactId}/tasks -m "list tasks"
 ```
 
 Tasks documented; notes/followers follow the same nesting [UNVERIFIED paths].
@@ -127,7 +127,7 @@ Tasks documented; notes/followers follow the same nesting [UNVERIFIED paths].
 ### 9: Custom field definitions (decode contact custom values)
 
 ```
-numa integrations request gohighlevel GET /locations/{locationId}/customFields --headers '{"Version":"2021-07-28"}' -m "custom fields"
+numa integrations request gohighlevel GET /locations/{locationId}/customFields -m "custom fields"
 ```
 
 Path inferred from the MCP tool `locations_get-custom-fields` [UNVERIFIED]. Fetch once per session; use `fieldKey`/`name` to translate opaque custom-field entries on contacts.
@@ -137,7 +137,7 @@ Path inferred from the MCP tool `locations_get-custom-fields` [UNVERIFIED]. Fetc
 Users family documented; list path [UNVERIFIED]:
 
 ```
-numa integrations request gohighlevel GET "/users/?locationId=ve9EPM428h8vShlRW1KT" --headers '{"Version":"2021-07-28"}' -m "list users"
+numa integrations request gohighlevel GET "/users/?locationId=ve9EPM428h8vShlRW1KT" -m "list users"
 ```
 
 Resolves `userId` for `/calendars/events` and displays owner names on opportunities. If it 404s, note it and ask the user for the person's id from the HighLevel UI.
@@ -156,8 +156,8 @@ Resolves `userId` for `/calendars/events` and displays owner names on opportunit
 ### "Find Jane Smith and show her details"
 
 ```
-numa integrations request gohighlevel GET /locations/search --headers '{"Version":"2021-07-28"}' -m "find location"
-numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+numa integrations request gohighlevel GET /locations/search -m "find location"
+numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100" -m "list contacts"
 # …page until found; match on name/email client-side
 ```
 
@@ -166,9 +166,9 @@ For ≤ a few thousand contacts, paged list + client-side match is reliable and 
 ### "How many deals in the Sales pipeline, by stage?"
 
 ```
-numa integrations request gohighlevel GET "/opportunities/pipelines?locationId={loc}" --headers '{"Version":"2021-07-28"}' -m "list pipelines"
+numa integrations request gohighlevel GET "/opportunities/pipelines?locationId={loc}" -m "list pipelines"
 # pick the pipeline id by name; then
-numa integrations request gohighlevel GET "/opportunities/search?location_id={loc}&pipeline_id={pid}&limit=100" --headers '{"Version":"2021-07-28"}' -m "search deals"
+numa integrations request gohighlevel GET "/opportunities/search?location_id={loc}&pipeline_id={pid}&limit=100" -m "search deals"
 ```
 
 `pipeline_id` filter [UNVERIFIED] — if rejected, search without it and group client-side by `pipelineId`/`stageId`. Map stage ids to names via the pipelines response.
@@ -176,9 +176,9 @@ numa integrations request gohighlevel GET "/opportunities/search?location_id={lo
 ### "Show the last messages with contact X"
 
 ```
-numa integrations request gohighlevel GET "/conversations/search?locationId={loc}&contactId={contactId}" --headers '{"Version":"2021-07-28"}' -m "find conversation"
+numa integrations request gohighlevel GET "/conversations/search?locationId={loc}&contactId={contactId}" -m "find conversation"
 # contactId filter [UNVERIFIED] — fall back to search + client-side match on contactId
-numa integrations request gohighlevel GET /conversations/{convId}/messages --headers '{"Version":"2021-07-28"}' -m "get messages"
+numa integrations request gohighlevel GET /conversations/{convId}/messages -m "get messages"
 ```
 
 ### Full contact export (cursor drain)
@@ -199,7 +199,7 @@ Write batches to a `/workdir` file as you go — don't hold tens of thousands of
 No documented server-side date filter [UNVERIFIED — search may support one]; robust path is a cursor walk with client-side filtering:
 
 ```
-numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100" -m "list contacts"
 # inspect page 1: identify the created-date field (likely dateAdded [UNVERIFIED]) and whether
 # results are ordered newest-first; if so, stop paging once records pre-date the window
 ```

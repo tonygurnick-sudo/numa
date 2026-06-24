@@ -989,6 +989,42 @@ const registerGmailWatch = async (accessToken: string, userSub: string): Promise
 // OAuth Provider API Calls
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Vendor-custom OAuth adapters
+//
+// Some providers do not speak RFC-6749. The adapter id is persisted on the
+// company vault entry as `oauth_adapter` (from the registry's `oauthAdapter`)
+// and read off `config.rawFields`. Each adapter knows how to build the
+// authorize URL, the token-exchange body, and the refresh body, and how to
+// normalise the token response into the standard `OAuthTokens` shape the rest
+// of this handler stores.
+// ---------------------------------------------------------------------------
+
+const getOAuthAdapter = (config: FullProviderConfig): string =>
+  String((config.rawFields?.oauth_adapter as string | undefined) || '').trim();
+
+/**
+ * Normalise a Total Synergy token response. Vendor docs do not publish the
+ * exact field casing, so accept both camelCase and snake_case. expiresIn may be
+ * absent — default to 3600s (the documented access-token TTL is short-lived but
+ * the exact value is not published; a conservative 1h means we refresh sooner
+ * rather than later, which is safe).
+ */
+const normaliseTotalSynergyTokens = (raw: Record<string, unknown>): OAuthTokens | null => {
+  const accessToken = String(raw.accessToken || raw.access_token || '');
+  if (!accessToken) return null;
+  const refreshToken = raw.refreshToken || raw.refresh_token;
+  const expiresInRaw = raw.expiresIn ?? raw.expires_in;
+  const expiresIn = typeof expiresInRaw === 'number' ? expiresInRaw : Number(expiresInRaw) || 3600;
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken ? String(refreshToken) : undefined,
+    expires_in: expiresIn,
+    token_type: 'access-token',
+    scope: '',
+  };
+};
+
 const exchangeCodeForTokens = async (
   provider: OAuthProvider,
   code: string,
@@ -999,6 +1035,36 @@ const exchangeCodeForTokens = async (
   if (!config) {
     console.error(`Missing configuration for ${provider}`);
     return null;
+  }
+
+  // ── Total Synergy adapter: custom body field names + host/path ──
+  if (getOAuthAdapter(config) === 'totalsynergy') {
+    const tsParams = new URLSearchParams({
+      applicationKey: config.clientId,
+      ApplicationSecret: config.clientSecret,
+      code,
+      grant_type: 'authorization_code',
+    });
+    try {
+      const tsResponse = await fetch(config.tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: tsParams.toString(),
+      });
+      if (!tsResponse.ok) {
+        const errorText = await tsResponse.text();
+        console.error(`Total Synergy token exchange failed:`, tsResponse.status, errorText);
+        return null;
+      }
+      const tsRaw = (await tsResponse.json()) as Record<string, unknown>;
+      return normaliseTotalSynergyTokens(tsRaw);
+    } catch (error) {
+      console.error(`Total Synergy token exchange request failed:`, error);
+      return null;
+    }
   }
 
   const params = new URLSearchParams({
@@ -1043,6 +1109,45 @@ const refreshTokens = async (provider: OAuthProvider, refreshToken: string): Pro
   if (!config) {
     console.error(`Missing configuration for ${provider}`);
     return null;
+  }
+
+  // ── Total Synergy adapter: custom refresh endpoint + body field names ──
+  if (getOAuthAdapter(config) === 'totalsynergy') {
+    // Refresh lives on a DIFFERENT path from exchange. token_url points at
+    // GetAccessToken; swap the trailing segment to RefreshAccessToken.
+    const refreshUrl = config.tokenUrl.replace(/GetAccessToken$/i, 'RefreshAccessToken');
+    const tsParams = new URLSearchParams({
+      applicationKey: config.clientId,
+      ApplicationSecret: config.clientSecret,
+      refreshToken,
+      grant_type: 'authorization_code',
+    });
+    try {
+      const tsResponse = await fetch(refreshUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: tsParams.toString(),
+      });
+      if (!tsResponse.ok) {
+        const errorText = await tsResponse.text();
+        console.error(`Total Synergy token refresh failed:`, tsResponse.status, errorText);
+        return null;
+      }
+      const tsRaw = (await tsResponse.json()) as Record<string, unknown>;
+      const normalised = normaliseTotalSynergyTokens(tsRaw);
+      // Synergy may not echo the refresh token on refresh — preserve the
+      // existing one so the next refresh still works.
+      if (normalised && !normalised.refresh_token) {
+        normalised.refresh_token = refreshToken;
+      }
+      return normalised;
+    } catch (error) {
+      console.error(`Total Synergy token refresh request failed:`, error);
+      return null;
+    }
   }
 
   const params = new URLSearchParams({
@@ -1225,6 +1330,28 @@ const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext, query
 
   // Build authorization URL
   const redirectUri = `${FRONTEND_BASE_URL}/oauth/callback/${provider}`;
+
+  // ── Total Synergy adapter: vendor-custom authorize params ──
+  // Synergy uses ApplicationKey / RedirectUri / tenant and NO response_type,
+  // scope, or PKCE. The `state` still rides along for CSRF + session lookup
+  // (handleCallback parses `state:sessionId`); Synergy round-trips unknown
+  // query params on the redirect, so state survives.
+  if (getOAuthAdapter(config) === 'totalsynergy') {
+    const tsAuthUrl = new URL(config.authUrl);
+    tsAuthUrl.searchParams.set('ApplicationKey', config.clientId);
+    tsAuthUrl.searchParams.set('RedirectUri', redirectUri);
+    // tenant is optional and usually blank for the hosted flow; include it so
+    // the param is present (vendor accepts an empty value).
+    const tenant = String((config.rawFields?.tenant as string | undefined) || '');
+    tsAuthUrl.searchParams.set('tenant', tenant);
+    tsAuthUrl.searchParams.set('state', `${state}:${sessionId}`);
+    return jsonResponse(200, {
+      success: true,
+      auth_url: tsAuthUrl.toString(),
+      session_id: sessionId,
+    });
+  }
+
   const authUrl = new URL(config.authUrl);
 
   authUrl.searchParams.set('response_type', 'code');

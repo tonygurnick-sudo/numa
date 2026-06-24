@@ -106,7 +106,6 @@ _NATIVE_CONNECTOR_SLUGS = {
     "simpro",
     "getjobber",
     "wrike",
-    "connecteam-oauth",
     "totalsynergy-oauth",
     "xero",
     "myob-account-right",

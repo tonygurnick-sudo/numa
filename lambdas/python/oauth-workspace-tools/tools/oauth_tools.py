@@ -322,6 +322,85 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
         logger.error(f"No token URL available for refresh: {provider}")
         return None
 
+    # ── Total Synergy adapter: vendor-custom refresh body + response casing ──
+    # The company vault entry carries oauth_adapter='totalsynergy' (persisted by
+    # the OAuth wizard from the registry). Synergy's refresh lives on
+    # .../Oauth2/RefreshAccessToken with applicationKey/ApplicationSecret/
+    # refreshToken/grant_type=authorization_code and returns custom-cased fields.
+    adapter = ""
+    if secrets:
+        for candidate in (f"oauth-client-{provider}", f"oauth-client-{platform}"):
+            entry = secrets.get(candidate)
+            if entry:
+                fields = entry.get("fields") or entry
+                adapter = str(fields.get("oauth_adapter") or "").strip()
+                if adapter:
+                    break
+
+    if adapter == "totalsynergy":
+        import re as _re
+
+        refresh_url = _re.sub(r"GetAccessToken$", "RefreshAccessToken", token_url)
+        ts_params = {
+            "applicationKey": creds["client_id"],
+            "ApplicationSecret": creds.get("client_secret", ""),
+            "refreshToken": refresh_token,
+            "grant_type": "authorization_code",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                ts_response = await http_client.post(
+                    refresh_url,
+                    data=ts_params,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json",
+                    },
+                )
+            if ts_response.status_code == 200:
+                raw = ts_response.json()
+                access = raw.get("accessToken") or raw.get("access_token") or ""
+                if not access:
+                    logger.warning(
+                        f"Total Synergy refresh returned no access token for {provider}"
+                    )
+                    return None
+                # Normalise to the snake_case shape get_oauth_token expects.
+                # Coerce expires_in to int: Synergy is a form-style API and may
+                # return the TTL as a string ("3600"); get_oauth_token does
+                # `now + expires_in`, which raises TypeError on a str and would
+                # silently turn a successful refresh into a failure.
+                _exp_raw = raw.get("expiresIn")
+                if _exp_raw is None:
+                    _exp_raw = raw.get("expires_in")
+                try:
+                    _expires_in = int(_exp_raw)
+                except (TypeError, ValueError):
+                    _expires_in = 3600
+                return {
+                    "access_token": access,
+                    "refresh_token": (
+                        raw.get("refreshToken")
+                        or raw.get("refresh_token")
+                        or refresh_token
+                    ),
+                    "expires_in": _expires_in,
+                }
+            logger.warning(
+                f"Total Synergy token refresh failed for {provider}",
+                extra={
+                    "status_code": ts_response.status_code,
+                    "response": ts_response.text[:500],
+                },
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                f"Total Synergy refresh request failed for {provider}",
+                extra={"error": str(e)},
+            )
+            return None
+
     params = {
         "grant_type": "refresh_token",
         "client_id": creds["client_id"],

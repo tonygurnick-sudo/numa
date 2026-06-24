@@ -532,8 +532,18 @@ export const OAuthWizard = ({
       // Non-standard auth header scheme (e.g. Zoho uses "Zoho-oauthtoken"
       // instead of "Bearer"). Persist when the registry defines it; the
       // backend connect_request reads this field and falls back to Bearer.
+      // The literal value `access-token` is a sentinel meaning the token rides
+      // in a header named `access-token`, not inside Authorization (Total Synergy).
       if (registryEntry?.authHeaderScheme) {
         fields.auth_header_scheme = registryEntry.authHeaderScheme;
+      }
+
+      // Vendor-custom OAuth flow selector (e.g. Total Synergy's
+      // ApplicationKey/GetAccessToken/RefreshAccessToken flow). Persist so the
+      // oauth-auth-handler Lambda dispatches authorize/exchange/refresh to the
+      // matching adapter. Absent → standard RFC-6749 path.
+      if (registryEntry?.oauthAdapter) {
+        fields.oauth_adapter = registryEntry.oauthAdapter;
       }
 
       // Fixed-base-URL OAuth connectors (e.g. JobAdder): persist the registry

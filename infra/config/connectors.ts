@@ -25,7 +25,6 @@ export const NATIVE_CONNECTORS = [
   'simpro',
   'getjobber',
   'wrike',
-  'connecteam-oauth',
   'totalsynergy-oauth',
   'xero',
   'myob-account-right',

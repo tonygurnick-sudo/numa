@@ -22,7 +22,7 @@ confidence: the Numa-side wiring below is the real implementation; the Rentman s
 | Rate limits  | 50,000 req/day · 10 req/s · max 20 concurrent (documented)                  |
 
 ⚠️ **No webhooks** — polling only (`modified[gte]` + `updateHash`).
-⚠️ A Pipedream `rentman` integration also exists in Numa (`integrationsConfig.ts`) but its prebuilt actions are broken per FEAT-209 — this native connector is the workaround. The two are NOT linked in `PIPEDREAM_TO_CONNECTOR` (`infra/config/connectors.ts`), so `preferred_method` enforcement does not arbitrate between them today.
+⚠️ A Pipedream `rentman` integration also exists in Numa (`integrationsConfig.ts`) but its prebuilt actions are broken per FEAT-209 — this native connector is the workaround. The two **are** linked in `PIPEDREAM_TO_CONNECTOR` (`infra/config/connectors.ts` → `rentman: 'rentman'`, mirrored in the agent's `_PIPEDREAM_TO_CONNECTOR`), so an admin's `preferred_method` choice in the unified Integrations UI arbitrates between the Pipedream and native surfaces for Rentman.
 
 ## 2. Auth model — per-user Bearer JWT, no admin credential
 

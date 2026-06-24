@@ -4,10 +4,10 @@ api_slug: podio
 auth_type: oauth2 (authorization_code) — no PAT/API-key path for the REST API
 auth_header_scheme: OAuth2 {access_token} — NOT Bearer (Bearer → 401)
 authorize_url: https://podio.com/oauth/authorize
-token_url: https://api.podio.com/oauth/token/v2 (registry currently says podio.com/oauth/token — §3)
+token_url: https://api.podio.com/oauth/token/v2 (registry corrected to this value — TASK-108; was podio.com/oauth/token)
 access_token_ttl: 8h (expires_in=28800, authoritative)
 refresh_token_ttl: 28 days, ROTATED on every refresh — must persist the new one
-confidence: medium — first-live-call gate not yet run. Verify the OAuth2 scheme, working tokenUrl, and refresh rotation on the first connect, then promote markers to [CONFIRMED].
+confidence: medium — first-live-call gate not yet run. Registry now sets authHeaderScheme:'OAuth2' and the corrected tokenUrl (TASK-108); verify the OAuth2 scheme, working tokenUrl, and refresh rotation on the first connect, then promote markers to [CONFIRMED].
 note: vendor-side only — Numa-internal vault/registry wiring lives in 03-connector-setup.md and the connector skill.
 ---
 
@@ -45,7 +45,7 @@ Admin does this once per Numa deployment, in the Podio API console.
 | ----------------- | ---------------------------------------------------------------------------------------------------------- |
 | Grant type        | `authorization_code`                                                                                       |
 | Authorization URL | `https://podio.com/oauth/authorize`                                                                        |
-| Token URL         | `https://api.podio.com/oauth/token/v2` ⚠️ (registry says `https://podio.com/oauth/token` — §3)             |
+| Token URL         | `https://api.podio.com/oauth/token/v2` (registry corrected to this value — TASK-108)                       |
 | Redirect URI      | `https://{client-name}.numa.arcanum.ai/oauth/callback/{oauthSecretId}`                                     |
 | Scopes            | _(empty)_ — Podio's scope model is coarse; omit `scope`, the token inherits the user's full permission set |
 | PKCE required?    | No                                                                                                         |
@@ -85,7 +85,7 @@ Before the access token expires (8h), POST the refresh token (form-urlencoded, n
 
 > ⚠️ **Rotation is the trap.** Each refresh issues a new refresh token — the connector must overwrite the stored `refresh_token` on **every** refresh. Keep refreshing with the original (or fail to persist the rotated one) and you get locked out once the old token's 28-day window lapses; the user must reconnect. [rotation DOCUMENTED; exact rotate-vs-reuse semantics INFERRED until confirmed on first live refresh.]
 >
-> ⚠️ **`tokenUrl` discrepancy.** Registry sets `tokenUrl: 'https://podio.com/oauth/token'`, but the documented endpoint is `https://api.podio.com/oauth/token/v2`. `podio.com/oauth/token` historically aliased to v2, but POST to the **documented** endpoint to be safe, and correct the registry (03 §3). If token exchange/refresh fails unexpectedly (404, redirect, or `invalid_grant` on an otherwise-valid code), check this first.
+> ✅ **`tokenUrl` corrected (TASK-108).** Registry now sets `tokenUrl: 'https://api.podio.com/oauth/token/v2'` — the documented Podio token endpoint (verified against developers.podio.com). The old value `https://podio.com/oauth/token` historically aliased to v2 but is not the documented host. If token exchange/refresh still fails unexpectedly (404, redirect, or `invalid_grant` on an otherwise-valid code), check this first.
 
 ## 4. Token Revocation
 

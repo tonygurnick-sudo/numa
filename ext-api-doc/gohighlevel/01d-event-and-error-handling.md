@@ -3,9 +3,9 @@ api_name: GoHighLevel
 api_slug: gohighlevel
 base_url: https://services.leadconnectorhq.com
 path_version_segment: none (version is the Version header, never a path)
-auth: Bearer PIT (backend-injected); Version header mandatory every call
+auth: Bearer PIT (backend-injected); Version header backend-injected (2021-07-28 via static_headers) — agent need not set it
 events: NO webhooks on this connector (PIT auth) — polling only
-rate_limit: numeric thresholds UNPUBLISHED — 429 is the only authoritative signal
+rate_limit: PUBLISHED — burst 100 req/10s + 200,000 req/day per resource (location/company); 429 on breach with X-RateLimit-* headers. Honour the live 429 over the static numbers. [DOCS marketplace.gohighlevel.com]
 call_surface: HTTP via `numa integrations request`. NOT a file-store connector.
 confidence: docs-derived [DOCS], NOT live-validated. Error body shape UNKNOWN — status code is the contract. Markers [UNVERIFIED] inline.
 companions: 01=api-rules, 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns
@@ -53,29 +53,29 @@ numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=100
 
 ### Cadence guidance
 
-Limits unknown — budget by observation, not math:
+Limits are published (burst 100 req/10s; 200,000/day per location/company) — budget against them, and let the live 429 correct you:
 
 - **In chat: poll on demand only.** "What's new?" → one walk from the watermark. No timers in chat.
-- **Standing syncs belong in Numa scheduled agents** — every 15–60 min per entity is a sane start; ~1 request/sec inside a run (community: 1000ms between pages).
-- The first 429 defines the real ceiling — halve pacing and remember it for the session.
+- **Standing syncs belong in Numa scheduled agents** — every 15–60 min per entity is a sane start; sequential, ~1 request/sec inside a run leaves huge headroom under the 100-per-10s burst ceiling.
+- The first 429 still defines the real per-resource ceiling under your token's actual app/load — halve pacing and remember it for the session.
 
-## Rate limits — unknown by design
+## Rate limits — published, with 429 as the live ceiling
 
-- No public numeric thresholds in official docs or community sources. **Do not quote numbers to the user.**
-- 429 is documented as the breach signal — the only authoritative source of rate-limit truth.
-- Check 429 responses for `Retry-After` / `X-RateLimit-*` headers — presence [UNVERIFIED]; honour them if they appear and report their existence.
+- **Burst:** 100 API requests / 10 seconds, per resource (Location or Company). **Daily:** 200,000 requests / day, per resource. [DOCS marketplace.gohighlevel.com]
+- Responses carry rate-limit telemetry: `X-RateLimit-Max` and `X-RateLimit-Remaining` (current burst window), `X-RateLimit-Interval-Milliseconds` (the burst window length), `X-RateLimit-Limit-Daily` and `X-RateLimit-Daily-Remaining` (daily). Read these to pace proactively when present.
+- 429 is the authoritative breach signal — honour the live 429 (and any `Retry-After`) over the static numbers above; the static numbers are per-resource and your effective ceiling can be lower under shared load.
 - Conservative defaults: sequential, ~1/sec, `limit=100` to minimise page count, no speculative refreshes.
 
 ### Backoff ladder for 429
 
 ```
-attempt 1: wait 2s
+attempt 1: wait 2s (or the Retry-After value if the response carries one)
 attempt 2: wait 10s
 attempt 3: wait 30s
 → then stop, tell the user GoHighLevel is rate-limiting, halve pacing for the session
 ```
 
-[UNVERIFIED — recommended; no documented windows to align with]
+Prefer the `Retry-After` header when present; the fixed ladder is the fallback.
 
 ## Error response format — unknown
 
@@ -94,7 +94,7 @@ Raw error JSON structure is undocumented and was never observed live [top risk].
 | 403    | PIT missing a scope for that endpoint family                                 | No         | user edits/recreates the Private Integration (Settings → Private Integrations) with the named scope, then reconnects. Name the scope (01a mapping) |
 | 404    | wrong id/path, or resource in another location                               | No         | verify id, exact documented path, and that the record belongs to THIS location                                                                     |
 | 422    | validation (field values)                                                    | No         | fix values — phone E.164, restricted `country` list, enum values; quote the body                                                                   |
-| 429    | rate limited — thresholds unknown                                            | Yes        | backoff ladder above; honour `Retry-After` if present [UNVERIFIED]                                                                                 |
+| 429    | rate limited — burst 100/10s or 200k/day per resource exceeded               | Yes        | honour `Retry-After`/`X-RateLimit-*` if present, else the backoff ladder above; halve pacing for the session                                       |
 | 5xx    | server error                                                                 | Once       | retry once after 5s; for writes, verify first whether it landed (below)                                                                            |
 
 ### 401 vs 403 — different fixes
@@ -138,7 +138,7 @@ First real sessions should close these; state the finding explicitly when you hi
 | Unknown | How it resolves |
 | --- | --- |
 | Error body JSON shape | first 4xx you receive — quote it |
-| Rate limit numbers / headers | first 429 — check for `Retry-After` / `X-RateLimit-*` |
+| Which `X-RateLimit-*` headers GHL actually returns on 2xx/429 | first live calls — docs list `X-RateLimit-Max`/`-Remaining`/`-Interval-Milliseconds`/`-Limit-Daily`/`-Daily-Remaining`; confirm presence and read them to pace |
 | `/contacts/search` request shape | first successful search call (01b Pattern 3 probe order) |
 | Contact update-timestamp field name | first contact GET (look for `dateUpdated`-like keys) |
 | List sort order | first page of each list |
@@ -170,12 +170,12 @@ numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=1" 
 
 ## Counter-exception handling
 
-1. **First suspect on ANY 4xx: the Version header.** A missing Version header is this connector's signature failure mode.
+1. **First suspect on a 4xx: locationId or a body field — NOT the Version header.** The backend injects `Version: 2021-07-28` on every call, so a missing-Version failure is off the table unless YOU sent a `--headers` Version override (in which case drop it). Check locationId and body fields first.
 2. **403 mid-session on a new endpoint family** = scope gap, not a broken connection. Everything that worked keeps working.
 3. **401 after earlier success** = the PIT was rotated/revoked in HighLevel between calls. Stop, reconnect via the chat card, resume.
 4. **Empty page with 200 is not an error** — end of data or no matches. Stop paging.
 5. **A 404 on an id the user gave you** may mean it lives in a different location than the PIT's — say so rather than declaring it nonexistent [UNVERIFIED, structural inference].
-6. **429 with unknown limits:** never promise "we'll be fine after N seconds" — back off, observe, adapt pacing for the session.
+6. **429 = you exceeded burst (100/10s) or daily (200k/day).** Honour `Retry-After`/`X-RateLimit-*` if returned; otherwise back off the ladder, halve pacing for the session — don't promise a precise resume time beyond what the headers state.
 7. **Response shape contradicts these docs:** trust the live response, surface it verbatim, note the discrepancy.
 8. **User asks for real-time/webhooks:** explain the PIT limitation, offer a Numa scheduled agent running the polling recipe.
 
@@ -188,6 +188,6 @@ numa integrations request gohighlevel GET "/contacts/?locationId={loc}&limit=1" 
 | List results   | first 10 records + "at least N" phrasing unless you drained all pages                                                                                        |
 | 403            | "Your GoHighLevel Private Integration is missing the '<scope>' permission. Edit it under Settings → Private Integrations in HighLevel, then reconnect here." |
 | 401            | "Your GoHighLevel token is no longer valid (it may have been rotated). Please reconnect via the connection card."                                            |
-| 429            | "GoHighLevel is rate-limiting requests (it doesn't publish limits) — I've slowed down and will retry."                                                       |
+| 429            | "GoHighLevel is rate-limiting requests (its limit is ~100 calls per 10 seconds) — I've slowed down and will retry."                                          |
 | Unknown errors | quote the status code and body verbatim — the error format is undocumented, so the raw text is the most useful thing                                         |
 | Real-time asks | "This connection can't receive GoHighLevel webhooks (they require a marketplace app). I can set up a scheduled check instead."                               |

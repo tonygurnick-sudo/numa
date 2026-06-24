@@ -72,7 +72,21 @@ export interface ConnectorTemplate {
   // when omitted. Zoho uses `Zoho-oauthtoken`; most providers use `Bearer`.
   // Persisted to the company vault at wizard save time so the backend
   // request path picks it up without a redeploy.
+  //
+  // SENTINEL: the literal value `access-token` means the OAuth access token is
+  // sent in a header NAMED `access-token` (not inside `Authorization` at all) —
+  // Total Synergy's custom scheme. The backend request path special-cases this.
   authHeaderScheme?: string;
+
+  // Selects a bespoke OAuth authorize/token-exchange/refresh adapter in the
+  // oauth-auth-handler Lambda when the provider's flow is NOT RFC-6749 standard
+  // (custom param/body names, non-standard token endpoint host/path, custom
+  // token-response field casing). `'totalsynergy'` builds the
+  // ApplicationKey/RedirectUri/tenant authorize URL and POSTs to
+  // api.totalsynergy.com/api/v2/Oauth2/GetAccessToken|RefreshAccessToken.
+  // Persisted to the company vault as `oauth_adapter` at wizard save time so
+  // the Lambda picks it up without a code change to the registry import.
+  oauthAdapter?: string;
 
   // Non-OAuth credential fields
   credentialFields?: CredentialFieldDef[];
@@ -316,15 +330,19 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Project Management',
     authType: 'oauth2',
     oauth: {
+      // WorkflowMax by BlueRock — the live product since Xero retired the
+      // original Xero-hosted WorkflowMax on 26 Jun 2024. OAuth runs on
+      // BlueRock's own platform (oauth.workflowmax2.com), NOT Xero identity.
+      // offline_access is required to be issued a refresh token.
       authUrl: 'https://oauth.workflowmax2.com/oauth/authorize',
       tokenUrl: 'https://oauth.workflowmax2.com/oauth/token',
-      scopes: 'openid profile email workflowmax',
+      scopes: 'openid profile email workflowmax offline_access',
       extraAuthParams: '{"prompt":"consent"}',
     },
     oauthSetupSteps: [
-      'Log in to the Xero Developer portal (developer.xero.com)',
-      'Create a new app and select "Web app" as the integration type',
-      'Add the redirect URI below under "OAuth 2.0 redirect URIs"',
+      'Sign in to your WorkflowMax (by BlueRock) account as an administrator',
+      'Open the Developer / API access area and register a new OAuth2 app',
+      "Add the redirect URI below under the app's OAuth 2.0 redirect URIs",
       'Copy the Client ID and generate a Client Secret',
     ],
   },
@@ -335,9 +353,13 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Flexible work management and collaboration platform',
     category: 'Project Management',
     authType: 'oauth2',
+    // Podio uses its own Authorization scheme — NOT Bearer (Bearer -> 401).
+    authHeaderScheme: 'OAuth2',
     oauth: {
       authUrl: 'https://podio.com/oauth/authorize',
-      tokenUrl: 'https://podio.com/oauth/token',
+      // Documented token endpoint is on api.podio.com with a /v2 suffix —
+      // different host from the authorize URL. https://developers.podio.com/authentication
+      tokenUrl: 'https://api.podio.com/oauth/token/v2',
       scopes: '',
       extraAuthParams: '{}',
     },
@@ -410,15 +432,21 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Employee management — time clock, scheduling, and forms (OAuth)',
     category: 'HR & Workforce',
     authType: 'oauth2',
-    oauth: {
-      authUrl: 'https://app.connecteam.com/oauth/authorize',
-      tokenUrl: 'https://app.connecteam.com/oauth/token',
-      scopes: 'forms.read attachments.write',
-    },
+    // NON-SELF-SERVICE (TASK-113). Connecteam's official OAuth 2.0 is
+    // `client_credentials` ONLY (server-to-server; no consent endpoint, no
+    // redirect, no refresh token) — token URL is
+    // POST https://api.connecteam.com/oauth/v1/token with HTTP Basic, 24h tokens.
+    // The authUrl/tokenUrl previously stored here were phantom
+    // authorization_code endpoints that do not exist, so the self-service
+    // OAuth wizard (3-legged, redirect-based) cannot drive this connector and
+    // its Connect button would 404 on authorize. client_credentials also adds
+    // no capability over the static API key (same REST API, account-level
+    // token), so we do NOT wire it. Use the API-key connector (connecteam-api).
+    // See ext-api-doc/connecteam-oauth/05-disposition.md.
+    selfService: false,
     oauthSetupSteps: [
-      'Go to Connecteam Developer Portal → Create an integration',
-      'Set the redirect URI to the value shown below',
-      'Copy the Client ID and Client Secret',
+      'Connecteam OAuth 2.0 is client-credentials only (no redirect flow) and is not self-service.',
+      'Use the "Connecteam (API Key)" connector instead — same data, set up via Settings → API Keys.',
     ],
   },
   {
@@ -428,15 +456,26 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Architecture and engineering practice management (OAuth)',
     category: 'Project Management',
     authType: 'oauth2',
+    surfaces: ['chat'],
+    baseUrl: 'https://api.totalsynergy.com/api/v2',
+    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Total Synergy's OAuth flow is vendor-custom, NOT RFC-6749: the authorize
+    // URL uses ApplicationKey/RedirectUri/tenant (no response_type/scope/PKCE),
+    // the token endpoint lives on a different host+path, and the access token
+    // rides in a header literally named `access-token` (not Authorization).
+    // `oauthAdapter` selects the bespoke flow in oauth-auth-handler; the
+    // `access-token` sentinel on authHeaderScheme drives the outbound header.
+    oauthAdapter: 'totalsynergy',
+    authHeaderScheme: 'access-token',
     oauth: {
-      authUrl: 'https://app.totalsynergy.com/oauth2/authorize',
-      tokenUrl: 'https://app.totalsynergy.com/oauth2/token',
+      authUrl: 'https://app.totalsynergy.com/OAuth2/Authorize',
+      tokenUrl: 'https://api.totalsynergy.com/api/v2/Oauth2/GetAccessToken',
       scopes: '',
     },
     oauthSetupSteps: [
-      'Contact Total Synergy support to register an OAuth application',
-      'Provide them with the redirect URI shown below',
-      'They will supply you with a Client ID and Client Secret',
+      'Register an application at app.totalsynergy.com/Applications (or contact Total Synergy support)',
+      'Set the redirect / callback URI to the value shown below',
+      'They will supply you with an ApplicationKey (Client ID) and ApplicationSecret (Client Secret)',
     ],
   },
 
@@ -674,6 +713,13 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Employee management — time clock, scheduling, and forms (API key)',
     category: 'HR & Workforce',
     authType: 'api-key',
+    baseUrl: 'https://api.connecteam.com',
+    // Connecteam authenticates with a static `X-API-KEY` header, NOT
+    // `Authorization: Bearer`. The map tells the generic request path
+    // (connect_tools.do_request → _headers_from_fields) which user credential
+    // field rides in which outbound header; ApiKeyWizard persists it as
+    // `credential_header_map` on the company vault — no backend redeploy.
+    credentialHeaderMap: { 'X-API-KEY': 'api_token' },
     credentialFields: [
       {
         key: 'api_token',

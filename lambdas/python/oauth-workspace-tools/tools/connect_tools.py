@@ -3106,7 +3106,13 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 # persists the expected prefix on the oauth-client vault entry so
                 # we don't have to hardcode a per-provider map here.
                 auth_scheme = _auth_header_scheme(connector) or "Bearer"
-                authorization = f"{auth_scheme} {access_token}"
+                if auth_scheme.lower() == "access-token":
+                    # SENTINEL (Total Synergy): the token rides in a header NAMED
+                    # `access-token`, NOT inside Authorization. Emit it as a custom
+                    # header and leave Authorization unset.
+                    custom_auth_headers = {"access-token": access_token}
+                else:
+                    authorization = f"{auth_scheme} {access_token}"
             else:
                 user_fields = _user_connector_fields(connector, user_sub)
                 header_map = _connector_header_map(connector)

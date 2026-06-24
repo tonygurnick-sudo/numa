@@ -96,7 +96,7 @@ Before users connect, a Cin7 Omni admin must create an API connection (**Setting
 Agent calls `connectors(name="request", params={connector:"cin7-omni", url:"/v1/Products?page=1&rows=50", method:"GET"})`. `handle_connect_request`:
 
 1. Expands the relative URL against the stored `base_url` (`_resolve_connector_base_url` → `https://api.cin7.com/api` + `/v1/Products...`).
-2. Looks for an OAuth token (none), then a single per-user token via `_user_connector_token` (none — no `api_key`-style field), then **`_user_connector_basic_creds`** → the user's `connector-cin7-omni` personal-vault secret → builds `Authorization: Basic base64(username:password)`.
+2. Resolves auth in `do_request`: an OAuth token first (none); then, because the company config declares `connector_type: username-password` and has no `credential_header_map`, the **`elif declared == "username-password":` branch** reads the user's `connector-cin7-omni` personal-vault fields (`_user_connector_fields`) and calls `_basic_from_fields`, building `Authorization: Basic base64(username:password)`. A missing username or password yields no header and counts as not connected.
 3. `_connector_static_headers` contributes nothing (no `api_key`/`api_key_header` on the config).
 4. No stored user credential → returns the structured `needs_credential` error (`_needs_credential_response`), surfaced as the **inline chat credential card** built from the `credential_fields` snapshot. On submit, values are written to the user's personal vault (`connector-cin7-omni`, fields `username`+`password`) via the PAT credentials endpoint, and the request retries.
 

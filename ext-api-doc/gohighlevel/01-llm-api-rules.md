@@ -6,12 +6,12 @@ url_form: relative path against base_url (e.g. /contacts/); backend expands it
 path_version_segment: none (no /v1/ etc.; API version is the Version HEADER, never a path)
 legacy_host_never_use: rest.gohighlevel.com (API 1.0, deprecated)
 auth: Bearer PIT (pit-...) — injected by backend; agent NEVER sets Authorization
-required_header: Version (mandatory every call; default 2021-07-28; 2023-02-21 for contacts)
+required_header: Version (mandatory every call; BACKEND-INJECTED as 2021-07-28 via static_headers — agent need not set it; override per-call to 2023-02-21 only to pin the newest contacts schema)
 field_casing: camelCase
 id_format: opaque strings (e.g. locationId 110411007T) — never parse/synthesize
 tenant_key: locationId (required on most list/search + many write bodies)
-rate_limit: numeric thresholds UNPUBLISHED — 429 is the only authoritative signal
-call_surface: HTTP via `numa integrations request gohighlevel <METHOD> <URL> --headers '{"Version":"..."}' [--body '{...}']`. NOT a file-store connector — does NOT support list-files/search-files/download-file.
+rate_limit: PUBLISHED — burst 100 req/10s + 200,000 req/day, per resource (location/company); 429 on breach with X-RateLimit-* headers. 429 is still the authoritative live signal — honour it over the static numbers. [DOCS marketplace.gohighlevel.com]
+call_surface: HTTP via `numa integrations request gohighlevel <METHOD> <URL> [--headers '{"Version":"2023-02-21"}'] [--body '{...}']`. Version is backend-injected; --headers only needed to override it. NOT a file-store connector — does NOT support list-files/search-files/download-file.
 confidence: every fact docs-derived from the 2026-05-04 investigation [DOCS], NOT live-validated through Numa; non-default markers [UNVERIFIED]/[INFERRED] inline. Trust real responses over this file; note discrepancies.
 companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=events+errors
 ---
@@ -23,21 +23,21 @@ GoHighLevel (HighLevel) API 2.0 — CRM + marketing: contacts, conversations (SM
 ## How to call
 
 ```
-numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
-numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"2021-07-28"}' --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","email":"jane@acme.co"}' -m "create contact"
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" -m "list contacts"
+numa integrations request gohighlevel POST /contacts/ --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","email":"jane@acme.co"}' -m "create contact"
 ```
 
 - URL = relative path (`/contacts/...`); backend prepends base_url. No version segment — `/v1/...` does NOT exist.
 - `Authorization: Bearer pit-...` is backend-injected from the user's vault. NEVER set it; you never see the token.
-- `Version` is NOT auto-added — pass it via `--headers` on EVERY call (per-call value wins).
+- `Version` is **backend-injected** as `2021-07-28` (the connector's `static_headers`). You do NOT need to add it. Pass `--headers '{"Version":"2023-02-21"}'` ONLY to override it for a call (per-call value wins).
 - POST/PUT body = single JSON object (no arrays). `--body '{...}'` or ad-hoc `--field value` flags (auto-camelized).
 
 ## The Version header
 
-- Selects the response schema. Required every call.
-- Values: `2023-02-21` (current), `2021-07-28`, `2021-04-15` (legacy, supported).
-- **Default `2021-07-28`** (works across families). Contacts docs target `2023-02-21`; if a contacts response looks wrong under `2021-07-28`, retry with `2023-02-21` [UNVERIFIED which differences exist].
-- Missing/invalid Version → expected 400/401-class [UNVERIFIED body]. First suspect on any odd 4xx.
+- Selects the response schema. Required on every call — but the backend supplies it for you (`2021-07-28` via `static_headers`), so it is never your job to remember it.
+- Values: `2023-02-21` (newest), `2021-07-28` (the injected default; works across families), `2021-04-15` (legacy, supported).
+- **Default `2021-07-28`** — injected automatically. Contacts has a newer `2023-02-21` schema; if a contacts response looks wrong, override with `--headers '{"Version":"2023-02-21"}'` [UNVERIFIED which response differences exist].
+- You will not normally produce a missing-Version 4xx because the backend always sends it. If you ever DO see a Version-shaped 4xx, it means your `--headers` override sent a bad value — drop the override and let the default ride.
 
 ## locationId — the tenant key
 
@@ -70,12 +70,12 @@ PIT = long-lived token from HighLevel → Settings → Private Integrations → 
 1. Receive webhooks — they require an OAuth Marketplace app; PIT gets none. **Polling only.**
 2. Exceed 100 records/page (default 20).
 3. Call anything the PIT wasn't scoped for (→ 403).
-4. Know numeric rate limits (undocumented; 429 is the only signal).
+4. Beat the published rate limits — burst 100 req/10s and 200,000/day per location; a 429 is the live ceiling, back off.
 5. Use API 1.0 (`rest.gohighlevel.com`).
 
 ## Critical gotchas
 
-1. **Version header is required and NOT auto-injected** — pass it every call. First thing to check on any 4xx.
+1. **Version header is required but backend-injected** (`2021-07-28`) — you do not pass it; only override via `--headers` to pin a newer schema (`2023-02-21` for contacts). A Version-shaped 4xx means your override value is wrong.
 2. **locationId required on most lists.** Resolve via `GET /locations/search` first; don't guess.
 3. **403 ≠ bad credentials** — missing PIT scope. Fix in HighLevel Settings → Private Integrations, not by re-entering the token.
 4. **`GET /contacts/` is deprecated** in favour of `/contacts/search` — still works, is the documented cursor-pagination path; prefer for full listing until search shape is validated; expect eventual removal.
@@ -88,13 +88,13 @@ PIT = long-lived token from HighLevel → Settings → Private Integrations → 
 
 ## Default parameters (override only if the user specifies)
 
-| Param                     | Default                                  | Reason                                        |
-| ------------------------- | ---------------------------------------- | --------------------------------------------- |
-| Version                   | 2021-07-28 (header, every call)          | SDK/MCP example value                         |
-| locationId                | from `GET /locations/search`, cached     | required on most lists                        |
-| limit                     | 20 (API default); use 100 for bulk reads | max 100                                       |
-| startAfter / startAfterId | omit on page 1; then from `meta`         | cursor pagination                             |
-| Pacing                    | ≥ 1 call/sec, sequential                 | limits unknown — be conservative [UNVERIFIED] |
+| Param                     | Default                                  | Reason                                                      |
+| ------------------------- | ---------------------------------------- | ----------------------------------------------------------- |
+| Version                   | 2021-07-28 (backend-injected; don't set) | static_headers default; override only to pin a newer schema |
+| locationId                | from `GET /locations/search`, cached     | required on most lists                                      |
+| limit                     | 20 (API default); use 100 for bulk reads | max 100                                                     |
+| startAfter / startAfterId | omit on page 1; then from `meta`         | cursor pagination                                           |
+| Pacing                    | sequential, well under 100 req/10s       | published burst limit; a 429 is the live ceiling            |
 
 ## Core operations (full catalog in 01a)
 
@@ -132,16 +132,18 @@ Body format unknown — status code is the contract; quote bodies verbatim.
 | 403 | PIT missing a scope | user adds scope in Settings → Private Integrations; do not retry |
 | 404 | wrong id or path (or record in another location) | verify entity id + exact documented path |
 | 422 | unprocessable (field validation) | fix values (phone E.164, country); don't retry unchanged |
-| 429 | rate limited (thresholds unknown) | back off 2s→10s→30s→stop; reduce pacing for the session |
+| 429 | rate limited (burst 100/10s or 200k/day) | check `Retry-After`/`X-RateLimit-*`; back off 2s→10s→30s→stop; reduce pacing for the session |
 | 5xx | server error | retry once after 5s; for writes, check first whether it landed |
 
 ## Examples
 
+(The Version header is backend-injected — none of these set it. Add `--headers '{"Version":"2023-02-21"}'` only to pin the newer contacts schema.)
+
 1. Resolve location, then list contacts:
 
 ```
-numa integrations request gohighlevel GET /locations/search --headers '{"Version":"2021-07-28"}' -m "find location"
-numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" --headers '{"Version":"2021-07-28"}' -m "list contacts"
+numa integrations request gohighlevel GET /locations/search -m "find location"
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100" -m "list contacts"
 ```
 
 → `{"contacts":[...],"meta":{"startAfter":...,"startAfterId":...}}`
@@ -149,13 +151,13 @@ numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShl
 2. Next page (BOTH cursors):
 
 ```
-numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100&startAfter=1717977600000&startAfterId=ocQHyuzHvysMo5N5VsXc" --headers '{"Version":"2021-07-28"}' -m "next page"
+numa integrations request gohighlevel GET "/contacts/?locationId=ve9EPM428h8vShlRW1KT&limit=100&startAfter=1717977600000&startAfterId=ocQHyuzHvysMo5N5VsXc" -m "next page"
 ```
 
 3. Create a contact:
 
 ```
-numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"2021-07-28"}' --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","lastName":"Smith","email":"jane.smith@acme.co.nz","phone":"+6495551234"}' -m "create contact"
+numa integrations request gohighlevel POST /contacts/ --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","lastName":"Smith","email":"jane.smith@acme.co.nz","phone":"+6495551234"}' -m "create contact"
 ```
 
 → `{"contact":{"id":"...",...}}` [wrapper inferred from SDK]. Capture the `id`.
@@ -163,6 +165,6 @@ numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"202
 4. Pipelines, then update an opportunity (mirror field names from a GET first — PUT body names are [UNVERIFIED]):
 
 ```
-numa integrations request gohighlevel GET "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT" --headers '{"Version":"2021-07-28"}' -m "list pipelines"
-numa integrations request gohighlevel PUT /opportunities/{opportunityId} --headers '{"Version":"2021-07-28"}' --body '{"pipelineStageId":"...","status":"won"}' -m "move deal"
+numa integrations request gohighlevel GET "/opportunities/pipelines?locationId=ve9EPM428h8vShlRW1KT" -m "list pipelines"
+numa integrations request gohighlevel PUT /opportunities/{opportunityId} --body '{"pipelineStageId":"...","status":"won"}' -m "move deal"
 ```

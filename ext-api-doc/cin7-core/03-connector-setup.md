@@ -66,7 +66,7 @@ Both come from Cin7 Core → **Integrations → API → New Application**, and b
 
 Notes:
 
-- `authType: 'api-key'` + `credentialHeaderMap` routes the backend to the **custom-header** credential path (`_user_connector_header_creds`) — not Bearer, not Basic.
+- `authType: 'api-key'` + `credentialHeaderMap` routes the backend to the **custom-header** credential path (the `if header_map:` branch in `do_request`, building the headers via `_headers_from_fields`) — not Bearer, not Basic. That branch is checked **first**, ahead of the declared `connector_type`, so a `credential_header_map` always wins.
 - **No `adminFields`** (admin flow is register + metadata only) and no `rateLimitDaily` — Core has no documented daily cap (unlike Omni's 5,000/day).
 
 The slug is also listed in `infra/config/connectors.ts` → `NATIVE_CONNECTORS` (under "Inventory (Cin7 is two separate products with separate APIs)"), feeding the unified Integrations catalog endpoint. That slug list is mirrored in `lambdas/python/workspace-chat-tools/tools/user_profile.py` (`_NATIVE_CONNECTOR_SLUGS`) — keep in sync if the slug ever changes.
@@ -106,7 +106,7 @@ Before users connect, someone with Cin7 Core access must create an API Applicati
 The agent calls `numa integrations request cin7-core GET "/Product?page=1&limit=100"`, routed to `handle_connect_request`, which:
 
 1. Expands the relative URL against the stored `base_url` (`_resolve_connector_base_url` → `https://inventory.dearsystems.com/externalapi/v2` + `/Product...`).
-2. Looks for: an OAuth token (none) → a single per-user token via `_user_connector_token` (none — vault fields are `account_id`/`application_key`, not `api_key`-style) → a Basic-auth pair via `_user_connector_basic_creds` (none — no `username`/`password`) → **`_user_connector_header_creds`** → reads `credential_header_map` from `connector-config-cin7-core`, resolves each mapped field from the user's `connector-cin7-core` personal-vault secret, builds **both** custom headers. **All-or-nothing:** if either mapped field is missing, no headers returned and the user counts as not connected.
+2. Resolves auth in `do_request`: an OAuth token first (none for this connector), then — because a `credential_header_map` is present on `connector-config-cin7-core` — the **`if header_map:` custom-header branch** wins ahead of any `connector_type`/Basic/token fallback. It reads the user's `connector-cin7-core` personal-vault fields (`_user_connector_fields`) and calls `_headers_from_fields(header_map, fields)`, resolving each mapped field into its header and building **both** custom headers. **All-or-nothing:** if either mapped field is missing, `_headers_from_fields` returns `{}` and the user counts as not connected (`_entry_has_usable_credential` mirrors this exactly for the status payload).
 3. `_connector_static_headers` contributes nothing (no `api_key`/`api_key_header` on the config).
 4. No stored user credential → returns the structured `needs_credential` error (`_needs_credential_response`), surfaced as the **inline chat credential card** built from the `credential_fields` snapshot. On submit, values written to the user's personal vault (`connector-cin7-core`, fields `account_id` + `application_key`) via the PAT credentials endpoint, and the request retries.
 

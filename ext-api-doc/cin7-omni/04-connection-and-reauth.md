@@ -45,7 +45,7 @@ Unlike ProWorkflow-style per-user logins, Omni credentials are **not tied to a C
 3. The agent surfaces an **inline credential card** asking for: **Username** (the account's Cin7 API Username) and **API Key** (the connection's key, stored in the `password` field).
 4. On submit, the pair is stored as `connector-cin7-omni` in the **user's personal vault** (fields `username`+`password`). The agent retries and the request succeeds.
 
-The agent never sees either value: the backend (`handle_connect_request` in `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`) reads them via `_user_connector_basic_creds` and injects `Authorization: Basic ...` on every call. Agents must never set that header.
+The agent never sees either value: the backend (`handle_connect_request` in `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`) reads them in `do_request` — the `elif declared == "username-password":` branch calls `_basic_from_fields` over the user's vault fields — and injects `Authorization: Basic ...` on every call. Agents must never set that header.
 
 ## 3. Credential lifetime / rotation
 

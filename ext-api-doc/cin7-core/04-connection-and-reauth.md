@@ -44,7 +44,7 @@ The credential pair is **per API Application, not per Cin7 user** — two Numa u
 3. The agent surfaces this as an **inline credential card** asking for **Account ID** (Cin7 Core → Integrations → API) and **Application Key** (the API Application's key, a password field).
 4. On submit, the pair is stored as `connector-cin7-core` in the **user's personal vault** (fields `account_id` + `application_key`). The agent retries and the request succeeds.
 
-The agent never sees either value: the backend (`handle_connect_request` in `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`) reads them via `_user_connector_header_creds` — resolving the admin-stored `credential_header_map`, building **both** custom headers, all-or-nothing (a partial pair counts as not connected) — and injects them on every call. Agents must never set those headers themselves.
+The agent never sees either value: the backend (`handle_connect_request` in `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`) reads them in `do_request` — the `if header_map:` branch resolves the admin-stored `credential_header_map` and calls `_headers_from_fields` over the user's vault fields, building **both** custom headers all-or-nothing (a partial pair counts as not connected) — and injects them on every call. Agents must never set those headers themselves.
 
 ## 3. Credential lifetime / rotation
 
