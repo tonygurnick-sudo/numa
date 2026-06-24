@@ -607,15 +607,28 @@ Parameters are identical to customer activity operations, but use `supplierId` i
 | ------------------- | -------------------------------------------------------------------------- | -------- |
 | `upload_attachment` | Upload a file from the workspace to a ticket as an attachment on a comment | Yes      |
 
-The file at `workspaceFilePath` is PUT to S3 via a presigned URL, and a system comment is added to the ticket carrying the attachment record. The attachment shows up under the ticket's Attachments section in the UI and in `get_ticket` under `comments[].attachments`.
+This is **one command** — you do not handle the upload yourself. The CLI reads
+the workspace file, PUTs it to S3 via a presigned URL, and adds a system comment
+to the ticket carrying the attachment record, all in a single call. You never see
+or move the presigned URL (and you couldn't — `curl`/`wget` are blocked). The
+attachment shows up under the ticket's Attachments section in the UI and in
+`get_ticket` under `comments[].attachments`. One approval covers the whole thing.
 
-| Parameter           | Type   | Required | Description                                                                                                      |
-| ------------------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------- |
-| `workspaceFilePath` | string | Yes      | Absolute workspace path (e.g. `/workdir/uploads/screenshot.png`). User-pasted files land in `/workdir/uploads/`. |
-| `ticketId`          | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)                                                                  |
-| `displayId`         | string | No       | Display ID (e.g. `BUG-064`) -- resolves automatically                                                            |
-| `fileName`          | string | Yes      | Name to store the file as (typically the basename of `workspaceFilePath`).                                       |
-| `contentType`       | string | Yes      | MIME type (e.g., `image/png`, `application/pdf`).                                                                |
+| Parameter           | Type   | Required | Description                                                                                                                                                                                                                 |
+| ------------------- | ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `workspaceFilePath` | string | Yes      | Absolute workspace path (e.g. `/workdir/uploads/screenshot.png`). User-pasted files land in `/workdir/uploads/`; files downloaded from integrations land in `/workdir/tmp/integrations-results/`. Must be under `/workdir`. |
+| `ticketId`          | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)                                                                                                                                                                             |
+| `displayId`         | string | No       | Display ID (e.g. `BUG-064`) -- resolves automatically                                                                                                                                                                       |
+| `fileName`          | string | No       | Name to store the file as. Defaults to the basename of `workspaceFilePath`.                                                                                                                                                 |
+| `contentType`       | string | No       | MIME type (e.g., `image/png`, `application/pdf`). Inferred from the file extension when omitted.                                                                                                                            |
+
+Example — attach a screenshot pulled from Slack to a ticket:
+
+```bash
+numa ops upload_attachment \
+  --params '{"workspaceFilePath":"/workdir/tmp/integrations-results/screenshot.png","displayId":"BUG-389"}' \
+  -m "attach the Slack screenshot to BUG-389"
+```
 
 ---
 

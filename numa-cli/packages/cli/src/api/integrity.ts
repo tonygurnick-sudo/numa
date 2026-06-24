@@ -125,6 +125,31 @@ export async function atomicDownload(url: string, destPath: string, opts: Atomic
 }
 
 /**
+ * PUT `body` to a presigned S3 URL, sending the EXACT Content-Type the URL was
+ * signed with — S3 rejects a presigned PUT whose `Content-Type` header doesn't
+ * match the signed value, so the caller must pass the same type it handed the
+ * presign step. The body is an in-memory Buffer (the caller has already read
+ * the file): that gives a known Content-Length, which a presigned PUT
+ * requires — S3 won't accept chunked/streaming PUTs against a presigned URL.
+ *
+ * The CLI uses this where the model can't: `curl`/`wget` are blocked by the
+ * workspace security hook, but the CLI's own `fetch` reaches S3 fine (same
+ * outbound path `atomicDownload` uses). Throws on any non-2xx so a partial /
+ * rejected upload is never reported as success.
+ */
+export async function uploadToPresignedUrl(url: string, body: Buffer, contentType: string): Promise<void> {
+  const res = await fetch(url, {
+    method: 'PUT',
+    body,
+    headers: { 'Content-Type': contentType },
+  });
+  if (!res.ok) {
+    // Do NOT include `url` — it carries a presigned bearer token.
+    throw new Error(`upload failed: HTTP ${res.status} ${res.statusText}`.trim());
+  }
+}
+
+/**
  * The fixed spillover envelope emitted by workspace-chat-tools'
  * `response_size.inline_or_spill` and pipedream-proxy's
  * `offload_oversized_result`.

@@ -43,6 +43,7 @@ import { type OutputModeFlags } from '../../output/mode.js';
 import { splitExtraArgs, parseJsonBlob, requireUserMessage } from '../../output/cli-args.js';
 import { requiresLocalApproval } from '../../context/approval.js';
 import { gateWriteOp } from './_hitl.js';
+import { runUploadAttachment, type OpsInvoke, type UploadAttachmentResult } from './_ops-attachment.js';
 
 /**
  * Canonical list of valid operations. Mirrors VALID_OPERATIONS in
@@ -274,6 +275,54 @@ export function createOpsCommand(): Command {
 
           const tokens = await getValidTokens(account);
           const scope = resolveScopingContext(account);
+
+          // upload_attachment is not a simple pass-through: the bytes have to
+          // move from the workspace to S3, and the model can't do that itself
+          // (curl/wget are blocked). The CLI orchestrates read → presign → PUT
+          // → register-as-comment as one logical command. The single approval
+          // above gates the presign step; the follow-on comment is its
+          // mechanical completion (auto-approved). See _ops-attachment.ts.
+          if (operation === 'upload_attachment') {
+            const invoke: OpsInvoke = (op, p, g) => {
+              const callParams: OpsOperationParams & { operation: string } = {
+                operation: op,
+                params: p,
+                auto_approved: g.autoApproved,
+              };
+              return invokeTool(account, tokens.accessToken, {
+                tool: `ops_${op}` as `ops_${string}`,
+                params: callParams,
+                context: {
+                  allowed_kbs: scope.allowed_kbs,
+                  allowed_kb_operations: scope.allowed_kb_operations,
+                  conversation_id: scope.conversation_id || undefined,
+                },
+                id_token: tokens.idToken,
+                user_message: options.userMessage,
+                ...(g.requestId ? { request_id: g.requestId } : {}),
+              });
+            };
+
+            let uploaded: UploadAttachmentResult;
+            try {
+              uploaded = await runUploadAttachment({
+                invoke,
+                opParams,
+                gate: { autoApproved, ...(requestId ? { requestId } : {}) },
+              });
+            } catch (err) {
+              fail(`ops upload_attachment failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+
+            prettyOrSpill({
+              tool: 'ops_upload_attachment',
+              result: uploaded,
+              options,
+              render: (r) => process.stdout.write(JSON.stringify(r, null, 2) + '\n'),
+            });
+            if (process.env['NUMA_DEBUG']) info('ops upload_attachment done');
+            return;
+          }
 
           const params: OpsOperationParams & { operation: string } = {
             operation,
