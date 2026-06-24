@@ -4,7 +4,7 @@ Used by both ``numa-chat-agent`` (read-only, to resolve a user's accessible
 KBs per turn) and ``numa-kb-manager`` (the full CRUD API).
 """
 
-from .kb_manager import KnowledgeBaseManager
+from .kb_manager import KnowledgeBaseManager, sanitize_kb_name
 from .resource_taxonomy import (
     INDUSTRIES,
     PERSONAS,
@@ -14,6 +14,7 @@ from .resource_taxonomy import (
 
 __all__ = [
     "KnowledgeBaseManager",
+    "sanitize_kb_name",
     "PERSONAS",
     "INDUSTRIES",
     "normalise_personas",

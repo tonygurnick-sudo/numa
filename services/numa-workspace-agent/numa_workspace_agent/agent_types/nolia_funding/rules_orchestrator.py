@@ -47,6 +47,7 @@ from typing import Any, Optional
 import boto3
 import structlog
 
+from ...prompts import safe_kb_label
 from ..base import AgentTypeConfig
 from ..registry import get_agent_type_config
 from .workspace_setup import (
@@ -190,7 +191,7 @@ async def run_nolia_funding_rules_pipeline(
         )
 
     # ── Pre-pipeline: download KB inputs ────────────────────────────────────
-    emit("download", f"Loading '{kb_name}' source documents...")
+    emit("download", f"Loading '{safe_kb_label(kb_name)}' source documents...")
     await setup_funding_rules_workspace(
         user_sub,
         conversation_id,
@@ -229,7 +230,7 @@ async def run_nolia_funding_rules_pipeline(
     if kb_category == "global":
         user_context = (
             f"Generate an ORGANISATION-WIDE (Global) assessment rulebook "
-            f"for the '{kb_name}' knowledge base. Read the policy documents "
+            f"for the '{safe_kb_label(kb_name)}' knowledge base. Read the policy documents "
             f"in `/workdir/knowledge-bases/documents/` and produce a "
             f"self-contained, cited set of rules that apply across every "
             f"Fund, Grant, and Scholarship."
@@ -262,7 +263,7 @@ async def run_nolia_funding_rules_pipeline(
         )
     else:
         user_context = (
-            f"Generate an assessment rulebook for the '{kb_name}' Funding "
+            f"Generate an assessment rulebook for the '{safe_kb_label(kb_name)}' Funding "
             f"knowledge base. Read the selection-criteria documents "
             f"(policy, rubric, scorecard), application form, output "
             f"template, and supporting-data-manifest.json in "
