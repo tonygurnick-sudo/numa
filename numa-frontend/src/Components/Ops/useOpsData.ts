@@ -300,9 +300,9 @@ export const useOpsData = (): OpsDataState => {
     async (boardId: string) => {
       try {
         setTicketsLoading(true);
-        // Default load excludes archived tickets. Views that want to surface
-        // archived data (e.g. AllTicketsView's "Show Archived" toggle) re-fetch
-        // with includeArchived=true explicitly.
+        // Default load returns all non-deleted tickets. The board/backlog views
+        // hide past-sprint work client-side; the admin Trash view re-fetches with
+        // includeDeleted=true to surface soft-deleted tickets. (BUG-369)
         const response = await OpsService.listTickets(numaGet, { boardId });
         setTickets(response.tickets);
         setCache(`tickets_${boardId}`, response.tickets);

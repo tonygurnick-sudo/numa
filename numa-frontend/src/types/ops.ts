@@ -404,7 +404,6 @@ export type Ticket = {
   isBlocking?: boolean;
   /** True when the ticket is the template for an active recurrence rule. Set by backend enrichment. */
   hasRecurrence?: boolean;
-  archived: boolean;
   version: number;
   order: number;
   createdBy: string;
@@ -415,6 +414,11 @@ export type Ticket = {
   scopedAt?: string | null;
   completedAt?: string | null;
   endedAt?: string | null;
+  /** Set when the ticket is soft-deleted (Trash). Cleared on restore. (BUG-369) */
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  /** Legacy pre-rework flag — still set on old data. Treated as completed/old work. (BUG-369) */
+  archived?: boolean;
 };
 
 export type LinkedWorkTicket = {
@@ -665,7 +669,6 @@ export type UpdateTicketPayload = {
   boardId?: string;
   currentBoardId?: string;
   ticketTypeId?: string;
-  archived?: boolean;
   assigneeId?: string | null;
   assigneeName?: string | null;
   reporterId?: string | null;
