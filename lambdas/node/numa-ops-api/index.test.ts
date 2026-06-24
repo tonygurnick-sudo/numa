@@ -240,3 +240,105 @@ describe('DELETE /ops/tickets/{id}/comments/{cid} — atomic delete + count drop
     expect(transactWrites()).toHaveLength(0);
   });
 });
+
+describe('POST /ops/tickets — typeless create uses board default type + prefix (BUG-366/367)', () => {
+  const STAGE = { PK: `TEAM#${TEAM_ID}`, SK: 'STAGE#stage-1', statusType: 'todo' };
+
+  it('resolves null ticketTypeId to the board default and mints the type prefix (SAL), not the TKT ghost', async () => {
+    const BOARD = {
+      PK: `TEAM#${TEAM_ID}`,
+      SK: 'META',
+      id: TEAM_ID,
+      accessControl: { mode: 'all' },
+      ticketTypeId: 'tt-sal',
+      allowedTicketTypes: ['tt-sal'],
+    };
+    sendMock.mockImplementation((cmd: FakeCommand) => {
+      const input = (cmd.input ?? {}) as Record<string, unknown>;
+      const values = (input.ExpressionAttributeValues ?? {}) as Record<string, unknown>;
+      const key = (input.Key ?? {}) as Record<string, unknown>;
+      if (cmd.__name === 'Query' && values[':pk'] === `TEAM#${TEAM_ID}` && values[':sk'] === 'META')
+        return Promise.resolve({ Items: [BOARD] });
+      if (cmd.__name === 'Get' && key.PK === `TEAM#${TEAM_ID}` && key.SK === 'STAGE#stage-1')
+        return Promise.resolve({ Item: STAGE });
+      if (cmd.__name === 'Get' && key.PK === 'CONFIG' && key.SK === 'TICKET_TYPE#tt-sal')
+        return Promise.resolve({ Item: { prefix: 'SAL' } });
+      if (cmd.__name === 'Update' && key.PK === 'PREFIX' && key.SK === 'SAL')
+        return Promise.resolve({ Attributes: { nextSequence: 435 } });
+      return Promise.resolve({ Items: [] });
+    });
+    const res = await handler(
+      event('POST', '/api/ops/tickets', { boardId: TEAM_ID, stageId: 'stage-1', title: 'Inbound enquiry' })
+    );
+    expect(res.statusCode).toBe(201);
+    const items = (transactWrites()[0].input as { TransactItems: { Put?: { Item: Record<string, unknown> } }[] })
+      .TransactItems;
+    const ticketItem = items.map((i) => i.Put?.Item).find((it) => it?.entityType === 'TICKET');
+    expect(ticketItem?.ticketTypeId).toBe('tt-sal');
+    expect(String(ticketItem?.displayId)).toMatch(/^SAL-/);
+  });
+
+  it('still falls back to TKT when the board has no ticket type at all', async () => {
+    const BOARD = { PK: `TEAM#${TEAM_ID}`, SK: 'META', id: TEAM_ID, accessControl: { mode: 'all' } };
+    sendMock.mockImplementation((cmd: FakeCommand) => {
+      const input = (cmd.input ?? {}) as Record<string, unknown>;
+      const values = (input.ExpressionAttributeValues ?? {}) as Record<string, unknown>;
+      const key = (input.Key ?? {}) as Record<string, unknown>;
+      if (cmd.__name === 'Query' && values[':pk'] === `TEAM#${TEAM_ID}` && values[':sk'] === 'META')
+        return Promise.resolve({ Items: [BOARD] });
+      if (cmd.__name === 'Get' && key.PK === `TEAM#${TEAM_ID}` && key.SK === 'STAGE#stage-1')
+        return Promise.resolve({ Item: STAGE });
+      if (cmd.__name === 'Update' && key.PK === 'PREFIX' && key.SK === 'TKT')
+        return Promise.resolve({ Attributes: { nextSequence: 693 } });
+      return Promise.resolve({ Items: [] });
+    });
+    const res = await handler(
+      event('POST', '/api/ops/tickets', { boardId: TEAM_ID, stageId: 'stage-1', title: 'No-type board ticket' })
+    );
+    expect(res.statusCode).toBe(201);
+    const items = (transactWrites()[0].input as { TransactItems: { Put?: { Item: Record<string, unknown> } }[] })
+      .TransactItems;
+    const ticketItem = items.map((i) => i.Put?.Item).find((it) => it?.entityType === 'TICKET');
+    expect(ticketItem?.ticketTypeId).toBeUndefined();
+    expect(String(ticketItem?.displayId)).toMatch(/^TKT-/);
+  });
+
+  it('uses the request-supplied ticketTypeId (and its prefix) over the board default', async () => {
+    const BOARD = {
+      PK: `TEAM#${TEAM_ID}`,
+      SK: 'META',
+      id: TEAM_ID,
+      accessControl: { mode: 'all' },
+      ticketTypeId: 'tt-sal',
+      allowedTicketTypes: ['tt-sal', 'tt-bug'],
+    };
+    sendMock.mockImplementation((cmd: FakeCommand) => {
+      const input = (cmd.input ?? {}) as Record<string, unknown>;
+      const values = (input.ExpressionAttributeValues ?? {}) as Record<string, unknown>;
+      const key = (input.Key ?? {}) as Record<string, unknown>;
+      if (cmd.__name === 'Query' && values[':pk'] === `TEAM#${TEAM_ID}` && values[':sk'] === 'META')
+        return Promise.resolve({ Items: [BOARD] });
+      if (cmd.__name === 'Get' && key.PK === `TEAM#${TEAM_ID}` && key.SK === 'STAGE#stage-1')
+        return Promise.resolve({ Item: STAGE });
+      if (cmd.__name === 'Get' && key.PK === 'CONFIG' && key.SK === 'TICKET_TYPE#tt-bug')
+        return Promise.resolve({ Item: { prefix: 'BUG' } });
+      if (cmd.__name === 'Update' && key.PK === 'PREFIX' && key.SK === 'BUG')
+        return Promise.resolve({ Attributes: { nextSequence: 12 } });
+      return Promise.resolve({ Items: [] });
+    });
+    const res = await handler(
+      event('POST', '/api/ops/tickets', {
+        boardId: TEAM_ID,
+        stageId: 'stage-1',
+        title: 'Explicit type',
+        ticketTypeId: 'tt-bug',
+      })
+    );
+    expect(res.statusCode).toBe(201);
+    const items = (transactWrites()[0].input as { TransactItems: { Put?: { Item: Record<string, unknown> } }[] })
+      .TransactItems;
+    const ticketItem = items.map((i) => i.Put?.Item).find((it) => it?.entityType === 'TICKET');
+    expect(ticketItem?.ticketTypeId).toBe('tt-bug');
+    expect(String(ticketItem?.displayId)).toMatch(/^BUG-/);
+  });
+});

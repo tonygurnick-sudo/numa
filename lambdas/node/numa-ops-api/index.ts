@@ -2640,8 +2640,24 @@ const handleTickets = async (
       }
     }
 
-    // Resolve prefix from ticket type
-    const prefix = ticketTypeId ? await resolveTicketTypePrefix(String(ticketTypeId)) : 'TKT';
+    // BUG-366/367: resolve the ticket type BEFORE minting the displayId. Use the
+    // type supplied on the request, else fall back to the board's default (its
+    // first allowed type). Persisting a real type here — instead of leaving it
+    // null and minting the legacy 'TKT' ghost prefix — is what stops the displayId
+    // from freezing to TKT-### while the UI later renders the board's default
+    // type (the mismatch that produced TKT-### on Sales/SAL tickets).
+    const allowedTypes = createTeamMeta?.allowedTicketTypes;
+    const boardDefaultTicketType =
+      (createTeamMeta?.ticketTypeId as string | undefined) ||
+      (Array.isArray(allowedTypes) ? (allowedTypes[0] as string | undefined) : undefined);
+    const resolvedTicketTypeId = ticketTypeId
+      ? String(ticketTypeId)
+      : boardDefaultTicketType
+        ? String(boardDefaultTicketType)
+        : undefined;
+
+    // Only a board with no ticket type at all falls through to the legacy 'TKT'.
+    const prefix = resolvedTicketTypeId ? await resolveTicketTypePrefix(resolvedTicketTypeId) : 'TKT';
 
     // Atomic display ID generation
     const { displayId } = await getNextDisplayId(prefix);
@@ -2663,7 +2679,7 @@ const handleTickets = async (
       teamId,
       zoneId,
       stageId,
-      ticketTypeId: ticketTypeId ? String(ticketTypeId) : undefined,
+      ticketTypeId: resolvedTicketTypeId,
       title: String(title),
       description: description ? String(description) : undefined,
       priority: priority ? String(priority) : 'medium',
