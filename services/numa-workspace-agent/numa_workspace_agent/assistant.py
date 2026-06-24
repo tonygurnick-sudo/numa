@@ -24,6 +24,7 @@ from typing import Optional
 
 import boto3
 import structlog
+from numa_workspace_agent.prompts import safe_kb_label
 
 logger = structlog.get_logger()
 
@@ -309,7 +310,10 @@ def build_assistant_prompt(context: AssistantContext) -> str:
         kb_names = [
             kb.get("name", kb.get("id", "unknown")) for kb in context.available_kbs
         ]
-        tool_lines.append(f"- numa_files: ENABLED (folders: {', '.join(kb_names)})")
+        safe_kb_names = [safe_kb_label(name) for name in kb_names]
+        tool_lines.append(
+            f"- numa_files: ENABLED (folders: {', '.join(safe_kb_names)})"
+        )
     else:
         tool_lines.append("- numa_files: DISABLED (user can enable in settings)")
 
@@ -427,7 +431,8 @@ def build_context_block(context: AssistantContext) -> str:
         kb_names = [
             kb.get("name", kb.get("id", "unknown")) for kb in context.available_kbs
         ]
-        lines.append(f"ENABLED_KBS: {', '.join(kb_names)}")
+        safe_kb_names = [safe_kb_label(name) for name in kb_names]
+        lines.append(f"ENABLED_KBS: {', '.join(safe_kb_names)}")
     else:
         lines.append("ENABLED_KBS: None - disabled")
 

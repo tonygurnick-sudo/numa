@@ -1,6 +1,7 @@
 """Knowledge Base management utilities for split user KBs."""
 
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
@@ -10,6 +11,58 @@ import structlog
 from prm import client as prm_client
 
 logger = structlog.get_logger()
+
+
+# KB names are interpolated raw into LLM system prompts when a KB is offered to
+# the chat agent, so an unsanitised name is a prompt-injection vector (the FE is
+# React-escaped, so the risk is the prompt, not XSS). We accept the punctuation
+# that shows up in legitimate names (e.g. "global-Evaluation Report CER",
+# "R&D / Q3 (2024)") and reject everything else via an allow-list — control
+# characters and structural metacharacters never reach the prompt or DynamoDB.
+_KB_NAME_MAX_LEN = 120
+
+# Allow-list: letters (any Unicode script), digits, spaces, and the punctuation
+# set . _ - ( ) & ' , /  — nothing else. Control chars (\x00-\x1f, \x7f) and
+# newlines/tabs are excluded by construction. \w covers Unicode letters/digits
+# (re.UNICODE is the default for str patterns) plus underscore.
+_KB_NAME_ALLOWED_RE = re.compile(r"^[\w \.\-\(\)&',/]+$", re.UNICODE)
+
+# Explicit control-character guard. \w can match some exotic categories, so we
+# reject ASCII control chars and DEL up front for a clear, defensive error.
+_KB_NAME_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def sanitize_kb_name(name: str) -> str:
+    """Validate and normalise a knowledge-base display name.
+
+    Strips surrounding whitespace and enforces an allow-list so the name is safe
+    to interpolate into LLM system prompts and persist. Raises ``ValueError`` on
+    any violation; returns the stripped name on success.
+
+    Rules:
+        - required (non-empty after strip)
+        - max length 120 chars
+        - no control characters / newlines / tabs (\\n \\r \\t, \\x00-\\x1f, \\x7f)
+        - allow-list: letters, digits, spaces, and the punctuation set ._-()&',/
+    """
+    if not isinstance(name, str):
+        raise ValueError("Knowledge base name is required")
+
+    stripped = name.strip()
+    if not stripped:
+        raise ValueError("Knowledge base name is required")
+
+    if len(stripped) > _KB_NAME_MAX_LEN:
+        raise ValueError("Knowledge base name is too long")
+
+    if _KB_NAME_CONTROL_RE.search(stripped):
+        raise ValueError("Knowledge base name contains invalid characters")
+
+    if not _KB_NAME_ALLOWED_RE.match(stripped):
+        raise ValueError("Knowledge base name contains invalid characters")
+
+    return stripped
+
 
 if TYPE_CHECKING:  # Provide local lightweight type defs so CI doesn't need boto3-stubs
     from typing import Mapping, Sequence, TypedDict
@@ -81,6 +134,11 @@ class KnowledgeBaseManager:
         Returns:
             KB record dict
         """
+        # Validate + normalise the display name before it touches the prompt
+        # path or DynamoDB. Defence-in-depth: the API layer also calls this, but
+        # every write goes through here so no caller can persist a bad name.
+        name = sanitize_kb_name(name)
+
         # Generate unique ID
         kb_id = str(uuid.uuid4())
         s3_prefix = f"documents/kb-{kb_id}/"
@@ -490,6 +548,11 @@ class KnowledgeBaseManager:
             new_viewers_list = kb.get("viewers", []) or []
             new_editors_list = kb.get("editors", []) or []
 
+            if name is not None:
+                # Validate + normalise before persisting (same guard as create).
+                # ValueError propagates to the caller, which maps it to a 400.
+                name = sanitize_kb_name(name)
+
             if name is not None and name != kb["kb_name"]:
                 # Check name uniqueness
                 if self._kb_name_exists(name):
@@ -594,6 +657,10 @@ class KnowledgeBaseManager:
 
             return False
 
+        except ValueError:
+            # Validation errors (bad/duplicate name) must reach the API layer so
+            # it can return a precise 400 — don't bury them as a generic failure.
+            raise
         except Exception as e:
             logger.error("Error updating KB", kb_id=kb_id, error=str(e))
             return False
