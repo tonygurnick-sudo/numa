@@ -7,7 +7,9 @@ import { useAlert } from '../../Providers/ConfirmContext';
 
 export interface User {
   username: string;
-  email: string;
+  // Optional: SSO/federated users can have no email attribute when the IdP omits the email
+  // claim. Callers must guard accesses (e.g. `user.email?.toLowerCase()`). (BUG-382/383)
+  email?: string;
   enabled: boolean;
   status: string;
   created: Date;
