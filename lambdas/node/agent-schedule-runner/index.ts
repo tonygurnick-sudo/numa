@@ -384,7 +384,8 @@ type AgentSnapshot = {
   requiredIntegrations?: string[];
   toolsConfig?: AgentToolsConfig;
   // Per-agent workspace-chat model (Standard / Premium / Expert), refreshed live each run so an
-  // existing schedule inherits the agent's current model. Omitted → platform default (Premium).
+  // existing schedule inherits the agent's current model. Omitted → container request-time default
+  // (Standard when the model-selection flag is on for the client, else Premium — FEAT-247).
   modelId?: string;
 };
 
@@ -3228,7 +3229,9 @@ const mergeRunConfig = (
   const numaOpsEnabled = base.numaOpsEnabled ?? toolsConfig.numaOpsEnabled;
   // Model: an explicit per-schedule run_config.modelId wins (none is set today — there's no
   // scheduler model picker), else inherit the agent's live model from the refreshed snapshot so an
-  // existing schedule follows the agent's current model. Undefined on both → backend default (Premium).
+  // existing schedule follows the agent's current model. Undefined on both → the container's
+  // request-time default: Standard when WORKSPACE_CHAT_MODEL_SELECTION is on for the client, else
+  // Premium (FEAT-247 — resolved in sdk_config.platform_default_model, not here).
   const modelId = base.modelId ?? agentSnapshot?.modelId;
 
   console.info('[SCHEDULE_RUNNER] mergeRunConfig KB resolution', {
