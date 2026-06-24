@@ -20,7 +20,12 @@ from botocore.exceptions import ClientError
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 
-from kb_core import KnowledgeBaseManager, normalise_industries, normalise_personas
+from kb_core import (
+    KnowledgeBaseManager,
+    normalise_industries,
+    normalise_personas,
+    sanitize_kb_name,
+)
 from prm import client as prm_client
 from prm import resource as prm_resource
 
@@ -119,9 +124,14 @@ async def create_kb(request: Request) -> Response:
     try:
         body = await request.json()
 
-        name = body.get("name", "").strip()
-        if not name:
-            return JSONResponse({"error": "Missing name"}, status_code=400)
+        # Validate + normalise the KB name. sanitize_kb_name strips, enforces
+        # length, and applies an allow-list — rejecting prompt-injection payloads
+        # (KB names are interpolated raw into LLM system prompts). Bad names must
+        # be a 400, never a 500.
+        try:
+            name = sanitize_kb_name(body.get("name", ""))
+        except ValueError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
 
         viewers = body.get("viewers", [])
         editors = body.get("editors", [])
@@ -264,6 +274,15 @@ async def update_kb(request: Request, kb_id: str) -> Response:
                 return JSONResponse({"error": "Access denied"}, status_code=403)
 
         name = body.get("name")
+        # Validate + normalise the new name when supplied (name is optional on
+        # update). Reject prompt-injection / control-char / over-length payloads
+        # with a 400, never a 500.
+        if name is not None:
+            try:
+                name = sanitize_kb_name(name)
+            except ValueError as e:
+                return JSONResponse({"error": str(e)}, status_code=400)
+
         viewers = body.get("viewers")
         editors = body.get("editors")
         personas_input = body.get("personas")
