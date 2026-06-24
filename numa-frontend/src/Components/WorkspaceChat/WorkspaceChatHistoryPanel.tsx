@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bot, History, Pencil, Trash2 } from 'lucide-react';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
-import i18n from '../../i18n';
+import { formatRelativeTime, groupConversationsByDate } from '../../utils/chatHistoryGrouping';
 import { useAuth } from '../../Providers/AuthProvider';
 import { useConfirm, usePrompt } from '../../Providers/ConfirmContext';
 
@@ -30,68 +30,6 @@ export interface WorkspaceChatHistoryPanelProps {
   currentConversationId?: string | null;
   onSelectConversation: (conversationId: string, isWorkspaceConversation?: boolean) => void;
 }
-
-const formatRelativeTime = (
-  timestamp: number,
-  t: (key: string, options?: Record<string, unknown>) => string
-): string => {
-  if (!timestamp || timestamp < 86400000) return '';
-
-  const now = Date.now();
-  const diff = now - timestamp;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (seconds < 60) return t('newChat.relativeTime.justNow');
-  if (minutes < 60) return t('newChat.relativeTime.minutesAgo', { count: minutes });
-  if (hours < 24) return t('newChat.relativeTime.hoursAgo', { count: hours });
-  if (days === 1) return t('newChat.relativeTime.yesterday');
-  if (days < 7) return t('newChat.relativeTime.daysAgo', { count: days });
-
-  const date = new Date(timestamp);
-  const currentYear = new Date().getFullYear();
-  if (date.getFullYear() !== currentYear) {
-    return date.toLocaleDateString(i18n.language || undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  }
-  return date.toLocaleDateString(i18n.language || undefined, {
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-type DateGroupKey = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | string;
-
-const getDateGroupKey = (timestamp: number): DateGroupKey => {
-  if (!timestamp || timestamp < 86400000) return 'older';
-
-  const now = new Date();
-  const date = new Date(timestamp);
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
-  const startOfWeek = new Date(startOfToday);
-  startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay());
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-  if (date >= startOfToday) return 'today';
-  if (date >= startOfYesterday) return 'yesterday';
-  if (date >= startOfWeek) return 'thisWeek';
-  if (date >= startOfMonth) return 'thisMonth';
-
-  return `month-${date.getFullYear()}-${date.getMonth()}`;
-};
-
-const getMonthYearLabel = (timestamp: number): string => {
-  return new Date(timestamp).toLocaleDateString(i18n.language || undefined, {
-    month: 'long',
-    year: 'numeric',
-  });
-};
 
 export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef, WorkspaceChatHistoryPanelProps>(
   function WorkspaceChatHistoryPanel({ isOpen, currentConversationId, onSelectConversation }, ref) {
@@ -249,36 +187,7 @@ export const WorkspaceChatHistoryPanel = forwardRef<WorkspaceChatHistoryPanelRef
       };
     }, [loadMoreConversations, hasMore, isLoadingMore, isOpen]);
 
-    const groupedConversations = useMemo(() => {
-      const groups: { key: string; label: string; conversations: ConversationMeta[] }[] = [];
-      const groupMap = new Map<string, ConversationMeta[]>();
-      const groupOrder: string[] = [];
-
-      const groupLabelMap: Record<string, string> = {
-        today: t('history.dateGroups.today'),
-        yesterday: t('history.dateGroups.yesterday'),
-        thisWeek: t('history.dateGroups.thisWeek'),
-        thisMonth: t('history.dateGroups.thisMonth'),
-        older: t('history.dateGroups.older'),
-      };
-
-      for (const convo of conversations) {
-        const key = getDateGroupKey(convo.latestTimestamp);
-        if (!groupMap.has(key)) {
-          groupMap.set(key, []);
-          groupOrder.push(key);
-        }
-        groupMap.get(key)!.push(convo);
-      }
-
-      for (const key of groupOrder) {
-        const items = groupMap.get(key)!;
-        const label = groupLabelMap[key] ?? getMonthYearLabel(items[0].latestTimestamp);
-        groups.push({ key, label, conversations: items });
-      }
-
-      return groups;
-    }, [conversations, t]);
+    const groupedConversations = useMemo(() => groupConversationsByDate(conversations, t), [conversations, t]);
 
     if (!isOpen) {
       return null;

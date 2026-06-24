@@ -251,6 +251,44 @@
   }
 }
 
+// Mobile-only: keep the Recent Activity row's trailing date + chevron on-screen.
+// Long account labels otherwise push them past the card's clipped (border-radius
+// overflow) right edge, making them unreachable. We let the name and account
+// columns shrink + truncate so the fixed-width date and chevron stay visible.
+// Desktop layout (single row, full-width labels) is untouched.
+@media (max-width: 768px) {
+  .automation-activity-row {
+    // Allow the flex children to shrink below their content width so the
+    // truncation below can take effect.
+    min-width: 0;
+  }
+
+  .automation-activity-row__name {
+    // Already flex-grow-1 + min-w-0 in markup; reassert here so it shares
+    // remaining space with the account column rather than monopolising it.
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .automation-activity-row__account {
+    // The big change: on desktop this column is flex-shrink-0 (Bootstrap's
+    // `.flex-shrink-0` utility, which is `!important`) so it never shrinks —
+    // that's what pushes the date/chevron offscreen on mobile. Override with
+    // `!important` to let it shrink, and cap it so the trailing date + chevron
+    // always fit.
+    flex-grow: 0;
+    flex-shrink: 1 !important;
+    flex-basis: auto;
+    min-width: 0;
+    max-width: 45%;
+    overflow: hidden;
+
+    .text-truncate {
+      min-width: 0;
+    }
+  }
+}
+
 // Empty state
 .automation-empty-state {
   max-width: 400px;
@@ -436,6 +474,72 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+  }
+}
+
+// Mobile-only: agent-picker (Create wizard step 3) description fix.
+// On desktop the description is a single truncated line; on narrow screens the
+// truncation can fail (clips without an ellipsis) and a single line is too
+// little. Allow a 2-line clamp on mobile so the description stays readable and
+// always shows an ellipsis when it overflows. The text column is constrained so
+// the clamp/ellipsis can take effect. Desktop is untouched.
+@media (max-width: 768px) {
+  .workflow-agent-item__text {
+    // The text column already carries `flex-grow-1 min-w-0` utilities; pin the
+    // basis to 0 so it's sized by available space, not by content width, which
+    // is what lets the description clamp/ellipsis below actually engage.
+    flex-basis: 0;
+    min-width: 0;
+  }
+
+  .workflow-agent-item__desc {
+    // Override the inherited `text-truncate` (white-space:nowrap) so we can
+    // clamp to two lines with an ellipsis instead of clipping a single line.
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+// Mobile-only: Automations DASHBOARD toolbar (section title + Search + view
+// toggle). On desktop this is `justify-content-between flex-wrap`: title on the
+// left, actions (search + Card/Table toggle) on the right. On narrow screens
+// the actions group stays narrow/right-aligned, leaving ragged whitespace.
+// Drop the actions group onto its own full-width row and let the search input
+// and view toggle stretch to fill that row. Desktop layout is untouched.
+@media (max-width: 768px) {
+  .automations-dashboard-toolbar {
+    // Right-hand action group (search + view toggle wrapper) — the immediate
+    // `.d-flex.gap-2` after the title. Force it onto its own full-width row so
+    // its children have the whole container width to share.
+    > div:last-child {
+      flex: 1 1 100%;
+    }
+
+    // Search wrapper (`.position-relative` with inline `max-width: 240`). Let it
+    // grow to fill the row; override the inline cap so the input can stretch.
+    > div:last-child > .position-relative {
+      flex: 1 1 auto;
+      max-width: none !important;
+
+      // The Form.Control input inside — make it fill the wrapper.
+      .form-control {
+        width: 100%;
+      }
+    }
+
+    // Card/Table view toggle (`.btn-group`) — let it stretch and have its two
+    // buttons split the available width evenly rather than sitting narrow.
+    > div:last-child > .btn-group {
+      flex: 1 1 auto;
+
+      .btn {
+        flex: 1 1 auto;
+      }
+    }
   }
 }
 

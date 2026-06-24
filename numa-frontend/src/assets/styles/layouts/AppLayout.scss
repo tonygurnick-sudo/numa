@@ -40,16 +40,19 @@
 
 // Mobile layout (≤768px)
 .app-layout-mobile {
+  // Fixed top nav is 54px tall + 1px bottom border. Clear exactly that so the
+  // page content sits flush under the nav (previously 60px → ~5px grey gap).
+  --mobile-nav-clearance: 55px;
   width: 100%;
-  min-height: calc(100dvh - 60px - env(safe-area-inset-top, 0px));
+  min-height: calc(100dvh - var(--mobile-nav-clearance) - env(safe-area-inset-top, 0px));
   background: var(--brand-background, var(--color-bg-lightest));
 
   &-content {
-    padding-top: calc(60px + env(safe-area-inset-top, 0px)); // Account for fixed top nav
+    padding-top: calc(var(--mobile-nav-clearance) + env(safe-area-inset-top, 0px)); // Account for fixed top nav
     width: 100%;
     display: flex;
     flex-direction: column;
-    min-height: calc(100dvh - 60px - env(safe-area-inset-top, 0px));
+    min-height: calc(100dvh - var(--mobile-nav-clearance) - env(safe-area-inset-top, 0px));
     overflow: hidden;
   }
 }

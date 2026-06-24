@@ -184,7 +184,7 @@ const OpsHeader = ({ activityOpen, onToggleActivity }: OpsHeaderProps = {}) => {
         {/* ── Row 2: Team selector + Zone/Sprint strip (Board view only) ── */}
         {topView === 'board' && (
           <div
-            className="d-flex align-items-center px-3 gap-3 border-bottom bg-white"
+            className="ops-board-bar d-flex align-items-center px-3 gap-3 border-bottom bg-white"
             style={{ minHeight: 54, padding: '10px 0' }}
           >
             {/* Board / All Boards selector */}

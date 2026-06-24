@@ -3,6 +3,7 @@
  */
 import { useTranslation } from 'react-i18next';
 import type { VaultSecretMetadata } from '../../Services/VaultService';
+import './VaultSecretsList.scss';
 
 const TYPE_ICONS: Record<string, string> = {
   login: 'bi bi-key-fill',
@@ -31,7 +32,7 @@ export function VaultSecretsList({ secrets, onSelect, onEdit, onDelete }: Props)
   }
 
   return (
-    <div className="table-responsive">
+    <div className="table-responsive vault-secrets-list">
       <table className="table table-hover align-middle">
         <thead>
           <tr>
@@ -58,24 +59,24 @@ export function VaultSecretsList({ secrets, onSelect, onEdit, onDelete }: Props)
                 </div>
                 {secret.description && <small className="text-muted d-block">{secret.description}</small>}
               </td>
-              <td>
+              <td data-label={t('vault.columns.type')}>
                 <span className="d-flex align-items-center gap-1">
                   <i className={TYPE_ICONS[secret.type] || TYPE_ICONS.custom} />
                   {t(`vault.types.${secret.type ?? 'custom'}`)}
                 </span>
               </td>
-              <td>
+              <td data-label={t('vault.columns.category')}>
                 <span className="badge bg-secondary-subtle text-secondary">{secret.category}</span>
               </td>
-              <td>
+              <td data-label={t('vault.columns.lastAccessed')}>
                 <small className="text-muted">
                   {secret.last_accessed_at ? new Date(secret.last_accessed_at).toLocaleDateString() : '-'}
                 </small>
               </td>
-              <td>
+              <td data-label={t('vault.columns.created')}>
                 <small className="text-muted">{new Date(secret.created_at).toLocaleDateString()}</small>
               </td>
-              <td className="text-end">
+              <td className="text-end vault-cell-actions">
                 <button
                   className="btn btn-sm btn-outline-secondary me-1"
                   onClick={(e) => {

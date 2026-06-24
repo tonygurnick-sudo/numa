@@ -23,6 +23,9 @@ import {
   type SortDirection,
   type Filters,
 } from '../Components/UserManagement';
+// Mobile-only toolbar reflow (full-width search, wrapping controls). Gated to
+// <=768px; desktop is unchanged.
+import './UserManagement.scss';
 
 type UserManagementProps = {
   embedded?: boolean;
@@ -55,8 +58,14 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
 
-  // View and filter state
-  const [viewMode, setViewMode] = useState<ViewMode>('row');
+  // View and filter state.
+  // Default to the card view on mobile (<=768px) so Status / Created / View aren't
+  // hidden behind the Table view's silent inner horizontal scroll. Desktop keeps
+  // the Table ('row') default. This only seeds the INITIAL view — the toggle still
+  // lets users switch on any device.
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    typeof window !== 'undefined' && window.innerWidth <= 768 ? 'card' : 'row'
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<Filters>({
     roles: [],
@@ -428,7 +437,7 @@ const UserManagement = ({ embedded = false, mfaEnabled = false }: UserManagement
         <div className="card-body position-relative">
           {loadingUsers && <Preloader smallscreen overlayParent />}
 
-          <div className="mb-3">
+          <div className="mb-3 user-management-toolbar">
             <UserActionsBar
               searchTerm={searchTerm}
               onSearchChange={setSearchTerm}

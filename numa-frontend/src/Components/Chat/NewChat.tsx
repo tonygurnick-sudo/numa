@@ -132,6 +132,13 @@ type NewChatProps = {
   onOpenHistory?: () => void;
   /** Callback to open the agents sidebar (V2 only) */
   onOpenAgents?: () => void;
+  /**
+   * Mobile-only: open the Settings/Tools/Files/Integrations drawer from the
+   * new-chat view. Only provided on mobile (the desktop side panel is reached
+   * via the input-bar settings button), so its entry point only renders when
+   * this callback is present.
+   */
+  onOpenSettings?: () => void;
   /** Files currently being uploaded via drag-and-drop (V2 only) */
   uploadingFiles?: UploadingFile[];
   /** Cancel an in-progress upload (V2 only) */
@@ -254,6 +261,7 @@ const NewChat = ({
   connectedIntegrations = new Set<string>(),
   onOpenHistory,
   onOpenAgents,
+  onOpenSettings,
   uploadingFiles = [],
   onCancelUpload,
   queuedSubmitMessage = null,
@@ -567,8 +575,40 @@ const NewChat = ({
           agentsEnabled={agentsFeatureEnabled}
           connectedIntegrations={connectedIntegrations}
           disabled={buttonStatus === 'streaming' || uploadsInProgress}
-          maxVisible={isMobile ? 4 : 9}
+          // All 9 actions are available. Desktop shows them in its 3-col grid.
+          // Mobile (paged) shows 4 at a time in a 2x2 grid with prev/next arrows,
+          // so the new-chat screen isn't dominated by a tall grid and no actions
+          // are dropped.
+          maxVisible={9}
+          paged={isMobile}
         />
+      )}
+
+      {/* Mobile-only: always-available entry points into the chat drawers
+          (Tools & settings / History / Agents). On a fresh new chat with no
+          history and no agents, the in-list panel buttons below don't render,
+          so without this the drawers are unreachable on mobile. Desktop reaches
+          these via the input-bar settings button and the right-hand side panels,
+          so this row is gated to mobile (onOpenSettings is only passed on mobile). */}
+      {variant === 'v2' && isMobile && onOpenSettings && (
+        <div className="new-chat-mobile-entry-row open-panel-buttons">
+          <button type="button" className="open-history-btn" onClick={onOpenSettings}>
+            <i className="bi bi-sliders" aria-hidden="true" />
+            {t('newChat.toolsAndSettings')}
+          </button>
+          {onOpenHistory && (
+            <button type="button" className="open-history-btn" onClick={onOpenHistory}>
+              <i className="bi bi-clock-history" aria-hidden="true" />
+              {t('newChat.openHistory')}
+            </button>
+          )}
+          {agentsFeatureEnabled && onOpenAgents && (
+            <button type="button" className="open-history-btn" onClick={onOpenAgents}>
+              <i className="bi bi-robot" aria-hidden="true" />
+              {t('newChat.openAgents')}
+            </button>
+          )}
+        </div>
       )}
 
       {variant !== 'v2' && inputComposer}
@@ -736,7 +776,12 @@ const NewChat = ({
                       )}
                     </div>
                   ))}
+                  {/* In-list overflow buttons: desktop only. On mobile the
+                      always-visible new-chat-mobile-entry-row above already
+                      provides History/Agents/Settings, so suppress these to
+                      avoid duplicate buttons. */}
                   {variant === 'v2' &&
+                    !isMobile &&
                     (recentConversations.length > 3 || (personalAgents.length > 0 && onOpenAgents)) && (
                       <div className="open-panel-buttons">
                         {recentConversations.length > 3 && onOpenHistory && (

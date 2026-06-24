@@ -163,6 +163,26 @@
     text-overflow: ellipsis;
   }
 
+  // Mobile: let the title/subtitle wrap within the viewport instead of being
+  // clipped offscreen by the inherited nowrap width (column layout only).
+  @include mobile {
+    .page-header__title-wrap {
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .page-header__title-group {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .page-subtitle {
+      white-space: normal;
+      overflow: visible;
+      text-overflow: clip;
+    }
+  }
+
   .page-icon {
     width: 56px;
     height: 56px;
@@ -537,6 +557,36 @@
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+
+  @include mobile {
+    width: 100%;
+
+    // Search input takes its own full-width row.
+    .position-relative {
+      flex: 1 1 100%;
+    }
+
+    .position-relative .form-control {
+      width: 100% !important;
+    }
+
+    // The four action controls (View Options dropdown + 3 action buttons)
+    // form tidy 2-up rows that stretch to fill the container width.
+    .dropdown,
+    .agents-hero__action-btn {
+      flex: 1 1 calc(50% - 0.25rem);
+      min-width: 0;
+    }
+
+    .dropdown .dropdown-toggle {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .agents-hero__action-btn {
+      justify-content: center;
+    }
+  }
 }
 
 .agents-hero__action-btn {
@@ -1085,6 +1135,12 @@
       padding-right: 0.75rem;
       padding-bottom: 1rem;
       padding-left: 0.75rem;
+    }
+
+    // Action buttons (Run Now / Edit / Pause / Delete) wrap 2-up and stretch
+    // to fill each row; container already has flex-wrap.
+    .schedule-detail-actions .btn {
+      flex: 1 1 calc(50% - 0.25rem);
     }
   }
 }

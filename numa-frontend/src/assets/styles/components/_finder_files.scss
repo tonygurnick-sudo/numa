@@ -1922,3 +1922,154 @@
     color: #71717a;
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// MOBILE-ONLY usability reflows (BUG-358). Everything below is scoped
+// to <=768px and only ADDS rules — the desktop single-row toolbar,
+// compact buttons and column grid above are untouched. Shared by both
+// User Files and Company Files since they reuse the same markup.
+// ══════════════════════════════════════════════════════════════════
+@media (max-width: 768px) {
+  .finder-files {
+    // ── CRITICAL: wrap the toolbar so every control is reachable ──
+    // Desktop keeps a single non-wrapping row (justify-content:
+    // space-between). On mobile we let it wrap: the location/primary
+    // cluster stays on the first row, and the search + filter
+    // dropdowns + refresh flow onto following full-width rows so the
+    // "Uploaded by" / "Modified" filters and Refresh are never clipped
+    // by the overflow-x:hidden ancestor.
+    .finder-toolbar {
+      flex-wrap: wrap;
+      row-gap: 0.5rem;
+
+      // The left cluster (location + Upload/New Folder) holds the first row.
+      .finder-toolbar__left {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        row-gap: 0.5rem;
+      }
+
+      // The search + filters + refresh group drops to its own full-width
+      // row and wraps internally so nothing overflows off-screen.
+      .finder-toolbar__actions {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        row-gap: 0.5rem;
+
+        // Search takes the full width of its row; the filter dropdowns
+        // and refresh wrap underneath it.
+        .finder-search {
+          flex: 1 1 100%;
+
+          input {
+            width: 100%;
+          }
+        }
+
+        .finder-filter-select {
+          flex: 1 1 auto;
+          max-width: none;
+          min-height: 40px;
+        }
+      }
+
+      // ── HIGH: give the toolbar buttons a >=40px hit area and bring
+      // their text labels back (the wrap above freed the horizontal
+      // space). Desktop compact 28px buttons are unchanged.
+      .finder-btn {
+        min-height: 40px;
+
+        &.finder-btn--labelled .finder-btn__label {
+          display: inline; // override the desktop <=600px hide
+        }
+      }
+    }
+
+    // ── MEDIUM: stacked row reflow. Desktop keeps the .finder-grid-6
+    // column grid; on mobile each row becomes name-on-line-1 with a
+    // compact meta line (type · modified · size) on line 2, and an
+    // enlarged action cluster. We switch .finder-row off grid into a
+    // wrapping flex row — the name + actions fill line 1, forcing the
+    // meta cells to wrap onto line 2 where they sit inline.
+    .finder-row.finder-grid-6 {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      column-gap: 0.5rem;
+      row-gap: 0.125rem;
+      height: auto;
+      min-height: 52px;
+      padding-top: 0.4rem;
+      padding-bottom: 0.4rem;
+
+      .finder-row__name-content {
+        flex: 1 1 60%;
+        order: 0;
+      }
+
+      // Actions sit at the end of line 1, pushed right.
+      .finder-row__actions {
+        order: 1;
+        flex: 0 0 auto;
+        margin-left: auto;
+      }
+
+      // Meta cells wrap to line 2 and flow inline. The grow on
+      // name-content consumes line 1, so these never fit beside it.
+      .finder-row__meta {
+        order: 2;
+        flex: 0 0 auto;
+        font-size: 0.7rem;
+      }
+
+      // Show type / modified / size on the meta line (override the
+      // Bootstrap d-none visibility utilities). "Added by" (d-lg-block)
+      // stays hidden to keep the line short — type · modified · size.
+      .finder-row__meta--type,
+      .finder-row__meta.d-md-block,
+      .finder-row__meta.d-sm-block {
+        display: inline-flex !important;
+        align-items: center;
+      }
+
+      // A subtle dot separator before the modified/size chips. Empty
+      // chips collapse to zero width so no stray dot shows — :not(:empty)
+      // guards the marker.
+      .finder-row__meta.d-md-block:not(:empty)::before,
+      .finder-row__meta.d-sm-block:not(:empty)::before {
+        content: '·';
+        margin-right: 0.4rem;
+        color: #d4d4d8;
+      }
+    }
+
+    // ── MEDIUM: enlarge per-row action targets to ~40px with more gap
+    // so download / upload / preview / edit / delete are comfortable to
+    // tap and harder to mis-hit. Desktop keeps the tight 24px icon row.
+    .finder-row__actions {
+      gap: 0.25rem;
+
+      button {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+      }
+    }
+
+    // The column-label header rows align to the desktop grid, which no
+    // longer matches the stacked rows — hide them on mobile. The plain
+    // header is all labels; the section header keeps its title + badge
+    // but drops the misaligned column-label cells.
+    .finder-columns.finder-grid-6 {
+      display: none;
+    }
+
+    .finder-section-header.finder-grid-6 {
+      display: block;
+
+      .finder-col {
+        display: none;
+      }
+    }
+  }
+}

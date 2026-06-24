@@ -555,8 +555,9 @@ const ChatInput = ({
   // in the stylesheet — a plain inline `padding` would lose to it, so the SCSS reads
   // the var instead (see `.chat-textarea-v2` in _chat_v2_overrides.scss).
   const showV2ModelSelector = variant === 'v2' && showModelSelector && !!setSelectedModelId;
-  const v2InlineToolsWidth =
-    (chatHealthSlot ? (isMobile ? 95 : 104) : isMobile ? 39 : 44) + (showV2ModelSelector ? (isMobile ? 78 : 92) : 0);
+  // On mobile the inline tools move to a toolbar *below* the textarea, so the
+  // textarea no longer reserves right-side space for an overlay — just normal padding.
+  const v2InlineToolsWidth = isMobile ? 16 : (chatHealthSlot ? 104 : 44) + (showV2ModelSelector ? 92 : 0);
   const v2TextareaStyle =
     variant === 'v2'
       ? ({
@@ -597,13 +598,26 @@ const ChatInput = ({
                   rows={1}
                   style={v2TextareaStyle}
                 />
-                <div className="chat-input-inline-tools">
-                  {renderV2ModelSelector()}
-                  {renderUploadButton('attachment-icon v2-inline')}
-                  {chatHealthSlot}
-                </div>
+                {isMobile ? (
+                  // Mobile: tools + send/mic sit on a row below the textarea (inside the box).
+                  <div className="chat-input-mobile-toolbar">
+                    <div className="chat-input-inline-tools">
+                      {renderV2ModelSelector()}
+                      {renderUploadButton('attachment-icon v2-inline')}
+                      {chatHealthSlot}
+                    </div>
+                    <div className="chat-input-inline-actions">{renderSendButton()}</div>
+                  </div>
+                ) : (
+                  // Desktop: tools overlay the textarea's bottom-right; send sits outside.
+                  <div className="chat-input-inline-tools">
+                    {renderV2ModelSelector()}
+                    {renderUploadButton('attachment-icon v2-inline')}
+                    {chatHealthSlot}
+                  </div>
+                )}
               </div>
-              <div className="chat-input-inline-actions">{renderSendButton()}</div>
+              {!isMobile && <div className="chat-input-inline-actions">{renderSendButton()}</div>}
             </div>
           ) : (
             <Form.Control
@@ -621,7 +635,7 @@ const ChatInput = ({
           )}
         </div>
 
-        {variant === 'v2' && <div className="chat-input-helper-text">{t('input.submitHint')}</div>}
+        {variant === 'v2' && !isMobile && <div className="chat-input-helper-text">{t('input.submitHint')}</div>}
 
         {/* Row 2: Buttons & Toggles (V1 only) */}
         {variant === 'v1' && (

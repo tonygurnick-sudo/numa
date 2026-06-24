@@ -1,0 +1,89 @@
+// Settings.scss — co-located, MOBILE-ONLY tweaks for the Settings surface.
+// Every rule in this file is wrapped in `@media (max-width: 768px)` (the app
+// mobile breakpoint) so desktop rendering is byte-for-byte unchanged. This file
+// is imported directly by Settings.tsx (JS import), so it is compiled stand-alone
+// and uses raw media queries rather than the `@include mobile` mixin.
+
+@media (max-width: 768px) {
+  // [CRITICAL] Tool Approvals matrix (`.approval-grid`) — on desktop this is a
+  // 4-column radio table (Tool | Always approve | Approve writes | Auto-approve all).
+  // The base rule `.approval-grid th { white-space: nowrap }` (in _user_profile.scss)
+  // forces the header row to its full ~487px intrinsic width; combined with the
+  // table's natural `table-layout: auto` and no horizontal-scroll wrapper, the
+  // rightmost radio columns ("Auto-approve all", and at 360px also "Approve
+  // writes") render offscreen and are completely unselectable on a phone.
+  //
+  // Mobile reflow: pin the table to the viewport width with a fixed layout and
+  // let the (translated) column headers wrap onto two lines instead of forcing
+  // overflow. Every column now sits inside the viewport, so all three approval
+  // radios are visible and tappable for every tool category. The header cells
+  // continue to label their radio columns, so the control stays fully labelled
+  // and i18n-safe with no markup or string changes. Desktop is untouched (this
+  // whole block is inside @media (max-width: 768px)).
+  //
+  // Scoped to `.settings-page` so it only hits the two 4-column matrices that
+  // live on the Settings surface (admin "Chat Defaults" + the embedded user
+  // "Approval Settings" tab). The visually-similar 5-column `.approval-grid` in
+  // the Agent create modal is portaled to <body>, outside `.settings-page`, so
+  // its column widths are deliberately left alone.
+  .settings-page .approval-grid {
+    width: 100%;
+    table-layout: fixed;
+
+    // Allow the previously-nowrap headers to wrap so the table fits the viewport.
+    th {
+      white-space: normal;
+      word-break: break-word;
+      font-size: 0.6875rem;
+      line-height: 1.2;
+      padding: 0.4rem 0.2rem;
+      text-align: center;
+      vertical-align: bottom;
+    }
+
+    // First column (tool name + description) keeps the most room; the three radio
+    // columns share the remainder evenly so every radio stays on-screen.
+    th:first-child {
+      width: 40%;
+      text-align: left;
+    }
+
+    th:not(:first-child) {
+      width: 20%;
+    }
+
+    td {
+      padding: 0.6rem 0.2rem;
+    }
+
+    // Keep the tool name / description readable and left-aligned.
+    td:first-child {
+      .fw-semibold {
+        font-size: 0.875rem;
+      }
+
+      .small {
+        font-size: 0.75rem;
+      }
+    }
+
+    // Enlarge the radios slightly so they remain comfortable tap targets in the
+    // now-narrower columns.
+    .form-check-input {
+      width: 1.15rem;
+      height: 1.15rem;
+    }
+  }
+
+  // [HIGH] Global "Ask Numa" FAB clearance. On mobile the FAB is fixed at
+  // bottom:16px with a 40px button (see _ask_numa.scss), so it overlaps the
+  // Save Changes / Reset action row and any table action icons at the bottom of
+  // a settings tab. Add bottom padding to the settings scroll container so the
+  // action row clears the FAB. Scoped to `.settings-page .settings-app-content`
+  // (higher specificity than the bare `.settings-app-content` mobile rule in the
+  // forbidden _layout.scss) so this override wins regardless of stylesheet load
+  // order, and only `padding-bottom` is touched — top/side padding is untouched.
+  .settings-page .settings-app-content {
+    padding-bottom: 88px;
+  }
+}

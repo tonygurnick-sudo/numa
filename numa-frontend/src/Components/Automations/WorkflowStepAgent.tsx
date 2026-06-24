@@ -59,9 +59,11 @@ export const WorkflowStepAgent = ({ agents, selectedAgentId, onSelect, loading }
                 onKeyDown={(e) => e.key === 'Enter' && onSelect(agent.agentId)}
               >
                 <AgentAvatar agent={agent} size={40} />
-                <div className="flex-grow-1 min-w-0">
+                <div className="flex-grow-1 min-w-0 workflow-agent-item__text">
                   <div className="fw-medium text-truncate">{agent.title}</div>
-                  {agent.description && <div className="text-muted small text-truncate">{agent.description}</div>}
+                  {agent.description && (
+                    <div className="text-muted small text-truncate workflow-agent-item__desc">{agent.description}</div>
+                  )}
                 </div>
                 {isSelected && (
                   <div className="workflow-agent-item__check">

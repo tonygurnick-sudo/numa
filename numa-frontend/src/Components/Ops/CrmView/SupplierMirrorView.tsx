@@ -886,7 +886,7 @@ export function SupplierMirrorView(): React.JSX.Element {
     <div className="d-flex flex-column h-100">
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div
-        className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
+        className="ops-fill-toolbar d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white"
         style={{ minHeight: 48 }}
       >
         <Form.Control
@@ -1081,10 +1081,13 @@ export function SupplierMirrorView(): React.JSX.Element {
       {/* ── Board or List content ──────────────────────────────────────── */}
       <div className="flex-grow-1 overflow-auto px-3 pb-3 pt-3">
         {viewMode === 'list' ? (
-          <div style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}>
+          <div
+            className="ops-crm-list"
+            style={{ borderRadius: 10, border: '1px solid #e5e7eb', overflow: 'hidden', backgroundColor: '#fff' }}
+          >
             {/* Header row with FilterDropdown per column */}
             <div
-              className="d-flex align-items-center px-3 py-2"
+              className="ops-crm-list-header d-flex align-items-center px-3 py-2"
               style={{
                 backgroundColor: '#f9fafb',
                 borderBottom: '1px solid #e5e7eb',
@@ -1125,7 +1128,7 @@ export function SupplierMirrorView(): React.JSX.Element {
               filteredSuppliers.map((supplier) => (
                 <div
                   key={supplier.id}
-                  className="d-flex align-items-center px-3 py-2"
+                  className="ops-crm-list-row d-flex align-items-center px-3 py-2"
                   style={{
                     borderBottom: '1px solid #f3f4f6',
                     cursor: 'pointer',
@@ -1148,6 +1151,8 @@ export function SupplierMirrorView(): React.JSX.Element {
                   {visibleColumns.map((col) => (
                     <div
                       key={col.key}
+                      className="ops-crm-list-cell"
+                      data-label={col.label}
                       style={{
                         flex: col.flex ?? '1 1 0',
                         minWidth: 0,

@@ -404,7 +404,7 @@ export const AutomationsPage = () => {
   const renderAutomationsList = () => (
     <>
       {/* Search + view toggle */}
-      <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
+      <div className="automations-dashboard-toolbar d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
         <h6 className="mb-0 fw-semibold">
           {statusFilter === 'all'
             ? t('page.filters.status.all')
@@ -775,14 +775,16 @@ export const AutomationsPage = () => {
                       <CheckCircle2 size={16} className="text-success" />
                     )}
                   </div>
-                  <div className="flex-grow-1 min-w-0">
+                  <div className="flex-grow-1 min-w-0 automation-activity-row__name">
                     <span className="fw-medium text-truncate d-block" style={{ fontSize: '0.85rem' }}>
                       {automation.label || automation.agentTitle || '\u2014'}
                     </span>
                   </div>
-                  <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                  <div className="d-flex align-items-center gap-2 flex-shrink-0 automation-activity-row__account">
                     <AgentAvatar agent={agent ?? undefined} size={18} />
-                    <span className="text-muted small">{agent?.title || automation.agentTitle || '\u2014'}</span>
+                    <span className="text-muted small text-truncate">
+                      {agent?.title || automation.agentTitle || '\u2014'}
+                    </span>
                   </div>
                   <span className="text-muted small flex-shrink-0" style={{ width: 80, textAlign: 'right' }}>
                     {lastRun || '\u2014'}

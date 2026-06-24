@@ -161,7 +161,7 @@ const AllBoardsStrip = ({ canManage, currentUserSub, pinnedBoardIds, onOpenBoard
 
   return (
     <div
-      className="d-flex align-items-stretch gap-3 flex-grow-1 ops-hide-scrollbar pb-2 pb-md-0 px-3 px-md-0"
+      className="ops-all-boards-strip d-flex align-items-stretch gap-3 flex-grow-1 ops-hide-scrollbar pb-2 pb-md-0 px-3 px-md-0"
       style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
     >
       {visibleBoards.map((team) => {

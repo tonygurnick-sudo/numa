@@ -54,89 +54,283 @@ $border-radius-pill: 1rem;
 // NOTE: Chat page header styles removed - now uses shared PageHeader component with .page-header class
 // Deprecated styles: .chat-page-header, .chat-page-title, .chat-page-subtitle, .chat-page-header-buttons
 
-.mobile-chat-actions {
+// Mobile-only: the chat-actions toggle is a compact gear button at the trailing
+// edge of the chat-health top bar. Tapping it opens the mobile chat menu (a
+// tabbed drawer — Settings / History / Agents). Desktop renders those panels in
+// the right-hand aside, and its action buttons in the page header instead.
+// Leading "new chat" button on the mobile health bar — a one-tap shortcut so
+// starting a fresh chat isn't buried in the actions drawer. Only rendered on
+// mobile (the page passes `leading` only in the isMobile branch), so desktop —
+// which already has a New Chat button in its header — is unaffected. Styled
+// lighter than the filled gear so the two flanking buttons don't clash.
+.chat-health-new-chat-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 0.1rem;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 12%, #ffffff 88%);
+  color: var(--brand-primary, var(--color-primary));
+  transition: $transition-smooth;
+
+  &:hover {
+    background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 22%, #ffffff 78%);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand-primary, var(--color-primary));
+    outline-offset: 2px;
+  }
+
+  // Match the trailing gear's ≥40×40 mobile tap target.
+  @include mobile {
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+  }
+}
+
+.chat-health-actions-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-left: 0.1rem;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: var(--brand-primary, var(--color-primary));
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  transition: $transition-smooth;
+
+  &.open {
+    background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 82%, #000000);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand-primary, var(--color-primary));
+    outline-offset: 2px;
+  }
+
+  // This toggle is the sole entry to the chat drawer while in a conversation,
+  // and it's only rendered on mobile. Bump the tap target to ≥40×40 (the gear
+  // glyph stays 15px — only the hit area grows). Mobile-scoped for safety.
+  @include mobile {
+    width: 40px;
+    height: 40px;
+    border-radius: 9px;
+  }
+}
+
+// ── Mobile chat menu drawer ───────────────────────────────────────────────
+// Slides in from the right over the conversation, with a dimming backdrop.
+// The whole subtree only renders on mobile (≤768px), so child selectors are
+// safe without a mixin guard; the parents stay display:none on desktop as a
+// belt-and-braces guard.
+.mobile-chat-menu-backdrop {
+  display: none;
+
+  @include mobile {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 1090;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+
+    &.is-open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+}
+
+.mobile-chat-menu {
   display: none;
 
   @include mobile {
     display: flex;
+    flex-direction: column;
     position: fixed;
-    top: calc(60px + env(safe-area-inset-top, 0px) + 8px);
-    left: 0.25rem;
-    z-index: 900;
-    padding: 0 0.35rem 0;
-    flex-direction: row;
-    align-items: flex-start;
-    pointer-events: none; // allow underlying chat to scroll when closed; children will re-enable
+    inset: 0; // full viewport
+    z-index: 1100;
+    background: #ffffff;
+    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.18);
+    transform: translateX(100%);
+    transition: transform 0.24s ease;
 
-    .mobile-actions-toggle {
-      width: 44px;
-      height: 44px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid transparent;
-      border-radius: 999px;
-      background: var(--brand-primary, var(--color-primary));
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-      color: #fff;
-      padding: 0.35rem;
-      transition: $transition-smooth;
-      margin-left: 0.25rem;
-      pointer-events: auto;
-
-      &:focus-visible {
-        outline: 2px solid var(--brand-primary, var(--color-primary));
-        outline-offset: 2px;
-      }
-
-      &.open {
-        border-color: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 35%, #ffffff);
-        background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 85%, #ffffff);
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
-        color: #fff;
-      }
-    }
-
-    .toggle-icon {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-
-      i {
-        font-size: 2.2rem;
-        font-weight: 800;
-        line-height: 1;
-      }
-    }
-
-    .mobile-actions-panel {
-      margin-left: 0.5rem;
-      margin-top: 0;
-      padding: 0.75rem;
-      background: #ffffff;
-      border: 1px solid #e8e8e8;
-      border-radius: 14px;
-      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
-      max-width: calc(100% - 3.5rem);
-      min-width: 240px;
-      pointer-events: auto;
-
-      &.collapsing,
-      &.show {
-        transition: $transition-smooth;
-      }
-
-      .btn {
-        flex: 1 1 45%;
-        min-width: 140px;
-        justify-content: center;
-        border-radius: 12px;
-        height: 38px;
-      }
+    &.is-open {
+      transform: translateX(0);
     }
   }
+}
+
+.mobile-chat-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: calc(0.75rem + env(safe-area-inset-top, 0px)) 1rem 0.75rem;
+  border-bottom: 1px solid #ececf0;
+}
+
+.mobile-chat-menu-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #18181b;
+}
+
+.mobile-chat-menu-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #52525b;
+  transition: background-color 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(0, 0, 0, 0.05);
+  }
+}
+
+// Single bar: tabs (Settings / History / Agents) on the left, the New Chat +
+// Export icon actions on the right.
+.mobile-chat-menu-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0 0.5rem 0 0.5rem;
+  border-bottom: 1px solid #ececf0;
+}
+
+.mobile-chat-menu-tabs {
+  display: flex;
+  gap: 0.1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto; // tabs scroll horizontally rather than wrap if space is tight
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.mobile-chat-menu-tab {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.7rem 0.5rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px; // sit the active underline on the bar's bottom border
+  background: transparent;
+  color: #71717a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: $transition-smooth;
+
+  svg {
+    flex: 0 0 auto;
+  }
+
+  &.is-active {
+    color: var(--brand-primary, var(--color-primary));
+    border-bottom-color: var(--brand-primary, var(--color-primary));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--brand-primary, var(--color-primary));
+    outline-offset: -2px;
+    border-radius: 6px;
+  }
+}
+
+.mobile-chat-menu-bar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+
+  .dropdown {
+    display: flex;
+  }
+}
+
+// Compact icon buttons at the end of the bar. New Chat is brand-coloured (the
+// primary action); Export reuses its existing toggle, sized to match.
+.mobile-chat-menu-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--brand-primary, var(--color-primary));
+  transition: background-color 120ms ease;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--brand-primary, var(--color-primary)) 10%, transparent);
+  }
+}
+
+.mobile-chat-menu-bar-actions .workspace-chat-settings-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.mobile-chat-menu-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+// The body borrows `.workspace-chat-settings-drawer` so the panels' (deeply
+// scoped) styling applies. Neutralise the desktop drawer's own layout — it is
+// fixed/transformed/hidden by default — so it just fills the menu body and lets
+// the panel's modern-body handle its own scroll. Higher specificity than the
+// base `.workspace-chat-v2 .workspace-chat-settings-drawer` rule.
+.workspace-chat-v2 .mobile-chat-menu-body.workspace-chat-settings-drawer {
+  display: block; // base rule makes this flex column, which collapsed the panel — keep it a plain scroll container
+  position: static;
+  inset: auto;
+  width: auto;
+  height: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
+  background: transparent;
+  border-left: none;
+  box-shadow: none;
+  z-index: auto;
 }
 
 // White container with gaps on sides
@@ -6456,6 +6650,144 @@ $border-radius-pill: 1rem;
     i:last-child {
       font-size: 0.625rem;
       opacity: 0.6;
+    }
+  }
+}
+
+// ── Recent Chats page: mobile list (mirrors the in-chat History tab) ─────────
+// On mobile the 5-column table is replaced by a History-tab-style grouped list
+// (see ChatHistoryPage). Sized a little larger than the in-drawer panel since
+// it's a full page. Desktop keeps the table — these only apply ≤768px.
+@include mobile {
+  .job-history-page {
+    // Let the list items stand on their own — drop the heavy table-card chrome.
+    .job-history-table-card {
+      border: none;
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .chat-history-m-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      padding: 0.5rem 0.9rem 1rem;
+    }
+
+    .chat-history-m-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+
+      & + .chat-history-m-group {
+        margin-top: 0.75rem;
+      }
+    }
+
+    .chat-history-m-group-header {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #a1a1aa;
+      padding: 0.2rem 0.15rem 0.1rem;
+    }
+
+    .chat-history-m-item {
+      display: flex;
+      align-items: stretch;
+      background: #ffffff;
+      border: 1px solid #e4e4e7;
+      border-radius: 10px;
+      overflow: hidden;
+      transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+
+      &.is-agent {
+        border-left: 3px solid var(--brand-primary, #7c3aed);
+      }
+
+      &:active {
+        background: #fafafa;
+      }
+    }
+
+    .chat-history-m-item-content {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      padding: 0.95rem 0.9rem;
+      background: none;
+      border: none;
+      text-align: left;
+    }
+
+    .chat-history-m-item-title {
+      color: #18181b;
+      font-size: 0.9rem;
+      font-weight: 500;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .chat-history-m-item-agent {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      color: var(--brand-primary, #7c3aed);
+      font-size: 0.78rem;
+      font-weight: 500;
+
+      svg {
+        flex-shrink: 0;
+      }
+    }
+
+    .chat-history-m-item-meta {
+      color: #a1a1aa;
+      font-size: 0.74rem;
+    }
+
+    .chat-history-m-item-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.15rem;
+      padding: 0.3rem 0.4rem;
+      flex: 0 0 auto;
+    }
+
+    .chat-history-m-action-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: #a1a1aa;
+      transition:
+        color 0.15s ease,
+        background-color 0.15s ease;
+
+      &:hover,
+      &:focus-visible {
+        color: #52525b;
+        background: #f4f4f5;
+      }
+
+      &--danger:hover,
+      &--danger:focus-visible {
+        color: #dc2626;
+        background: #fef2f2;
+      }
     }
   }
 }
