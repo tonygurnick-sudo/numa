@@ -340,6 +340,7 @@
     "fieldOverrides": "Fields",
     "accessControl": "Access Control",
     "workUnitsTab": "Work Units",
+    "deletedTab": "Deleted",
     "workflow": "Workflow",
     "workflowHelp": "Zones group your workflow stages. Stages are the columns on your board where tickets live.",
     "addStage": "Add stage...",
@@ -587,8 +588,6 @@
     "changeStatus": "Change Status",
     "copyLink": "Copy Ticket Link",
     "delete": "Delete",
-    "archive": "Archive",
-    "unarchive": "Unarchive",
     "openDetail": "Open Details"
   },
   "confirm": {
@@ -612,7 +611,7 @@
     "conflict": "Conflict detected \u2014 please refresh",
     "notFound": "Not found",
     "deleteFailed": "Failed to delete ticket",
-    "archiveFailed": "Failed to archive ticket",
+    "restoreFailed": "Failed to restore ticket",
     "uploadFailed": "Upload failed",
     "pendingAttachmentsFailed": "Some pasted images couldn't be attached: {{files}}. You can re-attach them from the ticket detail view."
   },
@@ -629,8 +628,7 @@
   "filters": {
     "thisBoard": "This Board",
     "allBoards": "All Boards",
-    "showDeleted": "Show Only Deleted",
-    "showArchived": "Show Archived",
+    "showOldWork": "Show completed/old work",
     "activeFilters": "Active Filters",
     "clearAll": "Clear All",
     "contains": "Contains",
@@ -697,11 +695,15 @@
     "addToSprint": "Add to Sprint",
     "draggingCount": "+{{count}}"
   },
-  "archive": {
-    "archive": "Archive",
-    "unarchive": "Unarchive",
-    "archived": "Archived",
-    "showArchived": "Show Archived"
+  "deleted": {
+    "deleted": "Deleted",
+    "restore": "Restore"
+  },
+  "deletedTab": {
+    "description": "Soft-deleted tickets for this board. Restoring brings a ticket back to the board's default stage.",
+    "empty": "No deleted tickets.",
+    "deletedMeta": "Deleted {{when}} by {{who}}",
+    "someone": "someone"
   },
   "activities": {
     "call": "Call",

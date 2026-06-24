@@ -13,6 +13,7 @@ import { GeneralTab } from './tabs/GeneralTab';
 import { WorkUnitsTab } from './tabs/WorkUnitsTab';
 import { TicketsFieldsTab } from './tabs/TicketsFieldsTab';
 import { WorkflowTab } from './tabs/WorkflowTab';
+import { DeletedTicketsTab } from './tabs/DeletedTicketsTab';
 import { ConfirmModal } from './ConfirmModal';
 import { UserPicker } from '../../Inputs/UserPicker';
 import type {
@@ -619,6 +620,12 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                   {t('settings.accessControl')}
                 </Nav.Link>
               </Nav.Item>
+              <Nav.Item>
+                <Nav.Link eventKey="deleted">
+                  <i className="bi bi-trash me-2" />
+                  {t('settings.deletedTab')}
+                </Nav.Link>
+              </Nav.Item>
             </Nav>
 
             {/* ── Content Area ─────────────────────────────────────────────── */}
@@ -797,6 +804,10 @@ export function BoardSettingsModal({ show, onHide, onSaved, onDeleted }: BoardSe
                     />
                   </div>
                 )}
+              </Tab.Pane>
+
+              <Tab.Pane eventKey="deleted" style={{ minHeight: 320 }}>
+                <DeletedTicketsTab boardId={team.id} />
               </Tab.Pane>
             </Tab.Content>
           </Tab.Container>

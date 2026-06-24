@@ -221,7 +221,8 @@ Valid `statusType` values per zone type:
 | `search_tickets`      | Search tickets by text query                     | No       |
 | `create_ticket`       | Create a new ticket                              | Yes      |
 | `update_ticket`       | Update an existing ticket                        | Yes      |
-| `delete_ticket`       | Delete a ticket                                  | Yes      |
+| `delete_ticket`       | Soft-delete a ticket (moves it to Trash)         | Yes      |
+| `restore_ticket`      | Restore a soft-deleted ticket from Trash         | Yes      |
 | `bulk_update_tickets` | Bulk update multiple tickets at once             | Yes      |
 | `add_comment`         | Add a comment to a ticket                        | Yes      |
 | `list_comments`       | List comments on a ticket                        | No       |
@@ -229,19 +230,19 @@ Valid `statusType` values per zone type:
 
 #### list_tickets
 
-| Parameter         | Type   | Required | Description                                                      |
-| ----------------- | ------ | -------- | ---------------------------------------------------------------- |
-| `boardId`         | string | Yes      | Board ID to list tickets for                                     |
-| `stageId`         | string | No       | Filter by stage ID                                               |
-| `statusType`      | string | No       | Filter by status type (backlog, queued, active, completed, etc.) |
-| `assigneeId`      | string | No       | Filter by assignee (user sub)                                    |
-| `customerId`      | string | No       | Filter by linked customer                                        |
-| `workUnitId`      | string | No       | Filter by sprint/work unit                                       |
-| `projectId`       | string | No       | Filter by project                                                |
-| `priority`        | string | No       | Filter by priority (lowest, low, medium, high, highest)          |
-| `includeArchived` | string | No       | Set to "true" to include archived tickets                        |
-| `limit`           | string | No       | Pagination limit                                                 |
-| `cursor`          | string | No       | Pagination cursor from previous response                         |
+| Parameter        | Type   | Required | Description                                                          |
+| ---------------- | ------ | -------- | -------------------------------------------------------------------- |
+| `boardId`        | string | Yes      | Board ID to list tickets for                                         |
+| `stageId`        | string | No       | Filter by stage ID                                                   |
+| `statusType`     | string | No       | Filter by status type (backlog, queued, active, completed, etc.)     |
+| `assigneeId`     | string | No       | Filter by assignee (user sub)                                        |
+| `customerId`     | string | No       | Filter by linked customer                                            |
+| `workUnitId`     | string | No       | Filter by sprint/work unit                                           |
+| `projectId`      | string | No       | Filter by project                                                    |
+| `priority`       | string | No       | Filter by priority (lowest, low, medium, high, highest)              |
+| `includeDeleted` | string | No       | Admin/owner only. Set "true" to include soft-deleted tickets (Trash) |
+| `limit`          | string | No       | Pagination limit                                                     |
+| `cursor`         | string | No       | Pagination cursor from previous response                             |
 
 > **Get ALL tickets — don't get silently truncated.** Omit `limit` entirely and the API auto-paginates, returning every matching ticket in one call. If you DO pass `limit`, the response includes a `cursor` whenever more tickets exist beyond the page — you must re-call with that `cursor` (same filters) and merge pages until no cursor is returned. Never compute counts/totals or build a report off a paginated response that still has a `cursor`.
 
@@ -306,40 +307,48 @@ Valid `statusType` values per zone type:
 
 You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and board ID.
 
-| Parameter        | Type    | Required | Description                                                   |
-| ---------------- | ------- | -------- | ------------------------------------------------------------- |
-| `ticketId`       | string  | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
-| `displayId`      | string  | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
-| `boardId`        | string  | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
-| `currentBoardId` | string  | No       | Current board (for cross-board moves)                         |
-| `title`          | string  | No       | New title                                                     |
-| `description`    | string  | No       | New description                                               |
-| `stageId`        | string  | No       | Move to different stage (auto-updates status type)            |
-| `zoneId`         | string  | No       | Move to different zone                                        |
-| `priority`       | string  | No       | New priority                                                  |
-| `assigneeId`     | string  | No       | New assignee                                                  |
-| `assigneeName`   | string  | No       | Assignee display name                                         |
-| `dueDate`        | string  | No       | New due date                                                  |
-| `customerId`     | string  | No       | Link to customer                                              |
-| `supplierId`     | string  | No       | Link to supplier                                              |
-| `workUnitId`     | string  | No       | Link to sprint/work unit                                      |
-| `projectId`      | string  | No       | Link to project                                               |
-| `tags`           | array   | No       | Updated tags                                                  |
-| `fields`         | object  | No       | Updated custom field values                                   |
-| `effortPoints`   | number  | No       | Updated effort points                                         |
-| `order`          | number  | No       | Position order within stage                                   |
-| `version`        | number  | No       | Optimistic locking (prevents concurrent edits)                |
-| `archived`       | boolean | No       | Set true to archive, false to unarchive                       |
+| Parameter        | Type   | Required | Description                                                   |
+| ---------------- | ------ | -------- | ------------------------------------------------------------- |
+| `ticketId`       | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
+| `displayId`      | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
+| `boardId`        | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
+| `currentBoardId` | string | No       | Current board (for cross-board moves)                         |
+| `title`          | string | No       | New title                                                     |
+| `description`    | string | No       | New description                                               |
+| `stageId`        | string | No       | Move to different stage (auto-updates status type)            |
+| `zoneId`         | string | No       | Move to different zone                                        |
+| `priority`       | string | No       | New priority                                                  |
+| `assigneeId`     | string | No       | New assignee                                                  |
+| `assigneeName`   | string | No       | Assignee display name                                         |
+| `dueDate`        | string | No       | New due date                                                  |
+| `customerId`     | string | No       | Link to customer                                              |
+| `supplierId`     | string | No       | Link to supplier                                              |
+| `workUnitId`     | string | No       | Link to sprint/work unit                                      |
+| `projectId`      | string | No       | Link to project                                               |
+| `tags`           | array  | No       | Updated tags                                                  |
+| `fields`         | object | No       | Updated custom field values                                   |
+| `effortPoints`   | number | No       | Updated effort points                                         |
+| `order`          | number | No       | Position order within stage                                   |
+| `version`        | number | No       | Optimistic locking (prevents concurrent edits)                |
 
 #### delete_ticket
 
-You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and board ID.
+Soft-deletes the ticket — it moves to Trash (hidden from normal views) and can be restored with `restore_ticket`. You can identify the ticket by either `ticketId` (UUID) or `displayId` (e.g. "BUG-002"). If `displayId` is provided, the system will automatically resolve it to the internal UUID and board ID.
 
 | Parameter   | Type   | Required | Description                                                   |
 | ----------- | ------ | -------- | ------------------------------------------------------------- |
 | `ticketId`  | string | Yes\*    | Ticket UUID (\* or provide `displayId` instead)               |
 | `displayId` | string | No       | Display ID (e.g. "BUG-002") -- resolves automatically         |
 | `boardId`   | string | Yes\*    | Board the ticket belongs to (\* auto-resolved from displayId) |
+
+#### restore_ticket
+
+Restores a soft-deleted ticket from Trash back onto its board (at the board's default stage).
+
+| Parameter  | Type   | Required | Description                 |
+| ---------- | ------ | -------- | --------------------------- |
+| `ticketId` | string | Yes      | Ticket UUID to restore      |
+| `boardId`  | string | Yes      | Board the ticket belongs to |
 
 #### bulk_update_tickets
 

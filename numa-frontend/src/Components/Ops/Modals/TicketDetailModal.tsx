@@ -9,6 +9,7 @@ import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAlert } from '../../../Providers/ConfirmContext';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
+import { getAssignableWorkUnits } from '../opsWorkFilters';
 import type {
   Ticket,
   TicketLink,
@@ -169,7 +170,7 @@ export function TicketDetailModal({
   const { numaGet, numaPost, numaPut, numaDelete } = useNumaRequest();
   const { showToast } = useToast();
   const showAlert = useAlert();
-  const [archiving, setArchiving] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const { config, boardData, boards, workUnits, refreshTickets, refreshCrmData } = useOps();
 
   // ── Recurrence state ────────────────────────────────────────────────────
@@ -400,7 +401,7 @@ export function TicketDetailModal({
           setSaveError(false);
           saveErrorRef.current = false;
           void refreshTickets();
-          const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId', 'archived'] as const;
+          const crmImpactingKeys = ['customerId', 'supplierId', 'statusType', 'stageId'] as const;
           if (crmImpactingKeys.some((key) => Object.prototype.hasOwnProperty.call(resolvedPayload, key))) {
             refreshCrmData();
           }
@@ -508,23 +509,21 @@ export function TicketDetailModal({
     setEditingTags(false);
   };
 
-  // ── Archive handler ──────────────────────────────────────────────────
+  // ── Restore handler (soft-deleted tickets) ───────────────────────────
 
-  const handleToggleArchive = async () => {
+  const handleRestore = async () => {
     if (!ticket || !ticketId || !team?.id) return;
-    setArchiving(true);
+    setRestoring(true);
     try {
-      const updated = ticket.archived
-        ? await OpsService.unarchiveTicket(numaPut, ticketId, ticket.version, team.id)
-        : await OpsService.archiveTicket(numaPut, ticketId, ticket.version, team.id);
+      const updated = await OpsService.restoreTicket(numaPost, ticketId, team.id);
       setTicket(updated);
       void refreshTickets();
       refreshCrmData();
     } catch (err) {
-      console.error('[TicketDetailModal] Archive toggle failed', err);
-      showToast({ message: t('errors.archiveFailed'), variant: 'error' });
+      console.error('[TicketDetailModal] Restore failed', err);
+      showToast({ message: t('errors.restoreFailed'), variant: 'error' });
     } finally {
-      setArchiving(false);
+      setRestoring(false);
     }
   };
 
@@ -1024,7 +1023,7 @@ export function TicketDetailModal({
                       onChange={(val) => void handleUpdate({ workUnitId: val || null })}
                       options={[
                         { value: '', label: t('common.none') },
-                        ...workUnits.map(
+                        ...getAssignableWorkUnits(workUnits, ticket.workUnitId).map(
                           (wu): DropdownOption => ({
                             value: wu.id,
                             label: wu.name,
@@ -1368,10 +1367,10 @@ export function TicketDetailModal({
               ) : null;
             })()}
 
-            {ticket.archived && (
-              <Badge bg="warning" text="dark" style={{ fontSize: '0.65rem', marginLeft: 6 }}>
-                <i className="bi bi-archive me-1" />
-                {t('archive.archived')}
+            {ticket.statusType === 'deleted' && (
+              <Badge bg="danger" style={{ fontSize: '0.65rem', marginLeft: 6 }}>
+                <i className="bi bi-trash me-1" />
+                {t('deleted.deleted')}
               </Badge>
             )}
 
@@ -1545,23 +1544,26 @@ export function TicketDetailModal({
             {/* Footer: actions left, close right */}
             <Modal.Footer className="d-flex align-items-center justify-content-between">
               <div className="d-flex align-items-center gap-1">
-                <button
-                  type="button"
-                  className="ticket-detail-footer-btn"
-                  disabled={archiving}
-                  onClick={() => void handleToggleArchive()}
-                >
-                  <i className={`bi ${ticket.archived ? 'bi-arrow-counterclockwise' : 'bi-archive'}`} />
-                  {ticket.archived ? t('archive.unarchive') : t('archive.archive')}
-                </button>
-                <button
-                  type="button"
-                  className="ticket-detail-footer-btn ticket-detail-footer-btn--danger"
-                  onClick={() => setShowDeleteConfirm(true)}
-                >
-                  <i className="bi bi-trash" />
-                  {t('common.delete')}
-                </button>
+                {ticket.statusType === 'deleted' ? (
+                  <button
+                    type="button"
+                    className="ticket-detail-footer-btn"
+                    disabled={restoring}
+                    onClick={() => void handleRestore()}
+                  >
+                    <i className="bi bi-arrow-counterclockwise" />
+                    {t('deleted.restore')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="ticket-detail-footer-btn ticket-detail-footer-btn--danger"
+                    onClick={() => setShowDeleteConfirm(true)}
+                  >
+                    <i className="bi bi-trash" />
+                    {t('common.delete')}
+                  </button>
+                )}
                 <button type="button" className="ticket-detail-footer-btn" onClick={handleOpenHistory}>
                   <i className="bi bi-clock-history" />
                   {t('tickets.history')}

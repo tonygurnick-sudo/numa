@@ -188,7 +188,6 @@ export function CustomerDetailModal({
           const linkedResponse = await OpsService.listTickets(numaGet, {
             boardId: queryTeamId,
             customerId,
-            includeArchived: true,
           });
           const rawTickets = linkedResponse.tickets as Array<
             Ticket & { entityType?: string; ticketId?: string; boardId?: string }

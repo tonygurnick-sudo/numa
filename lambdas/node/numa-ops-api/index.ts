@@ -1306,10 +1306,10 @@ const handleBoards = async (
 
       const ts = now();
 
-      // Archive completed/ended tickets
-      for (const ticket of doneTickets) {
-        await putItem({ ...ticket, archived: true, updatedAt: ts });
-      }
+      // Done tickets stay as completed/ended on the closed sprint — no archive
+      // flag. The frontend hides past-sprint work (work unit = completed) from
+      // active views, and surfaces it via the sprint history + All Tickets
+      // "show old work" toggle. (BUG-369)
 
       // Resolve rollover target
       const rolloverInput = body.rolloverToWorkUnitId ? String(body.rolloverToWorkUnitId) : undefined;
@@ -2442,11 +2442,12 @@ const handleTickets = async (
 
     // Client-side filter for additional params
     let filtered = items.filter((i) => String(i.entityType ?? '') === 'TICKET');
-    // Exclude soft-deleted tickets
-    filtered = filtered.filter((t) => t.statusType !== 'deleted');
-    // Exclude archived tickets by default
-    if (qp.includeArchived !== 'true') {
-      filtered = filtered.filter((t) => !t.archived);
+    // Soft-deleted tickets are hidden by default. They are only returned for the
+    // admin/owner Trash view, which opts in via includeDeleted=true. (BUG-369)
+    const includeDeleted =
+      qp.includeDeleted === 'true' && (isAdmin(auth) || (!!teamMeta && isTeamOwner(teamMeta, auth)));
+    if (!includeDeleted) {
+      filtered = filtered.filter((t) => t.statusType !== 'deleted');
     }
     if (qp.statusType) {
       filtered = filtered.filter((t) => t.statusType === qp.statusType);
@@ -2664,7 +2665,6 @@ const handleTickets = async (
       tags: Array.isArray(tags) ? tags : [],
       fields: fields ?? {},
       order,
-      archived: false,
       version: 1,
       commentCount: 0,
       linkCount: 0,

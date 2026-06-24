@@ -1500,7 +1500,7 @@ def _resolve_lambda_and_request(
                 ("workUnitId", "workUnitId", "work_unit_id"),
                 ("projectId", "projectId", "project_id"),
                 ("priority", "priority"),
-                ("includeArchived", "includeArchived", "include_archived"),
+                ("includeDeleted", "includeDeleted", "include_deleted"),
                 ("limit", "limit"),
                 ("cursor", "cursor"),
             ],
@@ -1594,7 +1594,6 @@ def _resolve_lambda_and_request(
                 ("effortPoints", "effortPoints", "effort_points"),
                 ("order", "order"),
                 ("version", "version"),
-                ("archived", "archived"),
             ],
         )
         return (OPS_API_LAMBDA, "PUT", f"ops/tickets/{ticket_id}", body, None)
@@ -1603,6 +1602,11 @@ def _resolve_lambda_and_request(
         ticket_id = _p(params, "ticketId", "ticket_id") or ""
         qp = _build_qp(params, [("boardId", "boardId", "board_id")])
         return (OPS_API_LAMBDA, "DELETE", f"ops/tickets/{ticket_id}", None, qp)
+
+    if operation == "restore_ticket":
+        ticket_id = _p(params, "ticketId", "ticket_id") or ""
+        body = _build_body(params, [("boardId", "boardId", "board_id")])
+        return (OPS_API_LAMBDA, "POST", f"ops/tickets/{ticket_id}/restore", body, None)
 
     if operation == "bulk_update_tickets":
         changes = dict(params.get("changes", {}))

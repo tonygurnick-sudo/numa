@@ -5,6 +5,7 @@ import { useNumaRequest } from '../../../Providers/NumaRequestContext';
 import { useAuth } from '../../../Providers/AuthProvider';
 import { useOps } from '../OpsContext';
 import * as OpsService from '../../../Services/OpsService';
+import { getAssignableWorkUnits } from '../opsWorkFilters';
 import { RichTextEditor } from '../Shared/RichTextEditor';
 import { uploadAttachmentToTicket } from '../Shared/attachmentUploader';
 import { useToast } from '../../../Providers/ToastContext';
@@ -1125,7 +1126,10 @@ export function CreateTicketModal({
                               onChange={(val) => setFieldValue('field-work-unit-id', val || null)}
                               options={[
                                 { value: '', label: t('common.none') },
-                                ...workUnits.map(
+                                ...getAssignableWorkUnits(
+                                  workUnits,
+                                  (customFields['field-work-unit-id'] as string) || null
+                                ).map(
                                   (wu): DropdownOption => ({
                                     value: wu.id,
                                     label: wu.name,

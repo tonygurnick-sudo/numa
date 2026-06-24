@@ -23,6 +23,7 @@ import BoardToolbar from './BoardToolbar';
 import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
 import ContextMenu from '../ContextMenu';
+import { getCompletedWorkUnitIds, isHiddenFromBoard } from '../opsWorkFilters';
 import './kanban.css';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -130,9 +131,12 @@ const BoardView = () => {
     [zones, activeZoneId]
   );
 
-  /** Filter tickets: only active zone, exclude archived, apply opt-in sprint filter, apply my-work filter */
+  /** Filter tickets: only active zone, hide past-sprint + legacy-archived work, apply opt-in sprint filter, apply my-work filter */
   const filteredTickets = useMemo(() => {
-    let result = tickets.filter((tk) => !tk.archived);
+    // Hide closed-sprint work (it lives in sprint history) and legacy-archived
+    // work (old `archived` data, treated as completed/old work). (BUG-369)
+    const completedWuIds = getCompletedWorkUnitIds(workUnits);
+    let result = tickets.filter((tk) => !isHiddenFromBoard(tk, completedWuIds));
     // Scope to active zone
     if (activeZone) {
       result = result.filter((tk) => tk.zoneId === activeZone.id);
@@ -158,6 +162,7 @@ const BoardView = () => {
     return result;
   }, [
     tickets,
+    workUnits,
     activeZone,
     selectedWorkUnitId,
     myWorkFilter,
@@ -526,10 +531,6 @@ const BoardView = () => {
             await refreshTickets();
             break;
           }
-          case 'archive':
-            await OpsService.archiveTicket(numaPut, ticket.id, ticket.version, ticket.boardId);
-            await refreshTickets();
-            break;
           case 'delete':
             await OpsService.deleteTicket(numaDelete, ticket.id, ticket.boardId);
             await refreshTickets();

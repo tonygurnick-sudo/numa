@@ -157,13 +157,6 @@ const ContextMenu = ({
 
       <MenuDivider />
 
-      {/* Archive / Unarchive */}
-      {ticket.archived ? (
-        <MenuItem label={t('contextMenu.unarchive')} onClick={() => onAction('unarchive')} />
-      ) : (
-        <MenuItem label={t('contextMenu.archive')} onClick={() => onAction('archive')} />
-      )}
-
       {/* Delete */}
       <MenuItem label={t('contextMenu.delete')} danger onClick={() => onAction('delete')} />
     </div>

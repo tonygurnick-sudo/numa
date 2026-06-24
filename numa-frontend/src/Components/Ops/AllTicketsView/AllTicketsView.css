@@ -1,0 +1,22 @@
+/* Toolbar toggle switches ("Show completed/old work", "Show Deleted").
+   Bootstrap's .form-switch floats the input and offsets the label, which leaves
+   the label vertically off-centre with no gap to the switch. Lay the switch and
+   label out as a centred flex row with explicit spacing. (BUG-369) */
+.ops-inline-switch.form-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 0;
+  margin-bottom: 0;
+  padding-left: 0;
+}
+
+.ops-inline-switch .form-check-input {
+  float: none;
+  margin-left: 0;
+  margin-top: 0;
+}
+
+.ops-inline-switch .form-check-label {
+  margin: 0;
+}
