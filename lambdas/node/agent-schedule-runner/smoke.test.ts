@@ -14,14 +14,15 @@ describe('buildScheduledRunPreamble (FEAT-243 REFLECT & COMPOUND)', () => {
     expect(p).toContain('MANDATORY — STATUS REPORT');
   });
 
-  it('carries the reflect-and-compound contract with the not-compulsory framing', () => {
+  it('carries the reflect-and-compound contract, encouraging scripting while keeping judgment live', () => {
     const p = buildScheduledRunPreamble('agt_123');
     expect(p).toContain('REFLECT & COMPOUND');
     expect(p).toContain('SCRIPT');
     expect(p).toContain('REMEMBER');
-    // Encourage, don't mandate — and never script the thinking.
+    // Encourage scripting, but never script the thinking — judgment stays
+    // live and opting out of a given script is always allowed.
     expect(p).toContain('NEVER script judgment');
-    expect(p).toMatch(/Acting on them is NOT/);
+    expect(p).toMatch(/leave it out and do it live/);
   });
 
   it('documents the optional optimised[] status field', () => {
