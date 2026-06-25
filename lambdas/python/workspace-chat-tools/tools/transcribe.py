@@ -27,7 +27,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import structlog
 from botocore.config import Config
@@ -389,27 +389,78 @@ def _transcribe_parallel(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _get_audio_duration(file_path: str) -> float:
-    """Get audio duration in seconds using ffprobe."""
+def _ffprobe_duration(file_path: str, show_streams: bool = False) -> Optional[float]:
+    """Probe duration via ffprobe container metadata (``-show_format``) or the first
+    audio stream (``-show_streams``). Returns ``None`` when the duration is absent or
+    unparseable rather than raising, so callers can fall back."""
+    selector = (
+        ["-show_streams", "-select_streams", "a:0"]
+        if show_streams
+        else ["-show_format"]
+    )
     result = subprocess.run(
-        [
-            FFPROBE,
-            "-v",
-            "quiet",
-            "-print_format",
-            "json",
-            "-show_format",
-            file_path,
-        ],
+        [FFPROBE, "-v", "quiet", "-print_format", "json", *selector, file_path],
         capture_output=True,
         text=True,
         timeout=30,
     )
     if result.returncode != 0:
-        raise ValueError(f"ffprobe failed: {result.stderr[:200]}")
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if show_streams:
+        streams = data.get("streams") or []
+        raw = streams[0].get("duration") if streams else None
+    else:
+        raw = (data.get("format") or {}).get("duration")
+    if raw in (None, "", "N/A"):
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
-    data = json.loads(result.stdout)
-    return float(data["format"]["duration"])
+
+def _decode_duration(file_path: str) -> float:
+    """Last-resort duration: fully decode the audio and read the processed time from
+    ffmpeg's progress output.
+
+    Chrome's ``MediaRecorder`` writes *streaming* WebM/Opus whose container carries no
+    duration (the Segment is "unknown size"), so both ffprobe ``-show_format`` and
+    ``-show_streams`` omit it. Decoding always yields an accurate duration. This is the
+    fix for BUG-195, where a naive ``data["format"]["duration"]`` raised
+    ``KeyError('duration')`` and silently dropped the user's voice recording."""
+    result = subprocess.run(
+        [FFMPEG, "-i", file_path, "-map", "0:a:0", "-f", "null", "-"],
+        capture_output=True,
+        text=True,
+        timeout=TRANSCRIBE_TIMEOUT_SECONDS,
+    )
+    # ffmpeg streams progress to stderr; the final "time=HH:MM:SS.xx" is the duration.
+    matches = re.findall(r"time=(\d+):(\d{2}):(\d{2}(?:\.\d+)?)", result.stderr)
+    if not matches:
+        raise ValueError(
+            "Could not determine audio duration "
+            f"(ffmpeg decode produced no timestamp): {result.stderr[-200:]}"
+        )
+    hours, minutes, seconds = matches[-1]
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def _get_audio_duration(file_path: str) -> float:
+    """Get audio duration in seconds, robust to containers without duration metadata.
+
+    Order: container metadata (fast) -> first audio stream -> full decode. The decode
+    fallback is required for live browser recordings (Chrome streaming WebM/Opus carry
+    no duration); without it the parallel path crashed with KeyError('duration')."""
+    duration = _ffprobe_duration(file_path, show_streams=False)
+    if duration is None:
+        duration = _ffprobe_duration(file_path, show_streams=True)
+    if duration is None:
+        duration = _decode_duration(file_path)
+    return duration
 
 
 def _extract_audio_track(video_path: str, output_path: str) -> None:

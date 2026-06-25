@@ -849,6 +849,29 @@ async def stream_claude_sdk(
                 prompt = f"{transcribed_text}\n\n{prompt}"
             # Update original_prompt too so the trace shows the transcribed text
             original_prompt = prompt
+        elif voice_recordings and not prompt.strip():
+            # BUG-195: the voice recording(s) produced no usable transcript (empty
+            # result or a transcription error). Previously `prompt` stayed empty: the
+            # agent ran on nothing and replied with a generic greeting, and the empty
+            # trace turn was dropped on reload -- so the recording vanished with no
+            # error or history entry. Instead, keep the turn visible (a 🎤 marker is
+            # written to the trace via original_prompt) and steer the model to tell the
+            # user the audio could not be transcribed so they can retry or type instead.
+            logger.warning(
+                "Voice transcription produced no text -- surfacing retry message",
+                _name="VOICE_TRANSCRIBE_EMPTY",
+                conversation_id=conversation_id,
+                request_id=request_id,
+                num_recordings=len(voice_recordings),
+            )
+            original_prompt = "🎤 Voice message"
+            prompt = (
+                "[System: The user sent a voice message but it could not be "
+                "transcribed -- no speech was recognised. Briefly and warmly let them "
+                "know you couldn't make out any audio, and ask them to try recording "
+                "again (speaking a moment after the recorder starts) or to type their "
+                "message instead. Do not guess at what they might have said.]"
+            )
 
     # 3. List uploaded files for context (after audio files removed)
     uploaded_files: list[str] = []
