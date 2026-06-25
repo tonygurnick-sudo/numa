@@ -117,6 +117,7 @@ _NATIVE_CONNECTOR_SLUGS = {
     "jobadder",
     "hirehop",
     "connecteam-api",
+    "motion",
     "totalsynergy-api",
     "synergy",
     "workbench",

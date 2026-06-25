@@ -898,6 +898,7 @@
       "hirehopBaseUrlHint": "The web address you log in to HireHop at (e.g. https://myhirehop.com) — not www.hirehop.com.",
       "synergyPatHint": "Generate one in 12d Synergy → My Profile → Personal Access Tokens (shown only once).",
       "connecteamApiKeyHint": "As the Connecteam account owner: Settings → API Keys → Add API key (needs the Expert plan).",
+      "motionApiKeyHint": "In Motion: Settings → API → create a new API key (shown only once — copy it immediately).",
       "totalsynergyApiKeyHint": "In Total Synergy → profile icon → Profile settings → ⋯ → API Key.",
       "filemakerServerUrlHint": "Your FileMaker Server or Cloud web address, without /fmi/data (e.g. https://myserver.fmi.filemaker-cloud.com).",
       "filemakerUsernameHint": "Your FileMaker account login for this database (File → Manage → Security), e.g. admin.",

@@ -706,6 +706,40 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     ],
   },
   {
+    id: 'motion',
+    displayName: 'Motion',
+    icon: 'bi-calendar-check',
+    description: 'AI calendar, tasks, and project management',
+    category: 'Productivity',
+    authType: 'api-key',
+    baseUrl: 'https://api.usemotion.com/v1',
+    // Motion's individual plan caps at 12 requests/min (teams up to 120);
+    // surfaced so the request path can pace calls and back off on 429.
+    rateLimitRpm: 12,
+    // Motion authenticates with a per-user `X-API-Key` header (NOT Bearer).
+    // The field key is `api_token` (NOT `api_key`) on purpose — the backend
+    // get_oauth_token() probe grabs `api_key` as a bearer token and bypasses
+    // credentialHeaderMap; `api_token` (as connecteam-api uses) isn't in that
+    // probe, so the header-map branch fires. Each user supplies their own key.
+    credentialHeaderMap: { 'X-API-Key': 'api_token' },
+    credentialFields: [
+      {
+        key: 'api_token',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: '',
+        required: true,
+        helpText: 'dataConnectors.fields.motionApiKeyHint',
+      },
+    ],
+    oauthSetupSteps: [
+      'Log in to Motion (app.usemotion.com) and open Settings.',
+      'In the API / integrations area, create a new API key.',
+      'Copy the key immediately — Motion shows it only once.',
+      'Each user connects with their own key, entered in chat on first use.',
+    ],
+  },
+  {
     id: 'totalsynergy-api',
     displayName: 'Total Synergy (API Key)',
     icon: 'bi-building',

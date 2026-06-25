@@ -38,6 +38,7 @@ export const NATIVE_CONNECTORS = [
   // API key
   'hirehop',
   'connecteam-api',
+  'motion',
   'totalsynergy-api',
 
   // Token
