@@ -46,6 +46,7 @@ import type {
 import { parseChunkWithoutDocComments, extractSingleDocBlock, createDocStripState } from './streamingProcessors';
 import { resolveToolVisual } from './ToolConfig';
 import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { notifyApprovalPending } from '../hooks/useBrowserNotification';
 
 // Type guards (runtime functions, not types)
 import {
@@ -2705,6 +2706,12 @@ export function processSDKEvent(event: SDKEvent, context: SDKEventContext, helpe
   // need a standalone UI card even when the tool runs inside a subagent.
   if (event.type === 'tool_approval') {
     const approval = event as SDKToolApprovalEvent;
+    // Nudge the user if they've switched tabs -- approvals time out (~180s) and
+    // are easy to miss. Fire-and-forget; the hook self-gates on visibility,
+    // liveness, freshness, and notification permission.
+    if (!approval.auto_approved) {
+      void notifyApprovalPending({ description: approval.description, createdAt: approval.created_at });
+    }
     if (approval.parent_tool_use_id || approval.tool_use_id?.startsWith('cli_')) {
       // Sub-agent OR CLI-emitted approval: render as standalone card.
       // CLI-emitted approvals carry tool_use_id like "cli_<uuid>" because

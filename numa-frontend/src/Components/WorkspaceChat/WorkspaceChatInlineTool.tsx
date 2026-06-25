@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import type { WorkspaceChatInlineToolSegment } from '@/types/workspaceChatTypes';
 import { ackToolApproval, approveToolAction } from '../../Services/workspaceChatAgentService';
 import { ConnectorsService } from '../../Services/ConnectorsService';
+import { registerPendingApproval, resolvePendingApproval } from '../../hooks/useBrowserNotification';
 
 // If you change this, also update APPROVAL_TIMEOUT_SECONDS in
 // `lambdas/python/workspace-chat-tools/tools/approval.py`. Three copies
@@ -173,6 +174,19 @@ function WorkspaceChatInlineTool({ segment, conversationId }: Props) {
 
   const decision = localDecision || approval?.decision || (approval?.autoApproved ? 'approved' : undefined);
   const showApprovalPanel = approval && !decision && !approval.autoApproved;
+
+  // Tab-title attention indicator: flag this approval as pending while it awaits
+  // a decision so the user spots it in the tab strip if they've switched away.
+  // Cleared when decided/timed out (panel hides) or when the segment unmounts.
+  useEffect(() => {
+    const requestId = approval?.requestId;
+    if (!requestId) return;
+    if (showApprovalPanel) {
+      registerPendingApproval(requestId);
+      return () => resolvePendingApproval(requestId);
+    }
+    resolvePendingApproval(requestId);
+  }, [showApprovalPanel, approval?.requestId]);
 
   // Acknowledge that the card rendered (writes seen_at via the proxy) so the
   // backend grants the full approval window instead of fast-failing the
