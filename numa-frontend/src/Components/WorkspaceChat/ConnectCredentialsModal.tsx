@@ -17,7 +17,7 @@ interface ConnectCredentialsModalProps {
  * per field, submits the whole set to the personal vault.
  */
 export const ConnectCredentialsModal = ({ show, onHide, connectorId, onConnected }: ConnectCredentialsModalProps) => {
-  const { t } = useTranslation(['chat', 'dataConnectors']);
+  const { t } = useTranslation(['chat', 'integrations']);
   const connector = useMemo(() => getConnectorById(connectorId), [connectorId]);
   const fields = useMemo(() => connector?.credentialFields ?? [], [connector]);
   const displayName = connector?.displayName ?? connectorId;
@@ -43,7 +43,7 @@ export const ConnectCredentialsModal = ({ show, onHide, connectorId, onConnected
     if (!raw) return fallback;
     // credentialFields.label in the registry is stored as an i18n key or a
     // literal — prefer the translation, fall back to the raw value if missing.
-    const translated = t(raw, { ns: 'dataConnectors', defaultValue: raw });
+    const translated = t(raw, { ns: 'integrations', defaultValue: raw });
     return translated === raw ? raw : translated;
   };
 
@@ -123,7 +123,7 @@ export const ConnectCredentialsModal = ({ show, onHide, connectorId, onConnected
                 />
                 {f.helpText && (
                   <Form.Text className="text-muted small">
-                    {t(f.helpText, { ns: 'dataConnectors', defaultValue: f.helpText })}
+                    {t(f.helpText, { ns: 'integrations', defaultValue: f.helpText })}
                   </Form.Text>
                 )}
               </Form.Group>

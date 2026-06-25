@@ -106,6 +106,11 @@ export interface ConnectorTemplate {
   // on a blank value.
   instanceUrlRequired?: boolean;
 
+  // True = connector has a default baseUrl but ALSO supports an optional custom
+  // instance URL (e.g. GitLab self-managed). Keeps the wizard's Instance URL
+  // field visible even though baseUrl is set.
+  instanceUrlOptional?: boolean;
+
   // Common metadata
   baseUrl?: string;
   rateLimitRpm?: number;
@@ -113,6 +118,11 @@ export interface ConnectorTemplate {
 
   // OAuth-specific setup guidance
   oauthSetupSteps?: string[];
+
+  // True = the admin may legitimately need to edit the authorize/token URLs
+  // (e.g. Zoho's per-region data-centre hosts). Keeps "Advanced OAuth Settings"
+  // visible for this connector; for all other known connectors it stays hidden.
+  editableOAuthUrls?: boolean;
 
   // OAuth platform family — connectors sharing the same OAuth client ('google' | 'microsoft')
   oauthPlatform?: string;
@@ -186,7 +196,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Go to APIs & Services → Credentials → Create Credentials → OAuth client ID',
       "Choose 'Web application' as the application type",
       "Under 'Authorized redirect URIs', add the redirect URI shown in this wizard (copy it verbatim — it must match exactly)",
-      'Copy the Client ID and Client Secret and paste them here',
+      "Copy the Client ID and Client Secret — you'll paste them on the next step (Credentials)",
     ],
   },
   {
@@ -210,7 +220,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Go to APIs & Services → Credentials → Create Credentials → OAuth client ID',
       "Choose 'Web application' as the application type",
       "Under 'Authorized redirect URIs', add the redirect URI shown in this wizard (copy it verbatim — it must match exactly)",
-      'Copy the Client ID and Client Secret and paste them here',
+      "Copy the Client ID and Client Secret — you'll paste them on the next step (Credentials)",
     ],
   },
   {
@@ -231,10 +241,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     },
     oauthSetupSteps: [
       'Go to Azure Portal → App registrations → New registration',
-      'Set a name and choose "Accounts in any organizational directory"',
+      'Set a name and choose "Accounts in any organizational directory and personal Microsoft accounts"',
       'Under "Redirect URIs", add the redirect URI shown below as type "Web"',
       'Go to Certificates & secrets → New client secret → copy the Value',
-      'Copy the Application (client) ID from the Overview page',
+      "Copy the Application (client) ID from the Azure app registration's Overview page (in Azure Portal)",
     ],
   },
   {
@@ -344,7 +354,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Set Access Type to OAuth 2.0 and Grant Type to Authorization Code.',
       'Paste the redirect URI shown below into the Redirect URI field exactly as it appears, then Save.',
       'simPRO shows the Client ID and Client Secret once — copy both now.',
-      'Enter your build subdomain above (the yourco in yourco.simprosuite.com).',
+      'On the Credentials step, enter your build subdomain — the yourco in yourco.simprosuite.com.',
     ],
   },
   {
@@ -383,30 +393,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Click "Create" / "New application" and name it (e.g. Numa Integration).',
       'Add the redirect URI shown below exactly as it appears — Wrike requires a byte-for-byte match.',
       'Copy the Client ID, then copy the Client Secret right away (it is shown only once).',
-    ],
-  },
-  {
-    id: 'connecteam-oauth',
-    displayName: 'Connecteam (OAuth)',
-    icon: 'bi-people',
-    description: 'Employee management — time clock, scheduling, and forms (OAuth)',
-    category: 'HR & Workforce',
-    authType: 'oauth2',
-    // NON-SELF-SERVICE (TASK-113). Connecteam's official OAuth 2.0 is
-    // `client_credentials` ONLY (server-to-server; no consent endpoint, no
-    // redirect, no refresh token) — token URL is
-    // POST https://api.connecteam.com/oauth/v1/token with HTTP Basic, 24h tokens.
-    // The authUrl/tokenUrl previously stored here were phantom
-    // authorization_code endpoints that do not exist, so the self-service
-    // OAuth wizard (3-legged, redirect-based) cannot drive this connector and
-    // its Connect button would 404 on authorize. client_credentials also adds
-    // no capability over the static API key (same REST API, account-level
-    // token), so we do NOT wire it. Use the API-key connector (connecteam-api).
-    // See ext-api-doc/connecteam-oauth/05-disposition.md.
-    selfService: false,
-    oauthSetupSteps: [
-      'Connecteam OAuth 2.0 is client-credentials only (no redirect flow) and is not self-service.',
-      'Use the "Connecteam (API Key)" connector instead — same data, set up via Settings → API Keys.',
     ],
   },
   {
@@ -493,7 +479,9 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       // Acumatica (Acumatica IdentityServer) serves OAuth2 at /identity/connect.
       authUrl: 'https://<INSTANCE_HOST>.myobadvanced.com/identity/connect/authorize',
       tokenUrl: 'https://<INSTANCE_HOST>.myobadvanced.com/identity/connect/token',
-      scopes: 'api',
+      // offline_access is required for Acumatica to issue a refresh token;
+      // without it the connection silently expires when the access token does.
+      scopes: 'api offline_access',
     },
     credentialFields: [
       {
@@ -511,7 +499,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Click + to add a new application and set Flow Type to Authorization Code.',
       'Paste the redirect URI shown below into the Redirect URI field exactly as it appears.',
       'Save — Acumatica shows the Client ID and Client Secret; the secret is shown once, so copy both now. (The Client ID includes an @Company suffix — copy the whole value.)',
-      'Enter your instance subdomain above (the yourco in yourco.myobadvanced.com).',
+      'On the Credentials step, enter your instance subdomain — the yourco in yourco.myobadvanced.com.',
     ],
   },
   {
@@ -522,6 +510,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'CRM',
     authType: 'oauth2',
     surfaces: ['chat'],
+    // Zoho's authorize/token hosts are per-region data centres (US / EU / IN /
+    // JP / CN / CA), so the admin may legitimately need to edit them — keep the
+    // wizard's Advanced OAuth Settings section visible for this connector.
+    editableOAuthUrls: true,
     // Zoho uses its own Authorization scheme — NOT Bearer.
     authHeaderScheme: 'Zoho-oauthtoken',
     oauth: {
@@ -538,7 +530,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Choose "Server-based Applications" as the client type.',
       'Set Client Name to a name your users will recognise, Homepage URL to your Numa address, and paste the redirect URI shown below under "Authorized Redirect URIs" exactly as it appears (one character off gives an "Invalid Redirect URI" error).',
       'Save, then copy the Client ID and copy the Client Secret right away (the secret is shown only once).',
-      'Non-AU customers: open Advanced below and replace accounts.zoho.com.au in the auth and token URLs with your region host (e.g. accounts.zoho.eu) — Canada is the exception: use accounts.zohocloud.ca, NOT accounts.zoho.ca.',
+      'Non-AU customers: on the Credentials step, open Advanced OAuth Settings and replace accounts.zoho.com.au in the Authorization and Token URLs with your region host (e.g. accounts.zoho.eu) — Canada is the exception: use accounts.zohocloud.ca, NOT accounts.zoho.ca.',
     ],
   },
   {
@@ -601,7 +593,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Email api@actionstep.com (or your Actionstep account manager) and ask for API credentials for your firm.',
       'Give them the redirect URI shown below; they register it and issue your Client ID and Client Secret.',
       'Paste the Client ID and Client Secret into this wizard.',
-      'Enter your regional API endpoint above (e.g. https://ap-southeast-2.actionstep.com) — Actionstep provides this with your credentials.',
+      'On the Credentials step, enter your regional API endpoint (e.g. https://ap-southeast-2.actionstep.com) — Actionstep provides this with your credentials.',
     ],
   },
 
@@ -652,7 +644,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Go to API permissions > Add a permission > Dynamics CRM > Delegated > user_impersonation, then click Grant admin consent.',
       'Go to Certificates & secrets > New client secret and copy the Value (shown once); copy the Application (client) ID from the Overview page.',
       'In the Power Platform admin center add this app as an Application User and give it a security role with read/write on the PMO365 tables.',
-      'Paste your Environment URL above, then open Advanced and replace YOUR-ENV.crm.dynamics.com in the scope with your environment host.',
+      'On the Credentials step, paste your Environment URL; then on the Permissions step edit the Scopes field and replace YOUR-ENV.crm.dynamics.com with your environment host (e.g. yourorg.crm.dynamics.com).',
     ],
   },
 
@@ -681,6 +673,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         required: true,
         helpText: 'dataConnectors.fields.hirehopBaseUrlHint',
       },
+    ],
+    oauthSetupSteps: [
+      'In HireHop, switch to Admin mode → Settings → Users → your API user → open its Menu → API Token, and copy the token.',
+      'Your Base URL is the web address you log in to HireHop at (e.g. https://myhirehop.com) — not www.hirehop.com.',
+      'Each user enters their own HireHop API token (and base URL) when they first use HireHop in chat.',
     ],
   },
   {
@@ -715,22 +712,24 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Architecture and engineering practice management (API key)',
     category: 'Project Management',
     authType: 'api-key',
+    baseUrl: 'https://api.totalsynergy.com/api/v2',
+    // Total Synergy's API-key auth uses a custom header literally named
+    // `access-token` (NOT Authorization: Bearer). The map tells the backend
+    // request path which user credential field rides in which outbound header;
+    // ApiKeyWizard persists it as `credential_header_map` on the company vault.
+    // NOTE: the field key is `api_token` (not `api_key`) on purpose — the backend
+    // get_oauth_token() probe list grabs `api_key` and treats it as an OAuth
+    // bearer token, bypassing credentialHeaderMap. `api_token` (as connecteam-api
+    // uses) isn't in that probe list, so the header-map branch fires correctly.
+    credentialHeaderMap: { 'access-token': 'api_token' },
     credentialFields: [
       {
-        key: 'api_key',
+        key: 'api_token',
         label: 'dataConnectors.fields.apiKey',
         type: 'password',
         placeholder: '',
         required: true,
         helpText: 'dataConnectors.fields.totalsynergyApiKeyHint',
-      },
-      {
-        key: 'instance_url',
-        label: 'dataConnectors.fields.instanceUrl',
-        type: 'url',
-        placeholder: 'https://yourcompany.totalsynergy.com',
-        required: false,
-        helpText: 'dataConnectors.fields.totalsynergyInstanceUrlHint',
       },
     ],
   },
@@ -743,6 +742,12 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Connect to Oracle NetSuite ERP for customers, orders, invoices, inventory, and financial reports',
     category: 'ERP',
     authType: 'oauth2',
+    // REST API base for data requests. <ACCOUNT_ID> is interpolated from the
+    // account_id credentialField at save time (sandbox `1234567_SB1` → host
+    // `1234567-sb1`). Without this the backend resolver finds no base_url and
+    // relative SuiteTalk REST paths can't resolve. (The MCP scope path reads
+    // account_id directly and doesn't use base_url.)
+    baseUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com',
     oauth: {
       authUrl: 'https://<ACCOUNT_ID>.app.netsuite.com/app/login/oauth2/authorize.nl',
       tokenUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
@@ -774,10 +779,12 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     ],
     oauthSetupSteps: [
       'In NetSuite go to Setup > Integration > Manage Integrations > New, name it (e.g. Numa Integration), and set State to Enabled.',
-      "Check 'OAuth 2.0 Authorization Code Grant', and check 'Public Client' (no client secret), then choose a Scope: REST Web Services for normal data access (or NetSuite AI Connector Service for MCP).",
+      "Check 'OAuth 2.0 Authorization Code Grant', then choose a Scope: REST Web Services for normal data access (or NetSuite AI Connector Service for MCP).",
+      'On the Permissions step of this wizard, tick the SAME scope you selected on the NetSuite integration record — REST Web Services for normal data access, or AI Connector (MCP) if you chose NetSuite AI Connector Service. MCP cannot be combined with the others.',
+      "Leave 'Public Client' UNCHECKED — this creates a Confidential Client so NetSuite issues a Client Secret (Numa requires it for the REST Web Services / RESTlets / SuiteAnalytics scopes).",
       'Paste the redirect URI shown below into the Redirect URI field exactly as it appears.',
-      'Save — NetSuite shows the Client ID once on the confirmation screen; copy it now (a Public Client has no Client Secret).',
-      'Enter your Account ID above, found in NetSuite at Setup > Company > Company Information > Account ID (a number like 1234567).',
+      'Save — NetSuite shows BOTH the Client ID and the Client Secret once on the confirmation screen; copy both now (they are never shown again).',
+      'On the Credentials step, enter your Account ID — found in NetSuite at Setup > Company > Company Information > Account ID (a number like 1234567).',
     ],
   },
   {
@@ -813,10 +820,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Job management for trade businesses',
     category: 'Field Service',
     authType: 'token',
+    baseUrl: 'https://api.fergus.com',
     credentialFields: [
       {
         key: 'api_key',
-        label: 'dataConnectors.fields.apiKey',
+        label: 'dataConnectors.fields.pat',
         type: 'password',
         placeholder: 'fergPAT_…',
         required: true,
@@ -876,6 +884,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Workflow',
     authType: 'username-password',
     selfService: false,
+    baseUrl: 'https://publicapi.flowingly.net',
     credentialFields: [
       {
         key: 'username',
@@ -1187,7 +1196,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       'Sign in to the JobAdder Developer Centre at developers.jobadder.com as an administrator',
       'Register a new application',
       "Copy the redirect URI shown in this wizard into the application's redirect URIs (it must match exactly)",
-      'Copy the Client ID and Client Secret from the application page and paste them here',
+      'Copy the Client ID and Client Secret from the application page, then paste them on the next step (Credentials).',
     ],
   },
   {
@@ -1207,7 +1216,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     credentialFields: [
       {
         key: 'api_key',
-        label: 'dataConnectors.fields.pat',
+        label: 'dataConnectors.fields.privateIntegrationToken',
         type: 'password',
         placeholder: 'pit-…',
         required: true,
@@ -1228,6 +1237,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     // wizard to their own API root (e.g. https://gitlab.example.com/api/v4) —
     // the backend resolver prefers the vault instance_url over this base_url.
     baseUrl: 'https://gitlab.com/api/v4',
+    instanceUrlOptional: true,
     surfaces: ['chat'],
     rateLimitRpm: 2000, // GitLab.com authenticated default is ~2,000 req/min/user
     // Per-user Personal Access Token (glpat-…), sent as a Bearer token — GitLab

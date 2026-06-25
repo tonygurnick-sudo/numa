@@ -503,15 +503,24 @@ export const OAuthWizard = ({
       // `1234567_SB1` and still get a resolvable hostname.
       let finalAuthUrl = form.authUrl.trim();
       let finalTokenUrl = form.tokenUrl.trim();
+      // base_url can also carry a per-instance placeholder (e.g. NetSuite's
+      // https://<ACCOUNT_ID>.suitetalk.api.netsuite.com) — interpolate it the
+      // same way so REST data requests resolve against the real host instead of
+      // a literal "<ACCOUNT_ID>" (or, worse, no base_url being written at all).
+      let finalBaseUrl = (registryEntry?.baseUrl ?? '').trim();
       const hostnameSafeKeys = new Set(
         (registryEntry?.credentialFields ?? []).filter((f) => f.hostnameSafe).map((f) => f.key)
       );
       Object.entries(form.customCredentials).forEach(([key, value]) => {
         const raw = value.trim();
         const safeValue = hostnameSafeKeys.has(key) ? raw.toLowerCase().replace(/_/g, '-') : raw;
+        // Literal global replace — a credentialField key containing a regex
+        // metachar (e.g. `.` or `+`) must not be treated as a pattern, so split
+        // on the literal placeholder and rejoin with the substituted value.
         const placeholder = `<${key.toUpperCase()}>`;
-        finalAuthUrl = finalAuthUrl.replace(new RegExp(placeholder, 'g'), safeValue);
-        finalTokenUrl = finalTokenUrl.replace(new RegExp(placeholder, 'g'), safeValue);
+        finalAuthUrl = finalAuthUrl.split(placeholder).join(safeValue);
+        finalTokenUrl = finalTokenUrl.split(placeholder).join(safeValue);
+        finalBaseUrl = finalBaseUrl.split(placeholder).join(safeValue);
       });
 
       // Shared config fields (auth endpoints, extra params)
@@ -521,33 +530,29 @@ export const OAuthWizard = ({
         ...form.customCredentials,
       };
 
-      if (form.extraAuthParams.trim()) fields.extra_auth_params = form.extraAuthParams.trim();
+      // ── Self-healing reconcile ─────────────────────────────────────────
+      // Re-saving must REPAIR drift, not just merge. Vault writes MERGE, so
+      // every registry-DERIVED field below is written on EVERY save — the
+      // current value, or '' to CLEAR what no longer applies — so reconfiguring
+      // reconciles the stored OAuth-client config to the current registry.
+      fields.extra_auth_params = form.extraAuthParams.trim();
 
-      // Non-standard auth header scheme (e.g. Zoho uses "Zoho-oauthtoken"
-      // instead of "Bearer"). Persist when the registry defines it; the
-      // backend connect_request reads this field and falls back to Bearer.
-      // The literal value `access-token` is a sentinel meaning the token rides
-      // in a header named `access-token`, not inside Authorization (Total Synergy).
-      if (registryEntry?.authHeaderScheme) {
-        fields.auth_header_scheme = registryEntry.authHeaderScheme;
-      }
+      // Non-standard auth header scheme (e.g. Zoho's "Zoho-oauthtoken" instead
+      // of "Bearer"). The backend connect_request reads this and falls back to
+      // Bearer when empty. The literal `access-token` is a sentinel meaning the
+      // token rides in a header named `access-token` (Total Synergy).
+      fields.auth_header_scheme = registryEntry?.authHeaderScheme ?? '';
 
       // Vendor-custom OAuth flow selector (e.g. Total Synergy's
-      // ApplicationKey/GetAccessToken/RefreshAccessToken flow). Persist so the
+      // ApplicationKey/GetAccessToken/RefreshAccessToken flow). The
       // oauth-auth-handler Lambda dispatches authorize/exchange/refresh to the
-      // matching adapter. Absent → standard RFC-6749 path.
-      if (registryEntry?.oauthAdapter) {
-        fields.oauth_adapter = registryEntry.oauthAdapter;
-      }
+      // matching adapter; empty → standard RFC-6749 path.
+      fields.oauth_adapter = registryEntry?.oauthAdapter ?? '';
 
-      // Fixed-base-URL OAuth connectors (e.g. JobAdder): persist the registry
-      // baseUrl so the backend URL resolver finds it in the vault and agents
-      // can use relative request URLs. Mirrors the ApiKeyWizard write-back.
-      // Tenant-specific api_endpoint/instance_url values still win — the
-      // backend resolver checks base_url last.
-      if (registryEntry?.baseUrl) {
-        fields.base_url = registryEntry.baseUrl;
-      }
+      // Fixed/per-instance base URL: persist (interpolated) so the backend URL
+      // resolver finds it and agents can use relative request URLs. Tenant
+      // api_endpoint/instance_url values still win — base_url is checked last.
+      fields.base_url = registryEntry?.baseUrl ? finalBaseUrl : '';
 
       const connector = getConnectorById(pid);
       if (connector?.oauthPlatform) {
@@ -727,6 +732,11 @@ export const OAuthWizard = ({
             </li>
           ))}
         </ol>
+        {/* Show the redirect URI here too: the setup steps tell the admin to
+            "give the provider the redirect URI shown below", and this is the
+            page that text appears on (it's also repeated on the Credentials
+            step for copy-convenience). */}
+        <div className="mt-3">{renderRedirectUri()}</div>
       </div>
     );
   };
@@ -809,7 +819,7 @@ export const OAuthWizard = ({
 
             {registryEntry?.credentialFields?.map((field, idx) => (
               <Form.Group key={field.key} className={idx < registryEntry.credentialFields!.length - 1 ? 'mb-3' : ''}>
-                <Form.Label className="small fw-semibold">{field.label}</Form.Label>
+                <Form.Label className="small fw-semibold">{t(field.label)}</Form.Label>
                 <Form.Control
                   type={field.type === 'password' ? 'password' : 'text'}
                   placeholder={field.placeholder}
@@ -821,7 +831,7 @@ export const OAuthWizard = ({
                   }
                   required={field.required}
                 />
-                {field.helpText && <Form.Text className="text-muted">{field.helpText}</Form.Text>}
+                {field.helpText && <Form.Text className="text-muted">{t(field.helpText)}</Form.Text>}
               </Form.Group>
             ))}
           </>
@@ -1029,8 +1039,14 @@ export const OAuthWizard = ({
           {/* Redirect URI */}
           {renderRedirectUri()}
 
-          {/* Advanced OAuth settings (collapsible) */}
-          {renderAdvancedOAuthSettings()}
+          {/* Advanced OAuth settings — for custom/new providers, and for known
+              connectors that declare `editableOAuthUrls` (e.g. Zoho, whose
+              authorize/token hosts are per-region data centres the admin may
+              legitimately need to change). For every other known connector the
+              authorize/token URLs and extra params are registry-defined and must
+              never be edited by the admin, so the whole section is hidden to kill
+              the "needed or not?" ambiguity. */}
+          {(!isKnownTemplate || registryEntry?.editableOAuthUrls) && renderAdvancedOAuthSettings()}
         </Row>
       )}
 

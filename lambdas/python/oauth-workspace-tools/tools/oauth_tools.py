@@ -340,7 +340,15 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
     if adapter == "totalsynergy":
         import re as _re
 
-        refresh_url = _re.sub(r"GetAccessToken$", "RefreshAccessToken", token_url)
+        # Refresh lives on a DIFFERENT path from exchange (GetAccessToken ->
+        # RefreshAccessToken). Strip any query string and trailing slash first so
+        # the suffix match still anchors even if the stored token_url has a
+        # `?...` or trailing `/`. re.IGNORECASE mirrors the Node `/i`.
+        _base_url = _re.sub(r"[?#].*$", "", token_url)
+        _base_url = _re.sub(r"/+$", "", _base_url)
+        refresh_url = _re.sub(
+            r"GetAccessToken$", "RefreshAccessToken", _base_url, flags=_re.IGNORECASE
+        )
         ts_params = {
             "applicationKey": creds["client_id"],
             "ApplicationSecret": creds.get("client_secret", ""),
@@ -359,7 +367,18 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
                 )
             if ts_response.status_code == 200:
                 raw = ts_response.json()
-                access = raw.get("accessToken") or raw.get("access_token") or ""
+                # Tolerate a nested response envelope: some Synergy responses
+                # wrap the token payload under `d` / `data` / `result`. Pick the
+                # first object (including the top-level body) carrying a token.
+                _body = raw if isinstance(raw, dict) else {}
+                for _key in ("d", "data", "result"):
+                    _nested = _body.get(_key) if isinstance(_body, dict) else None
+                    if isinstance(_nested, dict) and (
+                        _nested.get("accessToken") or _nested.get("access_token")
+                    ):
+                        _body = _nested
+                        break
+                access = _body.get("accessToken") or _body.get("access_token") or ""
                 if not access:
                     logger.warning(
                         f"Total Synergy refresh returned no access token for {provider}"
@@ -369,19 +388,24 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
                 # Coerce expires_in to int: Synergy is a form-style API and may
                 # return the TTL as a string ("3600"); get_oauth_token does
                 # `now + expires_in`, which raises TypeError on a str and would
-                # silently turn a successful refresh into a failure.
-                _exp_raw = raw.get("expiresIn")
+                # silently turn a successful refresh into a failure. Only accept a
+                # plausible positive TTL (not <=0 and not an absolute unix-epoch
+                # timestamp > 10 years of seconds); otherwise default to 3600.
+                _ten_years_seconds = 10 * 365 * 24 * 60 * 60
+                _exp_raw = _body.get("expiresIn")
                 if _exp_raw is None:
-                    _exp_raw = raw.get("expires_in")
+                    _exp_raw = _body.get("expires_in")
                 try:
                     _expires_in = int(_exp_raw)
                 except (TypeError, ValueError):
                     _expires_in = 3600
+                if _expires_in <= 0 or _expires_in > _ten_years_seconds:
+                    _expires_in = 3600
                 return {
                     "access_token": access,
                     "refresh_token": (
-                        raw.get("refreshToken")
-                        or raw.get("refresh_token")
+                        _body.get("refreshToken")
+                        or _body.get("refresh_token")
                         or refresh_token
                     ),
                     "expires_in": _expires_in,

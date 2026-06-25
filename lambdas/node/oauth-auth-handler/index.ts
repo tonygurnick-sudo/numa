@@ -1011,11 +1011,28 @@ const getOAuthAdapter = (config: FullProviderConfig): string =>
  * rather than later, which is safe).
  */
 const normaliseTotalSynergyTokens = (raw: Record<string, unknown>): OAuthTokens | null => {
-  const accessToken = String(raw.accessToken || raw.access_token || '');
+  // Tolerate a nested response envelope: some Synergy responses wrap the token
+  // payload under `d` / `data` / `result`. Pick the first object (including the
+  // top-level `raw`) that actually carries a token-like field.
+  const hasToken = (o: unknown): o is Record<string, unknown> =>
+    !!o &&
+    typeof o === 'object' &&
+    (!!(o as Record<string, unknown>).accessToken || !!(o as Record<string, unknown>).access_token);
+  const candidates = [raw, raw.d, raw.data, raw.result];
+  const body = (candidates.find(hasToken) as Record<string, unknown> | undefined) ?? raw;
+
+  const accessToken = String(body.accessToken || body.access_token || '');
   if (!accessToken) return null;
-  const refreshToken = raw.refreshToken || raw.refresh_token;
-  const expiresInRaw = raw.expiresIn ?? raw.expires_in;
-  const expiresIn = typeof expiresInRaw === 'number' ? expiresInRaw : Number(expiresInRaw) || 3600;
+  const refreshToken = body.refreshToken || body.refresh_token;
+
+  // Robust expires_in: coerce to a number and only fall back to 3600 when the
+  // value is null/undefined/NaN/<=0. Also reject implausibly large values (an
+  // absolute unix-epoch timestamp, > 10 years of seconds) — those are not a
+  // TTL and would push the expiry far into the future, so default to 3600.
+  const TEN_YEARS_SECONDS = 10 * 365 * 24 * 60 * 60;
+  const expiresInNum = Number(body.expiresIn ?? body.expires_in);
+  const expiresIn =
+    Number.isFinite(expiresInNum) && expiresInNum > 0 && expiresInNum <= TEN_YEARS_SECONDS ? expiresInNum : 3600;
   return {
     access_token: accessToken,
     refresh_token: refreshToken ? String(refreshToken) : undefined,
@@ -1044,6 +1061,10 @@ const exchangeCodeForTokens = async (
       ApplicationSecret: config.clientSecret,
       code,
       grant_type: 'authorization_code',
+      // Synergy validates RedirectUri on exchange against the value sent at
+      // authorize (handleAuthorize sets the same `${FRONTEND_BASE_URL}/oauth/
+      // callback/${provider}`). Omitting it makes the exchange fail.
+      RedirectUri: redirectUri,
     });
     try {
       const tsResponse = await fetch(config.tokenUrl, {
@@ -1114,8 +1135,13 @@ const refreshTokens = async (provider: OAuthProvider, refreshToken: string): Pro
   // ── Total Synergy adapter: custom refresh endpoint + body field names ──
   if (getOAuthAdapter(config) === 'totalsynergy') {
     // Refresh lives on a DIFFERENT path from exchange. token_url points at
-    // GetAccessToken; swap the trailing segment to RefreshAccessToken.
-    const refreshUrl = config.tokenUrl.replace(/GetAccessToken$/i, 'RefreshAccessToken');
+    // GetAccessToken; swap the trailing segment to RefreshAccessToken. Strip any
+    // query string and trailing slash first so the suffix match still anchors on
+    // `GetAccessToken` even if the stored token_url has a `?...` or trailing `/`.
+    const refreshUrl = config.tokenUrl
+      .replace(/[?#].*$/, '')
+      .replace(/\/+$/, '')
+      .replace(/GetAccessToken$/i, 'RefreshAccessToken');
     const tsParams = new URLSearchParams({
       applicationKey: config.clientId,
       ApplicationSecret: config.clientSecret,

@@ -153,8 +153,23 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   // base URL — saving without one would produce a connector that errors on
   // every request, so block the save instead.
   const instanceUrlMissing = Boolean(connector.instanceUrlRequired) && !form.instanceUrl.trim();
+  // Single source of truth for whether the Instance URL field applies to this
+  // connector — drives BOTH the render gate (step 2) and the save write-back.
+  // The Instance URL field is now shown ONLY for connectors that explicitly
+  // opt in: instanceUrlRequired (customer-hosted, e.g. Jiwa) or
+  // instanceUrlOptional (has a default but is overridable, e.g. GitLab).
+  // Connectors whose host is fixed (a baseUrl) or captured per-user in chat
+  // (a host-bearing credentialField) no longer render a spurious/misleading
+  // field — writing a stale rehydrated instance_url there would override the
+  // fixed baseUrl in the backend resolver.
+  const showInstanceUrl = Boolean(connector.instanceUrlRequired || connector.instanceUrlOptional);
   const canProceed =
-    step === 1 || step === 3 || (step === 2 && instanceUrlError === null && !adminFieldsMissing && !instanceUrlMissing);
+    step === 1 ||
+    step === 3 ||
+    // Only enforce instance-URL validation when the field is actually shown —
+    // otherwise a stale/malformed rehydrated value (for a now-hidden field)
+    // would permanently block Save with no visible field to fix.
+    (step === 2 && (!showInstanceUrl || (instanceUrlError === null && !instanceUrlMissing)) && !adminFieldsMissing);
 
   const handleSave = async () => {
     setSaving(true);
@@ -168,35 +183,46 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         connector_type: connector.authType,
       };
 
-      // Always write instance_url — company-secret updates MERGE fields, so an
-      // omitted key would leave a stale admin URL in place; empty string clears
-      // it (the backend resolver skips empty values).
-      fields.instance_url = form.instanceUrl.trim();
-      // Fixed-URL connectors (registry baseUrl, e.g. ProWorkflow): persist the
-      // base URL so the backend resolver finds it in the vault. Tenant-specific
-      // instance_url/api_endpoint values win — the resolver checks base_url last.
-      if (connector.baseUrl) fields.base_url = connector.baseUrl;
+      // Always write instance_url: the entered value when the field is shown,
+      // or an EMPTY STRING when hidden (fixed-host connectors). Writing ''
+      // CLEARS any stale instance_url left by an older wizard version — vault
+      // updates MERGE, so skipping it would let a leftover per-instance host
+      // survive and the backend resolver (first non-empty of
+      // api_endpoint/instance_url/base_url) would wrongly prefer it over the
+      // fixed baseUrl. The resolver skips empty values, so '' falls through.
+      fields.instance_url = showInstanceUrl ? form.instanceUrl.trim() : '';
+      // ── Self-healing reconcile ───────────────────────────────────────────
+      // Re-saving a connector must REPAIR drift, not just add to it. Vault
+      // writes MERGE, so every registry-DERIVED field below is written on EVERY
+      // save — the current value, or '' to CLEAR a value that no longer applies
+      // (an older wizard wrote it, or the registry changed). Reconfiguring any
+      // native connector therefore reconciles its stored config to the registry.
 
-      // Admin-level account config (e.g. ProWorkflow account API key). Stored
-      // alongside the metadata on the same connector-config secret.
+      // Fixed-URL connectors (registry baseUrl, e.g. ProWorkflow): persist the
+      // base URL so the backend resolver finds it. Tenant-specific
+      // instance_url/api_endpoint values win — the resolver checks base_url last.
+      fields.base_url = connector.baseUrl ?? '';
+
+      // Admin-level account config (e.g. ProWorkflow account API key). Write
+      // every declared adminField (value or '' to clear) so a cleared field
+      // doesn't linger in the vault.
       for (const def of connector.adminFields ?? []) {
-        const value = form.adminFields[def.key]?.trim();
-        if (value) fields[def.key] = value;
+        fields[def.key] = form.adminFields[def.key]?.trim() ?? '';
       }
       // Tell the backend which header carries the account API key on requests.
-      if (connector.apiKeyHeader && form.adminFields.api_key?.trim()) {
-        fields.api_key_header = connector.apiKeyHeader;
-      }
-      // Custom-header auth (e.g. Cin7 Core): persist the header→credential
-      // field mapping so the backend builds auth headers from the user vault.
-      if (connector.credentialHeaderMap && Object.keys(connector.credentialHeaderMap).length > 0) {
-        fields.credential_header_map = JSON.stringify(connector.credentialHeaderMap);
-      }
-      // Constant non-secret headers (e.g. GoHighLevel's Version): the backend
-      // merges these into every request.
-      if (connector.staticHeaders && Object.keys(connector.staticHeaders).length > 0) {
-        fields.static_headers = JSON.stringify(connector.staticHeaders);
-      }
+      fields.api_key_header = connector.apiKeyHeader && form.adminFields.api_key?.trim() ? connector.apiKeyHeader : '';
+      // Custom-header auth (e.g. Cin7 Core): persist the header→credential field
+      // mapping so the backend builds auth headers from the user vault.
+      fields.credential_header_map =
+        connector.credentialHeaderMap && Object.keys(connector.credentialHeaderMap).length > 0
+          ? JSON.stringify(connector.credentialHeaderMap)
+          : '';
+      // Constant non-secret headers (e.g. GoHighLevel's Version): merged into
+      // every request by the backend.
+      fields.static_headers =
+        connector.staticHeaders && Object.keys(connector.staticHeaders).length > 0
+          ? JSON.stringify(connector.staticHeaders)
+          : '';
 
       // Persist the credential-field schema so the backend can emit the right
       // `needs_credential` error shape when a user has no stored credential
@@ -416,33 +442,46 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
             </div>
           )}
 
-          <div className="border rounded p-3 mb-3">
-            <Form.Group>
-              <Form.Label className="small fw-semibold mb-1">
-                {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
-                <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
-                  ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
-                </span>
-              </Form.Label>
-              <Form.Control
-                type="url"
-                placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
-                  defaultValue: 'https://your-instance.example.com',
-                })}
-                value={form.instanceUrl}
-                onChange={(e) => updateForm({ instanceUrl: e.target.value })}
-                isInvalid={instanceUrlError !== null}
-                autoComplete="off"
-              />
-              {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
-              <Form.Text className="text-muted small">
-                {t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
-                  defaultValue:
-                    "Set this only if your connector's API is hosted at a customer-specific address (e.g. a private Synergy 12d server). Leave empty to use the connector's built-in default.",
-                })}
-              </Form.Text>
-            </Form.Group>
-          </div>
+          {/* Instance URL: only for customer-hosted connectors (no fixed baseUrl),
+              connectors that explicitly opt in (instanceUrlOptional, e.g. GitLab
+              self-managed), or those that require it. Hidden for fixed-host SaaS
+              connectors (Cin7, Connecteam, Rentman, …) where it doesn't apply. */}
+          {showInstanceUrl && (
+            <div className="border rounded p-3 mb-3">
+              <Form.Group>
+                <Form.Label className="small fw-semibold mb-1">
+                  {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
+                  {!connector.instanceUrlRequired && (
+                    <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                      ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+                    </span>
+                  )}
+                </Form.Label>
+                <Form.Control
+                  type="url"
+                  placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
+                    defaultValue: 'https://your-instance.example.com',
+                  })}
+                  value={form.instanceUrl}
+                  onChange={(e) => updateForm({ instanceUrl: e.target.value })}
+                  isInvalid={instanceUrlError !== null}
+                  autoComplete="off"
+                />
+                {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
+                <Form.Text className="text-muted small">
+                  {connector.instanceUrlRequired
+                    ? t('dataConnectors.apiKeyWizard.instanceUrlHelpRequired', {
+                        defaultValue:
+                          'Required — this connector is hosted at your own address with no default. Enter your full API URL.',
+                      })
+                    : t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
+                        defaultValue:
+                          "Only set this if your connector is hosted at your own (customer-specific) address. Leave empty to use the connector's built-in default.",
+                      })}
+                </Form.Text>
+              </Form.Group>
+            </div>
+          )}
         </div>
       )}
 
