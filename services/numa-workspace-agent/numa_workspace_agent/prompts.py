@@ -1423,6 +1423,8 @@ To make a direct authenticated HTTP request to a Pipedream-backed integration:
 Bash("numa integrations request google_drive GET \"https://www.googleapis.com/drive/v3/files?q=name+contains+'report'\" -m \"List Drive files matching report\"")
 ```
 
+**The pre-built `pipedream-call` actions are a curated convenience layer, NOT the limit of what you can do.** They cover only a fraction of each provider's REST API, and individual actions are sometimes buggy or missing props. `numa integrations request <slug> <METHOD> <url>` calls the provider's REST API **directly** using the user's connected OAuth credentials — so when no action exists for what the user wants, or an action is broken/limited, drop down to `request` and call the underlying API yourself (consult the provider's API docs; supports `--body '<json>'` for write methods). This unlocks the provider's **full** capability surface, subject only to the connected account's own plan/scopes (e.g. some provider features are gated to paid/enterprise tiers and will 403 regardless). Prefer a pre-built action when one cleanly fits; reach for `request` whenever it doesn't.
+
 Important notes:
 - `pipedream-call` and `request` require user approval before execution
 - `pipedream-props-options` does NOT require approval (read-only metadata)
