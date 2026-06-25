@@ -7,6 +7,7 @@ in the generic Files Remote tab without any UI changes.
 from __future__ import annotations
 
 import base64
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -41,6 +42,15 @@ _LABEL_DISPLAY_NAMES = {
     "TRASH": "Trash",
 }
 
+# Gmail message/thread ids are 16+ lowercase-hex chars; label ids never are
+# (system labels are UPPERCASE, user labels are "Label_<n>"). Used to route
+# list_files into a message's attachments vs a label's messages.
+_MESSAGE_ID_RE = re.compile(r"[0-9a-f]{16,}")
+
+# An attachment file_id is "{messageId}/attachments/{attachmentId}" — mirrors the
+# Gmail REST path so download_file / get_file_metadata can detect and route it.
+_ATTACHMENT_SEP = "/attachments/"
+
 
 class GmailProvider(OAuthProvider):
     """Gmail API v1 OAuth provider — emails as files, labels as folders."""
@@ -65,6 +75,9 @@ class GmailProvider(OAuthProvider):
         """List labels (root) or emails in a label."""
         if not folder_id:
             return await self._list_labels(access_token)
+        # A message id as the "folder" → open that email and list its attachments.
+        if _MESSAGE_ID_RE.fullmatch(folder_id):
+            return await self._list_message_attachments(access_token, folder_id)
         return await self._list_messages(access_token, folder_id, page_size, page_token)
 
     async def _list_labels(self, access_token: str) -> OAuthFolderContents:
@@ -137,12 +150,101 @@ class GmailProvider(OAuthProvider):
             if msg:
                 files.append(msg)
 
+        # Flag emails that carry attachments (one cheap has:attachment lookup).
+        attachment_ids = await self._emails_with_attachments(
+            access_token, label_id=label_id
+        )
+        self._mark_attachment_emails(files, attachment_ids)
+
         return OAuthFolderContents(
             folders=[],
             files=files,
             total_count=len(files),
             next_page_token=data.get("nextPageToken"),
         )
+
+    async def _list_message_attachments(
+        self, access_token: str, message_id: str
+    ) -> OAuthFolderContents:
+        """Open one email and list its attachments as downloadable files.
+
+        Reached when list_files gets a message id as the folder. Each attachment
+        gets a composite file_id (`{messageId}/attachments/{attachmentId}`) that
+        download_file / get_file_metadata route on — so the agent grabs it like
+        any other file, no manual Gmail-API dance.
+        """
+        response = await self._make_request_with_retry(
+            "GET",
+            f"{self.BASE_URL}/messages/{message_id}",
+            access_token,
+            params={"format": "full"},
+        )
+        data = response.json()
+        files: list[OAuthFile] = [
+            OAuthFile(
+                file_id=f"{message_id}{_ATTACHMENT_SEP}{att['attachment_id']}",
+                name=att["filename"],
+                is_folder=False,
+                path=normalize_file_path(f"/{att['filename']}"),
+                size=att["size"],
+                content_type=att["mime_type"],
+                parent_id=message_id,
+            )
+            for att in self._walk_attachments(data.get("payload", {}))
+        ]
+        return OAuthFolderContents(folders=[], files=files, total_count=len(files))
+
+    def _walk_attachments(self, payload: dict) -> list[dict]:
+        """Recursively collect attachment parts (a part with both `filename` and
+        `body.attachmentId`) from a Gmail payload. Structure can be deeply nested
+        (multipart/mixed → multipart/alternative → …), so walk parts[]."""
+        found: list[dict] = []
+        body = payload.get("body", {}) or {}
+        filename = payload.get("filename") or ""
+        attachment_id = body.get("attachmentId")
+        if filename and attachment_id:
+            found.append(
+                {
+                    "filename": filename,
+                    "attachment_id": attachment_id,
+                    "mime_type": payload.get("mimeType") or "application/octet-stream",
+                    "size": body.get("size", 0) or 0,
+                }
+            )
+        for part in payload.get("parts", []) or []:
+            found.extend(self._walk_attachments(part))
+        return found
+
+    async def _emails_with_attachments(
+        self,
+        access_token: str,
+        label_id: Optional[str] = None,
+        query: Optional[str] = None,
+    ) -> set[str]:
+        """One cheap `has:attachment` lookup → the set of in-scope message ids
+        that carry attachments, so listings can flag them. Best-effort: any
+        failure returns an empty set rather than breaking the listing."""
+        try:
+            q = f"({query}) has:attachment" if query else "has:attachment"
+            params: dict = {"q": q, "maxResults": 100}
+            if label_id:
+                params["labelIds"] = label_id
+            response = await self._make_request_with_retry(
+                "GET", f"{self.BASE_URL}/messages", access_token, params=params
+            )
+            return {m["id"] for m in response.json().get("messages", [])}
+        except OAuthError:
+            return set()
+
+    @staticmethod
+    def _mark_attachment_emails(
+        files: list[OAuthFile], attachment_ids: set[str]
+    ) -> None:
+        """Append a 📎 marker to emails that carry attachments so the agent can
+        see at a glance which to open (list_files into) for their files."""
+        for f in files:
+            if f.file_id in attachment_ids and not f.name.endswith("📎"):
+                f.name = f"{f.name} 📎"
 
     async def _get_message_metadata(
         self, access_token: str, message_id: str
@@ -217,7 +319,17 @@ class GmailProvider(OAuthProvider):
         file_id: str,
         max_download_size: Optional[int] = None,
     ) -> bytes:
-        """Download email body as HTML (or plain text fallback)."""
+        """Download an email body (HTML/plain), or the decoded bytes of an
+        attachment when given an attachment file_id."""
+        if _ATTACHMENT_SEP in file_id:
+            message_id, attachment_id = file_id.split(_ATTACHMENT_SEP, 1)
+            response = await self._make_request_with_retry(
+                "GET",
+                f"{self.BASE_URL}/messages/{message_id}/attachments/{attachment_id}",
+                access_token,
+            )
+            return self._decode_attachment_data(response.json().get("data", ""))
+
         response = await self._make_request_with_retry(
             "GET",
             f"{self.BASE_URL}/messages/{file_id}",
@@ -267,6 +379,15 @@ class GmailProvider(OAuthProvider):
         padded = data + "=" * (4 - len(data) % 4)
         return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
 
+    @staticmethod
+    def _decode_attachment_data(data: str) -> bytes:
+        """Decode base64url attachment data to raw bytes (binary-safe — unlike
+        _decode_body_data this never decodes to str)."""
+        if not data:
+            return b""
+        padded = data + "=" * (-len(data) % 4)
+        return base64.urlsafe_b64decode(padded)
+
     # ------------------------------------------------------------------
     # get_file_metadata
     # ------------------------------------------------------------------
@@ -274,7 +395,9 @@ class GmailProvider(OAuthProvider):
     async def get_file_metadata(
         self, access_token: str, file_id: str
     ) -> OAuthFileMetadata:
-        """Get email metadata."""
+        """Get email metadata, or attachment metadata for an attachment file_id."""
+        if _ATTACHMENT_SEP in file_id:
+            return await self._attachment_metadata(access_token, file_id)
         response = await self._make_request_with_retry(
             "GET",
             f"{self.BASE_URL}/messages/{file_id}",
@@ -305,6 +428,37 @@ class GmailProvider(OAuthProvider):
             modified_at=dt.isoformat(),
             created_at=dt.isoformat(),
             path=normalize_file_path(f"/{subject}"),
+        )
+
+    async def _attachment_metadata(
+        self, access_token: str, file_id: str
+    ) -> OAuthFileMetadata:
+        """Resolve an attachment file_id to its real filename, size and MIME by
+        finding the matching part in the parent message."""
+        message_id, attachment_id = file_id.split(_ATTACHMENT_SEP, 1)
+        response = await self._make_request_with_retry(
+            "GET",
+            f"{self.BASE_URL}/messages/{message_id}",
+            access_token,
+            params={"format": "full"},
+        )
+        data = response.json()
+        internal_date = data.get("internalDate", "0")
+        dt = datetime.fromtimestamp(int(internal_date) / 1000, tz=timezone.utc)
+        for att in self._walk_attachments(data.get("payload", {})):
+            if att["attachment_id"] == attachment_id:
+                return OAuthFileMetadata(
+                    file_id=file_id,
+                    name=att["filename"],
+                    size=att["size"],
+                    content_type=att["mime_type"],
+                    modified_at=dt.isoformat(),
+                    created_at=dt.isoformat(),
+                    parent_id=message_id,
+                    path=normalize_file_path(f"/{att['filename']}"),
+                )
+        raise OAuthError(
+            f"Attachment not found in message {message_id}", status_code=404
         )
 
     # ------------------------------------------------------------------
@@ -339,6 +493,11 @@ class GmailProvider(OAuthProvider):
             msg = await self._get_message_metadata(access_token, stub["id"])
             if msg:
                 files.append(msg)
+
+        attachment_ids = await self._emails_with_attachments(
+            access_token, label_id=folder_id, query=query
+        )
+        self._mark_attachment_emails(files, attachment_ids)
 
         return OAuthFolderContents(
             folders=[],

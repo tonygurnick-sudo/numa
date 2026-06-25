@@ -20,6 +20,7 @@ companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=eve
 ## Call surface (read first)
 
 - This is a **Files-Remote connector**: labels=folders, emails=files. Drive it via `numa integrations list-files` / `search-files` / `download-file` — NOT `numa integrations request`.
+- **Attachments are files too — no raw API needed.** Emails that carry attachments are marked 📎 in listings. To get one: `numa integrations list-files gmail --folder-id <messageId>` lists the email's attachments as files, then `numa integrations download-file gmail "<attachment-id>"` saves it with its real filename + extension (the connector fetches and base64url-decodes for you). The raw `…/attachments/{attId}` path documented further down is reference/debug only.
 - Raw HTTP below is reference/debug. Numa's connector handles OAuth + token refresh; you never construct `Authorization` yourself.
 - `userId` is always `me`. Path version `/gmail/v1` is already in base_url — never add another `/v1/`.
 
@@ -31,7 +32,7 @@ companions: 01a=domain-model, 01b=query-patterns, 01c=mutation-patterns, 01d=eve
 
 1. Browse labels as folders, list emails inside (Files>Remote).
 2. Full-text mailbox search with Gmail operators (`from:`, `is:unread`, `has:attachment`, date ranges).
-3. Open an email body (HTML/plain) + metadata; download attachment bytes (base64url).
+3. Open an email body (HTML/plain) + metadata; download attachments as files (`list-files` an email → `download-file` the attachment — the connector base64url-decodes for you).
 
 ## CANNOT
 
