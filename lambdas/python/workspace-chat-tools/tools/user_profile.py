@@ -95,6 +95,14 @@ _PIPEDREAM_INTEGRATION_SLUGS = {
     "microsofttodo",
     "fathom",
     "elevenlabs",
+    "heygen",
+    "gitlab",
+    "github",
+    "airtable_oauth",
+    "google_slides",
+    "todoist",
+    "google_my_business",
+    "streak",
 }
 _NATIVE_CONNECTOR_SLUGS = {
     "googledrive",

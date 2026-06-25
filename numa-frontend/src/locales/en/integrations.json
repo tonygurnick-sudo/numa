@@ -311,6 +311,46 @@
       "name": "ElevenLabs",
       "description": "Generate lifelike speech, manage voices, and place automated outbound phone calls with ElevenLabs voice AI.",
       "example_query": "Turn this paragraph into natural-sounding speech and save it as an audio file."
+    },
+    "heygen": {
+      "name": "HeyGen",
+      "description": "Generate AI avatar videos, manage templates, and automate video production with HeyGen.",
+      "example_query": "Create an avatar video from this script."
+    },
+    "gitlab": {
+      "name": "GitLab",
+      "description": "Manage repositories, issues, merge requests, and pipelines on GitLab.",
+      "example_query": "List the open merge requests in my project."
+    },
+    "github": {
+      "name": "GitHub",
+      "description": "Manage repositories, issues, pull requests, and workflows on GitHub.",
+      "example_query": "Show me the open issues assigned to me."
+    },
+    "airtable_oauth": {
+      "name": "Airtable",
+      "description": "Read and update records, manage bases and tables in Airtable.",
+      "example_query": "List the records in my project tracker base."
+    },
+    "google_slides": {
+      "name": "Google Slides",
+      "description": "Create, edit, and read presentations with Google Slides.",
+      "example_query": "Create a presentation from these talking points."
+    },
+    "todoist": {
+      "name": "Todoist",
+      "description": "Create tasks, manage projects, and organize your to-do lists in Todoist.",
+      "example_query": "Add a task to follow up with the client tomorrow."
+    },
+    "google_my_business": {
+      "name": "Google Business Profile",
+      "description": "Manage business locations, posts, and customer reviews on Google Business Profile.",
+      "example_query": "Show me recent reviews for my business."
+    },
+    "streak": {
+      "name": "Streak",
+      "description": "Manage CRM pipelines, boxes, and contacts directly from your Streak workspace.",
+      "example_query": "List the deals in my sales pipeline."
     }
   },
   "tabs": {
