@@ -765,7 +765,34 @@ def resolve_per_integration_approval_modes(
             agent_id=agent_config.agent_id if agent_config else None,
         )
         return {}
-    return fetch_integration_approval_modes(user_sub)
+    return _mirror_cross_method_slugs(fetch_integration_approval_modes(user_sub))
+
+
+def _mirror_cross_method_slugs(modes: dict[str, str]) -> dict[str, str]:
+    """Mirror each per-integration override onto its cross-method slug alias.
+
+    The Integrations UI saves a per-service override under ONE slug — the
+    Pipedream slug when the service has one (e.g. ``google_drive``) — but the
+    native connector path looks the override up under the native connector slug
+    (``googledrive``). Without mirroring, a native read/write silently misses
+    the override and falls back to the category default, so "always ask" set on
+    Google Drive never reached the native connector (BUG-390).
+
+    Expands ``{"google_drive": "always"}`` to
+    ``{"google_drive": "always", "googledrive": "always"}`` using the canonical
+    alias map (``integration_preferences.slug_aliases``). An explicitly-set slug
+    always wins over an alias-derived value.
+    """
+    from numa_workspace_agent.mcp_tools.integration_preferences import slug_aliases
+
+    expanded: dict[str, str] = {}
+    for slug, mode in modes.items():
+        for alias in slug_aliases(slug):
+            # Never let an alias clobber a slug the user set explicitly.
+            if alias != slug and alias in modes:
+                continue
+            expanded[alias] = mode
+    return expanded
 
 
 def resolve_all_approval_modes(

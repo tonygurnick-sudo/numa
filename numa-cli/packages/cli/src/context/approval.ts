@@ -167,6 +167,14 @@ export interface IntegrationApprovalInput {
   actionKey?: string;
   /** HTTP method for raw proxy requests — GET/HEAD are read-only. */
   httpMethod?: string;
+  /**
+   * Inherently read-only native op (file browsing, Synergy metadata) — no
+   * action-key schema and no HTTP method to infer safety from. Treated as a
+   * "safe" op so it auto-approves under `non_destructive` and only prompts
+   * under `always`, mirroring the pre-CLI SDK-runner rule that "always ask"
+   * gated EVERY native connector operation, reads included (BUG-390).
+   */
+  readOnly?: boolean;
   account?: string;
 }
 
@@ -182,6 +190,7 @@ const integrationSchemaDir = (): string => process.env['NUMA_INTEGRATION_SCHEMA_
  * fails closed. Raw proxy requests have no schema; GET/HEAD are read-only.
  */
 const isSafeIntegrationOp = (input: IntegrationApprovalInput): boolean => {
+  if (input.readOnly) return true; // file browsing / metadata reads are always safe
   if (input.actionKey) {
     try {
       const schemaPath = join(integrationSchemaDir(), input.slug, `${input.actionKey}.json`);

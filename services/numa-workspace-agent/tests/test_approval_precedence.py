@@ -77,6 +77,41 @@ class TestResolvePerIntegrationApprovalModes:
         assert resolve_per_integration_approval_modes("sub-1", agent) == USER_OVERRIDES
 
 
+@patch("numa_workspace_agent.agent_config.fetch_integration_approval_modes")
+class TestCrossMethodSlugMirroring:
+    """BUG-390: the Integrations UI saves a per-service override under ONE slug
+    (the Pipedream slug when the service has one, e.g. ``google_drive``), but the
+    native connector path looks it up under the native slug (``googledrive``).
+    The resolver must mirror an override onto its cross-method alias so the
+    native connector actually sees it."""
+
+    def test_pipedream_slug_override_mirrored_to_native(self, _fetch):
+        _fetch.return_value = {"google_drive": "always"}
+        result = resolve_per_integration_approval_modes("sub-1", None)
+        assert result == {"google_drive": "always", "googledrive": "always"}
+
+    def test_native_slug_override_mirrored_to_pipedream(self, _fetch):
+        _fetch.return_value = {"googledrive": "non_destructive"}
+        result = resolve_per_integration_approval_modes("sub-1", None)
+        assert result == {
+            "googledrive": "non_destructive",
+            "google_drive": "non_destructive",
+        }
+
+    def test_explicit_slug_wins_over_alias(self, _fetch):
+        # If the user somehow has both slugs set, neither clobbers the other.
+        _fetch.return_value = {"google_drive": "always", "googledrive": "never"}
+        result = resolve_per_integration_approval_modes("sub-1", None)
+        assert result == {"google_drive": "always", "googledrive": "never"}
+
+    def test_single_slug_service_unchanged(self, _fetch):
+        # A service with one shared slug (gmail) and one with no alias (slack)
+        # pass through untouched.
+        _fetch.return_value = {"gmail": "never", "slack": "always"}
+        result = resolve_per_integration_approval_modes("sub-1", None)
+        assert result == {"gmail": "never", "slack": "always"}
+
+
 class TestAgentOverridesIntegrations:
     def test_none_agent_is_false(self):
         assert _agent_overrides_integrations(None) is False
