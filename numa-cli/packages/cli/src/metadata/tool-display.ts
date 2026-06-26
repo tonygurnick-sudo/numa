@@ -30,6 +30,8 @@ import type {
   ConnectRequestResult,
   ConnectStatusParams,
   ConnectStatusResult,
+  ConnectSoapCredentialsParams,
+  ConnectSoapCredentialsResult,
   ConnectSynergyCompaniesParams,
   ConnectSynergyContactsParams,
   ConnectSynergyDownloadParams,
@@ -806,6 +808,21 @@ export const TOOL_DISPLAY: { [T in ToolName]: ToolDisplayInfo<T> } = {
       const connected = Object.values(r ?? {}).filter((e) => e?.status === 'connected').length;
       return `${connected}/${total} connected`;
     },
+  },
+
+  connect_soap_credentials: {
+    tool: 'connect_soap_credentials',
+    rendererKey: 'IntegrationsRenderer',
+    i18nLabelKey: 'common:toolLabels.integrationsSoapCredentials',
+    fallbackLabel: 'Integration SOAP credentials',
+    icon: 'Key',
+    category: 'integrations',
+    display: 'card',
+    describeCall: (p: ConnectSoapCredentialsParams) => `Retrieving SOAP credentials for ${p?.connector ?? 'autoplay'}`,
+    // Never echo the api_key / api_token here — only confirm a credential set
+    // came back (the secret values must not leak into captions / trace).
+    describeResult: (r: ConnectSoapCredentialsResult) =>
+      r?.api_key && r?.api_token ? `credentials retrieved for ${r.connector}` : 'no credentials',
   },
 
   // ─── native connector file browsing (Synergy + OAuth cloud storage) ──────

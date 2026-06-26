@@ -419,26 +419,57 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               <h6 className="fw-semibold small text-muted mb-2">
                 {t('dataConnectors.apiKeyWizard.adminFieldsTitle', { defaultValue: 'Account configuration' })}
               </h6>
-              {(connector.adminFields ?? []).map((def) => (
-                <Form.Group key={def.key} className="mb-2">
-                  <Form.Label className="small fw-semibold mb-1">
-                    {t(def.label)}
-                    {!def.required && (
-                      <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
-                        ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
-                      </span>
-                    )}
-                  </Form.Label>
-                  <Form.Control
-                    type={def.type === 'password' ? 'password' : def.type === 'url' ? 'url' : 'text'}
-                    placeholder={def.placeholder}
-                    value={form.adminFields[def.key] ?? ''}
-                    onChange={(e) => updateForm({ adminFields: { ...form.adminFields, [def.key]: e.target.value } })}
-                    autoComplete="off"
-                  />
-                  {def.helpText && <Form.Text className="text-muted small">{t(def.helpText)}</Form.Text>}
-                </Form.Group>
-              ))}
+              {(connector.adminFields ?? []).map((def) =>
+                def.type === 'checkbox' ? (
+                  // Capability toggle (e.g. AutoPlay Lead/Listing API + SOAP
+                  // token passthrough). Stored as 'true'/'false'. `tag` shows a
+                  // badge next to the label (e.g. SOAP); `comingSoon` disables it.
+                  <Form.Group key={def.key} className="mb-2">
+                    <Form.Check
+                      type="checkbox"
+                      id={`adminfield-${def.key}`}
+                      disabled={def.comingSoon}
+                      checked={form.adminFields[def.key] === 'true'}
+                      onChange={(e) =>
+                        updateForm({
+                          adminFields: { ...form.adminFields, [def.key]: e.target.checked ? 'true' : 'false' },
+                        })
+                      }
+                      label={
+                        <span className="small fw-semibold">
+                          {t(def.label)}
+                          {def.tag && <span className="badge bg-info-subtle text-info-emphasis ms-2">{def.tag}</span>}
+                          {def.comingSoon && (
+                            <span className="badge bg-warning-subtle text-warning-emphasis ms-2">
+                              {t('dataConnectors.apiKeyWizard.comingSoon', { defaultValue: 'Coming soon' })}
+                            </span>
+                          )}
+                        </span>
+                      }
+                    />
+                    {def.helpText && <Form.Text className="text-muted small d-block ms-4">{t(def.helpText)}</Form.Text>}
+                  </Form.Group>
+                ) : (
+                  <Form.Group key={def.key} className="mb-2">
+                    <Form.Label className="small fw-semibold mb-1">
+                      {t(def.label)}
+                      {!def.required && (
+                        <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                          ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+                        </span>
+                      )}
+                    </Form.Label>
+                    <Form.Control
+                      type={def.type === 'password' ? 'password' : def.type === 'url' ? 'url' : 'text'}
+                      placeholder={def.placeholder}
+                      value={form.adminFields[def.key] ?? ''}
+                      onChange={(e) => updateForm({ adminFields: { ...form.adminFields, [def.key]: e.target.value } })}
+                      autoComplete="off"
+                    />
+                    {def.helpText && <Form.Text className="text-muted small">{t(def.helpText)}</Form.Text>}
+                  </Form.Group>
+                )
+              )}
             </div>
           )}
 

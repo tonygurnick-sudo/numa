@@ -1041,6 +1041,43 @@ export interface ConnectStatusEntry {
 /** Server returns a map of connector-slug → status entry. */
 export type ConnectStatusResult = Record<string, ConnectStatusEntry>;
 
+// ── Native — connect_soap_credentials (via oauth_workspace_tools) ────────────
+//
+// AutoPlay-only. Hands the agent the company-level SOAP credentials AutoPlay's
+// Lead API needs (its auth must be embedded in the SOAP <Authentication>
+// envelope, not as an HTTP header — the generic request path can't do that).
+// Deliberate credential disclosure, HARD-gated server-side on TWO admin opt-ins
+// stored on the AutoPlay connector config: `soap_token_passthrough == 'true'`
+// AND `lead_api_enabled == 'true'`. The connector is pinned to `autoplay` — no
+// other slug can reach this path. If any gate fails the handler returns an auth
+// error and exposes nothing. user_sub is dispatcher-injected. Source:
+// `lambdas/python/oauth-workspace-tools/tools/connect_tools.py:
+// handle_connect_soap_credentials`.
+
+export interface ConnectSoapCredentialsParams extends HitlParams {
+  /** Native connector slug — only `autoplay` is permitted. Defaults to `autoplay`. */
+  connector?: string;
+}
+
+/**
+ * Standard `{status, result, error}` envelope server-side; the CLI surfaces
+ * `result` as this shape on success. On any gate failure the handler returns
+ * `status: 'error'` with `result` null and NOTHING about the credentials leaks.
+ */
+export interface ConnectSoapCredentialsResult {
+  connector: string;
+  /** SOAP endpoint base URL (admin override, else AutoPlay's fixed Lead API URL). */
+  base_url: string;
+  /** Company-level SOAP API key — embedded in the <Authentication> envelope. */
+  api_key: string;
+  /** Company-level SOAP API token — embedded in the <Authentication> envelope. */
+  api_token: string;
+  /** Dealership identifier (may be empty string when the admin didn't set it). */
+  dealership_id: string;
+  /** Yard identifier (may be empty string when the admin didn't set it). */
+  yard_id: string;
+}
+
 // ── Native — connector file browsing (Synergy + OAuth cloud storage) ────────
 //
 // Restores the file ops the MCP `connect.py` tool exposed before the MCP→CLI
@@ -1718,6 +1755,7 @@ export type ToolCall =
   | { tool: 'pipedream_proxy_request'; params: PipedreamProxyRequestParams }
   | { tool: 'connect_request'; params: ConnectRequestParams }
   | { tool: 'connect_status'; params: ConnectStatusParams }
+  | { tool: 'connect_soap_credentials'; params: ConnectSoapCredentialsParams }
   | { tool: 'connect_synergy_list'; params: ConnectSynergyListParams }
   | { tool: 'connect_synergy_search'; params: ConnectSynergySearchParams }
   | { tool: 'connect_synergy_download'; params: ConnectSynergyDownloadParams }
@@ -1827,107 +1865,112 @@ export type ToolResult<T extends ToolName> = T extends 'query_knowledgebase'
                                                               ? ConnectRequestResult
                                                               : T extends 'connect_status'
                                                                 ? ConnectStatusResult
-                                                                : T extends 'connect_synergy_list'
-                                                                  ? ConnectorListResult
-                                                                  : T extends 'connect_synergy_search'
+                                                                : T extends 'connect_soap_credentials'
+                                                                  ? ConnectSoapCredentialsResult
+                                                                  : T extends 'connect_synergy_list'
                                                                     ? ConnectorListResult
-                                                                    : T extends 'connect_synergy_download'
-                                                                      ? ConnectorDownloadResult
-                                                                      : T extends 'connect_synergy_job_meta'
-                                                                        ? Record<string, unknown>
-                                                                        : T extends 'connect_synergy_folder_summary'
+                                                                    : T extends 'connect_synergy_search'
+                                                                      ? ConnectorListResult
+                                                                      : T extends 'connect_synergy_download'
+                                                                        ? ConnectorDownloadResult
+                                                                        : T extends 'connect_synergy_job_meta'
                                                                           ? Record<string, unknown>
-                                                                          : T extends 'connect_synergy_schema'
+                                                                          : T extends 'connect_synergy_folder_summary'
                                                                             ? Record<string, unknown>
-                                                                            : T extends 'connect_synergy_file_info'
-                                                                              ? ConnectorFileMetadataResult
-                                                                              : T extends 'connect_synergy_job_stats'
-                                                                                ? Record<string, unknown>
-                                                                                : T extends 'connect_synergy_job_tree'
+                                                                            : T extends 'connect_synergy_schema'
+                                                                              ? Record<string, unknown>
+                                                                              : T extends 'connect_synergy_file_info'
+                                                                                ? ConnectorFileMetadataResult
+                                                                                : T extends 'connect_synergy_job_stats'
                                                                                   ? Record<string, unknown>
-                                                                                  : T extends 'connect_synergy_portfolio'
+                                                                                  : T extends 'connect_synergy_job_tree'
                                                                                     ? Record<string, unknown>
-                                                                                    : T extends 'connect_synergy_exact_term'
+                                                                                    : T extends 'connect_synergy_portfolio'
                                                                                       ? Record<string, unknown>
-                                                                                      : T extends 'connect_synergy_tasks'
+                                                                                      : T extends 'connect_synergy_exact_term'
                                                                                         ? Record<string, unknown>
-                                                                                        : T extends 'connect_synergy_contacts'
+                                                                                        : T extends 'connect_synergy_tasks'
                                                                                           ? Record<string, unknown>
-                                                                                          : T extends 'connect_synergy_issues'
+                                                                                          : T extends 'connect_synergy_contacts'
                                                                                             ? Record<string, unknown>
-                                                                                            : T extends 'connect_synergy_workflow'
+                                                                                            : T extends 'connect_synergy_issues'
                                                                                               ? Record<string, unknown>
-                                                                                              : T extends 'connect_synergy_file_history'
+                                                                                              : T extends 'connect_synergy_workflow'
                                                                                                 ? Record<
                                                                                                     string,
                                                                                                     unknown
                                                                                                   >
-                                                                                                : T extends 'connect_synergy_recent'
+                                                                                                : T extends 'connect_synergy_file_history'
                                                                                                   ? Record<
                                                                                                       string,
                                                                                                       unknown
                                                                                                     >
-                                                                                                  : T extends 'connect_synergy_forums'
+                                                                                                  : T extends 'connect_synergy_recent'
                                                                                                     ? Record<
                                                                                                         string,
                                                                                                         unknown
                                                                                                       >
-                                                                                                    : T extends 'connect_synergy_projects'
+                                                                                                    : T extends 'connect_synergy_forums'
                                                                                                       ? Record<
                                                                                                           string,
                                                                                                           unknown
                                                                                                         >
-                                                                                                      : T extends 'connect_synergy_transmittals'
+                                                                                                      : T extends 'connect_synergy_projects'
                                                                                                         ? Record<
                                                                                                             string,
                                                                                                             unknown
                                                                                                           >
-                                                                                                        : T extends 'connect_synergy_companies'
+                                                                                                        : T extends 'connect_synergy_transmittals'
                                                                                                           ? Record<
                                                                                                               string,
                                                                                                               unknown
                                                                                                             >
-                                                                                                          : T extends 'connect_synergy_webforms'
+                                                                                                          : T extends 'connect_synergy_companies'
                                                                                                             ? Record<
                                                                                                                 string,
                                                                                                                 unknown
                                                                                                               >
-                                                                                                            : T extends 'connect_synergy_job_extras'
+                                                                                                            : T extends 'connect_synergy_webforms'
                                                                                                               ? Record<
                                                                                                                   string,
                                                                                                                   unknown
                                                                                                                 >
-                                                                                                              : T extends 'connect_synergy_notes'
+                                                                                                              : T extends 'connect_synergy_job_extras'
                                                                                                                 ? Record<
                                                                                                                     string,
                                                                                                                     unknown
                                                                                                                   >
-                                                                                                                : T extends 'connect_synergy_status'
+                                                                                                                : T extends 'connect_synergy_notes'
                                                                                                                   ? Record<
                                                                                                                       string,
                                                                                                                       unknown
                                                                                                                     >
-                                                                                                                  : T extends 'connect_synergy_users'
+                                                                                                                  : T extends 'connect_synergy_status'
                                                                                                                     ? Record<
                                                                                                                         string,
                                                                                                                         unknown
                                                                                                                       >
-                                                                                                                    : T extends 'connect_synergy_resolve'
+                                                                                                                    : T extends 'connect_synergy_users'
                                                                                                                       ? Record<
                                                                                                                           string,
                                                                                                                           unknown
                                                                                                                         >
-                                                                                                                      : T extends 'oauth_list_files'
-                                                                                                                        ? ConnectorListResult
-                                                                                                                        : T extends 'oauth_search_files'
+                                                                                                                      : T extends 'connect_synergy_resolve'
+                                                                                                                        ? Record<
+                                                                                                                            string,
+                                                                                                                            unknown
+                                                                                                                          >
+                                                                                                                        : T extends 'oauth_list_files'
                                                                                                                           ? ConnectorListResult
-                                                                                                                          : T extends 'oauth_download_file'
-                                                                                                                            ? ConnectorDownloadResult
-                                                                                                                            : T extends 'oauth_get_file_metadata'
-                                                                                                                              ? ConnectorFileMetadataResult
-                                                                                                                              : T extends `ops_${string}`
-                                                                                                                                ? OpsOperationResult
-                                                                                                                                : never;
+                                                                                                                          : T extends 'oauth_search_files'
+                                                                                                                            ? ConnectorListResult
+                                                                                                                            : T extends 'oauth_download_file'
+                                                                                                                              ? ConnectorDownloadResult
+                                                                                                                              : T extends 'oauth_get_file_metadata'
+                                                                                                                                ? ConnectorFileMetadataResult
+                                                                                                                                : T extends `ops_${string}`
+                                                                                                                                  ? OpsOperationResult
+                                                                                                                                  : never;
 
 /**
  * Extracts the params type for a given tool name. Useful for typing

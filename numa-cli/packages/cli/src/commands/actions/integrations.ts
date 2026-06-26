@@ -1006,6 +1006,47 @@ function createIntegrationsRequestCommand(): Command {
     );
 }
 
+// ─── native connector — AutoPlay SOAP credential passthrough ─────────────────
+//
+// `soap-credentials <connector>` (default `autoplay`). Hands the agent the
+// company-level SOAP credentials AutoPlay's Lead API needs — its auth must be
+// embedded inside the SOAP <Authentication> envelope, not sent as an HTTP
+// header, so the generic `request` path can't do it and the model has to build
+// the envelope itself. This is a DELIBERATE credential disclosure, hard-gated
+// SERVER-SIDE (oauth_workspace_tools) on TWO admin opt-ins on the AutoPlay
+// connector config — `soap_token_passthrough` AND `lead_api_enabled` — and
+// pinned to the `autoplay` slug. When a gate is off the handler returns an auth
+// error and exposes nothing; the CLI just surfaces that message. user_sub is
+// injected by numa-cli-api. Read-only credential read → no local HITL gate.
+
+function createIntegrationsSoapCredentialsCommand(): Command {
+  return new Command('soap-credentials')
+    .description(
+      'AutoPlay only: fetch the gated SOAP credentials (base URL, API key/token, dealer IDs) ' +
+        'for building Lead API envelopes. Requires the admin soap_token_passthrough + lead_api_enabled opt-ins.'
+    )
+    .argument('[connector]', 'Native connector slug — only autoplay is supported', 'autoplay')
+    .option('-m, --user-message <text>', CAPTION_HELP)
+    .option('--pretty', 'Force human-readable output')
+    .option('--standard', 'Force standard envelope output (LLM-friendly)')
+    .option('--json', 'Force raw JSON output')
+    .action(async (connector: string, options: StandardOptions) => {
+      const account = activeProfile();
+      if (!account) fail('no active profile — run `numa login` first');
+      const slug = (connector || 'autoplay').trim();
+      const params: ParamsForTool<'connect_soap_credentials'> = { connector: slug };
+      const { accessToken, request } = await buildIntegrationsRequest({
+        account,
+        tool: 'connect_soap_credentials',
+        params,
+        userMessage: options.userMessage,
+      });
+      const res = await invokeTool(account, accessToken, request);
+      if (res.status === 'error') fail(connectorFailure('soap-credentials', slug, res));
+      emitResult({ tool: 'connect_soap_credentials', result: res.result, options, pretty: writeJson });
+    });
+}
+
 // ─── native connector file browsing ──────────────────────────────────────────
 //
 // list-files / search-files / download-file / file-info. Restores the file ops
@@ -2927,6 +2968,7 @@ export function createIntegrationsCommand(): Command {
     .addCommand(createIntegrationsPipedreamPropsOptionsCommand())
     .addCommand(createIntegrationsPipedreamCallCommand())
     .addCommand(createIntegrationsRequestCommand())
+    .addCommand(createIntegrationsSoapCredentialsCommand())
     .addCommand(createIntegrationsListFilesCommand())
     .addCommand(createIntegrationsSearchFilesCommand())
     .addCommand(createIntegrationsDownloadFileCommand())

@@ -74,6 +74,7 @@ const TOOL_CATEGORY: Record<string, CliCategory> = {
   pipedream_proxy_request: 'integrations',
   connect_status: 'integrations',
   connect_request: 'integrations',
+  connect_soap_credentials: 'integrations',
   // native-connector file browsing (Synergy + OAuth cloud storage). The
   // Synergy tools come from the shared SYNERGY_TOOLS list (registry.ts) so the
   // category map and the routing registry stay in lockstep — every Synergy

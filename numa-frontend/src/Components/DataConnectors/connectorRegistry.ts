@@ -15,7 +15,10 @@ export type ConnectorAuthType = 'oauth2' | 'api-key' | 'token' | 'username-passw
 export interface CredentialFieldDef {
   key: string;
   label: string;
-  type: 'text' | 'password' | 'url';
+  // 'checkbox' renders a boolean toggle (admin config only); the stored value
+  // is the string 'true' / 'false'. Used for per-connector capability switches
+  // (e.g. AutoPlay's Lead API / Listing API / token-passthrough toggles).
+  type: 'text' | 'password' | 'url' | 'checkbox';
   placeholder?: string;
   required: boolean;
   helpText?: string;
@@ -27,6 +30,17 @@ export interface CredentialFieldDef {
    * embed tenant identifiers in the hostname (e.g. NetSuite account IDs).
    */
   hostnameSafe?: boolean;
+  /**
+   * Small badge rendered next to a checkbox label (e.g. 'SOAP' on AutoPlay's
+   * Lead API toggle) to flag a non-standard protocol/behaviour to the admin.
+   */
+  tag?: string;
+  /**
+   * Checkbox-only: render disabled with a "Coming soon" note. Used for
+   * capabilities that are declared but not yet wired (e.g. AutoPlay's Listing
+   * API, pending the vendor's REST spec).
+   */
+  comingSoon?: boolean;
 }
 
 export interface ConnectorTemplate {
@@ -795,15 +809,83 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     icon: 'bi-car-front',
     description: 'Automotive dealership inventory, vehicle listings and lead management (AU/NZ)',
     category: 'Automotive',
-    // AutoPlay exposes a tokenised Listing API (vehicle inventory/media) and a
-    // SOAP Lead API (lead-api.autoplay.co.nz, <API_KEY>/<API_TOKEN> + Dealership/
-    // Yard IDs), issued per dealer. The agent-facing Listing API spec isn't
-    // public, so this is `contact-required` until AutoPlay supplies the pack.
-    authType: 'contact-required',
+    // AutoPlay is issued per dealer with a Key + Token. The Lead API (SaveLead)
+    // is SOAP — the credentials ride INSIDE the SOAP envelope, not as an HTTP
+    // header, so the generic request path can't inject them. The agent builds
+    // the envelope, which means the token has to be handed to it — gated by the
+    // `soap_token_passthrough` admin toggle. The Listing API (vehicle inventory
+    // pull) is declared but not yet wired (AutoPlay hasn't published a REST spec).
+    authType: 'api-key',
+    // Lead API SOAP endpoint (prod). Test: https://lead-api.aptest.co.nz/LeadAPI.svc
+    baseUrl: 'https://lead-api.autoplay.co.nz/V2/LeadAPI.svc',
+    adminFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: '',
+        required: true,
+        helpText: 'dataConnectors.fields.autoplayApiKeyHint',
+      },
+      {
+        key: 'api_token',
+        label: 'dataConnectors.fields.apiToken',
+        type: 'password',
+        placeholder: '',
+        required: true,
+        helpText: 'dataConnectors.fields.autoplayApiTokenHint',
+      },
+      {
+        key: 'dealership_id',
+        label: 'dataConnectors.fields.autoplayDealershipId',
+        type: 'text',
+        placeholder: 'e.g. 1234',
+        required: true,
+        helpText: 'dataConnectors.fields.autoplayDealershipIdHint',
+      },
+      {
+        key: 'yard_id',
+        label: 'dataConnectors.fields.autoplayYardId',
+        type: 'text',
+        placeholder: 'e.g. 1',
+        required: false,
+        helpText: 'dataConnectors.fields.autoplayYardIdHint',
+      },
+      {
+        // SOAP — the agent builds a SaveLead envelope; flagged with a SOAP tag
+        // so the admin (and Numa) know this capability is not a REST call.
+        key: 'lead_api_enabled',
+        label: 'dataConnectors.fields.autoplayLeadApi',
+        type: 'checkbox',
+        required: false,
+        tag: 'SOAP',
+        helpText: 'dataConnectors.fields.autoplayLeadApiHint',
+      },
+      {
+        // Coming soon: AutoPlay hasn't published the Listing (inventory) REST spec.
+        key: 'listing_api_enabled',
+        label: 'dataConnectors.fields.autoplayListingApi',
+        type: 'checkbox',
+        required: false,
+        comingSoon: true,
+        helpText: 'dataConnectors.fields.autoplayListingApiHint',
+      },
+      {
+        // The SOAP credentials live in the request body, so the agent needs the
+        // token to build the envelope. This toggle is the admin's explicit
+        // authorisation to expose it to the agent.
+        key: 'soap_token_passthrough',
+        label: 'dataConnectors.fields.autoplaySoapPassthrough',
+        type: 'checkbox',
+        required: false,
+        helpText: 'dataConnectors.fields.autoplaySoapPassthroughHint',
+      },
+    ],
     oauthSetupSteps: [
-      'AutoPlay issues a tokenised Listing API (vehicle inventory) and a SOAP Lead API per dealer, with a unique Key + Token (Settings → Company Settings → API Management).',
-      'Email support@autoplay.co.nz to request the Listing API spec + Lead API manual, and have AutoPlay issue your dealer Key + Token (and Dealership/Yard IDs).',
-      'Once the Listing API spec + credentials are supplied, this connector is completed and enabled.',
+      'In AutoPlay, go to Settings → Company Settings → API Management and create an API record — AutoPlay issues a unique Key + Token (and your Dealership / Yard IDs).',
+      'Paste the Key, Token and Dealership ID here, and tick "Lead API".',
+      'The Lead API is SOAP, so its credentials must travel inside the request envelope — tick "Authorise passing the API token to the agent" so Numa can build SaveLead calls.',
+      'The Listing API (vehicle inventory pull) is coming soon — pending AutoPlay publishing its REST spec.',
     ],
   },
   {
