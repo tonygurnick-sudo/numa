@@ -23,6 +23,8 @@ import {
   aggregateSnapshots,
   buildByClientRowsWindowed,
   isAggregate,
+  modelTotalsInWindow,
+  poolForAggregate,
   setLastNDays,
   sumByKeyInWindow,
   sumDailyInWindow,
@@ -229,14 +231,13 @@ export function buildDashboardWindowView(
     by_user_top,
     by_agent_top,
     by_tool: { ...(chat?.tool_totals || {}) },
-    by_model: { ...(chat?.model_totals || {}) },
+    by_model: modelTotalsInWindow(chat, win),
     top_conversations,
     top_scheduled_runs,
   };
 
   if (isAggregate(data)) {
-    const pool =
-      data.aggregate_kind === 'clients' ? snapshots.filter((s) => !s.client_config?.dev_instance) : snapshots;
+    const pool = poolForAggregate(snapshots, data.aggregate_kind);
     view.by_client = buildByClientRowsWindowed(pool, win);
   }
 
@@ -295,12 +296,18 @@ function countDaysInclusive(start: string, end: string): number {
 
 /**
  * Build the full dashboard export bundle: every per-client snapshot + the
- * _FLEET and _CLIENTS aggregates, each rendered across all preset windows.
+ * _FLEET, _CLIENTS and _ARCANUM aggregates, each rendered across all preset
+ * windows. _ARCANUM = every Arcanum-owned account (HQ + dev + all NextGen),
+ * i.e. everything Arcanum pays the AWS bill for, excluding standalone.
  */
 export function buildDashboardExport(snapshots: ClientSnapshot[]): DashboardExportBundle {
   const windowStates: WindowState[] = DEFAULT_WINDOW_DAYS.map((n) => setLastNDays(n));
   const fleet = aggregateSnapshots(snapshots, { key: '_FLEET', kind: 'fleet' });
   const clientsAgg = aggregateSnapshots(snapshots, { key: '_CLIENTS', kind: 'clients' });
+  const arcanumAgg = aggregateSnapshots(poolForAggregate(snapshots, 'arcanum'), {
+    key: '_ARCANUM',
+    kind: 'arcanum',
+  });
 
   const views: Record<string, DashboardExportClientEntry> = {};
 
@@ -316,7 +323,7 @@ export function buildDashboardExport(snapshots: ClientSnapshot[]): DashboardExpo
     };
   }
 
-  for (const agg of [fleet, clientsAgg]) {
+  for (const agg of [fleet, clientsAgg, arcanumAgg]) {
     views[agg.client] = {
       client: agg.client,
       is_aggregate: true,

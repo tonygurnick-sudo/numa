@@ -15,9 +15,8 @@ import {
   fmtUSDc,
   friendlyAccountName,
   isAggregate,
-  isInternalClient,
-  isRandDDevStack,
   pct,
+  poolForAggregate,
   siblingStacksFor,
   sumDailyInWindow,
 } from '../shared';
@@ -582,14 +581,7 @@ function ByClientTable({
   // time_saved are summed across the group's stacks. Inferred CE for the
   // group is recomputed as (account_ce − account_claude_ce + summed_chat).
   const rows: ExtendedRow[] = useMemo(() => {
-    const pool =
-      agg.aggregate_kind === 'clients'
-        ? snapshots.filter((s) => !isRandDDevStack(s.client, s.client_config?.dev_instance))
-        : agg.aggregate_kind === 'nextgen'
-          ? snapshots.filter((s) => s.client_config?.account_org === 'nextgen')
-          : agg.aggregate_kind === 'standalone'
-            ? snapshots.filter((s) => s.client_config?.account_org === 'standalone')
-            : snapshots;
+    const pool = poolForAggregate(snapshots, agg.aggregate_kind);
     const base = buildByClientRowsWindowed(pool, window);
     const byName: Record<string, ClientSnapshot> = {};
     for (const s of pool) byName[s.client] = s;

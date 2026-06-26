@@ -21,6 +21,7 @@ import {
   isAggregate,
   isInternalClient,
   isRandDDevStack,
+  poolForAggregate,
   setLastNDays,
 } from '@/components/NumaDashboard/shared';
 import { computeInferredCosts } from '@/components/NumaDashboard/inferredCosts';
@@ -142,6 +143,16 @@ export default function NumaDashboard() {
       // OpenSearch / RDS / etc. don't bleed into the donut.
       const sa = allSnapshots.filter((s) => s.client_config?.account_org === 'standalone');
       return aggregateSnapshots(sa, { key: '_STANDALONE', kind: 'standalone' });
+    }
+    if (selectedClient === '_ARCANUM') {
+      // Every Arcanum-owned account (account_org !== 'standalone'): HQ +
+      // dev/demo + all NextGen — i.e. everything Arcanum pays the AWS bill for.
+      // Excludes customer-owned standalone accounts. This is the "Arcanum
+      // spend" roll-up. Quota-sharing nets out within the pool (a NextGen
+      // borrower's Claude billed to an Arcanum lender is reattributed by the
+      // per-stack inferred-cost math).
+      const arc = poolForAggregate(allSnapshots, 'arcanum');
+      return aggregateSnapshots(arc, { key: '_ARCANUM', kind: 'arcanum' });
     }
     // Per-client view: apply the standalone Numa-attributable filter here so
     // every consumer (Overview KPIs, inferred-cost math, Cost Efficiency,

@@ -1,6 +1,6 @@
 import { Bar } from 'react-chartjs-2';
 import '../chartSetup';
-import { fmtN, fmtUSD, pct } from '../shared';
+import { fmtN, fmtUSD, modelTotalsInWindow, pct } from '../shared';
 import { useCurrency } from '../currencyContext';
 import { ND_COLORS } from '../theme';
 import type { WindowState } from '../shared';
@@ -12,17 +12,23 @@ interface Props {
 }
 
 /**
- * Tools & Models tab. Reads `chat.tool_totals` and `chat.model_totals`
- * directly from the snapshot (snapshot window). No window-filtering of
- * per-conv data here — these aggregates are pre-computed.
+ * Tools & Models tab.
+ *
+ * Tools: `chat.tool_totals` is snapshot-wide only (no per-day map exists), so
+ * the tools chart can't re-filter to the window — labelled accordingly.
+ * Models: window-aware via `modelTotalsInWindow`, which sums the per-day
+ * `daily_cost_by_model` maps over the picker (falls back to the snapshot-wide
+ * `model_totals` on legacy snapshots that predate those maps).
  */
-export function ToolsModelsTab({ data }: Props) {
+export function ToolsModelsTab({ data, window }: Props) {
   useCurrency();
   const toolEntries = Object.entries(data.chat?.tool_totals || {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 25);
-  const modelEntries = Object.entries(data.chat?.model_totals || {}).sort((a, b) => b[1].cost - a[1].cost);
-  const totalCost = data.chat?.totals?.cost || 0;
+  const modelEntries = Object.entries(modelTotalsInWindow(data.chat, window)).sort((a, b) => b[1].cost - a[1].cost);
+  // Denominator = the displayed models' total so shares sum to 100% whether
+  // window-sliced or falling back to snapshot-wide totals.
+  const totalCost = modelEntries.reduce((s, [, v]) => s + v.cost, 0);
 
   return (
     <div className="nd-row-2">
@@ -54,9 +60,7 @@ export function ToolsModelsTab({ data }: Props) {
       <div className="nd-card">
         <div className="nd-card-header">
           <div className="nd-card-title">Models in use</div>
-          <div className="nd-card-subtitle">
-            Cost + conversation count per model · snapshot-window (window picker doesn't re-filter)
-          </div>
+          <div className="nd-card-subtitle">Cost + conversation count per model · in selected window</div>
         </div>
         <table className="nd-table">
           <thead>

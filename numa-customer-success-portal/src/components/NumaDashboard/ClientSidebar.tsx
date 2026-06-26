@@ -51,6 +51,9 @@ export function ClientSidebar({ snapshots, loading, selectedClientName, onSelect
   const clientStackCount = clientStacks.length;
   const nextgenCount = useMemo(() => perClient.filter((s) => s.account_org === 'nextgen').length, [perClient]);
   const standaloneCount = useMemo(() => perClient.filter((s) => s.account_org === 'standalone').length, [perClient]);
+  // Arcanum-owned = everything Arcanum pays the AWS bill for (HQ + dev + all
+  // NextGen), i.e. not customer-owned standalone accounts.
+  const arcanumCount = useMemo(() => perClient.filter((s) => s.account_org !== 'standalone').length, [perClient]);
 
   const filtered = useMemo(() => {
     if (!filter.trim()) return null;
@@ -157,6 +160,7 @@ export function ClientSidebar({ snapshots, loading, selectedClientName, onSelect
       <div className="nd-sidebar-section-header">Aggregate</div>
       {renderAggregateRow('_FLEET', 'All Stacks', allStackCount)}
       {renderAggregateRow('_CLIENTS', 'Client Stacks', clientStackCount)}
+      {arcanumCount > 0 && renderAggregateRow('_ARCANUM', 'Arcanum Spend', arcanumCount)}
       {nextgenCount > 0 && renderAggregateRow('_NEXTGEN', 'NextGen Clients', nextgenCount)}
       {standaloneCount > 0 && renderAggregateRow('_STANDALONE', 'Standalone Clients', standaloneCount)}
 
