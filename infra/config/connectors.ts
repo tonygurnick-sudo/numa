@@ -39,6 +39,9 @@ export const NATIVE_CONNECTORS = [
   'hirehop',
   'connecteam-api',
   'motion',
+  'isolved',
+  'net-inspect',
+  'autoplay',
   'totalsynergy-api',
 
   // Token

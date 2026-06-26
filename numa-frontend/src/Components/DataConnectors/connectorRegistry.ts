@@ -740,6 +740,65 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     ],
   },
   {
+    id: 'isolved',
+    displayName: 'isolved',
+    icon: 'bi-people-fill',
+    description: 'HCM — employees, payroll, time and benefits (isolved People Cloud)',
+    category: 'HR & Workforce',
+    // isolved has a real REST API (per-tenant {tenant}.myisolved.com/rest/api;
+    // OAuth2 CLIENT-CREDENTIALS → Bearer — a company-level service credential,
+    // not per-user consent). It is `contact-required` for now: access needs the
+    // isolved Network Partner program (client_id/secret + per-client grant), and
+    // the exact token path / endpoint specs sit behind isolved's partner docs.
+    // The full design + the two wiring tasks (a client-credentials adapter in
+    // oauth-auth-handler/oauth_tools, and OAuthWizard instance_url capture) are
+    // in ext-api-doc/isolved/. Flip to authType 'oauth2' + oauthAdapter
+    // 'isolved' + instanceUrlRequired once the adapter is built and partner
+    // credentials are in hand.
+    authType: 'contact-required',
+    oauthSetupSteps: [
+      'Join the isolved Network Partner program and submit the API Questionnaire to register this integration; isolved issues an API Application client_id and client_secret.',
+      'Paste the client_id as Client ID and the client_secret as Client Secret here.',
+      'Enter your isolved Instance URL (e.g. https://yourco.myisolved.com) as the Instance URL — the API base is that host + /rest/api.',
+      'For each client, your isolved admin grants the partner user access: Security → Partner Users → Client Access → add the Client Code, then run Production Utilities → Refresh System Data.',
+    ],
+  },
+  {
+    id: 'net-inspect',
+    displayName: 'Net-Inspect',
+    icon: 'bi-clipboard-check',
+    description: 'Supplier quality & first-article inspection (AS9102 FAI, NCR, PPAP) for manufacturing supply chains',
+    category: 'Quality & Manufacturing',
+    // Net-Inspect operates a real API (api.net-inspect.com) + webhooks, but only
+    // under an enterprise/partner agreement — no self-serve portal and no public
+    // base URL / auth / endpoint spec. `contact-required` surfaces the connector
+    // with a "CONTACT REQUIRED" badge so customers can request access; the
+    // request-time auth + endpoints get wired once Net-Inspect supplies the spec.
+    authType: 'contact-required',
+    oauthSetupSteps: [
+      'Net-Inspect provides APIs and webhooks to enterprise customers under a partner agreement — there is no self-serve developer portal.',
+      'Contact Net-Inspect via your account rep (or net-inspect.com) and request API & Webhooks documentation plus integration credentials.',
+      'Once Net-Inspect supplies the base URL, auth scheme and endpoint spec, this connector is completed and enabled.',
+    ],
+  },
+  {
+    id: 'autoplay',
+    displayName: 'AutoPlay',
+    icon: 'bi-car-front',
+    description: 'Automotive dealership inventory, vehicle listings and lead management (AU/NZ)',
+    category: 'Automotive',
+    // AutoPlay exposes a tokenised Listing API (vehicle inventory/media) and a
+    // SOAP Lead API (lead-api.autoplay.co.nz, <API_KEY>/<API_TOKEN> + Dealership/
+    // Yard IDs), issued per dealer. The agent-facing Listing API spec isn't
+    // public, so this is `contact-required` until AutoPlay supplies the pack.
+    authType: 'contact-required',
+    oauthSetupSteps: [
+      'AutoPlay issues a tokenised Listing API (vehicle inventory) and a SOAP Lead API per dealer, with a unique Key + Token (Settings → Company Settings → API Management).',
+      'Email support@autoplay.co.nz to request the Listing API spec + Lead API manual, and have AutoPlay issue your dealer Key + Token (and Dealership/Yard IDs).',
+      'Once the Listing API spec + credentials are supplied, this connector is completed and enabled.',
+    ],
+  },
+  {
     id: 'totalsynergy-api',
     displayName: 'Total Synergy (API Key)',
     icon: 'bi-building',
