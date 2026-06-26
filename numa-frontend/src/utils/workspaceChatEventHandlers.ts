@@ -46,6 +46,7 @@ import type {
 import { parseChunkWithoutDocComments, extractSingleDocBlock, createDocStripState } from './streamingProcessors';
 import { resolveToolVisual } from './ToolConfig';
 import { getConnectorById } from '../Components/DataConnectors/connectorRegistry';
+import { notifyApprovalPending } from '../hooks/useBrowserNotification';
 
 // Type guards (runtime functions, not types)
 import {
@@ -1744,29 +1745,32 @@ function handleResultEvent(
         lastMsg.cacheCreationTokens = event.usage.cache_creation_input_tokens;
     }
 
-    // Finalize text segments
+    // Finalize text segments. Drop any inter-step "Thinking…" bridge indicator
+    // first so it never strands after the turn ends.
     if (lastMsg.segments) {
-      lastMsg.segments = lastMsg.segments.map((seg) => {
-        if (seg.kind === 'text') {
-          return { ...seg, finalized: true };
-        }
-        if (seg.kind === 'inline_tool' && !(seg as WorkspaceChatInlineToolSegment).isComplete) {
-          return { ...seg, isComplete: true };
-        }
-        if (seg.kind === 'subagent' && !(seg as WorkspaceChatSubagentSegment).isComplete) {
-          return { ...seg, isComplete: true };
-        }
-        if (seg.kind === 'todo' && !(seg as WorkspaceChatTodoSegment).isComplete) {
-          return { ...seg, isComplete: true };
-        }
-        if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
-          return { ...seg, isLoading: false };
-        }
-        if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
-          return { ...seg, status: event.is_error ? 'failed' : 'complete' };
-        }
-        return seg;
-      });
+      lastMsg.segments = lastMsg.segments
+        .filter((seg) => seg.kind !== 'inline_thinking')
+        .map((seg) => {
+          if (seg.kind === 'text') {
+            return { ...seg, finalized: true };
+          }
+          if (seg.kind === 'inline_tool' && !(seg as WorkspaceChatInlineToolSegment).isComplete) {
+            return { ...seg, isComplete: true };
+          }
+          if (seg.kind === 'subagent' && !(seg as WorkspaceChatSubagentSegment).isComplete) {
+            return { ...seg, isComplete: true };
+          }
+          if (seg.kind === 'todo' && !(seg as WorkspaceChatTodoSegment).isComplete) {
+            return { ...seg, isComplete: true };
+          }
+          if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
+            return { ...seg, isLoading: false };
+          }
+          if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+            return { ...seg, status: event.is_error ? 'failed' : 'complete' };
+          }
+          return seg;
+        });
     }
 
     updated[lastIdx] = lastMsg;
@@ -1789,7 +1793,9 @@ function handleErrorEvent(event: SDKErrorEvent, _context: SDKEventContext, helpe
 
     delete lastMsg.status;
 
-    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+    const segments = [...(lastMsg.segments || [])].filter(
+      (s) => s.kind !== 'inline_thinking'
+    ) as WorkspaceChatSegment[];
     segments.push({
       kind: 'text',
       text: `\n\n**Error:** ${event.error}`,
@@ -2385,6 +2391,30 @@ export function createStreamEventHandler(config: StreamEventHandlerConfig): (eve
         }
       }
 
+      // After a tool result the agent always makes another model call. For slow
+      // upstreams (e.g. the Numa Standard Model) that next call's time-to-first-
+      // token leaves a silent gap: the message status is already 'streaming' and
+      // the inline-thinking spinner was removed when the tool started, so nothing
+      // renders between tool steps. Re-add the inline-thinking indicator so the
+      // "Thinking…" feedback bridges every inter-step gap — it's removed again the
+      // instant the next text/tool/reasoning arrives, and stripped at turn end.
+      // Skip while a subagent is streaming: its card shows live activity already.
+      if (hasToolResults && (!activeStreamingTasksRef || activeStreamingTasksRef.current.size === 0)) {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx < 0 || updated[lastIdx].role !== 'assistant') return prev;
+          const lastMsg = { ...updated[lastIdx] };
+          const segments = [...(lastMsg.segments || [])];
+          if (!segments.some((s) => s.kind === 'inline_thinking')) {
+            segments.push({ kind: 'inline_thinking', isStreaming: true });
+            lastMsg.segments = segments;
+            updated[lastIdx] = lastMsg;
+          }
+          return updated;
+        });
+      }
+
       // If the user event contained tool results, we've handled it -- don't pass to processSDKEvent
       if (hasToolResults) return;
     }
@@ -2676,6 +2706,12 @@ export function processSDKEvent(event: SDKEvent, context: SDKEventContext, helpe
   // need a standalone UI card even when the tool runs inside a subagent.
   if (event.type === 'tool_approval') {
     const approval = event as SDKToolApprovalEvent;
+    // Nudge the user if they've switched tabs -- approvals time out (~180s) and
+    // are easy to miss. Fire-and-forget; the hook self-gates on visibility,
+    // liveness, freshness, and notification permission.
+    if (!approval.auto_approved) {
+      void notifyApprovalPending({ description: approval.description, createdAt: approval.created_at });
+    }
     if (approval.parent_tool_use_id || approval.tool_use_id?.startsWith('cli_')) {
       // Sub-agent OR CLI-emitted approval: render as standalone card.
       // CLI-emitted approvals carry tool_use_id like "cli_<uuid>" because
@@ -2767,28 +2803,32 @@ export function handleSDKStreamComplete(context: SDKEventContext, helpers: Works
 
     delete lastMsg.status;
 
+    // Drop any inter-step "Thinking…" bridge indicator before finalizing so it
+    // never strands once the stream closes.
     if (lastMsg.segments) {
-      lastMsg.segments = lastMsg.segments.map((seg) => {
-        if (seg.kind === 'text') {
-          return { ...seg, finalized: true };
-        }
-        if (seg.kind === 'inline_tool' && !(seg as WorkspaceChatInlineToolSegment).isComplete) {
-          return { ...seg, isComplete: true };
-        }
-        if (seg.kind === 'subagent' && !(seg as WorkspaceChatSubagentSegment).isComplete) {
-          return { ...seg, isComplete: true };
-        }
-        if (seg.kind === 'todo' && !(seg as WorkspaceChatTodoSegment).isComplete) {
-          return { ...seg, isComplete: true };
-        }
-        if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
-          return { ...seg, isLoading: false };
-        }
-        if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
-          return { ...seg, status: 'complete' };
-        }
-        return seg;
-      });
+      lastMsg.segments = lastMsg.segments
+        .filter((seg) => seg.kind !== 'inline_thinking')
+        .map((seg) => {
+          if (seg.kind === 'text') {
+            return { ...seg, finalized: true };
+          }
+          if (seg.kind === 'inline_tool' && !(seg as WorkspaceChatInlineToolSegment).isComplete) {
+            return { ...seg, isComplete: true };
+          }
+          if (seg.kind === 'subagent' && !(seg as WorkspaceChatSubagentSegment).isComplete) {
+            return { ...seg, isComplete: true };
+          }
+          if (seg.kind === 'todo' && !(seg as WorkspaceChatTodoSegment).isComplete) {
+            return { ...seg, isComplete: true };
+          }
+          if (seg.kind === 'tool_card' && (seg as WorkspaceChatToolCardSegment).isLoading) {
+            return { ...seg, isLoading: false };
+          }
+          if (seg.kind === 'compaction' && (seg as WorkspaceChatCompactionSegment).status === 'summarizing') {
+            return { ...seg, status: 'complete' };
+          }
+          return seg;
+        });
     }
 
     updated[lastIdx] = lastMsg;
@@ -2816,7 +2856,9 @@ export function handleSDKStreamError(
 
     delete lastMsg.status;
 
-    const segments = [...(lastMsg.segments || [])] as WorkspaceChatSegment[];
+    const segments = [...(lastMsg.segments || [])].filter(
+      (s) => s.kind !== 'inline_thinking'
+    ) as WorkspaceChatSegment[];
     segments.push({
       kind: 'text',
       text: `\n\n**Error:** ${error.message}`,

@@ -138,6 +138,16 @@ export const AgentsManagement = () => {
   // ── New UX state ──
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>(() => (localStorage.getItem(LS_VIEW_MODE) as ViewMode) || 'grid');
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Mobile only ever uses grid view (list rows are too cramped); the toggle is hidden there.
+  const effectiveViewMode: ViewMode = isMobile ? 'grid' : viewMode;
   const [sortMode, setSortMode] = useState<SortMode>(
     () => (localStorage.getItem(LS_SORT_MODE) as SortMode) || 'recent'
   );
@@ -802,7 +812,7 @@ export const AgentsManagement = () => {
       return <p className="text-muted small">{emptyMessage}</p>;
     }
 
-    if (viewMode === 'list') {
+    if (effectiveViewMode === 'list') {
       return (
         <div className="d-flex flex-column gap-2">
           {agents.map((agent) => (
@@ -888,23 +898,25 @@ export const AgentsManagement = () => {
         )}
       </div>
 
-      {/* View toggle */}
-      <div className="btn-group btn-group-sm">
-        <button
-          className={`btn ${viewMode === 'grid' ? 'btn-primary' : 'btn-outline-secondary'}`}
-          onClick={() => setViewMode('grid')}
-          title={t('management.view.grid')}
-        >
-          <Grid3X3 size={14} />
-        </button>
-        <button
-          className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-outline-secondary'}`}
-          onClick={() => setViewMode('list')}
-          title={t('management.view.list')}
-        >
-          <List size={14} />
-        </button>
-      </div>
+      {/* View toggle — desktop only; mobile is always grid */}
+      {!isMobile && (
+        <div className="btn-group btn-group-sm">
+          <button
+            className={`btn ${viewMode === 'grid' ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setViewMode('grid')}
+            title={t('management.view.grid')}
+          >
+            <Grid3X3 size={14} />
+          </button>
+          <button
+            className={`btn ${viewMode === 'list' ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setViewMode('list')}
+            title={t('management.view.list')}
+          >
+            <List size={14} />
+          </button>
+        </div>
+      )}
 
       {/* View Options dropdown */}
       <Dropdown align="end">

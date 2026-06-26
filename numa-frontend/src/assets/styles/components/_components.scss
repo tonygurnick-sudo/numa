@@ -2501,7 +2501,9 @@ fieldset:disabled .btn {
   }
 
   .integrations-row-actions {
-    overflow-x: auto;
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: flex-start;
     padding-bottom: 0.1rem;
   }
 }
@@ -2738,7 +2740,8 @@ fieldset:disabled .btn {
 
   .notifications-card-actions {
     width: 100%;
-    overflow-x: auto;
+    flex-wrap: wrap;
+    white-space: normal;
     padding-bottom: 0.15rem;
   }
 }

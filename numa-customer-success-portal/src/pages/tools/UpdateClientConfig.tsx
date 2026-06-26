@@ -134,6 +134,8 @@ export default function UpdateClientConfig() {
   const [numaOps, setNumaOps] = useState<boolean>(false);
   const [numaDropZones, setNumaDropZones] = useState<boolean>(false);
   const [numaSharing, setNumaSharing] = useState<boolean>(false);
+  // Numa Credit System (FEAT-245) — Credits visibility flag, editable here too.
+  const [showCredits, setShowCredits] = useState<boolean>(false);
   // Numa Voice (FEAT-169) — recordingsBucket/didNumbers are runtime write-back
   // fields and deliberately have no form inputs here.
   const [numaVoice, setNumaVoice] = useState<boolean>(false);
@@ -296,6 +298,7 @@ export default function UpdateClientConfig() {
     setNumaOps(Boolean((cfg as any).numaOps));
     setNumaDropZones(Boolean((cfg as any).numaDropZones));
     setNumaSharing(Boolean((cfg as any).numaSharing));
+    setShowCredits(Boolean((cfg as any).showCredits));
     setNumaVoice(Boolean((cfg as any).numaVoice));
     setConnectAutoProvision(Boolean((cfg as any).connectAutoProvision));
     setConnectClaimDid(Boolean((cfg as any).connectClaimDid));
@@ -363,6 +366,7 @@ export default function UpdateClientConfig() {
       numaOps: (current as any)?.numaOps ?? defaults.numaOps,
       numaDropZones: (current as any)?.numaDropZones ?? defaults.numaDropZones,
       numaSharing: (current as any)?.numaSharing ?? defaults.numaSharing,
+      showCredits: (current as any)?.showCredits ?? defaults.showCredits,
       numaVoice: (current as any)?.numaVoice ?? defaults.numaVoice,
       connectAutoProvision: (current as any)?.connectAutoProvision ?? defaults.connectAutoProvision,
       connectClaimDid: (current as any)?.connectClaimDid ?? defaults.connectClaimDid,
@@ -473,6 +477,7 @@ export default function UpdateClientConfig() {
     if (eff.numaOps !== numaOps) updates.numaOps = numaOps;
     if (eff.numaDropZones !== numaDropZones) (updates as any).numaDropZones = numaDropZones;
     if (eff.numaSharing !== numaSharing) (updates as any).numaSharing = numaSharing;
+    if ((eff as any).showCredits !== showCredits) (updates as any).showCredits = showCredits;
     if (eff.numaVoice !== numaVoice) (updates as any).numaVoice = numaVoice;
     if (eff.connectAutoProvision !== connectAutoProvision) (updates as any).connectAutoProvision = connectAutoProvision;
     if (eff.connectClaimDid !== connectClaimDid) (updates as any).connectClaimDid = connectClaimDid;
@@ -837,7 +842,7 @@ export default function UpdateClientConfig() {
                           defaultValue={defaults.workspaceChatModelSelection}
                           onChange={setWorkspaceChatModelSelection}
                           type="switch"
-                          helpText="Allow users to select AI models in Chat V2"
+                          helpText="Show the model picker in Workspace Chat. Enables the non-AWS 'Standard' model (Numa Standard Model, billed at lower credits) alongside Premium (Sonnet, default) and Expert (Opus)."
                         />
                         <ConfigField
                           label="Numa Ops"
@@ -862,6 +867,14 @@ export default function UpdateClientConfig() {
                           onChange={setNumaSharing}
                           type="switch"
                           helpText="Allow users to share documents externally for Q&A"
+                        />
+                        <ConfigField
+                          label="Show Credits"
+                          value={showCredits}
+                          defaultValue={defaults.showCredits}
+                          onChange={setShowCredits}
+                          type="switch"
+                          helpText="Surface the Credits dashboard (Settings) and the in-chat credit indicator to this client's users. Metering runs regardless; pricing is configured on the Credits page."
                         />
                         <ConfigField
                           label="Numa Voice"

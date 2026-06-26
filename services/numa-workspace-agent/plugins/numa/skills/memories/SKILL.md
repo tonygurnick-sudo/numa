@@ -227,17 +227,14 @@ Memory ids come in two formats: `mem_<hex>` for AI-created memories (e.g. `mem_4
 
 Before generating a user-facing deliverable (email, doc, message, summary), list the relevant memories first — preferences, sign-off, tone, names, operational details — and apply them. This matters most when the **output format changes mid-conversation**: if you saved that the user signs off as "Priya — PMM", carry that into the Slack message too, not just the email you first saved it from. A saved preference you don't retrieve is a preference you've effectively forgotten.
 
-### Always Confirm First
+### Save proactively when it's obvious; ask only when it's genuinely unclear
 
-**ALWAYS ask the user before adding or updating a memory.** Never silently save memories.
+Numa is meant to quietly get to know the user over time, so **lean toward saving** — don't turn every memory into a permission prompt. This mirrors the base self-optimisation rule: act when it's obvious, confirm when it's genuinely unclear.
 
-Examples of good confirmation:
+- **Just save it, then mention it in one line** when the value is _obvious_: an explicit "remember this", a clear durable preference, a correction, an integration gotcha you worked out, or a durable fact about who they are or how they work. Tell them afterwards in a few words so they can wave you off — e.g. "Noted — I'll invoice in NZD from now on." A memory is cheap and trivially deleted, so a clearly-durable fact does not need a permission prompt.
+- **Ask first** only when it's _genuinely unclear_ whether it's worth keeping — you can't tell if a detail is transient or long-term, or whether a one-off instruction will recur. Then offer: "Want me to remember that for next time?"
 
-- "I'd like to save a memory that you prefer concise bullet-point responses. Shall I go ahead?"
-- "I noticed your Jira Cloud ID is abc123-def456. Want me to remember that for future Jira tasks?"
-- "You mentioned you prefer dark mode — shall I save that as a memory so I remember next time?"
-
-Only run the add/update command **after the user confirms**.
+Don't save secrets or obviously transient one-off context, and don't pile up crap: every memory should make a future conversation smoother or more accurate. If it wouldn't, skip it.
 
 ### Exception — autonomous (scheduled / agent) runs
 
@@ -248,9 +245,9 @@ save it (scope it to the agent: `--scope agent:<id>`); if it's marginal, skip it
 Keep each one short and factual, and update or delete a stale one rather than
 letting near-duplicates pile up toward the 50-memory cap.
 
-### When to Suggest Adding Memories
+### When to Save a Memory
 
-**DO suggest adding memories when:**
+**DO save a memory (and mention it after) when:**
 
 - The user explicitly says "remember this", "keep this in mind", "save this for next time", or semantically similar
 - Working with integrations and discovering useful operational details (cloud IDs, channel IDs, project boards, preferred settings)
@@ -258,7 +255,7 @@ letting near-duplicates pile up toward the 50-memory cap.
 - The user **corrects you or re-states something you should already have known** ("no, always use the AU entity", "like I told you last time…") — that correction is exactly what a memory prevents next time
 - The user supplies the **same context, IDs, or preferences a second time**, or you **hit an integration gotcha the hard way** (a pagination quirk, a required format, a magic ID) — capture it so the next run doesn't re-learn it
 
-**DO NOT suggest adding memories when:**
+**DON'T save a memory when:**
 
 - It's a one-off instruction for the current conversation only
 - The user is telling you about their profile (name, job title, etc.) - direct them to the Profile page in Settings

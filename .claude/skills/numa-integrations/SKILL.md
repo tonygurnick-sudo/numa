@@ -78,9 +78,11 @@ Browser (Frontend)
 
 ## Supported Integrations
 
-The canonical list lives in `/infra/config/integrations.ts` (`SUPPORTED_INTEGRATIONS` array). As of now:
+The canonical list lives in `/infra/config/integrations.ts` (`SUPPORTED_INTEGRATIONS` array) — **always check that file, this snapshot drifts.** As of the last skill update (63 integrations):
 
-gmail, microsoft_outlook, microsoft_outlook_calendar, slack, google_calendar, xero_accounting_api, hubspot, notion, apollo_io, pipedrive, jira, linkedin, google_drive, google_analytics, sharepoint, salesforce_rest_api, asana, onenote, trello, whatsapp_business, mailchimp, freshdesk, rentman, podio, google_sheets, google_forms, google_docs, telegram_bot_api, microsoft_teams, zoom, microsoft_excel, smartsheet, box, zoho_books, odoo, jobber, canva, google_tag_manager, webflow
+gmail, microsoft_outlook, microsoft_outlook_calendar, slack, google_calendar, xero_accounting_api, hubspot, notion, apollo_io, pipedrive, jira, linkedin, google_drive, google_analytics, sharepoint, salesforce_rest_api, asana, onenote, trello, whatsapp_business, mailchimp, freshdesk, rentman, podio, google_sheets, google_forms, google_docs, telegram_bot_api, microsoft_teams, zoom, microsoft_excel, smartsheet, box, zoho_books, odoo, jobber, canva, google_tag_manager, webflow, dropbox, survey_monkey, monday, procore, quickbooks, harvest, alchemer, microsoft_sql_server, microsoft_dynamics_365_sales, dynamics_365_business_central_api, clickup, google_ads, zoho_crm, microsofttodo, fathom, elevenlabs, heygen, gitlab, github, airtable_oauth, google_slides, todoist, google_my_business, streak
+
+Slug naming note: the slug is the Pipedream app's `name_slug` exactly (e.g. `airtable_oauth` keeps its `_oauth` suffix). Verify against Pipedream's registry before adding — see Step 1.
 
 ## Supported Operations
 
@@ -182,11 +184,7 @@ Auto-approval mode (`NUMA_APPROVAL_MODE=auto`) can be set for agent-scheduled ru
 
 ## Integration Prompts (Workspace Agent)
 
-Per-integration prompt files in `/services/numa-workspace-agent/integration-prompts/` are injected into the workspace agent's system prompt when the corresponding integration is connected. Currently:
-
-- `apollo_io.md`, `asana.md`, `gmail.md`, `google_calendar.md`, `google_drive.md`
-- `hubspot.md`, `jira.md`, `microsoft_outlook.md`, `microsoft_outlook_calendar.md`
-- `notion.md`, `sharepoint.md`, `slack.md`, `xero_accounting_api.md`, `zoom.md`
+Per-integration prompt files in `/services/numa-workspace-agent/integration-prompts/` are injected into the workspace agent's system prompt when the corresponding integration is connected. These are **optional** — only a subset of supported integrations has one (run `ls services/numa-workspace-agent/integration-prompts/` for the current set; it covers the common ones like `gmail.md`, `slack.md`, `jira.md`, `notion.md`, the Google/Microsoft suites, `hubspot.md`, `pipedrive.md`, etc.). Add one only when the agent genuinely needs guidance — they're meant to capture real gotchas, which are hard to write well without a connected account to test against.
 
 These files contain integration-specific tips, gotchas, and usage patterns. The build function is `_build_integrations_context()` in `prompts-with-sub-agents.py`.
 
@@ -202,21 +200,27 @@ The external user ID format used across the system is: `{clientName}_{cognitoSub
 
 ## How to Add a New Integration
 
+### Step 0: Verify the slug + grab metadata from Pipedream
+
+Before touching code, confirm the slug exists and pull its real name/auth type/icon URL from Pipedream's registry. Creds + a working script live in `dev-notes/research/integrations/` (uses `PIPEDREAM_CLIENT_ID`/`PIPEDREAM_CLIENT_SECRET`/`PROJECT_ID` from the repo-root `.env`). The apps endpoint `GET https://api.pipedream.com/v1/apps?q={slug}` returns `name`, `name_slug`, `auth_type` (`oauth` vs `keys`), and `img_src` (a usable logo URL — no need to hunt for icons manually; download it straight into `src/assets/icons/`). Note: some `img_src` URLs serve a different format than the extension implies (e.g. a JPEG/SVG at a `.png` URL) — check with `file` and rename to match, since Vite resolves the asset loader by extension.
+
 ### Step 1: Add to the Supported Integrations Registry
 
 File: `/infra/config/integrations.ts`
 
 Add the Pipedream app slug (e.g., `'monday'`) to the `SUPPORTED_INTEGRATIONS` array. This is the single source of truth that propagates to the proxy Lambda's `SUPPORTED_INTEGRATIONS` env var.
 
+> ⚠️ **Mirror the slug in Python — same commit.** The slug set is duplicated in `lambdas/python/workspace-chat-tools/tools/user_profile.py` (`_PIPEDREAM_INTEGRATION_SLUGS`) for memory-scope validation — that Lambda can't import the TS file. Add/rename a slug in `integrations.ts` → add it there too, or `integration:{slug}` memory scopes silently fail validation. The header comment in `integrations.ts` calls this out.
+
 ### Step 2: Add Frontend Config Entry
 
 File: `/numa-frontend/src/config/integrationsConfig.ts`
 
-Add a `ConnectionConfigEntry` with:
+Add an icon import at the top, then a `ConnectionConfigEntry` with:
 
 - `id`: Must match the Pipedream app slug
-- `name`, `description`, `example_query`: Use i18n keys
-- `auth_type`: Usually `'oauth'`
+- `name`, `description`, `example_query`: Use i18n keys via `connectionText(...)`
+- `auth_type`: `'oauth'` for OAuth apps, `'api_key'` for Pipedream `keys`-auth apps (e.g. HeyGen, Streak, ElevenLabs)
 - `img_src`: Import an icon (add SVG/PNG to `src/assets/icons/`)
 - `fallback_icon`: Bootstrap icon class
 - `fallback_color`: Bootstrap color variant

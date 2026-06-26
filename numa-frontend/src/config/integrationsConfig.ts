@@ -62,6 +62,14 @@ import dynamics365BusinessCentralApiIcon from '../assets/icons/dynamics_365_busi
 import microsoftTodoIcon from '../assets/icons/microsofttodo.svg';
 import fathomIcon from '../assets/icons/fathom.png';
 import elevenlabsIcon from '../assets/icons/elevenlabs.svg';
+import heygenIcon from '../assets/icons/heygen.png';
+import gitlabIcon from '../assets/icons/gitlab.png';
+import githubIcon from '../assets/icons/github.png';
+import airtableIcon from '../assets/icons/airtable_oauth.png';
+import googleSlidesIcon from '../assets/icons/google_slides.png';
+import todoistIcon from '../assets/icons/todoist.png';
+import googleMyBusinessIcon from '../assets/icons/google_my_business.svg';
+import streakIcon from '../assets/icons/streak.png';
 import i18n from '../i18n';
 
 export type BootstrapColor =
@@ -642,6 +650,86 @@ const getConnectionsConfig = (): Record<string, ConnectionConfigEntry> => ({
     fallback_icon: 'bi bi-soundwave',
     fallback_color: 'dark',
     example_query: connectionText('elevenlabs', 'example_query'),
+  },
+  heygen: {
+    id: 'heygen',
+    name: connectionText('heygen', 'name'),
+    description: connectionText('heygen', 'description'),
+    auth_type: 'api_key',
+    img_src: heygenIcon,
+    fallback_icon: 'bi bi-camera-video',
+    fallback_color: 'primary',
+    example_query: connectionText('heygen', 'example_query'),
+  },
+  gitlab: {
+    id: 'gitlab',
+    name: connectionText('gitlab', 'name'),
+    description: connectionText('gitlab', 'description'),
+    auth_type: 'oauth',
+    img_src: gitlabIcon,
+    fallback_icon: 'bi bi-git',
+    fallback_color: 'warning',
+    example_query: connectionText('gitlab', 'example_query'),
+  },
+  github: {
+    id: 'github',
+    name: connectionText('github', 'name'),
+    description: connectionText('github', 'description'),
+    auth_type: 'oauth',
+    img_src: githubIcon,
+    fallback_icon: 'bi bi-github',
+    fallback_color: 'dark',
+    example_query: connectionText('github', 'example_query'),
+  },
+  airtable_oauth: {
+    id: 'airtable_oauth',
+    name: connectionText('airtable_oauth', 'name'),
+    description: connectionText('airtable_oauth', 'description'),
+    auth_type: 'oauth',
+    img_src: airtableIcon,
+    fallback_icon: 'bi bi-table',
+    fallback_color: 'warning',
+    example_query: connectionText('airtable_oauth', 'example_query'),
+  },
+  google_slides: {
+    id: 'google_slides',
+    name: connectionText('google_slides', 'name'),
+    description: connectionText('google_slides', 'description'),
+    auth_type: 'oauth',
+    img_src: googleSlidesIcon,
+    fallback_icon: 'bi bi-easel',
+    fallback_color: 'warning',
+    example_query: connectionText('google_slides', 'example_query'),
+  },
+  todoist: {
+    id: 'todoist',
+    name: connectionText('todoist', 'name'),
+    description: connectionText('todoist', 'description'),
+    auth_type: 'oauth',
+    img_src: todoistIcon,
+    fallback_icon: 'bi bi-check2-square',
+    fallback_color: 'danger',
+    example_query: connectionText('todoist', 'example_query'),
+  },
+  google_my_business: {
+    id: 'google_my_business',
+    name: connectionText('google_my_business', 'name'),
+    description: connectionText('google_my_business', 'description'),
+    auth_type: 'oauth',
+    img_src: googleMyBusinessIcon,
+    fallback_icon: 'bi bi-shop',
+    fallback_color: 'primary',
+    example_query: connectionText('google_my_business', 'example_query'),
+  },
+  streak: {
+    id: 'streak',
+    name: connectionText('streak', 'name'),
+    description: connectionText('streak', 'description'),
+    auth_type: 'api_key',
+    img_src: streakIcon,
+    fallback_icon: 'bi bi-funnel',
+    fallback_color: 'success',
+    example_query: connectionText('streak', 'example_query'),
   },
 });
 

@@ -9,6 +9,18 @@ const HOVER_DELAY = { show: 150, hide: 100 };
 
 interface Props {
   state: ChatHealthState;
+  /**
+   * Optional control rendered at the leading edge of the bar (before the health
+   * label). Used on mobile to surface a one-tap "new chat" button so starting a
+   * fresh chat isn't buried inside the actions drawer.
+   */
+  leading?: React.ReactNode;
+  /**
+   * Optional control rendered at the trailing edge of the bar (after the help
+   * button). Used on mobile to host the chat-actions toggle so the actions menu
+   * can drop down from the health bar instead of a separate floating button.
+   */
+  trailing?: React.ReactNode;
 }
 
 type TrafficBand = 'green' | 'orange' | 'red';
@@ -27,7 +39,7 @@ type TrafficBand = 'green' | 'orange' | 'red';
  * brand-independent, and agrees with the hourglass alarm by construction
  * (both derive from the same wearRatio).
  */
-export const ChatHealthTopBar: React.FC<Props> = ({ state }) => {
+export const ChatHealthTopBar: React.FC<Props> = ({ state, leading, trailing }) => {
   const { t } = useTranslation('chat');
   const { wearRatio } = state;
 
@@ -53,6 +65,7 @@ export const ChatHealthTopBar: React.FC<Props> = ({ state }) => {
 
   return (
     <div className={`chat-health-topbar chat-health-topbar-${band}`} role="img" aria-label={t(labelKey)}>
+      {leading}
       <div className="chat-health-topbar-label">
         <span className="chat-health-topbar-dot" aria-hidden="true" />
         <span className="chat-health-topbar-label-text">{t(labelKey)}</span>
@@ -66,6 +79,7 @@ export const ChatHealthTopBar: React.FC<Props> = ({ state }) => {
           <HelpCircle size={13} strokeWidth={2.2} />
         </button>
       </OverlayTrigger>
+      {trailing}
     </div>
   );
 };

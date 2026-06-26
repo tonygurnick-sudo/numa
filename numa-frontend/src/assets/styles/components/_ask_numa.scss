@@ -344,6 +344,21 @@
     right: 16px;
     padding: 12px;
     font-size: 14px;
+
+    // Mobile: the popup anchors full-width at the bottom, so the active FAB's
+    // labelled "Ask Numa" pill is redundant and sits directly under the open
+    // popup. Keep the FAB a compact circle even when active on mobile.
+    &:hover,
+    &--active {
+      border-radius: 50%;
+      padding: 12px;
+      gap: 0;
+
+      .ask-numa-fab-label {
+        max-width: 0;
+        opacity: 0;
+      }
+    }
   }
 
   .ask-numa-popup {
@@ -351,5 +366,40 @@
     right: 16px;
     left: 16px;
     width: auto;
+  }
+
+  // Mobile: enlarge interactive controls to >=40px hit areas without growing
+  // the glyphs (touch-target accessibility). Desktop sizes are unchanged.
+  // Match the desktop rule's specificity (.ask-numa-popup-header .ask-numa-popup-close,
+  // 0,2,0) so the 40px mobile target actually wins; the bare selector (0,1,0) was outranked.
+  .ask-numa-popup-header .ask-numa-popup-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .ask-numa-upload-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .ask-numa-send-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  // Expand the info-icon tap area via an invisible overlay so the 14px glyph
+  // stays visually small while the touch target reaches 40px.
+  .ask-numa-context-info {
+    position: relative;
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 40px;
+      height: 40px;
+      transform: translate(-50%, -50%);
+    }
   }
 }

@@ -627,6 +627,29 @@ _HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPT
 # and is unaffected.
 _BRACE_EXPANSION_RE = re.compile(r"\{[^{}]*(?:,[^{}]*|\.\.[^{}]+)[^{}]*\}")
 _PARAM_EXPANSION_RE = re.compile(r"\$\{[^{}]*\}")
+# Quoted spans, for neutralising before the brace-expansion scan (BUG-389
+# follow-up). Single quotes are fully literal in bash; double quotes allow
+# escaped `\"` but still suppress brace expansion.
+_SINGLE_QUOTED_RE = re.compile(r"'[^']*'")
+_DOUBLE_QUOTED_RE = re.compile(r'"(?:[^"\\]|\\.)*"')
+
+
+def _strip_quoted_spans(s: str) -> str:
+    """Replace quoted spans with empty quotes before the brace-expansion scan.
+
+    Brace expansion is a shell-parsing step that ANY quoting suppresses —
+    `'{a,b}'` and `"{a,b}"` are literal, never expanded. A real escape
+    (`c{u,}rl`, `{cat,/etc/passwd}`) must therefore leave its braces UNQUOTED,
+    so neutralising quoted spans keeps every such escape visible to
+    `_BRACE_EXPANSION_RE` while stopping legitimate quoted JSON
+    (`numa ops … --params '{"a":"b","c":"d"}'`) from being misread as `{x,y}`
+    expansion. Partial quoting (`{'a',b}`) still trips it — the unquoted comma
+    survives.
+    """
+    s = _SINGLE_QUOTED_RE.sub("''", s)
+    s = _DOUBLE_QUOTED_RE.sub('""', s)
+    return s
+
 
 # Boundary after a protected path segment (BUG-274 / BUG-320). The final
 # blocked-path / blocked-file scans below previously used a bare substring
@@ -688,9 +711,14 @@ def check_bash_command(
     # expansion can reconstruct a blocked literal from fragments the substring
     # scanners above never see (`c{u,}rl`, `/e{t,}c/passwd`, `{cat,/etc/passwd}`).
     # Run on the data-stripped structure (so a Python/Node dict literal inside an
-    # inline `-c`/`-e` body is not misread as brace expansion) and after removing
-    # `${VAR}` parameter expansions (whose inner commas are not expansion).
-    brace_structure = _PARAM_EXPANSION_RE.sub("", strip_data_content(command))
+    # inline `-c`/`-e` body is not misread as brace expansion), after removing
+    # `${VAR}` parameter expansions (whose inner commas are not expansion), and
+    # after neutralising quoted spans (quoting suppresses brace expansion, so
+    # quoted JSON like `--params '{"a":"b","c":"d"}'` is not a `{x,y}` escape —
+    # BUG-389 follow-up).
+    brace_structure = _strip_quoted_spans(
+        _PARAM_EXPANSION_RE.sub("", strip_data_content(command))
+    )
     if _BRACE_EXPANSION_RE.search(brace_structure):
         return (
             True,

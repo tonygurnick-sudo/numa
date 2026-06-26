@@ -761,6 +761,10 @@ class TestBraceExpansionBlocked:
             "cat /workdir/.{s,}ystem",  # -> .system
             "echo {a..z}",  # range form
             "cp /workdir/{a,b}.txt /workdir/out/",
+            # BUG-389: quote-stripping must NOT let a partially-quoted escape
+            # through — the unquoted comma/braces still reconstruct the literal.
+            "{a,'b'}",  # -> a b (arg quoted, comma + braces unquoted)
+            "cat /e't'{t,}c/passwd",  # quoted fragment, comma still unquoted
         ],
     )
     def test_brace_expansion_blocked(self, cmd):
@@ -778,6 +782,12 @@ class TestBraceExpansionBlocked:
             'find /workdir/uploads -name "*.pdf" -exec ls {} \\;',
             # ${VAR} parameter expansion is not brace expansion.
             "ls /workdir/outputs/",
+            # BUG-389: quoted multi-key JSON passed to the numa CLI is not a
+            # brace-expansion escape — quoting suppresses expansion entirely.
+            'numa ops upload_attachment --params \'{"workspaceFilePath":"/workdir/tmp/x.png","displayId":"BUG-389"}\' -m "attach"',
+            'numa ops update_ticket --params \'{"displayId":"BUG-1","priority":"high","assigneeName":"Tom"}\' -m \'set priority\'',
+            # Same, but double-quoted with escaped inner quotes.
+            'numa ops create_ticket --params "{\\"title\\":\\"a\\",\\"ticketTypeId\\":\\"tt-bug\\"}" -m "new"',
         ],
     )
     def test_legitimate_braces_allowed(self, cmd):

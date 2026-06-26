@@ -62,6 +62,14 @@ export const SUPPORTED_INTEGRATIONS = [
   'microsofttodo',
   'fathom',
   'elevenlabs',
+  'heygen',
+  'gitlab',
+  'github',
+  'airtable_oauth',
+  'google_slides',
+  'todoist',
+  'google_my_business',
+  'streak',
 ] as const;
 
 export type SupportedIntegration = (typeof SUPPORTED_INTEGRATIONS)[number];

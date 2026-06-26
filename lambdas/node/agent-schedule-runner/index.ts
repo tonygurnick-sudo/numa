@@ -606,27 +606,26 @@ This status report is used to notify the user of the outcome. Be honest and spec
 Even if the task failed entirely, you MUST still write status.json with status "failed" and an explanation.
 
 REFLECT & COMPOUND (after writing status.json):
-This schedule runs repeatedly — you can make the next run better than this one.
-Considering the two questions below is mandatory on every run. Acting on them is NOT — on many runs the right answer is to save nothing, and that's fine.
-Earlier runs may have already done the optimising. If the deterministic work is already captured in a saved workflow that's running well, you don't need to script anything new this run — just reuse it. Only script or remember when there's genuinely something new and durable to capture. Some agents keep finding improvements; others reach a steady state fast and mostly just run — both are healthy. Never optimise for its own sake, and never let optimising pull you off the goal.
+This is a recurring job — you have done, or will do, this exact work many times. Your one task in this step is to make the next run cheaper and more reliable than this one was. Two questions:
 
-1) SCRIPT — was anything in this run deterministic mechanics?
-- Worth scripting: steps that are identical run-over-run — fixed data pulls, file/format transformations, rendering with fixed parameters, posting results to a fixed destination.
-- If a saved workflow for this schedule already exists, prefer repairing or extending it over writing a new one. If it has gone stale, fix or retire it.
-- NEVER script judgment: reading, weighing, or interpreting; choosing what matters; writing prose; deciding what to escalate; handling unusual input. That thinking is the job — keep doing it fresh each run. Scripts are accelerators, not contracts: verify their output every run and deviate without hesitation when inputs look unusual or the task has drifted. Never trade correctness for speed or lower cost.
-- Surface what you bake in: if a step can only be scripted by assuming a weighting, a threshold, a definition of "what matters", or a default pick, that part is judgment, not mechanics. Don't bury it — document the assumption in the script header AND record it in the "optimised" note so the owner can review it (there's no user to confirm with mid-run). Better still, leave that part out of the script. Either way, do the reasoning and judgment calls yourself AFTER the script runs: you are an LLM and excel at natural-language reasoning, so let the script gather the facts and structure, then make the call live each run. A workflow that prints a verdict ("Recommended: X") has frozen the judgment — have it print the facts instead and you decide.
-- Save to /workdir/agent-workflows/<kebab-name>.py if that directory exists, otherwise /workdir/chat-workflows/<schedule-slug>/<kebab-name>.py. Load the saved-workflows skill for the header format. Parameterise dates/IDs — never hardcode this run's values. Scripts must fail loudly so a future run can't silently ship wrong output. The rhythm once a workflow exists: run script → verify output → handle exceptions with fresh thinking.
+1) SCRIPT — did this run contain work a script should do for you next time? Two kinds qualify, and they are easy to under-count:
+- (a) DISCOVERY you would otherwise repeat — you spent tool-calls figuring out HOW: reading a skill or schema, working out the right query / params / IDs, finding the right endpoint, recovering from a dead-end. Bake the working recipe in so a fresh run skips the rediscovery. Even a single call is worth saving if a fresh run wouldn't get it exactly right first try.
+- (b) MECHANICS you would otherwise re-run — the same multi-step sequence each time: data pulls, dedupe, transforms, rendering, posting to a fixed place. You just ran those tool-calls; you will run them again next time. Collapse them into one script.
+- The test is simple: "would a fresh run have to re-figure this out, or re-run these same steps?" If yes, script it. Do NOT wait for it to feel big or hard — "I already did it the quick way inline" is the exact trap: the inline way pays those tool-calls EVERY run; a script pays them once.
+- Script READILY. Only the ~20 most-recently-used workflows are ever surfaced to you, so making lots of them costs you nothing — the only real risk is an INACCURATE script silently shipping wrong output. So spend your caution on accuracy, not restraint: every workflow must verify its own output and fail loudly, must parameterise dates/IDs (never hardcode this run's values), and gets re-checked each run. If a workflow for this job already exists, repair or extend it rather than writing a new one.
+- NEVER script judgment — reading, weighing, choosing what matters, writing prose, deciding what to escalate, handling unusual input. The script gathers and prints the facts; you make the call live every run. Don't freeze a verdict ("Recommended: X") into code — print the facts and decide yourself. If a script can only be written by baking in an assumption (a weighting, a threshold, a default pick), surface it in the script header AND the "optimised" note, or leave it out and do it live.
+- Save to /workdir/agent-workflows/<kebab-name>.py if that directory exists, otherwise /workdir/chat-workflows/<schedule-slug>/<kebab-name>.py. Load the saved-workflows skill for the header format.
 
 2) REMEMBER — did this run teach you something durable?
-- Your saved memories for this agent are already provided in your context above (the User Memories section) — apply them this run so you don't re-learn the same things. That is the payoff of remembering: each run starts smarter than the last.
-- Worth remembering: integration gotchas (IDs, formats, quirks you had to work out), data-source facts, recurring exceptions and how you handled them, owner preferences evident from the task.
+- Your saved memories for this agent are already in your context above (the User Memories section) — apply them this run so you don't re-learn the same things. That is the payoff: each run starts smarter than the last.
+- Worth remembering: integration gotchas (IDs, formats, quirks you worked out), data-source facts, recurring exceptions and how you handled them, owner preferences evident from the task. Keep each one short and factual.
+- Before you save, scan the memories already in your context: if one covers this, UPDATE it instead of adding a near-duplicate. The bar: would the next run be slower or wrong without it?
 - Save with: numa memory add "<short factual note>" --scope ${memoryScope} -m "remembering for next run" -y
-- No user is present, so the usual confirm-first rule doesn't apply. Apply this bar instead: would the next run be slower or wrong without it? Keep each memory short and factual; update or delete a stale one rather than piling up near-duplicates.
 
-When you create or update a workflow or memory, record it in the OPTIONAL "optimised" field of status.json — one string per item, e.g.:
+Record anything you created or updated in the "optimised" field of status.json — one string per item, e.g.:
   "optimised": ["agent-workflows/fetch-pipeline-data.py (created — pulls this week's closed-won deals; summary writing deliberately NOT scripted)", "memory: the CRM export mislabels the 'owner' column as 'rep'"]
 
-IMPORTANT: Always reflect before finishing. Scripting and remembering make you more efficient and save the user money on every future run — but don't script things that require reasoning, and don't force it when this run genuinely had nothing worth keeping.
+Scripting and remembering are how you get cheaper and more reliable every run. Script the mechanics and the hard-won discoveries; keep the judgment live.
 </scheduled-run>
 
 `;

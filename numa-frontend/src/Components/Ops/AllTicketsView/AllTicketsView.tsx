@@ -1007,7 +1007,7 @@ export function AllTicketsView(): React.JSX.Element {
         style={{ border: '1px solid #e0e0e0', borderRadius: 12, minHeight: 0 }}
       >
         {/* ── Toolbar ────────────────────────────────────────────────────── */}
-        <div className="d-flex align-items-center flex-wrap gap-2 gap-md-3 px-3 py-2 border-bottom bg-white">
+        <div className="ops-fill-toolbar d-flex align-items-center flex-wrap gap-2 gap-md-3 px-3 py-2 border-bottom bg-white">
           {/* Search input */}
           <div className="position-relative" style={{ width: 280 }}>
             <i

@@ -941,7 +941,7 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
       <div className="d-flex flex-column" style={{ height: '100%', minHeight: 0, overflow: 'hidden' }}>
         {/* ── Toolbar ──────────────────────────────────────────────────── */}
         <div
-          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white flex-shrink-0"
+          className="ops-fill-toolbar d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom bg-white flex-shrink-0"
           style={{ minHeight: 48 }}
         >
           <Form.Control
@@ -1015,7 +1015,7 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
 
         {/* ── Filter bar (shared across board + list) ─────────────────── */}
         <div
-          className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom flex-shrink-0"
+          className="ops-fill-toolbar d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom flex-shrink-0"
           style={{ backgroundColor: '#fafafa' }}
         >
           <div className="d-flex flex-wrap align-items-center gap-2">
@@ -1117,6 +1117,7 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
         >
           {viewMode === 'list' ? (
             <div
+              className="ops-crm-list"
               style={{
                 borderRadius: 10,
                 border: '1px solid #e5e7eb',
@@ -1130,7 +1131,7 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
             >
               {/* Header row with FilterDropdown per column */}
               <div
-                className="d-flex align-items-center px-3 py-2"
+                className="ops-crm-list-header d-flex align-items-center px-3 py-2"
                 style={{
                   backgroundColor: '#f9fafb',
                   borderBottom: '1px solid #e5e7eb',
@@ -1163,7 +1164,7 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
               </div>
 
               {/* Data rows (scrollable) */}
-              <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              <div className="ops-crm-list-body" style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
                 {filteredCustomers.length === 0 ? (
                   <div className="text-center py-5">
                     <i className="bi bi-people fs-1 d-block mb-2" style={{ color: '#d1d5db' }} />
@@ -1173,7 +1174,7 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
                   filteredCustomers.map((customer) => (
                     <div
                       key={customer.id}
-                      className="d-flex align-items-center px-3 py-2"
+                      className="ops-crm-list-row d-flex align-items-center px-3 py-2"
                       style={{
                         borderBottom: '1px solid #f3f4f6',
                         cursor: 'pointer',
@@ -1196,6 +1197,8 @@ const CrmMirrorView = ({ initialCustomerId }: { initialCustomerId?: string | nul
                       {visibleColumns.map((col) => (
                         <div
                           key={col.key}
+                          className="ops-crm-list-cell"
+                          data-label={col.label}
                           style={{
                             flex: col.flex ?? '1 1 0',
                             minWidth: 0,

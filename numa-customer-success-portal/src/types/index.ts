@@ -354,6 +354,10 @@ export const getDefaultClientConfigValues = () => ({
   numaOps: false,
   numaDropZones: false,
   numaSharing: false,
+  // Numa Credit System (SPK-015). Gates the in-app Credits dashboard + in-chat
+  // credit indicator; metering runs regardless. Pricing is authored on the
+  // dedicated Credits page.
+  showCredits: false,
   developerMode: false,
   oauthIntegrationsEnabled: false,
   ssoEnabled: true,

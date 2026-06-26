@@ -118,6 +118,32 @@ interface BuildRequestOpts<T extends ToolName> {
   userMessage?: string;
 }
 
+/**
+ * Native-connector READ tools — file browsing and Synergy metadata. These are
+ * inherently read-only and were previously dispatched ungated, which silently
+ * dropped the user's "always ask" approval mode for every native read (BUG-390;
+ * the pre-CLI SDK runner gated EVERY connector op, reads included). They're now
+ * gated centrally in `buildIntegrationsRequest` so a per-tool wrapper can't be
+ * forgotten when a new Synergy/cloud-storage read command is added — match here
+ * and the gate applies automatically.
+ *
+ * The Pipedream catalogue lookups (`pipedream_list_actions`/`_configure_props`)
+ * are deliberately NOT here — they're schema/metadata, not data reads, and the
+ * pre-CLI runner never gated them. Native *writes* (`connect_request`) gate
+ * themselves at the command site before calling this builder, so they're absent
+ * too (listing them would double-gate).
+ */
+const isNativeReadTool = (tool: string): boolean =>
+  tool.startsWith('connect_synergy_') ||
+  tool === 'oauth_list_files' ||
+  tool === 'oauth_search_files' ||
+  tool === 'oauth_download_file' ||
+  tool === 'oauth_get_file_metadata';
+
+/** Connector slug a native read gates on: Synergy is fixed; OAuth tools key on `provider`. */
+const nativeReadSlug = <T extends ToolName>(tool: T, params: ParamsForTool<T>): string =>
+  tool.startsWith('connect_synergy_') ? 'synergy' : String((params as { provider?: unknown }).provider ?? '');
+
 async function buildIntegrationsRequest<T extends ToolName>(
   opts: BuildRequestOpts<T>
 ): Promise<{ accessToken: string; request: ToolInvokeRequest<T>; scope: ScopingContext }> {
@@ -137,6 +163,32 @@ async function buildIntegrationsRequest<T extends ToolName>(
     id_token: tokens.idToken,
     user_message: opts.userMessage,
   };
+
+  // Gate native reads on the user's integration approval mode (BUG-390). Safe
+  // reads → auto-approve under `never`/`non_destructive`; `always` prompts. In
+  // workspace mode gateWriteOp emits the approval card and threads a request_id
+  // the server polls on; on a laptop it TTY-confirms (default mode is `never`,
+  // so reads don't prompt there unless the user opted into `always`).
+  if (isNativeReadTool(opts.tool)) {
+    const slug = nativeReadSlug(opts.tool, opts.params);
+    const { requestId } = await gateWriteOp({
+      requiresApproval: requiresLocalApprovalForIntegration({ slug, readOnly: true, account: opts.account }),
+      yes: false,
+      confirmOpts: {
+        title: `Read from ${slug}${opts.userMessage ? ` — ${opts.userMessage}` : ''}`,
+        requireWord: 'yes',
+      },
+      emit: {
+        actionKey: `integration-${slug}-read`,
+        toolName: opts.tool,
+        description: opts.userMessage ?? '',
+        propsPreview: (opts.params ?? {}) as Record<string, unknown>,
+        approvalCategory: 'integration',
+      },
+    });
+    if (requestId) request.request_id = requestId;
+  }
+
   return { accessToken: tokens.accessToken, request, scope };
 }
 
@@ -1057,7 +1109,10 @@ function createIntegrationsSoapCredentialsCommand(): Command {
 //   - OAuth cloud storage (Google Drive / Gmail / OneDrive / Dropbox) →
 //     `oauth_{list_files,search_files,download_file,get_file_metadata}`, keyed
 //     by a `provider` param (== the slug).
-// All read-only → no HITL gate. The numa-cli-api Lambda injects user_sub.
+// Read-only, but still gated on the user's integration approval mode: safe
+// reads auto-approve under `never`/`non_destructive` and only prompt under
+// `always` (BUG-390). The gate is centralised in `buildIntegrationsRequest`
+// via `isNativeReadTool`. The numa-cli-api Lambda injects user_sub.
 
 const CAPTION_HELP = 'Short caption shown to the user in chat ("Numa Integrations: <msg>")';
 
@@ -1496,8 +1551,11 @@ function createIntegrationsFileInfoCommand(): Command {
 }
 
 // --- Synergy read-only metadata commands (Phase 1) -------------------------
-// Structure/stats/schema the file-browse ops don't surface. All read-only, no
-// HITL, on the per-user-PAT native path (connect_synergy_* → oauth-workspace-tools).
+// Structure/stats/schema the file-browse ops don't surface. Read-only on the
+// per-user-PAT native path (connect_synergy_* → oauth-workspace-tools), but
+// gated on the integration approval mode like every native read — `always`
+// prompts, `never`/`non_destructive` auto-approve (BUG-390, centralised in
+// buildIntegrationsRequest via isNativeReadTool).
 const writeJson = (r: unknown) => process.stdout.write((r ? JSON.stringify(r, null, 2) : '(no result)') + '\n');
 
 /**

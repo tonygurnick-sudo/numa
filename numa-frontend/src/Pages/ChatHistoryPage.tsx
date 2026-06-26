@@ -7,6 +7,7 @@ import { useAuth } from '../Providers/AuthProvider';
 import { useConfirm, usePrompt } from '../Providers/ConfirmContext';
 import { PageHeader } from '../Components/PageHeader';
 import { StickyToolbar } from '../Components/StickyToolbar';
+import { formatRelativeTime, groupConversationsByDate } from '../utils/chatHistoryGrouping';
 import type { AttributeValue } from '@aws-sdk/client-dynamodb';
 
 const PAGE_SIZE = 50;
@@ -43,6 +44,13 @@ const ChatHistoryPage = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const fetchConversations = useCallback(async () => {
     if (!numaChatDynamoUtils || !user) return;
@@ -276,6 +284,18 @@ const ChatHistoryPage = () => {
     });
   };
 
+  const openConversation = (convo: ConversationMeta) => {
+    sessionStorage.setItem('currentConversationId-v2', convo.conversation_id);
+    sessionStorage.setItem('isWorkspaceConversation-v2', convo.isWorkspaceConversation === false ? 'false' : 'true');
+    // Flag this as an explicit selection so useConversationManager honors it
+    // unconditionally (bypassing inactivity + top-100-meta gates).
+    sessionStorage.setItem('pendingConversationSelect-v2', '1');
+    navigate('/chat');
+  };
+
+  // Mobile renders a History-tab-style grouped list (Today / Yesterday / …) instead of the table.
+  const groupedConversations = groupConversationsByDate(filteredConversations, t);
+
   return (
     <div className="dashboard job-history-page" data-testid="layout-dashboard">
       <PageHeader
@@ -306,7 +326,7 @@ const ChatHistoryPage = () => {
       <Container fluid className="job-history-content mt-4">
         <StickyToolbar className="job-history-toolbar">
           <Row className="g-3 align-items-end mb-0 job-history-toolbar-row">
-            <Col md={5}>
+            <Col xs={12} md={5}>
               <Form.Group className="job-history-search-group">
                 <div className="position-relative">
                   <Form.Control
@@ -321,44 +341,49 @@ const ChatHistoryPage = () => {
                 </div>
               </Form.Group>
             </Col>
-            <Col md={3}>
-              <Form.Group>
-                <Form.Select
-                  value={filterAgent}
-                  onChange={(e) => setFilterAgent(e.target.value)}
-                  className="job-history-filter-select"
-                  aria-label={t('history.filters.agent', 'Filter by agent')}
-                >
-                  <option value="all">{t('history.filters.allAgents', 'All Agents')}</option>
-                  {agentOptions.map((agentName) => (
-                    <option key={agentName} value={agentName}>
-                      {agentName}
-                    </option>
-                  ))}
-                </Form.Select>
-              </Form.Group>
-            </Col>
-            <Col md={4}>
-              <Form.Group>
-                <div className="d-flex align-items-center">
-                  <Form.Control
-                    type="date"
-                    value={filterStartDate}
-                    onChange={(e) => setFilterStartDate(e.target.value)}
-                    className="job-history-filter-select me-2"
-                    aria-label={t('history.filters.startDate', 'Filter from start date')}
-                  />
-                  <span className="me-2 text-muted fw-medium">-</span>
-                  <Form.Control
-                    type="date"
-                    value={filterEndDate}
-                    onChange={(e) => setFilterEndDate(e.target.value)}
-                    className="job-history-filter-select"
-                    aria-label={t('history.filters.endDate', 'Filter to end date')}
-                  />
-                </div>
-              </Form.Group>
-            </Col>
+            {/* Agent + date filters are desktop-only; mobile keeps just the search, like the History tab. */}
+            {!isMobile && (
+              <>
+                <Col md={3}>
+                  <Form.Group>
+                    <Form.Select
+                      value={filterAgent}
+                      onChange={(e) => setFilterAgent(e.target.value)}
+                      className="job-history-filter-select"
+                      aria-label={t('history.filters.agent', 'Filter by agent')}
+                    >
+                      <option value="all">{t('history.filters.allAgents', 'All Agents')}</option>
+                      {agentOptions.map((agentName) => (
+                        <option key={agentName} value={agentName}>
+                          {agentName}
+                        </option>
+                      ))}
+                    </Form.Select>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group>
+                    <div className="d-flex align-items-center">
+                      <Form.Control
+                        type="date"
+                        value={filterStartDate}
+                        onChange={(e) => setFilterStartDate(e.target.value)}
+                        className="job-history-filter-select me-2"
+                        aria-label={t('history.filters.startDate', 'Filter from start date')}
+                      />
+                      <span className="me-2 text-muted fw-medium">-</span>
+                      <Form.Control
+                        type="date"
+                        value={filterEndDate}
+                        onChange={(e) => setFilterEndDate(e.target.value)}
+                        className="job-history-filter-select"
+                        aria-label={t('history.filters.endDate', 'Filter to end date')}
+                      />
+                    </div>
+                  </Form.Group>
+                </Col>
+              </>
+            )}
           </Row>
         </StickyToolbar>
 
@@ -409,6 +434,65 @@ const ChatHistoryPage = () => {
             ) : filteredConversations.length === 0 ? (
               <div className="text-center bg-light rounded p-4">
                 <p className="mb-0 text-muted">{t('history.empty', 'No conversations found.')}</p>
+              </div>
+            ) : isMobile ? (
+              <div className="chat-history-m-list">
+                {groupedConversations.map((group) => (
+                  <div key={group.key} className="chat-history-m-group">
+                    <div className="chat-history-m-group-header">{group.label}</div>
+                    {group.conversations.map((convo) => (
+                      <div
+                        key={convo.conversation_id}
+                        className={`chat-history-m-item${convo.isAgentConversation ? ' is-agent' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          className="chat-history-m-item-content"
+                          onClick={() => openConversation(convo)}
+                        >
+                          <div className="chat-history-m-item-title">
+                            {convo.conversationName || t('history.untitled', 'Untitled')}
+                          </div>
+                          {convo.isAgentConversation && convo.agentTitle && (
+                            <div className="chat-history-m-item-agent">
+                              <Bot size={13} />
+                              {convo.agentTitle}
+                            </div>
+                          )}
+                          <div className="chat-history-m-item-meta">
+                            {formatRelativeTime(convo.latestTimestamp, t as (key: string) => string) ||
+                              formatDateTime(convo.latestTimestamp)}
+                          </div>
+                        </button>
+                        <div className="chat-history-m-item-actions">
+                          <button
+                            type="button"
+                            className="chat-history-m-action-btn"
+                            aria-label={t('history.actions.rename', 'Rename')}
+                            onClick={() => handleRename(convo.conversation_id, convo.conversationName)}
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="chat-history-m-action-btn chat-history-m-action-btn--danger"
+                            aria-label={t('history.actions.delete', 'Delete')}
+                            onClick={() => handleDelete(convo.conversation_id)}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="text-center p-3">
+                    <Button variant="link" onClick={loadMoreConversations} disabled={isLoadingMore}>
+                      {isLoadingMore ? <Spinner animation="border" size="sm" /> : t('history.loadMore', 'Load More')}
+                    </Button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="table-responsive file-table-container scrollable">
@@ -467,21 +551,7 @@ const ChatHistoryPage = () => {
                         </td>
                         <td className="text-end align-middle pe-3">
                           <div className="d-flex justify-content-end align-items-center gap-2">
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => {
-                                sessionStorage.setItem('currentConversationId-v2', convo.conversation_id);
-                                sessionStorage.setItem(
-                                  'isWorkspaceConversation-v2',
-                                  convo.isWorkspaceConversation === false ? 'false' : 'true'
-                                );
-                                // Flag this as an explicit selection so useConversationManager
-                                // honors it unconditionally (bypassing inactivity + top-100-meta gates).
-                                sessionStorage.setItem('pendingConversationSelect-v2', '1');
-                                navigate('/chat');
-                              }}
-                            >
+                            <Button variant="primary" size="sm" onClick={() => openConversation(convo)}>
                               {t('history.actions.resume', 'Open')}
                             </Button>
                             <Dropdown align="end">

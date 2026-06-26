@@ -100,7 +100,15 @@ const BULK_UPDATABLE_FIELDS: FieldConfig[] = [
     key: 'workspaceChatModelSelection',
     label: 'Workspace Chat Model Selection',
     type: 'boolean',
-    description: 'Allow users to select AI models in Chat V2',
+    description:
+      "Show the model picker in Workspace Chat. Enables the non-AWS 'Standard' model (Numa Standard Model, billed at lower credits) alongside Premium (Sonnet, default) and Expert (Opus).",
+  },
+  {
+    key: 'showCredits',
+    label: 'Show Credits',
+    type: 'boolean',
+    description:
+      "Surface the Credits dashboard (Settings) and the in-chat credit indicator to this client's users. Metering runs regardless; pricing is configured on the Credits page.",
   },
   {
     key: 'allowBedrockQuotaSharing',

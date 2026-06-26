@@ -1,0 +1,61 @@
+// UserManagement.scss — co-located, MOBILE-ONLY tweaks for the User Management
+// toolbar. Every rule is wrapped in `@media (max-width: 768px)` (the app mobile
+// breakpoint) so desktop rendering is byte-for-byte unchanged. Imported directly
+// by UserManagement.tsx (JS import), so it is compiled stand-alone and uses raw
+// media queries rather than the `@include mobile` mixin.
+
+@media (max-width: 768px) {
+  // [HIGH] The User Management toolbar (rendered by <UserActionsBar/>) is a single
+  // flex-nowrap row: search + view-toggle + Filter + Sort + count. On a phone the
+  // fixed-width controls crush the "Search by email" input down to ~41px. Scoped
+  // to `.user-management-toolbar` (the wrapper this page puts around the bar), make
+  // the row wrap and give the search input its own full-width line; the toggle,
+  // Filter, Sort and count wrap onto the line(s) below. Desktop keeps its single
+  // row (this block is mobile-only).
+  .user-management-toolbar {
+    // Root flex row from UserActionsBar.
+    > .d-flex {
+      flex-wrap: wrap;
+      row-gap: 0.5rem;
+    }
+
+    // The left controls group: allow it to wrap internally and take the full width.
+    > .d-flex > .d-flex {
+      flex-wrap: wrap;
+      width: 100%;
+      row-gap: 0.5rem;
+    }
+
+    // Search input group — full width on its own line (overrides the inline
+    // max-width: 300px set on the InputGroup).
+    .input-group {
+      max-width: none !important;
+      flex: 1 1 100%;
+    }
+
+    // Secondary controls (view toggle, Filter, Sort) wrap onto the row below the
+    // search. Make each one grow to fill the available width so the row is flush
+    // to both edges instead of leaving ragged whitespace on the right. They share
+    // one line and split the width evenly via flex-grow.
+    > .d-flex > .d-flex > .btn-group,
+    > .d-flex > .d-flex > .dropdown {
+      flex: 1 1 auto;
+    }
+
+    // Stretch the toggle/buttons inside those controls to fill their flex item so
+    // the visible control surface (not just the wrapper) reaches the row edges.
+    > .d-flex > .d-flex > .btn-group > .btn,
+    > .d-flex > .d-flex > .dropdown > .dropdown-toggle {
+      width: 100%;
+      justify-content: center;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    // "N of N users" count — let it drop onto its own line and span the full
+    // width rather than being squeezed against the toolbar edge.
+    > .d-flex > small {
+      flex: 1 1 100%;
+    }
+  }
+}

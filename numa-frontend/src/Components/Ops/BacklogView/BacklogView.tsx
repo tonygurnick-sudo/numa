@@ -1405,17 +1405,21 @@ const BacklogView = () => {
             />
           </div>
 
-          {backlogAssignees.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              className={`backlog-assignee-filter ${assigneeFilter.has(a.id) ? 'active' : ''}`}
-              title={a.name}
-              onClick={() => toggleAssignee(a.id)}
-            >
-              <StaffAvatar staff={a.staff} name={!a.staff ? a.name : undefined} size={28} />
-            </button>
-          ))}
+          {backlogAssignees.length > 0 && (
+            <div className="backlog-assignee-strip">
+              {backlogAssignees.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`backlog-assignee-filter ${assigneeFilter.has(a.id) ? 'active' : ''}`}
+                  title={a.name}
+                  onClick={() => toggleAssignee(a.id)}
+                >
+                  <StaffAvatar staff={a.staff} name={!a.staff ? a.name : undefined} size={28} />
+                </button>
+              ))}
+            </div>
+          )}
 
           {(backlogAssignees.length > 0 || typeOptions.length > 0) && <div className="backlog-filter-divider" />}
 

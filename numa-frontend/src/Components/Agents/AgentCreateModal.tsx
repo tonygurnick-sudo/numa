@@ -206,6 +206,15 @@ export const AgentCreateModal = ({
   // Inline schedule management state (for editing existing agents)
   const [_editingScheduleData, setEditingScheduleData] = useState<AgentSchedule | null>(null);
 
+  // Mobile breakpoint (<=768px) — used to reflow the footer button group so the
+  // primary submit button stays on-screen on narrow viewports. Desktop is unaffected.
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const brandPrimaryColor = branding.colors.primary ?? 'var(--brand-primary, var(--color-primary))';
   const brandPrimaryContrast = branding.colors.primaryContrast ?? 'white';
   const primaryButtonColor = branding.colors.buttonPrimary ?? brandPrimaryColor;
@@ -2220,14 +2229,24 @@ export const AgentCreateModal = ({
             minHeight: 'auto',
           }}
         >
-          <div className="d-flex align-items-center justify-content-between w-100">
-            <div className="d-flex align-items-center gap-2">
+          <div
+            className={
+              isMobile
+                ? 'd-flex flex-column align-items-stretch gap-2 w-100'
+                : 'd-flex align-items-center justify-content-between w-100'
+            }
+          >
+            <div className={isMobile ? 'd-flex align-items-center gap-2 order-2' : 'd-flex align-items-center gap-2'}>
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={handleExportJson}
                 disabled={saving}
-                className="d-flex align-items-center gap-1"
+                className={
+                  isMobile
+                    ? 'd-flex align-items-center justify-content-center gap-1 flex-fill'
+                    : 'd-flex align-items-center gap-1'
+                }
               >
                 <i className="bi bi-download"></i>
                 {t('createModal.footer.export')}
@@ -2237,20 +2256,29 @@ export const AgentCreateModal = ({
                 size="sm"
                 onClick={triggerImportPicker}
                 disabled={saving}
-                className="d-flex align-items-center gap-1"
+                className={
+                  isMobile
+                    ? 'd-flex align-items-center justify-content-center gap-1 flex-fill'
+                    : 'd-flex align-items-center gap-1'
+                }
               >
                 <i className="bi bi-upload"></i>
                 {t('createModal.footer.import')}
               </Button>
             </div>
-            <div className="d-flex align-items-center gap-2">
-              <Button variant="secondary" onClick={onHide} disabled={saving} className="px-4">
+            <div className={isMobile ? 'd-flex align-items-center gap-2 order-1' : 'd-flex align-items-center gap-2'}>
+              <Button
+                variant="secondary"
+                onClick={onHide}
+                disabled={saving}
+                className={isMobile ? 'px-4 flex-fill' : 'px-4'}
+              >
                 {t('createModal.footer.cancel')}
               </Button>
               <Button
                 type="submit"
                 disabled={saving}
-                className="px-4"
+                className={isMobile ? 'px-4 flex-fill' : 'px-4'}
                 style={{
                   backgroundColor: primaryButtonColor,
                   borderColor: primaryButtonBorderColor,

@@ -114,6 +114,35 @@ test('GET/HEAD proxy requests are safe under non_destructive; writes are not', (
   assert.equal(requiresLocalApprovalForIntegration({ slug: 'gmail', httpMethod: 'DELETE' }), true);
 });
 
+// ── native reads: file browsing / Synergy metadata (BUG-390) ──────────────
+
+test('native read ops auto-approve under never/non_destructive, prompt under always', () => {
+  // non_destructive: a read-only native op is "safe" → no prompt.
+  setModes({ integrations: 'non_destructive' });
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'googledrive', readOnly: true }), false);
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'synergy', readOnly: true }), false);
+
+  // never: auto-approve regardless.
+  setModes({ integrations: 'never' });
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'googledrive', readOnly: true }), false);
+
+  // always: every native read prompts — the regression this fixes.
+  setModes({ integrations: 'always' });
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'googledrive', readOnly: true }), true);
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'synergy', readOnly: true }), true);
+});
+
+test('per-slug override drives native reads (mirrored cross-method slug)', () => {
+  // The agent mirrors a Pipedream-slug override onto the native slug, so the
+  // native connector key (googledrive) carries the override the user set on the
+  // unified service. "always" here must prompt even though the category default
+  // would auto-approve a read.
+  setModes({ integrations: 'non_destructive' }, { googledrive: 'always' });
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'googledrive', readOnly: true }), true);
+  // A different native slug with no override still follows the category default.
+  assert.equal(requiresLocalApprovalForIntegration({ slug: 'dropbox', readOnly: true }), false);
+});
+
 // ── schema-annotation safety (non_destructive mode) ──────────────────────
 
 test('schema annotations decide action safety under non_destructive', () => {

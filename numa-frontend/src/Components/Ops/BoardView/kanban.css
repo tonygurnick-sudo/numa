@@ -2301,6 +2301,15 @@
 }
 
 /* Assignee avatar filter */
+/* Assignee ("users") strip wrapper. On desktop `display: contents` makes the
+   avatar buttons behave as direct children of .backlog-filter-bar exactly as
+   before (no visual change). On mobile it becomes a full-width horizontal
+   scroller (see the @media block) so many users scroll sideways on their own
+   line instead of wrapping / forcing the whole page to scroll. */
+.backlog-assignee-strip {
+  display: contents;
+}
+
 .backlog-assignee-filter {
   width: 28px;
   height: 28px;
@@ -3913,4 +3922,372 @@ body:has(.backlog-bulk-bar) .ask-numa-fab {
 .modal .form-check-input:focus {
   border-color: #a5b4fc;
   box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.25);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE USABILITY (BUG-358) — mobile-only Ops reflows (≤768px).
+   All rules below are scoped to this media query so desktop is untouched.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* ── [HIGH] Ticket detail + create-ticket modal: stack the two columns ──
+     Both modals use dialogClassName="ticket-detail-modal" and share
+     .ticket-detail-left-col / .ticket-detail-right-col inside a flex row.
+     On mobile, stack them vertically so the metadata sidebar renders
+     full-width below the description instead of being crushed to ~114px. */
+  .ticket-detail-modal .d-flex:has(> .ticket-detail-left-col) {
+    flex-direction: column;
+    /* override the inline `overflow: hidden` so the stacked columns scroll
+       as one (instead of two side-by-side independently-scrolling panes) */
+    overflow-y: auto !important;
+  }
+
+  .ticket-detail-modal .ticket-detail-left-col,
+  .ticket-detail-modal .ticket-detail-right-col {
+    flex: 0 0 auto;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .ticket-detail-modal .ticket-detail-left-col {
+    /* drop the desktop right divider + right padding when stacked */
+    border-right: none;
+    padding-right: 0;
+    /* let the parent scroll instead of each column scrolling independently */
+    overflow-y: visible;
+    border-bottom: 1px solid var(--ops-border);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+
+  .ticket-detail-modal .ticket-detail-right-col {
+    padding-left: 0;
+    overflow-y: visible;
+  }
+
+  /* ── [MEDIUM] Ticket detail modal footer buttons: ≥40px tap targets ──
+     Footer wraps; action buttons grow to a comfortable height and the
+     Save/Close pair stacks full-width for easy thumb access. */
+  .ticket-detail-modal .modal-footer {
+    flex-wrap: wrap;
+    gap: 8px;
+    row-gap: 8px;
+  }
+
+  .ticket-detail-modal .ticket-detail-footer-btn {
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+
+  /* The right-hand group (save status + Save + Close) goes full width and
+     its buttons stretch so Save/Close stack as full-width primary actions. */
+  .ticket-detail-modal .modal-footer > div:last-child {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .ticket-detail-modal .modal-footer > div:last-child .ticket-detail-footer-btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  /* ── [HIGH] Board selector strip: own full-width row below the controls ──
+     Row 2 (.ops-board-bar) holds [selector] [strip] [My Work + New Ticket].
+     On mobile, let it wrap and push the All Boards strip to its own line so
+     the board cards get full width instead of an ~80px blind-scroll window. */
+  .ops-board-bar {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .ops-board-bar .ops-all-boards-strip {
+    flex: 1 1 100%;
+    order: 3;
+    /* a faint inset shadow hints there is more to scroll horizontally */
+    box-shadow: inset -16px 0 12px -12px rgba(0, 0, 0, 0.12);
+  }
+
+  /* ── Sprint/Board view: stop the toolbar from forcing horizontal scroll ──
+     `.ops-board-toolbar-row` is a non-wrapping flex row (avatars + a fixed
+     200px search + the sprint pill + New/Complete Sprint) that overflows the
+     viewport and drags the whole board content — kanban columns + ticket cards
+     — wider than the screen, so the tickets get clipped and you have to scroll
+     sideways. Let the row wrap, give the search its own full-width line, and
+     keep the board columns/cards within the viewport. */
+  .ops-board-toolbar-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .ops-board-toolbar-row .ops-toolbar-search {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  /* Board-member avatars get their own full-width line that scrolls sideways,
+     so a board with many members can't push the toolbar (and the whole board)
+     wider than the screen again. */
+  .ops-board-toolbar-row .ops-toolbar-avatars {
+    flex: 1 1 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  /* Sprint controls full-width: the active-sprint pill takes its own full-width
+     line (progress track stretches to fill), and New Sprint + Complete Sprint
+     sit 2-up, together filling the next line. */
+  .ops-board-toolbar-row .ops-pill--sprint {
+    flex: 1 1 100%;
+  }
+
+  .ops-board-toolbar-row .ops-pill--sprint .ops-sprint-track {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  .ops-board-toolbar-row > div:has(> .ops-new-link) {
+    flex: 1 1 100%;
+    gap: 8px;
+  }
+
+  .ops-board-toolbar-row > div:has(> .ops-new-link) .ops-new-link {
+    flex: 1 1 0;
+    justify-content: center;
+    border: 1px solid var(--ops-border);
+    border-radius: var(--ops-radius);
+    padding: 0 10px;
+    min-height: 40px;
+  }
+
+  /* ── Customers / Suppliers / All Tickets toolbars: stretch wrapped items to
+     fill each row on mobile (like the backlog board) instead of leaving ragged
+     right-edge whitespace. The desktop right-pusher spacer is hidden; the
+     search field takes its own full-width line; every other control (and the
+     controls inside the nested filter/action groups) grows to fill its row. */
+  .ops-fill-toolbar {
+    row-gap: 8px;
+  }
+
+  .ops-fill-toolbar > .flex-grow-1 {
+    display: none;
+  }
+
+  /* Nested control/filter groups must also wrap, otherwise their items get
+     crushed onto one line (text overlapping / clipped). */
+  .ops-fill-toolbar > .d-flex {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  /* Each control grows to fill its row. Crucially we do NOT set min-width:0 here
+     — keeping the default min-content width is what makes items WRAP onto new
+     rows instead of shrinking below their text and overlapping. */
+  .ops-fill-toolbar > *:not(.flex-grow-1),
+  .ops-fill-toolbar > .d-flex > *:not(.flex-grow-1) {
+    flex: 1 1 auto;
+  }
+
+  /* Search field gets its own full-width line. CRM search is a direct
+     .form-control; All Tickets search is a plain .position-relative wrapper —
+     but the filter dropdowns are .position-relative.d-inline-block, so exclude
+     those (they should share rows, not each take a full-width line). */
+  .ops-fill-toolbar > .form-control,
+  .ops-fill-toolbar > .position-relative:not(.d-inline-block) {
+    flex: 1 1 100% !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+
+  .ops-fill-toolbar > .position-relative:not(.d-inline-block) input,
+  .ops-fill-toolbar > .position-relative:not(.d-inline-block) .form-control {
+    width: 100%;
+  }
+
+  /* Dropdown / select toggles fill their (stretched) flex container, so they
+     don't sit left-aligned with empty space on their row. */
+  .ops-fill-toolbar .ops-filter-btn,
+  .ops-fill-toolbar .form-select,
+  .ops-fill-toolbar .dropdown-toggle {
+    width: 100%;
+  }
+
+  /* Belt-and-braces: don't let any wide child stretch the stacked board
+     columns / ticket cards past the viewport. */
+  .kanban-columns,
+  .kanban-column,
+  .kanban-column-body {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* ── [MEDIUM] Customers / Suppliers list → stacked cards ──
+     The wide scrolling table reflows into one card per record. The shared
+     column header is hidden; each cell becomes a labelled meta line using
+     its data-label, and the first cell (Name) becomes the card title. */
+  .ops-crm-list-header {
+    display: none !important;
+  }
+
+  .ops-crm-list-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 6px !important;
+    padding: 12px 14px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 10px;
+    margin: 0 0 10px 0;
+    background: #fff;
+  }
+
+  .ops-crm-list-row .ops-crm-list-cell {
+    flex: 0 0 auto !important;
+    max-width: 100% !important;
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding-right: 0 !important;
+  }
+
+  /* Label prefix derived from the (now hidden) column header. */
+  .ops-crm-list-row .ops-crm-list-cell::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ops-text-secondary, #6b7280);
+    white-space: nowrap;
+  }
+
+  /* First cell = Name: promote to a full-width card title, no label. */
+  .ops-crm-list-row .ops-crm-list-cell:first-child {
+    flex-direction: column;
+    align-items: stretch;
+    border-bottom: 1px solid #f3f4f6;
+    padding-bottom: 8px;
+    margin-bottom: 2px;
+  }
+
+  .ops-crm-list-row .ops-crm-list-cell:first-child::before {
+    display: none;
+  }
+
+  .ops-crm-list-row .ops-crm-list-cell:first-child .fw-semibold {
+    font-size: 0.95rem !important;
+    white-space: normal !important;
+  }
+
+  /* Let the value side wrap/truncate sensibly within the meta line. */
+  .ops-crm-list-row .ops-crm-list-cell > span,
+  .ops-crm-list-row .ops-crm-list-cell > div {
+    min-width: 0;
+    text-align: right;
+  }
+
+  .ops-crm-list-row .ops-crm-list-cell:first-child > span,
+  .ops-crm-list-row .ops-crm-list-cell:first-child > div {
+    text-align: left;
+  }
+
+  /* ── [CRITICAL] Backlog filter bar: wrapped rows stretch to full width ──
+     The bar (display:flex; flex-wrap:wrap; gap:8px) wraps on narrow screens,
+     leaving ragged right-edge whitespace because most children carry
+     flex-shrink:0 / fixed widths. On mobile, let each wrapped row fill the
+     full container width: search on its own row, filter dropdowns and the
+     sprint/status pills grow to fill. All rules are scoped under
+     .backlog-filter-bar so ops-pills / filter buttons elsewhere are untouched. */
+
+  /* Search input on its own full-width row */
+  .backlog-filter-bar .backlog-search-wrapper {
+    flex: 1 1 100%;
+  }
+
+  .backlog-filter-bar .backlog-search-input {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Assignee ("users") avatars get their own full-width line and scroll
+     horizontally within it — so one user no longer sits awkwardly inline, and
+     many users scroll sideways instead of wrapping or making the page scroll. */
+  .backlog-filter-bar .backlog-assignee-strip {
+    display: flex;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .backlog-filter-bar .backlog-assignee-strip .backlog-assignee-filter {
+    flex: 0 0 auto;
+  }
+
+  /* Type/Priority/Project/Customer dropdowns: the FilterDropdown wrapper is an
+     unclassed relative-positioned div whose only child is .backlog-filter-btn.
+     Stretch the wrapper, and make the button fill it (drop flex-shrink:0). */
+  .backlog-filter-bar > div:has(> .backlog-filter-btn) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .backlog-filter-bar .backlog-filter-btn {
+    flex: 1 1 auto;
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Sprint/status pills + New Sprint: stretch to fill each wrapped row.
+     Scoped to the filter bar so ops-pills used elsewhere keep flex-shrink:0. */
+  .backlog-filter-bar .ops-pill {
+    flex: 1 1 auto;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  /* The vertical dividers and the empty flex-grow-1 spacer only make sense in a
+     single-row desktop layout — on mobile they inject gaps / break wrapped rows.
+     Hide the dividers; collapse the spacer so it never forces a row break. */
+  .backlog-filter-bar .backlog-filter-divider {
+    display: none;
+  }
+
+  .backlog-filter-bar > .flex-grow-1 {
+    display: none;
+  }
+
+  /* List/Board view toggle: an unclassed inline-styled div containing two
+     unclassed buttons (distinct from the FilterDropdown wrapper, whose child is
+     .backlog-filter-btn). Stretch it so its row fills the width, and split its
+     two segments evenly with centred icons so it reads as a proper segmented
+     control instead of two icons jammed to the left of an empty stretched box. */
+  .backlog-filter-bar > div:has(> button:not([class])) {
+    flex: 1 1 auto;
+  }
+
+  .backlog-filter-bar > div:has(> button:not([class])) > button {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Uniform control height so every wrapped row lines up: the search input, the
+     Type/Priority dropdowns, the status/sprint pills, New Sprint and the view
+     toggle all become the same 40px height (they otherwise range ~28-40px). */
+  .backlog-filter-bar .backlog-search-input,
+  .backlog-filter-bar .backlog-filter-btn,
+  .backlog-filter-bar .ops-pill,
+  .backlog-filter-bar > div:has(> button:not([class])),
+  .backlog-filter-bar > div:has(> button:not([class])) > button {
+    min-height: 40px;
+    box-sizing: border-box;
+  }
 }

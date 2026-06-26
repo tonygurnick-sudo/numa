@@ -80,6 +80,7 @@ from .sdk_runner import (
     request_stop,
     run_claude_sdk,
     stream_claude_sdk,
+    user_facing_error,
 )
 from .trace_parser import parse_trace_content_to_messages
 from .workspace import (
@@ -1114,18 +1115,12 @@ def _build_workspace_error_payload(e: OSError) -> dict[str, Any]:
     AgentCore container disk is fixed and not configurable, so users hit this
     on conversations that have accumulated large files across turns.
     """
-    is_disk_full = getattr(e, "errno", None) == errno.ENOSPC
-    if is_disk_full:
-        message = (
-            f"Workspace storage is full ({e}). "
-            "Free space by deleting files in the workspace settings panel "
-            "(uploads/outputs tabs), or start a new conversation."
-        )
-    else:
-        message = f"Workspace I/O error: {e}"
+    # Raw `e` can leak internals, so only a sanitized, user-facing message goes
+    # into the payload (the disk-full case is kept actionable). The real error
+    # is logged by the caller for our own debugging.
     return {
         "type": "error",
-        "error": message,
+        "error": user_facing_error(e, str(e)),
         "error_type": type(e).__name__,
         "errno": getattr(e, "errno", None),
         "timestamp": datetime.now(timezone.utc).isoformat(),

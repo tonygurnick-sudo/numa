@@ -294,6 +294,9 @@
     "noRecent": "No recent conversations",
     "openHistory": "Open history",
     "openAgents": "Agents",
+    "toolsAndSettings": "Tools & settings",
+    "quickActionsPrev": "Previous quick actions",
+    "quickActionsNext": "More quick actions",
     "tabs": {
       "settings": "Settings",
       "history": "History"
@@ -320,6 +323,10 @@
     "mobileActions": {
       "show": "Show chat actions",
       "hide": "Hide chat actions"
+    },
+    "mobileMenu": {
+      "title": "Chat menu",
+      "close": "Close menu"
     },
     "agentAssistant": "AI Agent Assistant",
     "missingIntegrations": {

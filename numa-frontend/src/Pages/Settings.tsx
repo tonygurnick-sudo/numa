@@ -79,6 +79,9 @@ import { VoiceAdminPanel } from '../Components/Voice/VoiceAdminPanel';
 import { CreditsDashboardPanel } from '../Components/Settings/CreditsDashboard/CreditsDashboardPanel';
 import { loadAdminCapabilityGating, DEFAULT_DISABLED_FLAGS } from '../utils/adminCapabilityGating';
 import { CHAT_SUGGESTIONS_DISABLED } from '../hooks/useChatSuggestions';
+// Mobile-only Settings tweaks (Tool Approvals matrix reflow + Ask Numa FAB
+// clearance). Every rule is gated to <=768px; desktop is unchanged.
+import './Settings.scss';
 
 // Capability flags hidden by a code-level kill switch. When the corresponding
 // kill switch is engaged, the capability is removed from the admin Capabilities

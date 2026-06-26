@@ -26,6 +26,13 @@ interface VoiceRecordButtonProps {
 /** Maximum recording duration in seconds (30 minutes) */
 const MAX_RECORDING_SECONDS = 1800;
 
+/**
+ * Minimum blob size (bytes) we treat as a real recording. A stop race or a mic that
+ * never produced audio yields just a few-hundred-byte container header; anything below
+ * this is rejected with a visible error rather than silently dropped (BUG-195).
+ */
+const MIN_VALID_BLOB_BYTES = 1024;
+
 /** Stores the elapsed seconds of the most recent completed recording */
 let lastRecordingDuration = 0;
 
@@ -218,11 +225,13 @@ export default function VoiceRecordButton({
     }
 
     try {
+      // Note: do NOT pin an exact sampleRate here. Forcing sampleRate:16000 is at best
+      // ignored and at worst risks constraint negotiation on Chrome/macOS; Amazon
+      // Transcribe infers the rate from the container. Resample later if ever needed.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          sampleRate: 16000,
         },
       });
       streamRef.current = stream;
@@ -258,13 +267,17 @@ export default function VoiceRecordButton({
         });
         chunksRef.current = [];
 
-        if (blob.size > 0) {
+        // Reject empty / header-only blobs (a stop race or a mic that produced no
+        // audio) with an explicit, retryable error instead of silently returning to
+        // idle and dropping the recording (BUG-195).
+        if (blob.size >= MIN_VALID_BLOB_BYTES) {
           const ext = getExtension(mimeType || recorder.mimeType);
           const filename = `voice-recording-${Date.now()}${ext}`;
           setState('uploading');
           onRecordingComplete(blob, filename);
         } else {
-          setState('idle');
+          setErrorMessage(t('input.voice.error.recordingFailed'));
+          setState('error');
         }
       };
 
@@ -311,8 +324,16 @@ export default function VoiceRecordButton({
   }, [t, onRecordingComplete, clearTimer, stopMediaTracks]);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current?.state === 'recording') {
-      mediaRecorderRef.current.stop();
+    const recorder = mediaRecorderRef.current;
+    if (recorder?.state === 'recording') {
+      // Flush the trailing (sub-timeslice) chunk before stopping so the final moments
+      // of speech are never lost to a stop race (BUG-195).
+      try {
+        recorder.requestData();
+      } catch {
+        // best-effort -- not all engines allow requestData() mid-stream
+      }
+      recorder.stop();
     }
   }, []);
 

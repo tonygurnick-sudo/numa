@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback, type ReactNode, type SetStateAction } from 'react';
-import { Button, Alert, Modal, Collapse } from 'react-bootstrap';
-import { Bot, Clock, Plus, Settings } from 'lucide-react';
+import { Button, Alert, Modal } from 'react-bootstrap';
+import { Bot, Clock, MessageSquarePlus, Plus, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../Providers/AuthProvider';
@@ -294,7 +294,11 @@ const NumaWorkspaceChatAgents = () => {
   const [agentsFeatureEnabled] = useState(() => getFlag('AGENTS'));
   const [missingConfirm, setMissingConfirm] = useState<{ agent: AgentSummary; missing: string[] } | null>(null);
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [showMobileActions, setShowMobileActions] = useState(false);
+  // Mobile chat menu: a tabbed drawer (Settings / History / Agents) opened from
+  // the gear button in the chat-health bar. Replaces the desktop-only side aside
+  // on mobile, where Settings + Agents previously had no home at all.
+  const [mobileChatMenuOpen, setMobileChatMenuOpen] = useState(false);
+  const [mobileChatMenuTab, setMobileChatMenuTab] = useState<'settings' | 'history' | 'agents'>('settings');
   const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(
     () => localStorage.getItem('numa-sidebar-active') === 'history'
   );
@@ -3417,32 +3421,120 @@ const NumaWorkspaceChatAgents = () => {
     </>
   );
 
-  const mobileActionsPanelId = 'mobile-chat-actions-panel';
-  const handleMobileActionClick = () => setShowMobileActions(false);
+  const closeMobileChatMenu = () => setMobileChatMenuOpen(false);
+  const openMobileChatMenu = (tab: 'settings' | 'history' | 'agents' = 'settings') => {
+    setMobileChatMenuTab(tab);
+    setMobileChatMenuOpen(true);
+  };
 
-  // Ensure mobile actions start collapsed on mount/navigation
+  // Ensure the mobile chat menu starts closed on mount/navigation.
   useEffect(() => {
-    setShowMobileActions(false);
+    setMobileChatMenuOpen(false);
   }, []);
 
-  // Close mobile actions when clicking/tapping outside
+  // Close the mobile chat menu on Escape (the backdrop handles tap-to-dismiss).
   useEffect(() => {
-    if (!isMobile || !showMobileActions) return;
-
-    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest('.mobile-chat-actions')) return;
-      setShowMobileActions(false);
+    if (!isMobile || !mobileChatMenuOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileChatMenuOpen(false);
     };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [isMobile, mobileChatMenuOpen]);
 
-    document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      document.removeEventListener('touchstart', handleOutsideClick);
-    };
-  }, [isMobile, showMobileActions]);
+  // Unified open state for the three side panels. On desktop they live in the
+  // right-hand aside (driven by their individual toggles); on mobile they live
+  // in the tabbed chat menu (driven by the active tab). Only the active panel
+  // renders — each returns null when not open.
+  const mobileMenuTab = isMobile && mobileChatMenuOpen ? mobileChatMenuTab : null;
+  const settingsPanelOpen = isMobile ? mobileMenuTab === 'settings' : settingsPanel.isPanelOpen;
+  const historyPanelOpen = isMobile ? mobileMenuTab === 'history' : isHistoryPanelOpen;
+  const agentsPanelOpen = isMobile ? mobileMenuTab === 'agents' : isAgentsPanelOpen;
+
+  const renderChatPanels = () => (
+    <>
+      <WorkspaceChatHistoryPanel
+        ref={historyPanelRef}
+        isOpen={historyPanelOpen}
+        currentConversationId={conversationId}
+        onSelectConversation={(id) => {
+          void handleLoadConversation(id);
+          closeMobileChatMenu();
+        }}
+      />
+      <WorkspaceChatAgentsPanel
+        isOpen={agentsPanelOpen}
+        agents={personalAgents}
+        agentsLoading={personalAgentsLoading}
+        onSelectAgent={(agent) => {
+          handleAgentSelect(agent);
+          closeMobileChatMenu();
+        }}
+      />
+      <WorkspaceChatSettingsPanel
+        isOpen={settingsPanelOpen}
+        isNewChat={shouldShowNewChatView}
+        uploadsFiles={settingsPanel.uploadsFiles}
+        outputFiles={settingsPanel.outputFiles}
+        outputFileGroups={settingsPanel.outputFileGroups}
+        filesLoading={settingsPanel.filesLoading}
+        filesError={settingsPanel.filesError}
+        onRefreshFiles={settingsPanel.refreshFiles}
+        onOpenFile={(file) => {
+          // Build full S3 key from relative path
+          // S3 structure: numa-chat/workspace/{user_sub}/conversations/{conversation_id}/{relative_path}
+          const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
+          openFilePreview({
+            filename: file.name,
+            fullPath: fullS3Key,
+            relativePath: file.path,
+            extension: file.name.split('.').pop() || '',
+          });
+          settingsPanel.closePanel();
+          setIsHistoryPanelOpen(false);
+          setIsAgentsPanelOpen(false);
+          closeMobileChatMenu();
+        }}
+        onDownloadFile={async (file) => {
+          const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
+          try {
+            await downloadFileFromS3(fullS3Key, OUTPUTS_BUCKET || '', REGION || '', getCredentials, file.name);
+          } catch (err) {
+            console.error('[NumaWorkspaceChatAgents] Failed to download output file:', err);
+          }
+        }}
+        autoToolsEnabled={autoToolsEnabled}
+        setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
+        webSearchEnabled={webSearchEnabled}
+        setWebSearchEnabled={handleUserSetWebSearchEnabled}
+        createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
+        setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
+        memoriesEnabled={memoriesEnabled}
+        setMemoriesEnabled={handleUserSetMemoriesEnabled}
+        numaOpsEnabled={numaOpsFeatureEnabled ? numaOpsEnabled : false}
+        setNumaOpsEnabled={handleUserSetNumaOpsEnabled}
+        numaOpsFeatureEnabled={numaOpsFeatureEnabled}
+        dataConnectorsFeatureEnabled={dataConnectorsFeatureEnabled}
+        agentsFeatureEnabled={agentsFeatureEnabled}
+        enabledKBIds={enabledKBIds}
+        setEnabledKBIds={handleUserSetEnabledKBIds}
+        availableKBs={availableKBs}
+        isLoadingKBs={isLoadingKBs}
+        enabledConnections={enabledConnections}
+        setEnabledConnections={handleUserSetEnabledConnections}
+        availableConnections={availableConnections}
+        connectionsLoading={connectionsLoading}
+        hasPipedreamFeature={hasPipedreamFeature}
+        adminConfiguredConnectors={connectedDataConnectors}
+        userConnectedConnectorIds={userConnectedConnectorIds}
+        enabledNativeConnectorIds={enabledNativeConnectorIds}
+        setEnabledNativeConnectorIds={handleUserSetEnabledNativeConnectorIds}
+        selectedAccountsByApp={selectedAccountsByApp}
+        setSelectedAccountsByApp={setSelectedAccountsByApp}
+        isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
+      />
+    </>
+  );
 
   return (
     <div
@@ -3481,33 +3573,7 @@ const NumaWorkspaceChatAgents = () => {
               />
             )}
 
-            {/* Mobile action toggle lives just below the nav bar */}
-            {isMobile && !shouldShowNewChatView && (
-              <div className="mobile-chat-actions">
-                <button
-                  type="button"
-                  className={`mobile-actions-toggle ${showMobileActions ? 'open' : ''}`}
-                  onClick={() => setShowMobileActions((open) => !open)}
-                  aria-expanded={showMobileActions}
-                  aria-controls={mobileActionsPanelId}
-                  aria-label={showMobileActions ? t('page.mobileActions.hide') : t('page.mobileActions.show')}
-                >
-                  <span className="toggle-icon">
-                    <i className="bi bi-plus"></i>
-                  </span>
-                </button>
-                <Collapse in={showMobileActions}>
-                  <div id={mobileActionsPanelId} className="mobile-actions-panel">
-                    <div
-                      className="d-flex flex-wrap gap-2 workspace-chat-header-actions"
-                      onClick={handleMobileActionClick}
-                    >
-                      {renderActionButtons()}
-                    </div>
-                  </div>
-                </Collapse>
-              </div>
-            )}
+            {/* Mobile chat actions now live inside the chat-health bar (see below). */}
 
             <Modal show={!!missingConfirm} onHide={() => setMissingConfirm(null)} centered>
               <Modal.Header closeButton>
@@ -3647,7 +3713,37 @@ const NumaWorkspaceChatAgents = () => {
                       </div>
                     )}
 
-                    {!shouldShowNewChatView && <ChatHealthTopBar state={chatHealthForBanner} />}
+                    {!shouldShowNewChatView &&
+                      (isMobile ? (
+                        <ChatHealthTopBar
+                          state={chatHealthForBanner}
+                          leading={
+                            <button
+                              type="button"
+                              className="chat-health-new-chat-toggle"
+                              onClick={() => void handleHeaderNewChat()}
+                              title={t('page.newChat')}
+                              aria-label={t('page.newChat')}
+                            >
+                              <MessageSquarePlus size={16} strokeWidth={2.2} />
+                            </button>
+                          }
+                          trailing={
+                            <button
+                              type="button"
+                              className={`chat-health-actions-toggle ${mobileChatMenuOpen ? 'open' : ''}`}
+                              onClick={() => openMobileChatMenu('settings')}
+                              aria-haspopup="dialog"
+                              aria-expanded={mobileChatMenuOpen}
+                              aria-label={t('page.mobileActions.show')}
+                            >
+                              <Settings size={15} strokeWidth={2.2} />
+                            </button>
+                          }
+                        />
+                      ) : (
+                        <ChatHealthTopBar state={chatHealthForBanner} />
+                      ))}
 
                     {isFirstMessagePending && (
                       <div className="workspace-chat-first-message-banner" role="status">
@@ -3742,17 +3838,32 @@ const NumaWorkspaceChatAgents = () => {
                           onQuickAction={handleQuickAction}
                           connectedIntegrations={connectedSet}
                           onOpenHistory={() => {
+                            // Mobile: the desktop side panels are positioned off-screen, so
+                            // route the welcome-screen buttons to the working mobile drawer.
+                            if (isMobile) {
+                              openMobileChatMenu('history');
+                              return;
+                            }
                             settingsPanel.closePanel();
                             setIsAgentsPanelOpen(false);
                             setIsHistoryPanelOpen(true);
                             localStorage.setItem('numa-sidebar-active', 'history');
                           }}
                           onOpenAgents={() => {
+                            if (isMobile) {
+                              openMobileChatMenu('agents');
+                              return;
+                            }
                             settingsPanel.closePanel();
                             setIsHistoryPanelOpen(false);
                             setIsAgentsPanelOpen(true);
                             localStorage.setItem('numa-sidebar-active', 'agents');
                           }}
+                          // Mobile-only: surface the Settings/Tools/Files/Integrations drawer
+                          // from the new-chat view (the desktop side panel is unreachable on
+                          // mobile, and the chat-menu gear only renders once a conversation is
+                          // active). Undefined on desktop so the button never renders there.
+                          onOpenSettings={isMobile ? () => openMobileChatMenu('settings') : undefined}
                           onFilesDropped={(files) => handleDroppedFiles(files.map((f) => ({ file: f })))}
                           uploadingFiles={uploadingFiles}
                           onCancelUpload={handleCancelUpload}
@@ -3973,82 +4084,107 @@ const NumaWorkspaceChatAgents = () => {
           }
           aria-hidden={!(settingsPanel.isPanelOpen || isHistoryPanelOpen || isAgentsPanelOpen)}
         >
-          <WorkspaceChatHistoryPanel
-            ref={historyPanelRef}
-            isOpen={isHistoryPanelOpen}
-            currentConversationId={conversationId}
-            onSelectConversation={handleLoadConversation}
-          />
-          <WorkspaceChatAgentsPanel
-            isOpen={isAgentsPanelOpen}
-            agents={personalAgents}
-            agentsLoading={personalAgentsLoading}
-            onSelectAgent={(agent) => {
-              handleAgentSelect(agent);
-            }}
-          />
-          <WorkspaceChatSettingsPanel
-            isOpen={settingsPanel.isPanelOpen}
-            isNewChat={shouldShowNewChatView}
-            uploadsFiles={settingsPanel.uploadsFiles}
-            outputFiles={settingsPanel.outputFiles}
-            outputFileGroups={settingsPanel.outputFileGroups}
-            filesLoading={settingsPanel.filesLoading}
-            filesError={settingsPanel.filesError}
-            onRefreshFiles={settingsPanel.refreshFiles}
-            onOpenFile={(file) => {
-              // Build full S3 key from relative path
-              // S3 structure: numa-chat/workspace/{user_sub}/conversations/{conversation_id}/{relative_path}
-              const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
-              openFilePreview({
-                filename: file.name,
-                fullPath: fullS3Key,
-                relativePath: file.path,
-                extension: file.name.split('.').pop() || '',
-              });
-              settingsPanel.closePanel();
-              setIsHistoryPanelOpen(false);
-              setIsAgentsPanelOpen(false);
-            }}
-            onDownloadFile={async (file) => {
-              const fullS3Key = `numa-chat/workspace/${sub}/conversations/${conversationId}/${file.path}`;
-              try {
-                await downloadFileFromS3(fullS3Key, OUTPUTS_BUCKET || '', REGION || '', getCredentials, file.name);
-              } catch (err) {
-                console.error('[NumaWorkspaceChatAgents] Failed to download output file:', err);
-              }
-            }}
-            autoToolsEnabled={autoToolsEnabled}
-            setAutoToolsEnabled={handleUserSetAutoToolsEnabled}
-            webSearchEnabled={webSearchEnabled}
-            setWebSearchEnabled={handleUserSetWebSearchEnabled}
-            createAgentEnabled={agentsFeatureEnabled ? createAgentEnabled : false}
-            setCreateAgentEnabled={handleUserSetCreateAgentEnabled}
-            memoriesEnabled={memoriesEnabled}
-            setMemoriesEnabled={handleUserSetMemoriesEnabled}
-            numaOpsEnabled={numaOpsFeatureEnabled ? numaOpsEnabled : false}
-            setNumaOpsEnabled={handleUserSetNumaOpsEnabled}
-            numaOpsFeatureEnabled={numaOpsFeatureEnabled}
-            dataConnectorsFeatureEnabled={dataConnectorsFeatureEnabled}
-            agentsFeatureEnabled={agentsFeatureEnabled}
-            enabledKBIds={enabledKBIds}
-            setEnabledKBIds={handleUserSetEnabledKBIds}
-            availableKBs={availableKBs}
-            isLoadingKBs={isLoadingKBs}
-            enabledConnections={enabledConnections}
-            setEnabledConnections={handleUserSetEnabledConnections}
-            availableConnections={availableConnections}
-            connectionsLoading={connectionsLoading}
-            hasPipedreamFeature={hasPipedreamFeature}
-            adminConfiguredConnectors={connectedDataConnectors}
-            userConnectedConnectorIds={userConnectedConnectorIds}
-            enabledNativeConnectorIds={enabledNativeConnectorIds}
-            setEnabledNativeConnectorIds={handleUserSetEnabledNativeConnectorIds}
-            selectedAccountsByApp={selectedAccountsByApp}
-            setSelectedAccountsByApp={setSelectedAccountsByApp}
-            isDisabled={buttonStatus === 'streaming' || isFileProcessing || hasUploadsInProgress}
-          />
+          {renderChatPanels()}
         </aside>
+      )}
+
+      {/* Mobile chat menu — tabbed drawer (Settings / History / Agents) */}
+      {isMobile && (
+        <>
+          <div
+            className={`mobile-chat-menu-backdrop ${mobileChatMenuOpen ? 'is-open' : ''}`}
+            onClick={closeMobileChatMenu}
+            aria-hidden="true"
+          />
+          <aside
+            className={`mobile-chat-menu ${mobileChatMenuOpen ? 'is-open' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('page.mobileMenu.title')}
+            aria-hidden={!mobileChatMenuOpen}
+          >
+            <div className="mobile-chat-menu-header">
+              <span className="mobile-chat-menu-title">{t('page.mobileMenu.title')}</span>
+              <button
+                type="button"
+                className="mobile-chat-menu-close"
+                onClick={closeMobileChatMenu}
+                aria-label={t('page.mobileMenu.close')}
+              >
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div className="mobile-chat-menu-bar">
+              <div className="mobile-chat-menu-tabs" role="tablist" aria-label={t('page.mobileMenu.title')}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileChatMenuTab === 'settings'}
+                  className={`mobile-chat-menu-tab ${mobileChatMenuTab === 'settings' ? 'is-active' : ''}`}
+                  onClick={() => setMobileChatMenuTab('settings')}
+                >
+                  <Settings size={16} />
+                  <span>{t('newChat.tabs.settings')}</span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileChatMenuTab === 'history'}
+                  className={`mobile-chat-menu-tab ${mobileChatMenuTab === 'history' ? 'is-active' : ''}`}
+                  onClick={() => setMobileChatMenuTab('history')}
+                >
+                  <Clock size={16} />
+                  <span>{t('page.historyButton')}</span>
+                </button>
+                {agentsFeatureEnabled && (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={mobileChatMenuTab === 'agents'}
+                    className={`mobile-chat-menu-tab ${mobileChatMenuTab === 'agents' ? 'is-active' : ''}`}
+                    onClick={() => setMobileChatMenuTab('agents')}
+                  >
+                    <Bot size={16} />
+                    <span>{t('page.agentsButton')}</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="mobile-chat-menu-bar-actions">
+                <button
+                  type="button"
+                  className="mobile-chat-menu-action"
+                  onClick={() => {
+                    void handleHeaderNewChat();
+                    closeMobileChatMenu();
+                  }}
+                  title={t('page.newChat')}
+                  aria-label={t('page.newChat')}
+                >
+                  <MessageSquarePlus size={18} />
+                </button>
+                {conversationId && (
+                  <ExportConversationButton
+                    messages={messages}
+                    conversationId={conversationId}
+                    agentName={currentAgent?.title}
+                    agentId={currentAgent?.agentId}
+                    userId={sub}
+                    userEmail={userEmail}
+                    environment={window.location.hostname}
+                    getCredentials={getCredentials}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* `workspace-chat-settings-drawer` scope class: the Settings/History/
+                Agents panels' styling is all scoped under that ancestor. We borrow
+                the scope here and neutralise its desktop layout in SCSS. */}
+            <div className="mobile-chat-menu-body workspace-chat-settings-drawer">{renderChatPanels()}</div>
+          </aside>
+        </>
       )}
 
       {/* Mobile file preview modal */}

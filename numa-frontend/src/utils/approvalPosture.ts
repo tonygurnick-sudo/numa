@@ -1,5 +1,9 @@
 import type { AgentToolsConfig } from '../types/agents';
 import type { ApprovalMode, ChatSettings } from '../Services/ChatSettingsService';
+import {
+  pipedreamSlugForConnector,
+  connectorSlugForPipedream,
+} from '../Components/Integrations/integrationCatalogHelpers';
 
 /**
  * Approval posture for an agent's tools — used to warn, at schedule / automation
@@ -57,7 +61,15 @@ export function effectiveModeFor(
   if (isMode(agentOverride)) return agentOverride; // agent override wins (suppresses per-slug)
 
   if (category === 'integrations' && slug) {
-    const perSlug = settings.integrationApprovalModes?.[slug];
+    // The override is saved under ONE slug per service — the Pipedream slug when
+    // the service has one (e.g. `google_drive`). A native connector is keyed by
+    // its own slug (`googledrive`), so check the cross-method alias too, else a
+    // native Drive/Dropbox/etc. under "always" silently reads as auto-approve
+    // and the unattended-run warning never fires (BUG-390).
+    const perSlug =
+      settings.integrationApprovalModes?.[slug] ??
+      settings.integrationApprovalModes?.[pipedreamSlugForConnector(slug) ?? ''] ??
+      settings.integrationApprovalModes?.[connectorSlugForPipedream(slug) ?? ''];
     if (isMode(perSlug)) return perSlug;
   }
   return userDefaultMode(category, settings);

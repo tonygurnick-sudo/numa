@@ -239,6 +239,9 @@
     "renameAria": "רהנאמה כונבהרסאטיונ",
     "deleteAria": "דהלהטה כונבהרסאטיונ",
     "noRecent": "נו רהכהנט כונבהרסאטיונס",
+    "toolsAndSettings": "כלים והגדרות",
+    "quickActionsPrev": "פעולות מהירות קודמות",
+    "quickActionsNext": "פעולות מהירות נוספות",
     "tabs": {
       "settings": "סהטטינגס",
       "history": "חיסטורי"
@@ -264,6 +267,10 @@
     "mobileActions": {
       "show": "סחוו כחאט אכטיונס",
       "hide": "חידה כחאט אכטיונס"
+    },
+    "mobileMenu": {
+      "title": "כחאט מהנו",
+      "close": "כלוסה מהנו"
     },
     "agentAssistant": "אי אגהנט אססיסטאנט",
     "missingIntegrations": {

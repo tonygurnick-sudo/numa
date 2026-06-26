@@ -1,10 +1,13 @@
-import React, { useMemo, useState, useEffect, memo } from 'react';
+import React, { useMemo, memo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { OverlayTrigger, Tooltip } from 'react-bootstrap';
 import {
   BarChart2,
   Bot,
   Calendar,
   CalendarCheck,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Inbox,
   Lightbulb,
@@ -27,17 +30,24 @@ interface QuickActionsRowProps {
   connectedIntegrations?: Set<string>;
   /** Whether buttons should be disabled (e.g., during streaming) */
   disabled?: boolean;
-  /** Maximum number of actions to show */
+  /** Maximum number of actions to show (the caller caps this per breakpoint) */
   maxVisible?: number;
+  /**
+   * When true, show the actions a page at a time (default 4) with prev/next
+   * arrows instead of all at once. Used on mobile so the new-chat screen isn't
+   * dominated by a tall grid. Desktop passes this false/undefined and is
+   * unaffected (all actions render exactly as before).
+   */
+  paged?: boolean;
+  /** Actions per page when `paged` is true. */
+  pageSize?: number;
 }
 
 /**
- * QuickActionsRow displays a row of quick action buttons on the new chat page.
- * These help non-technical users discover what Numa can do by providing
- * one-click prompts for common tasks.
- *
- * Actions are filtered based on enabled features and connected integrations.
- * On mobile, the row becomes horizontally scrollable.
+ * QuickActionsRow displays a grid of quick action buttons on the new chat page.
+ * Desktop: 3 columns. Mobile: a 2-column grid that scrolls vertically (the
+ * caller passes all actions through; none are dropped).
+ * Layout (grid columns) is handled in CSS.
  */
 const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
   onQuickAction,
@@ -47,7 +57,12 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
   connectedIntegrations = new Set<string>(),
   disabled = false,
   maxVisible = 6,
+  paged = false,
+  pageSize = 4,
 }) => {
+  const { t } = useTranslation('chat');
+  const [page, setPage] = useState(0);
+
   const iconMap: Record<string, LucideIcon> = {
     'file-text': FileText,
     'bar-chart-2': BarChart2,
@@ -60,21 +75,6 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
     'calendar-check': CalendarCheck,
   };
 
-  // Track viewport width for responsive behavior
-  const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth <= 768 : false));
-  const [isSmallMobile, setIsSmallMobile] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth <= 400 : false
-  );
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
-      setIsSmallMobile(window.innerWidth <= 400);
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
   // Get visible actions based on enabled features
   const visibleActions = useMemo(() => {
     return getVisibleQuickActions({
@@ -82,14 +82,22 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
       kbEnabled,
       agentsEnabled,
       connectedIntegrations,
-      maxVisible: isMobile ? Math.min(maxVisible, 4) : maxVisible,
+      maxVisible,
     });
-  }, [webSearchEnabled, kbEnabled, agentsEnabled, connectedIntegrations, maxVisible, isMobile]);
+  }, [webSearchEnabled, kbEnabled, agentsEnabled, connectedIntegrations, maxVisible]);
 
   // Don't render if no actions are visible
   if (visibleActions.length === 0) {
     return null;
   }
+
+  // Mobile pager: show `pageSize` actions at a time with prev/next arrows.
+  // When not paged (desktop), every action renders exactly as before.
+  const pageCount = paged ? Math.ceil(visibleActions.length / pageSize) : 1;
+  const safePage = Math.min(page, pageCount - 1);
+  const shownActions =
+    paged && pageCount > 1 ? visibleActions.slice(safePage * pageSize, safePage * pageSize + pageSize) : visibleActions;
+  const showPager = paged && pageCount > 1;
 
   const handleClick = (action: QuickActionConfig) => {
     if (!disabled) {
@@ -107,7 +115,7 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
   return (
     <div className="quick-actions-row" role="group" aria-label="Quick actions">
       <div className="quick-actions-scroll">
-        {visibleActions.map((action) => {
+        {shownActions.map((action) => {
           const ActionIcon = iconMap[action.icon];
           return (
             <OverlayTrigger
@@ -130,12 +138,39 @@ const QuickActionsRow: React.FC<QuickActionsRowProps> = ({
                     <i className={`bi ${action.icon}`} aria-hidden="true" />
                   )}
                 </span>
-                {!isSmallMobile && <span className="quick-action-label">{action.label}</span>}
+                <span className="quick-action-label">{action.label}</span>
               </button>
             </OverlayTrigger>
           );
         })}
       </div>
+      {showPager && (
+        <div className="quick-actions-pager">
+          <button
+            type="button"
+            className="quick-actions-pager-btn"
+            onClick={() => setPage((p) => Math.max(0, Math.min(p, pageCount - 1) - 1))}
+            disabled={safePage === 0}
+            aria-label={t('newChat.quickActionsPrev')}
+          >
+            <ChevronLeft size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
+          <div className="quick-actions-pager-dots" aria-hidden="true">
+            {Array.from({ length: pageCount }).map((_, i) => (
+              <span key={i} className={`quick-actions-pager-dot ${i === safePage ? 'is-active' : ''}`} />
+            ))}
+          </div>
+          <button
+            type="button"
+            className="quick-actions-pager-btn"
+            onClick={() => setPage((p) => Math.min(pageCount - 1, Math.min(p, pageCount - 1) + 1))}
+            disabled={safePage === pageCount - 1}
+            aria-label={t('newChat.quickActionsNext')}
+          >
+            <ChevronRight size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

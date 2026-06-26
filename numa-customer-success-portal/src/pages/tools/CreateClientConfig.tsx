@@ -125,6 +125,9 @@ export default function CreateClientConfig() {
   const [numaOps, setNumaOps] = useState(defaults.numaOps);
   const [numaDropZones, setNumaDropZones] = useState(defaults.numaDropZones);
   const [numaSharing, setNumaSharing] = useState(defaults.numaSharing);
+  // Numa Credit System (FEAT-245) — surface the Credits visibility flag here so
+  // staff can opt a client in at provisioning time, not just on the Credits page.
+  const [showCredits, setShowCredits] = useState(defaults.showCredits);
   // Numa Voice (FEAT-169). connectInstanceUrl is only relevant for manually
   // created Connect instances; auto-provision derives the URL at deploy time.
   const [numaVoice, setNumaVoice] = useState(defaults.numaVoice);
@@ -308,6 +311,7 @@ export default function CreateClientConfig() {
     if (numaOps) minimal['numaOps'] = true;
     if (numaDropZones !== defaults.numaDropZones) minimal['numaDropZones'] = numaDropZones;
     if (numaSharing !== defaults.numaSharing) minimal['numaSharing'] = numaSharing;
+    if (showCredits) minimal['showCredits'] = true;
     if (numaVoice) {
       minimal['numaVoice'] = true;
       if (connectAutoProvision) minimal['connectAutoProvision'] = true;
@@ -606,7 +610,7 @@ export default function CreateClientConfig() {
                         defaultValue={defaults.workspaceChatModelSelection}
                         onChange={setWorkspaceChatModelSelection}
                         type="switch"
-                        helpText="Allow users to select AI models in Chat V2"
+                        helpText="Show the model picker in Workspace Chat. Enables the non-AWS 'Standard' model (Numa Standard Model, billed at lower credits) alongside Premium (Sonnet, default) and Expert (Opus)."
                       />
                       <ConfigField
                         label="Numa Ops"
@@ -631,6 +635,14 @@ export default function CreateClientConfig() {
                         onChange={setNumaSharing}
                         type="switch"
                         helpText="Allow users to share documents externally for Q&A"
+                      />
+                      <ConfigField
+                        label="Show Credits"
+                        value={showCredits}
+                        defaultValue={defaults.showCredits}
+                        onChange={setShowCredits}
+                        type="switch"
+                        helpText="Surface the Credits dashboard (Settings) and the in-chat credit indicator to this client's users. Metering runs regardless; pricing is configured on the Credits page."
                       />
                       <ConfigField
                         label="Numa Voice"

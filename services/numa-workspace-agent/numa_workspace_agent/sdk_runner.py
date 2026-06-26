@@ -243,6 +243,38 @@ def format_sse_event(data: dict) -> bytes:
     return f"data: {json.dumps(data)}\n\n".encode("utf-8")
 
 
+# Generic, internal-free message shown to the user when a chat request fails.
+# Raw exception text (which can leak implementation details — the underlying
+# model/runtime, env var names, token limits, stack frames, subprocess stderr)
+# must never reach the frontend. The real error is always preserved in
+# CloudWatch logs and the conversation trace's diagnostic fields for debugging.
+GENERIC_USER_FACING_ERROR = (
+    "An error occurred in your Numa workspace. To report this, contact the "
+    "Arcanum support team using the support button in the bottom-left of your "
+    "screen. To help us debug, include a chat export (or the date, time, and "
+    "user it happened for)."
+)
+
+
+def user_facing_error(e: Exception, error_str: str) -> str:
+    """Map a raw exception to a safe, user-facing error message.
+
+    Only errors that are genuinely actionable by the user *and* expose nothing
+    internal get a tailored message; everything else collapses to the generic
+    Numa message so we never surface implementation details to customers.
+    """
+    # Disk full: actionable and reveals nothing sensitive, so keep guiding the
+    # user to free space. (errno text like "[Errno 28] No space left on device"
+    # is a standard OS message, not a Numa internal.)
+    if isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOSPC:
+        return (
+            "Your Numa workspace has run out of storage. Free space by deleting "
+            "files in the workspace settings panel (uploads/outputs tabs), or "
+            "start a new conversation."
+        )
+    return GENERIC_USER_FACING_ERROR
+
+
 def serialize_content_block(block: Any) -> dict[str, Any]:
     """Serialize a content block to a JSON-compatible dict."""
     if isinstance(block, TextBlock):
@@ -817,6 +849,29 @@ async def stream_claude_sdk(
                 prompt = f"{transcribed_text}\n\n{prompt}"
             # Update original_prompt too so the trace shows the transcribed text
             original_prompt = prompt
+        elif voice_recordings and not prompt.strip():
+            # BUG-195: the voice recording(s) produced no usable transcript (empty
+            # result or a transcription error). Previously `prompt` stayed empty: the
+            # agent ran on nothing and replied with a generic greeting, and the empty
+            # trace turn was dropped on reload -- so the recording vanished with no
+            # error or history entry. Instead, keep the turn visible (a 🎤 marker is
+            # written to the trace via original_prompt) and steer the model to tell the
+            # user the audio could not be transcribed so they can retry or type instead.
+            logger.warning(
+                "Voice transcription produced no text -- surfacing retry message",
+                _name="VOICE_TRANSCRIBE_EMPTY",
+                conversation_id=conversation_id,
+                request_id=request_id,
+                num_recordings=len(voice_recordings),
+            )
+            original_prompt = "🎤 Voice message"
+            prompt = (
+                "[System: The user sent a voice message but it could not be "
+                "transcribed -- no speech was recognised. Briefly and warmly let them "
+                "know you couldn't make out any audio, and ask them to try recording "
+                "again (speaking a moment after the recorder starts) or to type their "
+                "message instead. Do not guess at what they might have said.]"
+            )
 
     # 3. List uploaded files for context (after audio files removed)
     uploaded_files: list[str] = []
@@ -1373,16 +1428,13 @@ async def stream_claude_sdk(
         ) and _strip_prefix(options.model) != _strip_prefix(FALLBACK_MODEL):
             mark_quota_exhausted(options.model)
 
-        # If the disk filled mid-stream, surface a friendlier message so the
-        # user knows what to do (delete files / new conversation) rather than
-        # seeing a raw `[Errno 28] No space left on device:` traceback.
-        display_error = error_str
-        if isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOSPC:
-            display_error = (
-                f"Workspace storage is full ({error_str}). "
-                "Free space by deleting files in the workspace settings panel "
-                "(uploads/outputs tabs), or start a new conversation."
-            )
+        # Surface a generic, internal-free message to the user. The raw error
+        # (and extra_info: stderr/stdout/cmd) is intentionally NOT included in
+        # the event — it can leak implementation details (runtime, env vars,
+        # token limits, tracebacks) and the trace is replayed into the browser
+        # on refresh, so it must stay clean too. The full error is preserved in
+        # CloudWatch above (logger.error + SDK_ERROR prints + stream_log).
+        display_error = user_facing_error(e, error_str)
 
         error_event = {
             "type": "error",
@@ -1390,7 +1442,6 @@ async def stream_claude_sdk(
             "error": display_error,
             "error_type": type(e).__name__,
             "errno": getattr(e, "errno", None),
-            **extra_info,
         }
         # Write to trace file (NDJSON format for storage)
         trace_line = json.dumps(error_event) + "\n"
@@ -1940,15 +1991,9 @@ async def run_claude_sdk(
         ) and _strip_prefix(options.model) != _strip_prefix(FALLBACK_MODEL):
             mark_quota_exhausted(options.model)
 
-        # If the disk filled mid-run, surface a friendlier message (matches
-        # the streaming path).
-        display_error = error_str
-        if isinstance(e, OSError) and getattr(e, "errno", None) == errno.ENOSPC:
-            display_error = (
-                f"Workspace storage is full ({error_str}). "
-                "Free space by deleting files in the workspace settings panel "
-                "(uploads/outputs tabs), or start a new conversation."
-            )
+        # Generic, internal-free message (matches the streaming path). Raw
+        # error stays in CloudWatch only; never in the trace or response.
+        display_error = user_facing_error(e, error_str)
 
         error_event = {
             "type": "error",
