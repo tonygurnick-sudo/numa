@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Col, Collapse, Form, Row } from 'react-bootstrap';
+import { Alert, Col, Form, Row } from 'react-bootstrap';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import { ConnectorWizardModal } from './ConnectorWizardModal';
 import type { WizardStep } from './ConnectorWizardModal';
 import {
@@ -24,8 +23,6 @@ interface ApiKeyFormState {
   displayName: string;
   icon: string;
   description: string;
-  rateLimitRpm: string;
-  rateLimitDaily: string;
   /** Optional admin-configured base URL for connectors whose API lives at a
    *  customer-hosted / per-instance location (e.g. Synergy 12d). If empty,
    *  runtime falls back to whatever the connector registry / backend has
@@ -55,7 +52,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   const [success, setSuccess] = useState<string | null>(null);
   const [existingSecretName, setExistingSecretName] = useState<string | null>(null);
   const [legacySecretName, setLegacySecretName] = useState<string | null>(null);
-  const [customizeExpanded, setCustomizeExpanded] = useState(false);
 
   const configSecretName = `connector-config-${connector.id}`;
   const legacyCredentialSecretName = `connector-${connector.id}`;
@@ -66,8 +62,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
       displayName: connector.displayName,
       icon: connector.icon,
       description: connector.description,
-      rateLimitRpm: connector.rateLimitRpm?.toString() || '',
-      rateLimitDaily: connector.rateLimitDaily?.toString() || '',
       // No default — always optional. If the registry has a baseUrl it's used at
       // runtime when this is blank; we don't pre-fill to avoid forking the value.
       instanceUrl: '',
@@ -108,8 +102,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         displayName: fields.display_name || connector.displayName,
         icon: fields.icon || connector.icon,
         description: fields.description || connector.description,
-        rateLimitRpm: fields.rate_limit_rpm || connector.rateLimitRpm?.toString() || '',
-        rateLimitDaily: fields.rate_limit_daily || connector.rateLimitDaily?.toString() || '',
         instanceUrl: fields.instance_url || '',
         adminFields: Object.fromEntries((connector.adminFields ?? []).map((f) => [f.key, fields[f.key] || ''])),
       });
@@ -123,7 +115,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     setStep(1);
     setError(null);
     setSuccess(null);
-    setCustomizeExpanded(false);
     setExistingSecretName(null);
     setLegacySecretName(null);
 
@@ -162,8 +153,23 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
   // base URL — saving without one would produce a connector that errors on
   // every request, so block the save instead.
   const instanceUrlMissing = Boolean(connector.instanceUrlRequired) && !form.instanceUrl.trim();
+  // Single source of truth for whether the Instance URL field applies to this
+  // connector — drives BOTH the render gate (step 2) and the save write-back.
+  // The Instance URL field is now shown ONLY for connectors that explicitly
+  // opt in: instanceUrlRequired (customer-hosted, e.g. Jiwa) or
+  // instanceUrlOptional (has a default but is overridable, e.g. GitLab).
+  // Connectors whose host is fixed (a baseUrl) or captured per-user in chat
+  // (a host-bearing credentialField) no longer render a spurious/misleading
+  // field — writing a stale rehydrated instance_url there would override the
+  // fixed baseUrl in the backend resolver.
+  const showInstanceUrl = Boolean(connector.instanceUrlRequired || connector.instanceUrlOptional);
   const canProceed =
-    step === 1 || step === 3 || (step === 2 && instanceUrlError === null && !adminFieldsMissing && !instanceUrlMissing);
+    step === 1 ||
+    step === 3 ||
+    // Only enforce instance-URL validation when the field is actually shown —
+    // otherwise a stale/malformed rehydrated value (for a now-hidden field)
+    // would permanently block Save with no visible field to fix.
+    (step === 2 && (!showInstanceUrl || (instanceUrlError === null && !instanceUrlMissing)) && !adminFieldsMissing);
 
   const handleSave = async () => {
     setSaving(true);
@@ -177,37 +183,46 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
         connector_type: connector.authType,
       };
 
-      if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
-      if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
-      // Always write instance_url — company-secret updates MERGE fields, so an
-      // omitted key would leave a stale admin URL in place; empty string clears
-      // it (the backend resolver skips empty values).
-      fields.instance_url = form.instanceUrl.trim();
-      // Fixed-URL connectors (registry baseUrl, e.g. ProWorkflow): persist the
-      // base URL so the backend resolver finds it in the vault. Tenant-specific
-      // instance_url/api_endpoint values win — the resolver checks base_url last.
-      if (connector.baseUrl) fields.base_url = connector.baseUrl;
+      // Always write instance_url: the entered value when the field is shown,
+      // or an EMPTY STRING when hidden (fixed-host connectors). Writing ''
+      // CLEARS any stale instance_url left by an older wizard version — vault
+      // updates MERGE, so skipping it would let a leftover per-instance host
+      // survive and the backend resolver (first non-empty of
+      // api_endpoint/instance_url/base_url) would wrongly prefer it over the
+      // fixed baseUrl. The resolver skips empty values, so '' falls through.
+      fields.instance_url = showInstanceUrl ? form.instanceUrl.trim() : '';
+      // ── Self-healing reconcile ───────────────────────────────────────────
+      // Re-saving a connector must REPAIR drift, not just add to it. Vault
+      // writes MERGE, so every registry-DERIVED field below is written on EVERY
+      // save — the current value, or '' to CLEAR a value that no longer applies
+      // (an older wizard wrote it, or the registry changed). Reconfiguring any
+      // native connector therefore reconciles its stored config to the registry.
 
-      // Admin-level account config (e.g. ProWorkflow account API key). Stored
-      // alongside the metadata on the same connector-config secret.
+      // Fixed-URL connectors (registry baseUrl, e.g. ProWorkflow): persist the
+      // base URL so the backend resolver finds it. Tenant-specific
+      // instance_url/api_endpoint values win — the resolver checks base_url last.
+      fields.base_url = connector.baseUrl ?? '';
+
+      // Admin-level account config (e.g. ProWorkflow account API key). Write
+      // every declared adminField (value or '' to clear) so a cleared field
+      // doesn't linger in the vault.
       for (const def of connector.adminFields ?? []) {
-        const value = form.adminFields[def.key]?.trim();
-        if (value) fields[def.key] = value;
+        fields[def.key] = form.adminFields[def.key]?.trim() ?? '';
       }
       // Tell the backend which header carries the account API key on requests.
-      if (connector.apiKeyHeader && form.adminFields.api_key?.trim()) {
-        fields.api_key_header = connector.apiKeyHeader;
-      }
-      // Custom-header auth (e.g. Cin7 Core): persist the header→credential
-      // field mapping so the backend builds auth headers from the user vault.
-      if (connector.credentialHeaderMap && Object.keys(connector.credentialHeaderMap).length > 0) {
-        fields.credential_header_map = JSON.stringify(connector.credentialHeaderMap);
-      }
-      // Constant non-secret headers (e.g. GoHighLevel's Version): the backend
-      // merges these into every request.
-      if (connector.staticHeaders && Object.keys(connector.staticHeaders).length > 0) {
-        fields.static_headers = JSON.stringify(connector.staticHeaders);
-      }
+      fields.api_key_header = connector.apiKeyHeader && form.adminFields.api_key?.trim() ? connector.apiKeyHeader : '';
+      // Custom-header auth (e.g. Cin7 Core): persist the header→credential field
+      // mapping so the backend builds auth headers from the user vault.
+      fields.credential_header_map =
+        connector.credentialHeaderMap && Object.keys(connector.credentialHeaderMap).length > 0
+          ? JSON.stringify(connector.credentialHeaderMap)
+          : '';
+      // Constant non-secret headers (e.g. GoHighLevel's Version): merged into
+      // every request by the backend.
+      fields.static_headers =
+        connector.staticHeaders && Object.keys(connector.staticHeaders).length > 0
+          ? JSON.stringify(connector.staticHeaders)
+          : '';
 
       // Persist the credential-field schema so the backend can emit the right
       // `needs_credential` error shape when a user has no stored credential
@@ -285,7 +300,6 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
     setSuccess(null);
     setExistingSecretName(null);
     setLegacySecretName(null);
-    setCustomizeExpanded(false);
   };
 
   const handleHide = () => {
@@ -405,106 +419,100 @@ export const ApiKeyWizard = ({ show, onHide, onSaved, connector, existingSecrets
               <h6 className="fw-semibold small text-muted mb-2">
                 {t('dataConnectors.apiKeyWizard.adminFieldsTitle', { defaultValue: 'Account configuration' })}
               </h6>
-              {(connector.adminFields ?? []).map((def) => (
-                <Form.Group key={def.key} className="mb-2">
-                  <Form.Label className="small fw-semibold mb-1">
-                    {t(def.label)}
-                    {!def.required && (
-                      <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
-                        ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
-                      </span>
-                    )}
-                  </Form.Label>
-                  <Form.Control
-                    type={def.type === 'password' ? 'password' : def.type === 'url' ? 'url' : 'text'}
-                    placeholder={def.placeholder}
-                    value={form.adminFields[def.key] ?? ''}
-                    onChange={(e) => updateForm({ adminFields: { ...form.adminFields, [def.key]: e.target.value } })}
-                    autoComplete="off"
-                  />
-                  {def.helpText && <Form.Text className="text-muted small">{t(def.helpText)}</Form.Text>}
-                </Form.Group>
-              ))}
+              {(connector.adminFields ?? []).map((def) =>
+                def.type === 'checkbox' ? (
+                  // Capability toggle (e.g. AutoPlay Lead/Listing API + SOAP
+                  // token passthrough). Stored as 'true'/'false'. `tag` shows a
+                  // badge next to the label (e.g. SOAP); `comingSoon` disables it.
+                  <Form.Group key={def.key} className="mb-2">
+                    <Form.Check
+                      type="checkbox"
+                      id={`adminfield-${def.key}`}
+                      disabled={def.comingSoon}
+                      checked={form.adminFields[def.key] === 'true'}
+                      onChange={(e) =>
+                        updateForm({
+                          adminFields: { ...form.adminFields, [def.key]: e.target.checked ? 'true' : 'false' },
+                        })
+                      }
+                      label={
+                        <span className="small fw-semibold">
+                          {t(def.label)}
+                          {def.tag && <span className="badge bg-info-subtle text-info-emphasis ms-2">{def.tag}</span>}
+                          {def.comingSoon && (
+                            <span className="badge bg-warning-subtle text-warning-emphasis ms-2">
+                              {t('dataConnectors.apiKeyWizard.comingSoon', { defaultValue: 'Coming soon' })}
+                            </span>
+                          )}
+                        </span>
+                      }
+                    />
+                    {def.helpText && <Form.Text className="text-muted small d-block ms-4">{t(def.helpText)}</Form.Text>}
+                  </Form.Group>
+                ) : (
+                  <Form.Group key={def.key} className="mb-2">
+                    <Form.Label className="small fw-semibold mb-1">
+                      {t(def.label)}
+                      {!def.required && (
+                        <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                          ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+                        </span>
+                      )}
+                    </Form.Label>
+                    <Form.Control
+                      type={def.type === 'password' ? 'password' : def.type === 'url' ? 'url' : 'text'}
+                      placeholder={def.placeholder}
+                      value={form.adminFields[def.key] ?? ''}
+                      onChange={(e) => updateForm({ adminFields: { ...form.adminFields, [def.key]: e.target.value } })}
+                      autoComplete="off"
+                    />
+                    {def.helpText && <Form.Text className="text-muted small">{t(def.helpText)}</Form.Text>}
+                  </Form.Group>
+                )
+              )}
             </div>
           )}
 
-          <div className="border rounded p-3 mb-3">
-            <Form.Group>
-              <Form.Label className="small fw-semibold mb-1">
-                {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
-                <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
-                  ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
-                </span>
-              </Form.Label>
-              <Form.Control
-                type="url"
-                placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
-                  defaultValue: 'https://your-instance.example.com',
-                })}
-                value={form.instanceUrl}
-                onChange={(e) => updateForm({ instanceUrl: e.target.value })}
-                isInvalid={instanceUrlError !== null}
-                autoComplete="off"
-              />
-              {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
-              <Form.Text className="text-muted small">
-                {t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
-                  defaultValue:
-                    "Set this only if your connector's API is hosted at a customer-specific address (e.g. a private Synergy 12d server). Leave empty to use the connector's built-in default.",
-                })}
-              </Form.Text>
-            </Form.Group>
-          </div>
-
-          <div
-            className="d-flex align-items-center gap-2 cursor-pointer mb-2"
-            onClick={() => setCustomizeExpanded(!customizeExpanded)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => e.key === 'Enter' && setCustomizeExpanded(!customizeExpanded)}
-          >
-            <h6 className="fw-semibold small mb-0">{t('dataConnectors.apiReference.customize')}</h6>
-            {customizeExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </div>
-          <Collapse in={customizeExpanded}>
-            <div>
-              <Row className="g-3">
-                <Col md={12}>
-                  <Form.Label className="small fw-semibold">
-                    {t('dataConnectors.oauthWizard.rateLimitsLabel')}
-                  </Form.Label>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small text-muted">
-                      {t('dataConnectors.oauthWizard.rateLimitRpmLabel')}
-                    </Form.Label>
-                    <Form.Control
-                      type="number"
-                      placeholder={t('dataConnectors.oauthWizard.rateLimitRpmPlaceholder')}
-                      value={form.rateLimitRpm}
-                      onChange={(e) => updateForm({ rateLimitRpm: e.target.value })}
-                      min={0}
-                    />
-                  </Form.Group>
-                </Col>
-                <Col md={6}>
-                  <Form.Group>
-                    <Form.Label className="small text-muted">
-                      {t('dataConnectors.oauthWizard.rateLimitDailyLabel')}
-                    </Form.Label>
-                    <Form.Control
-                      type="number"
-                      placeholder={t('dataConnectors.oauthWizard.rateLimitDailyPlaceholder')}
-                      value={form.rateLimitDaily}
-                      onChange={(e) => updateForm({ rateLimitDaily: e.target.value })}
-                      min={0}
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
+          {/* Instance URL: only for customer-hosted connectors (no fixed baseUrl),
+              connectors that explicitly opt in (instanceUrlOptional, e.g. GitLab
+              self-managed), or those that require it. Hidden for fixed-host SaaS
+              connectors (Cin7, Connecteam, Rentman, …) where it doesn't apply. */}
+          {showInstanceUrl && (
+            <div className="border rounded p-3 mb-3">
+              <Form.Group>
+                <Form.Label className="small fw-semibold mb-1">
+                  {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
+                  {!connector.instanceUrlRequired && (
+                    <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                      ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+                    </span>
+                  )}
+                </Form.Label>
+                <Form.Control
+                  type="url"
+                  placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
+                    defaultValue: 'https://your-instance.example.com',
+                  })}
+                  value={form.instanceUrl}
+                  onChange={(e) => updateForm({ instanceUrl: e.target.value })}
+                  isInvalid={instanceUrlError !== null}
+                  autoComplete="off"
+                />
+                {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
+                <Form.Text className="text-muted small">
+                  {connector.instanceUrlRequired
+                    ? t('dataConnectors.apiKeyWizard.instanceUrlHelpRequired', {
+                        defaultValue:
+                          'Required — this connector is hosted at your own address with no default. Enter your full API URL.',
+                      })
+                    : t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
+                        defaultValue:
+                          "Only set this if your connector is hosted at your own (customer-specific) address. Leave empty to use the connector's built-in default.",
+                      })}
+                </Form.Text>
+              </Form.Group>
             </div>
-          </Collapse>
+          )}
         </div>
       )}
 

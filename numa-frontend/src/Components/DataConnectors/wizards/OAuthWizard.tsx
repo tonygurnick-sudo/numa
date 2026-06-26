@@ -47,10 +47,13 @@ interface OAuthFormState {
   extraAuthParams: string;
   clientId: string;
   clientSecret: string;
-  rateLimitRpm: string;
-  rateLimitDaily: string;
   customHeaders: CustomHeader[];
   customCredentials: Record<string, string>;
+  /** Per-tenant API host for customer-hosted connectors (instanceUrlRequired,
+   *  e.g. isolved's {tenant}.myisolved.com). Persisted as `instance_url` to the
+   *  oauth-client company secret; the backend derives the API base + token
+   *  endpoint from it at runtime. Empty for fixed-host SaaS OAuth connectors. */
+  instanceUrl: string;
 }
 
 interface OAuthWizardProps {
@@ -134,10 +137,9 @@ export const OAuthWizard = ({
     extraAuthParams: '',
     clientId: '',
     clientSecret: '',
-    rateLimitRpm: '',
-    rateLimitDaily: '',
     customHeaders: [],
     customCredentials: {},
+    instanceUrl: '',
   };
 
   const [form, setForm] = useState<OAuthFormState>(emptyForm);
@@ -232,10 +234,9 @@ export const OAuthWizard = ({
             displayName: full.fields?.display_name || baseForm.displayName || '',
             icon: full.fields?.icon || baseForm.icon || '',
             description: full.fields?.description || baseForm.description || '',
-            rateLimitRpm: full.fields?.rate_limit_rpm || '',
-            rateLimitDaily: full.fields?.rate_limit_daily || '',
             customHeaders: parseCustomHeaders(full.fields?.custom_headers),
             customCredentials: loadedCustomCredentials,
+            instanceUrl: full.fields?.instance_url || '',
           });
         })
         .catch(() => {
@@ -309,6 +310,31 @@ export const OAuthWizard = ({
   const oauthSecretId = effectiveProviderId ? getOAuthSecretId(effectiveProviderId) : '';
   const secretName = oauthSecretId ? `oauth-client-${oauthSecretId}` : '';
   const registryEntry = getConnectorById(effectiveProviderId);
+
+  // Instance URL — only for customer-hosted OAuth connectors that have no fixed
+  // host (instanceUrlRequired, e.g. isolved's {tenant}.myisolved.com). The
+  // backend derives the API base + token endpoint from this value at runtime.
+  // Mirrors ApiKeyWizard's showInstanceUrl/instanceUrlError/handleSave logic.
+  const showInstanceUrl = Boolean(registryEntry?.instanceUrlRequired || registryEntry?.instanceUrlOptional);
+  const instanceUrlError = ((): string | null => {
+    const v = form.instanceUrl.trim();
+    if (!v) return null;
+    try {
+      const u = new URL(v);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return t('dataConnectors.apiKeyWizard.instanceUrlInvalidProtocol', {
+          defaultValue: 'Must start with http:// or https://',
+        });
+      }
+      if (!u.host) {
+        return t('dataConnectors.apiKeyWizard.instanceUrlInvalid', { defaultValue: 'Invalid URL' });
+      }
+      return null;
+    } catch {
+      return t('dataConnectors.apiKeyWizard.instanceUrlInvalid', { defaultValue: 'Invalid URL' });
+    }
+  })();
+  const instanceUrlMissing = Boolean(registryEntry?.instanceUrlRequired) && !form.instanceUrl.trim();
 
   // ---------------------------------------------------------------------------
   // Steps — dynamic based on isNew vs known template
@@ -393,9 +419,13 @@ export const OAuthWizard = ({
       case 'guide':
         return true;
       case 'credentials':
+        // Instance URL is required up-front for customer-hosted connectors even
+        // when the secret already exists (it can be re-entered/corrected), and a
+        // malformed value always blocks. Only enforce when the field is shown.
+        if (showInstanceUrl && (instanceUrlError !== null || instanceUrlMissing)) return false;
         if (!secretExists) {
           if (form.clientId.trim().length === 0) return false;
-          if (!registryEntry?.oauth?.hideClientSecret && form.clientSecret.trim().length === 0) return false;
+          if (form.clientSecret.trim().length === 0) return false;
 
           if (registryEntry?.credentialFields) {
             for (const field of registryEntry.credentialFields) {
@@ -509,15 +539,24 @@ export const OAuthWizard = ({
       // `1234567_SB1` and still get a resolvable hostname.
       let finalAuthUrl = form.authUrl.trim();
       let finalTokenUrl = form.tokenUrl.trim();
+      // base_url can also carry a per-instance placeholder (e.g. NetSuite's
+      // https://<ACCOUNT_ID>.suitetalk.api.netsuite.com) — interpolate it the
+      // same way so REST data requests resolve against the real host instead of
+      // a literal "<ACCOUNT_ID>" (or, worse, no base_url being written at all).
+      let finalBaseUrl = (registryEntry?.baseUrl ?? '').trim();
       const hostnameSafeKeys = new Set(
         (registryEntry?.credentialFields ?? []).filter((f) => f.hostnameSafe).map((f) => f.key)
       );
       Object.entries(form.customCredentials).forEach(([key, value]) => {
         const raw = value.trim();
         const safeValue = hostnameSafeKeys.has(key) ? raw.toLowerCase().replace(/_/g, '-') : raw;
+        // Literal global replace — a credentialField key containing a regex
+        // metachar (e.g. `.` or `+`) must not be treated as a pattern, so split
+        // on the literal placeholder and rejoin with the substituted value.
         const placeholder = `<${key.toUpperCase()}>`;
-        finalAuthUrl = finalAuthUrl.replace(new RegExp(placeholder, 'g'), safeValue);
-        finalTokenUrl = finalTokenUrl.replace(new RegExp(placeholder, 'g'), safeValue);
+        finalAuthUrl = finalAuthUrl.split(placeholder).join(safeValue);
+        finalTokenUrl = finalTokenUrl.split(placeholder).join(safeValue);
+        finalBaseUrl = finalBaseUrl.split(placeholder).join(safeValue);
       });
 
       // Shared config fields (auth endpoints, extra params)
@@ -527,23 +566,37 @@ export const OAuthWizard = ({
         ...form.customCredentials,
       };
 
-      if (form.extraAuthParams.trim()) fields.extra_auth_params = form.extraAuthParams.trim();
+      // ── Self-healing reconcile ─────────────────────────────────────────
+      // Re-saving must REPAIR drift, not just merge. Vault writes MERGE, so
+      // every registry-DERIVED field below is written on EVERY save — the
+      // current value, or '' to CLEAR what no longer applies — so reconfiguring
+      // reconciles the stored OAuth-client config to the current registry.
+      fields.extra_auth_params = form.extraAuthParams.trim();
 
-      // Non-standard auth header scheme (e.g. Zoho uses "Zoho-oauthtoken"
-      // instead of "Bearer"). Persist when the registry defines it; the
-      // backend connect_request reads this field and falls back to Bearer.
-      if (registryEntry?.authHeaderScheme) {
-        fields.auth_header_scheme = registryEntry.authHeaderScheme;
-      }
+      // Non-standard auth header scheme (e.g. Zoho's "Zoho-oauthtoken" instead
+      // of "Bearer"). The backend connect_request reads this and falls back to
+      // Bearer when empty. The literal `access-token` is a sentinel meaning the
+      // token rides in a header named `access-token` (Total Synergy).
+      fields.auth_header_scheme = registryEntry?.authHeaderScheme ?? '';
 
-      // Fixed-base-URL OAuth connectors (e.g. JobAdder): persist the registry
-      // baseUrl so the backend URL resolver finds it in the vault and agents
-      // can use relative request URLs. Mirrors the ApiKeyWizard write-back.
-      // Tenant-specific api_endpoint/instance_url values still win — the
-      // backend resolver checks base_url last.
-      if (registryEntry?.baseUrl) {
-        fields.base_url = registryEntry.baseUrl;
-      }
+      // Vendor-custom OAuth flow selector (e.g. Total Synergy's
+      // ApplicationKey/GetAccessToken/RefreshAccessToken flow). The
+      // oauth-auth-handler Lambda dispatches authorize/exchange/refresh to the
+      // matching adapter; empty → standard RFC-6749 path.
+      fields.oauth_adapter = registryEntry?.oauthAdapter ?? '';
+
+      // Fixed/per-instance base URL: persist (interpolated) so the backend URL
+      // resolver finds it and agents can use relative request URLs. Tenant
+      // api_endpoint/instance_url values still win — base_url is checked last.
+      fields.base_url = registryEntry?.baseUrl ? finalBaseUrl : '';
+
+      // Per-tenant API host for customer-hosted OAuth connectors
+      // (instanceUrlRequired, e.g. isolved). The backend derives the API base
+      // (<instance_url>/rest/api) and the token endpoint
+      // (<instance_url>/rest/api/token) from this. Written on EVERY save (value,
+      // or '' to clear when the field doesn't apply) so vault MERGE writes can't
+      // leave a stale host behind — mirrors ApiKeyWizard's handleSave.
+      fields.instance_url = showInstanceUrl ? form.instanceUrl.trim() : '';
 
       const connector = getConnectorById(pid);
       if (connector?.oauthPlatform) {
@@ -573,9 +626,6 @@ export const OAuthWizard = ({
         fields.display_name = form.displayName.trim();
         fields.icon = form.icon.trim();
         fields.description = form.description.trim();
-
-        if (form.rateLimitRpm.trim()) fields.rate_limit_rpm = form.rateLimitRpm.trim();
-        if (form.rateLimitDaily.trim()) fields.rate_limit_daily = form.rateLimitDaily.trim();
       }
 
       const validHeaders = form.customHeaders.filter((h) => h.name.trim() && h.value.trim());
@@ -627,7 +677,9 @@ export const OAuthWizard = ({
       // endpoint which navigates the browser on success, so we never actually
       // see 'success' here unless classification fails.
       const action = await ConnectorsService.connect(effectiveProviderId);
-      if (action.kind === 'redirecting') {
+      // 'redirecting' = standard OAuth (browser navigates); 'connected' =
+      // client-credentials connector (isolved) connected server-side, no redirect.
+      if (action.kind === 'redirecting' || action.kind === 'connected') {
         setTestResult('success');
       } else {
         setTestResult('failed');
@@ -726,6 +778,11 @@ export const OAuthWizard = ({
             </li>
           ))}
         </ol>
+        {/* Show the redirect URI here too: the setup steps tell the admin to
+            "give the provider the redirect URI shown below", and this is the
+            page that text appears on (it's also repeated on the Credentials
+            step for copy-convenience). */}
+        <div className="mt-3">{renderRedirectUri()}</div>
       </div>
     );
   };
@@ -795,22 +852,20 @@ export const OAuthWizard = ({
                 required
               />
             </Form.Group>
-            {!registryEntry?.oauth?.hideClientSecret && (
-              <Form.Group className={registryEntry?.credentialFields?.length ? 'mb-3' : ''}>
-                <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientSecret')}</Form.Label>
-                <Form.Control
-                  type="password"
-                  placeholder={t('dataConnectors.oauth.clientSecretPlaceholder')}
-                  value={form.clientSecret}
-                  onChange={(e) => updateForm({ clientSecret: e.target.value })}
-                  required
-                />
-              </Form.Group>
-            )}
+            <Form.Group className={registryEntry?.credentialFields?.length ? 'mb-3' : ''}>
+              <Form.Label className="small fw-semibold">{t('dataConnectors.oauth.clientSecret')}</Form.Label>
+              <Form.Control
+                type="password"
+                placeholder={t('dataConnectors.oauth.clientSecretPlaceholder')}
+                value={form.clientSecret}
+                onChange={(e) => updateForm({ clientSecret: e.target.value })}
+                required
+              />
+            </Form.Group>
 
             {registryEntry?.credentialFields?.map((field, idx) => (
               <Form.Group key={field.key} className={idx < registryEntry.credentialFields!.length - 1 ? 'mb-3' : ''}>
-                <Form.Label className="small fw-semibold">{field.label}</Form.Label>
+                <Form.Label className="small fw-semibold">{t(field.label)}</Form.Label>
                 <Form.Control
                   type={field.type === 'password' ? 'password' : 'text'}
                   placeholder={field.placeholder}
@@ -822,7 +877,7 @@ export const OAuthWizard = ({
                   }
                   required={field.required}
                 />
-                {field.helpText && <Form.Text className="text-muted">{field.helpText}</Form.Text>}
+                {field.helpText && <Form.Text className="text-muted">{t(field.helpText)}</Form.Text>}
               </Form.Group>
             ))}
           </>
@@ -872,6 +927,46 @@ export const OAuthWizard = ({
       )}
     </Col>
   );
+
+  // Instance URL field for customer-hosted OAuth connectors (instanceUrlRequired,
+  // e.g. isolved). Renders on the Credentials step alongside client_id/secret.
+  const renderInstanceUrl = () =>
+    showInstanceUrl ? (
+      <Col md={12}>
+        <Form.Group>
+          <Form.Label className="small fw-semibold">
+            {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
+            {!registryEntry?.instanceUrlRequired && (
+              <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+              </span>
+            )}
+          </Form.Label>
+          <Form.Control
+            type="url"
+            placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
+              defaultValue: 'https://your-instance.example.com',
+            })}
+            value={form.instanceUrl}
+            onChange={(e) => updateForm({ instanceUrl: e.target.value })}
+            isInvalid={instanceUrlError !== null}
+            autoComplete="off"
+          />
+          {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
+          <Form.Text className="text-muted small">
+            {registryEntry?.instanceUrlRequired
+              ? t('dataConnectors.apiKeyWizard.instanceUrlHelpRequired', {
+                  defaultValue:
+                    'Required — this connector is hosted at your own address with no default. Enter your full API URL.',
+                })
+              : t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
+                  defaultValue:
+                    "Only set this if your connector is hosted at your own (customer-specific) address. Leave empty to use the connector's built-in default.",
+                })}
+          </Form.Text>
+        </Form.Group>
+      </Col>
+    ) : null;
 
   const renderRedirectUri = () => (
     <Col md={12}>
@@ -1027,11 +1122,21 @@ export const OAuthWizard = ({
           {/* Credentials */}
           {renderCredentialsSection()}
 
+          {/* Instance URL — customer-hosted connectors only (isolved). Shown
+              before the redirect URI since the host scopes everything else. */}
+          {renderInstanceUrl()}
+
           {/* Redirect URI */}
           {renderRedirectUri()}
 
-          {/* Advanced OAuth settings (collapsible) */}
-          {renderAdvancedOAuthSettings()}
+          {/* Advanced OAuth settings — for custom/new providers, and for known
+              connectors that declare `editableOAuthUrls` (e.g. Zoho, whose
+              authorize/token hosts are per-region data centres the admin may
+              legitimately need to change). For every other known connector the
+              authorize/token URLs and extra params are registry-defined and must
+              never be edited by the admin, so the whole section is hidden to kill
+              the "needed or not?" ambiguity. */}
+          {(!isKnownTemplate || registryEntry?.editableOAuthUrls) && renderAdvancedOAuthSettings()}
         </Row>
       )}
 
@@ -1127,37 +1232,6 @@ export const OAuthWizard = ({
       {/* ── Docs & Advanced (custom/new flow: step 5) ── */}
       {stepContent === 'advanced' && (
         <Row className="g-3">
-          {/* Rate Limits */}
-          <Col md={12}>
-            <Form.Label className="small fw-semibold">{t('dataConnectors.oauthWizard.rateLimitsLabel')}</Form.Label>
-          </Col>
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label className="small text-muted">{t('dataConnectors.oauthWizard.rateLimitRpmLabel')}</Form.Label>
-              <Form.Control
-                type="number"
-                placeholder={t('dataConnectors.oauthWizard.rateLimitRpmPlaceholder')}
-                value={form.rateLimitRpm}
-                onChange={(e) => updateForm({ rateLimitRpm: e.target.value })}
-                min={0}
-              />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label className="small text-muted">
-                {t('dataConnectors.oauthWizard.rateLimitDailyLabel')}
-              </Form.Label>
-              <Form.Control
-                type="number"
-                placeholder={t('dataConnectors.oauthWizard.rateLimitDailyPlaceholder')}
-                value={form.rateLimitDaily}
-                onChange={(e) => updateForm({ rateLimitDaily: e.target.value })}
-                min={0}
-              />
-            </Form.Group>
-          </Col>
-
           {/* Custom Headers */}
           <Col md={12}>
             <Form.Label className="small fw-semibold">{t('dataConnectors.oauthWizard.customHeadersLabel')}</Form.Label>
@@ -1267,26 +1341,6 @@ export const OAuthWizard = ({
               <span className="text-muted">{t('dataConnectors.oauth.tokenUrl')}:</span>{' '}
               <span className="text-break">{form.tokenUrl}</span>
             </div>
-
-            {/* Rate Limits */}
-            {(form.rateLimitRpm || form.rateLimitDaily) && (
-              <>
-                <hr className="my-2" />
-                <h6 className="fw-semibold small text-muted mb-2">
-                  {t('dataConnectors.oauthWizard.reviewRateLimits')}
-                </h6>
-                {form.rateLimitRpm && (
-                  <div className="small">
-                    {t('dataConnectors.oauthWizard.reviewRpm', { count: Number(form.rateLimitRpm) })}
-                  </div>
-                )}
-                {form.rateLimitDaily && (
-                  <div className="small">
-                    {t('dataConnectors.oauthWizard.reviewDaily', { count: Number(form.rateLimitDaily) })}
-                  </div>
-                )}
-              </>
-            )}
 
             {/* Custom Headers */}
             {form.customHeaders.filter((h) => h.name.trim()).length > 0 && (

@@ -5,8 +5,8 @@ scope: connecting Numa to Total Synergy via OAuth 2.0 + token refresh
 auth: OAuth 2.0 authorization-code grant — **vendor-custom**, not RFC-6749-standard (custom param names, custom token endpoint on a different host, custom credential header `access-token`)
 credential_header: `access-token: <token>` on every API call — NOT `Authorization: Bearer`
 sibling: totalsynergy-api (same API; long-lived static key 1yr/3yr copied from a Synergy user profile, same `access-token` header). Documented fallback if OAuth is too painful for a tenant.
-confidence: NO live call made — values are [DOCUMENTED] from the dev portal/FAQ or [INFERRED]; 🔬 items need a live tenant. Phase 2 "first successful call" gate NOT satisfied — close it with the smoke test below.
-registry_blocker: committed registry entry declares standard placeholders (`app.totalsynergy.com/oauth2/authorize`, `app.totalsynergy.com/oauth2/token`, `scopes:''`) that DON'T match the real flow. Generic OAuth tooling won't work unmodified — wire the endpoints/params/header below into a Total-Synergy-specific adapter (see 03-connector-setup.md §3) before consent yields a usable token. 🚩
+confidence: endpoints/params/header [DOCUMENTED] + re-verified 2026-06-24 against developers.totalsynergy.com. Token-RESPONSE field casing is NOT published (🔬) — the adapter normalises both camelCase and snake_case. NO live token exchange made (no vendor app credentials) — Phase 2 "first successful call" gate still open; close it with the smoke test below once an app is registered.
+adapter_status: SHIPPED — the `totalsynergy` OAuth adapter (oauth-auth-handler authorize/exchange/refresh + connect_tools.py / oauth_tools.py outbound `access-token` header) implements the custom flow. The registry now declares the REAL endpoints + `oauthAdapter: 'totalsynergy'` + `authHeaderScheme: 'access-token'`. See 03-connector-setup.md §3.
 ---
 
 # Total Synergy (OAuth) — Connection & Reauthorization Guide

@@ -33,6 +33,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from tools import (
     handle_connect_netsuite_mcp,
     handle_connect_request,
+    handle_connect_soap_credentials,
     handle_connect_status,
     handle_connect_synergy_companies,
     handle_connect_synergy_contacts,
@@ -149,6 +150,12 @@ OAUTH_TOOL_HANDLERS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "connect_synergy_resolve": handle_connect_synergy_resolve,
     "connect_request": handle_connect_request,
     "connect_netsuite_mcp": handle_connect_netsuite_mcp,
+    # AutoPlay SOAP token passthrough — admin-gated company-credential exposure.
+    # Returns AutoPlay's SOAP api_key/api_token + dealer IDs + endpoint ONLY when
+    # the admin has set soap_token_passthrough == 'true' AND lead_api_enabled ==
+    # 'true' on the connector-config-autoplay company secret. See
+    # get_soap_passthrough_credentials() for the security rationale.
+    "connect_soap_credentials": handle_connect_soap_credentials,
 }
 
 

@@ -45,7 +45,7 @@ No admin step for user credentials — the wizard stores metadata only. Each use
 3. The agent surfaces this as an **inline credential card** asking for one field: **Personal Access Token** — the PIT (`pit-…`), with hint text pointing at HighLevel → Settings → Private Integrations.
 4. On submit, the token is stored as `connector-gohighlevel` in the **user's personal vault** (field `api_key`). The agent retries and the request succeeds.
 
-The agent never sees the token: the backend (`handle_connect_request` in `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`) reads it via `_user_connector_token` and injects `Authorization: Bearer pit-…` on every call. Agents never set that header — but MUST set Version on each request.
+The agent never sees the token: the backend (`handle_connect_request` in `lambdas/python/oauth-workspace-tools/tools/connect_tools.py`) reads it via `_user_connector_token` and injects `Authorization: Bearer pit-…` on every call. It also injects `Version: 2021-07-28` from the connector's `static_headers` (`_connector_static_headers`). Agents set neither header — they only override Version (`--headers '{"Version":"2023-02-21"}'`) to pin the newest contacts schema.
 
 ## 3. Credential lifetime / rotation
 
@@ -66,19 +66,19 @@ The agent never sees the token: the backend (`handle_connect_request` in `lambda
 - **403 Forbidden** — the token is **valid**; the PIT **lacks the scope** for that endpoint (chosen at creation). Fixed in HighLevel (Settings → Private Integrations) by editing/recreating with the right scopes. **Never re-prompt for credentials on a 403**, and never retry — not transient.
 - **404** — wrong path or id (also check the resource exists in _this_ PIT's location).
 - **400/422** — validation (bad fields, country values, non-E.164 phones). Not auth.
-- **429** — rate limited; budget unpublished. Back off 1s → 5s → 30s → 2m with jitter.
+- **429** — rate limited (burst 100/10s or 200k/day per location/company). Honour `Retry-After`/`X-RateLimit-*` if present, else back off 1s → 5s → 30s → 2m with jitter.
 - **5xx** — server error; retry once with backoff, then surface.
   Raw error **bodies** are undocumented — diagnose from the status code first; body text is supporting evidence.
 
 ### Reauthorization triggers
 
-| Trigger                           | Detection                              | Action                                                               |
-| --------------------------------- | -------------------------------------- | -------------------------------------------------------------------- |
-| PIT rotated / integration deleted | 401 on every call for affected users   | each user re-enters the PIT via the inline chat card                 |
-| Scope missing                     | 403 on specific endpoints only         | edit scopes in HighLevel → Private Integrations — **not** a Numa fix |
-| Missing Version header            | 4xx despite a known-good token         | agent adds Version to the request — not a credential issue           |
-| Rate limited                      | 429                                    | backoff with jitter; keep page-walks spaced                          |
-| Wrong location                    | 404 / empty results despite valid auth | confirm the PIT belongs to the intended sub-account                  |
+| Trigger                           | Detection                              | Action                                                                                                                                      |
+| --------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| PIT rotated / integration deleted | 401 on every call for affected users   | each user re-enters the PIT via the inline chat card                                                                                        |
+| Scope missing                     | 403 on specific endpoints only         | edit scopes in HighLevel → Private Integrations — **not** a Numa fix                                                                        |
+| Bad Version override              | 4xx despite a known-good token         | only possible if the agent sent a bad `--headers` Version override — drop it and let the injected `2021-07-28` ride. Not a credential issue |
+| Rate limited                      | 429                                    | honour `Retry-After`/`X-RateLimit-*`, else backoff with jitter; keep page-walks under 100/10s                                               |
+| Wrong location                    | 404 / empty results despite valid auth | confirm the PIT belongs to the intended sub-account                                                                                         |
 
 ## 5. Disconnect semantics
 
@@ -119,7 +119,7 @@ on 401: # nothing to refresh — the static PIT is bad (rotated/revoked/deleted)
   emit needs_credential → inline chat card re-prompts the user for the PIT
 on 403: do NOT re-prompt — the token works; the PIT lacks that endpoint's scope.
   user edits the integration's scopes in HighLevel (Settings → Private Integrations).
-on 429: backoff with jitter (1s → 5s → 30s → 2m); budget unpublished — never busy-retry.
+on 429: honour Retry-After/X-RateLimit-* if present, else backoff with jitter (1s → 5s → 30s → 2m); ceiling is 100/10s + 200k/day per location — never busy-retry.
 ```
 
 ## Events & future surfaces

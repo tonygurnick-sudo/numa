@@ -15,13 +15,13 @@ How the connector is wired into Numa: registry entry, admin wizard, storage, bac
 
 ## 1. Product context
 
-|              |                                                                          |
-| ------------ | ------------------------------------------------------------------------ |
-| Vendor       | HighLevel Inc. (branded "HighLevel"; known as GoHighLevel / GHL)         |
-| Product      | all-in-one CRM + marketing platform for agencies and SMBs                |
-| App URL      | `app.gohighlevel.com` (agencies may use white-label domains)             |
-| API base URL | `https://services.leadconnectorhq.com` (API 2.0; fixed SaaS host, HTTPS) |
-| Rate limits  | not published — 429 on breach; back off                                  |
+|              |                                                                                                                                                                |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vendor       | HighLevel Inc. (branded "HighLevel"; known as GoHighLevel / GHL)                                                                                               |
+| Product      | all-in-one CRM + marketing platform for agencies and SMBs                                                                                                      |
+| App URL      | `app.gohighlevel.com` (agencies may use white-label domains)                                                                                                   |
+| API base URL | `https://services.leadconnectorhq.com` (API 2.0; fixed SaaS host, HTTPS)                                                                                       |
+| Rate limits  | burst 100 req/10s + 200,000 req/day, per resource (location/company); 429 on breach with `X-RateLimit-*` headers — back off [DOCS marketplace.gohighlevel.com] |
 
 ⚠️ **API 2.0 only** — legacy API 1.0 (`rest.gohighlevel.com`) is deprecated; never call it.
 ⚠️ **No webhooks on this connector** — they require an OAuth marketplace app, not a PIT. Polling only.
@@ -32,12 +32,12 @@ Every call carries two GoHighLevel-specific headers:
 
 ```
 Authorization: Bearer pit-…        ← injected by the Numa backend (the secret)
-Version: 2021-07-28                ← set by the AGENT per request (a constant, not a secret); 2023-02-21 on contacts
+Version: 2021-07-28                ← injected by the Numa backend as a static header (a constant, not a secret); agent may override per-call (e.g. 2023-02-21 for the newest contacts schema)
 ```
 
 - **PIT** — created in HighLevel → Settings → Private Integrations → Create New Integration. Scopes chosen at creation; issued per sub-account (location); begins `pit-`.
 - The PIT is a **per-user secret in Numa**: pasted into the inline chat credential card on first use (stored as `api_key` in the personal vault). The admin wizard collects **no credential**.
-- The **Version header is mandatory** and selects the response shape. The backend does not add it — the agent passes it on each request.
+- The **Version header is mandatory** and selects the response shape. The backend **adds it automatically** from the registry's `staticHeaders` (`Version: 2021-07-28`), persisted to the company config secret as `static_headers` and merged into every request by `_connector_static_headers`. The agent does **not** need to set it — but a per-call `--headers '{"Version":"2023-02-21"}'` still wins (caller-supplied headers merge last), so use that to pin a specific endpoint family to a newer schema.
 - **Scope quirk:** a **403 means the PIT lacks a scope** chosen at creation — not bad credentials (that's 401). Fixed in HighLevel, never in Numa. See 04 §4.
 
 ## 3. Connector registry entry
@@ -55,7 +55,9 @@ File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts`
   baseUrl: 'https://services.leadconnectorhq.com',
   cachingPolicy: CACHING_PRESETS.projectManagement,
   // PIT ("pit-...") from HighLevel → Settings → Private Integrations, sent as Bearer;
-  // every request also needs a `Version` header, added by the agent (constant, not secret).
+  // every request also needs a `Version` header — injected automatically by the
+  // backend from staticHeaders (agent can override per-call for a newer schema).
+  staticHeaders: { Version: '2021-07-28' },
   credentialFields: [
     {
       key: 'api_key',
@@ -71,10 +73,11 @@ File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts`
 
 - `authType: 'token'` routes to the **single-token Bearer** credential path (same as Fergus/Workbench), with the PIT in the `api_key` vault field — the first key `_user_connector_token` looks for.
 - **No `adminFields`** — the admin flow is register + metadata only.
-- No `rateLimitRpm`/`rateLimitDaily`: GoHighLevel publishes no numbers (admins can enter overrides if limits are discovered).
+- `staticHeaders: { Version: '2021-07-28' }`: the only account-level header GHL requires on every call; the wizard persists it as `static_headers` JSON and the backend merges it in. This is the connector's one non-secret constant header.
+- No `rateLimitRpm`/`rateLimitDaily`: GHL's published limits are **burst-based** (100 req/10s, 200,000/day per location/company), not a flat per-minute quota, and the generic request path enforces no proactive cap — it surfaces the 429 to the agent, which backs off. Leaving these unset is intentional (a misleading RPM number would imply enforcement that doesn't exist). Admins can still enter advisory overrides in the wizard's advanced section.
 - `helpText` i18n key (`gohighlevelTokenHint`, `locales/en/integrations.json`) tells the user where the PIT comes from and that 401/403 usually means a missing scope.
 
-The slug is also in `infra/config/connectors.ts` → `NATIVE_CONNECTORS` (under "CRM / marketing"), feeding the unified Integrations catalog endpoint. **Known sync gap:** `_NATIVE_CONNECTOR_SLUGS` in `lambdas/python/workspace-chat-tools/tools/user_profile.py` lacks the newer slugs (`gohighlevel` included) — it only gates `integration:{slug}` memory scoping, but bring it in line when next touched.
+The slug is also in `infra/config/connectors.ts` → `NATIVE_CONNECTORS` (under "CRM / marketing"), feeding the unified Integrations catalog endpoint, and in `_NATIVE_CONNECTOR_SLUGS` in `lambdas/python/workspace-chat-tools/tools/user_profile.py` (the Python mirror that gates `integration:{slug}` memory scoping) — both lists are in sync.
 
 ## 4. Admin setup (Integrations → GoHighLevel)
 
@@ -95,7 +98,8 @@ Single company vault secret (category "Connector Config"):
 | `connector_type` | `token` |
 | `base_url` | `https://services.leadconnectorhq.com` — written from the registry when no instance URL is entered |
 | `credential_fields` | JSON snapshot of the per-user field (`api_key`, password, `pit-…` placeholder) — drives the inline chat credential card |
-No `api_key`/`api_key_header` (no admin credential or static account header) and no `credential_header_map` (Cin7 Core-style custom-header auth only). Re-running the wizard updates this same secret; a legacy `connector-gohighlevel` company secret is migrated and deleted on save.
+| `static_headers` | `{"Version":"2021-07-28"}` (JSON) — the constant Version header merged into every outbound request by `_connector_static_headers` |
+No `api_key`/`api_key_header` (no admin credential carried as a header) and no `credential_header_map` (Cin7 Core-style custom-header auth only). Re-running the wizard updates this same secret; a legacy `connector-gohighlevel` company secret is migrated and deleted on save.
 
 ### 4.2 Prerequisite on the GoHighLevel side
 
@@ -108,19 +112,21 @@ The agent calls `numa integrations request gohighlevel GET "/contacts/search?loc
 
 1. Expands the relative URL against the stored `base_url` (`_resolve_connector_base_url` → `https://services.leadconnectorhq.com` + `/contacts/search…`).
 2. Looks for an OAuth token (none), then the per-user token via **`_user_connector_token`** — the user's `connector-gohighlevel` personal-vault secret, first populated of `api_key`/`bearer_token`/`access_token`/`token` — and builds `Authorization: Bearer pit-…` (default Bearer scheme; no `_auth_header_scheme` override).
-3. `_connector_static_headers` contributes nothing (no `api_key`/`api_key_header` on the config); the agent-supplied headers (the Version header) merge last.
+3. `_connector_static_headers` contributes the `Version: 2021-07-28` header from the config secret's `static_headers` JSON (no `api_key`/`api_key_header` is set, so no account credential header). Any agent-supplied `--headers` (e.g. a `Version` override) merge last and win.
 4. No stored user credential → returns the structured `needs_credential` error (`_needs_credential_response`), surfaced as the **inline chat credential card** built from the `credential_fields` snapshot. On submit the PIT is written to the user's personal vault (`connector-gohighlevel`, field `api_key`) via the PAT credentials endpoint, and the request retries.
 
-The agent must **never** set `Authorization` (backend-injected; agent never sees the token) and **must** set `Version` on every call.
+The agent must **never** set `Authorization` (backend-injected; agent never sees the token). It does **not** need to set `Version` either (backend-injected from `static_headers`) — only pass `--headers '{"Version":"2023-02-21"}'` when deliberately pinning an endpoint family to a newer schema.
 
 ## 6. Smoke test after setup
 
 ```http
-# Cheapest authenticated probe (needs the Locations view scope)
+# Cheapest authenticated probe (needs the Locations view scope).
+# Both headers below are backend-injected; the agent sends neither.
 GET https://services.leadconnectorhq.com/locations/search?limit=1
-Version: 2021-07-28
+Authorization: Bearer pit-…      ← from the user's vault
+Version: 2021-07-28              ← from static_headers
 → 200 { locations: [...] }   — token valid, scope present; note the locationId
-→ 401                        — bad/rotated/revoked PIT (or missing Version header — verify)
+→ 401                        — bad/rotated/revoked PIT
 → 403                        — token VALID but the PIT lacks the Locations scope (fix in HighLevel)
 ```
 

@@ -1041,6 +1041,43 @@ export interface ConnectStatusEntry {
 /** Server returns a map of connector-slug → status entry. */
 export type ConnectStatusResult = Record<string, ConnectStatusEntry>;
 
+// ── Native — connect_soap_credentials (via oauth_workspace_tools) ────────────
+//
+// AutoPlay-only. Hands the agent the company-level SOAP credentials AutoPlay's
+// Lead API needs (its auth must be embedded in the SOAP <Authentication>
+// envelope, not as an HTTP header — the generic request path can't do that).
+// Deliberate credential disclosure, HARD-gated server-side on TWO admin opt-ins
+// stored on the AutoPlay connector config: `soap_token_passthrough == 'true'`
+// AND `lead_api_enabled == 'true'`. The connector is pinned to `autoplay` — no
+// other slug can reach this path. If any gate fails the handler returns an auth
+// error and exposes nothing. user_sub is dispatcher-injected. Source:
+// `lambdas/python/oauth-workspace-tools/tools/connect_tools.py:
+// handle_connect_soap_credentials`.
+
+export interface ConnectSoapCredentialsParams extends HitlParams {
+  /** Native connector slug — only `autoplay` is permitted. Defaults to `autoplay`. */
+  connector?: string;
+}
+
+/**
+ * Standard `{status, result, error}` envelope server-side; the CLI surfaces
+ * `result` as this shape on success. On any gate failure the handler returns
+ * `status: 'error'` with `result` null and NOTHING about the credentials leaks.
+ */
+export interface ConnectSoapCredentialsResult {
+  connector: string;
+  /** SOAP endpoint base URL (admin override, else AutoPlay's fixed Lead API URL). */
+  base_url: string;
+  /** Company-level SOAP API key — embedded in the <Authentication> envelope. */
+  api_key: string;
+  /** Company-level SOAP API token — embedded in the <Authentication> envelope. */
+  api_token: string;
+  /** Dealership identifier (may be empty string when the admin didn't set it). */
+  dealership_id: string;
+  /** Yard identifier (may be empty string when the admin didn't set it). */
+  yard_id: string;
+}
+
 // ── Native — connector file browsing (Synergy + OAuth cloud storage) ────────
 //
 // Restores the file ops the MCP `connect.py` tool exposed before the MCP→CLI
@@ -1718,6 +1755,7 @@ export type ToolCall =
   | { tool: 'pipedream_proxy_request'; params: PipedreamProxyRequestParams }
   | { tool: 'connect_request'; params: ConnectRequestParams }
   | { tool: 'connect_status'; params: ConnectStatusParams }
+  | { tool: 'connect_soap_credentials'; params: ConnectSoapCredentialsParams }
   | { tool: 'connect_synergy_list'; params: ConnectSynergyListParams }
   | { tool: 'connect_synergy_search'; params: ConnectSynergySearchParams }
   | { tool: 'connect_synergy_download'; params: ConnectSynergyDownloadParams }
@@ -1827,8 +1865,10 @@ export type ToolResult<T extends ToolName> = T extends 'query_knowledgebase'
                                                               ? ConnectRequestResult
                                                               : T extends 'connect_status'
                                                                 ? ConnectStatusResult
-                                                                : T extends 'connect_synergy_list'
-                                                                  ? ConnectorListResult
+                                                                : T extends 'connect_soap_credentials'
+                                                                  ? ConnectSoapCredentialsResult
+                                                                  : T extends 'connect_synergy_list'
+                                                                    ? ConnectorListResult
                                                                   : T extends 'connect_synergy_search'
                                                                     ? ConnectorListResult
                                                                     : T extends 'connect_synergy_download'

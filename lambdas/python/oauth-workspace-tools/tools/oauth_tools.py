@@ -282,6 +282,142 @@ def _get_friendly_secret_name(provider: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# isolved adapter — OAuth2 CLIENT-CREDENTIALS (no refresh token, re-mint)
+#
+# The company client_id/client_secret + per-tenant instance_url mint a Bearer
+# token directly. There is no per-user consent and no refresh token; the token
+# is re-minted from the company credentials whenever it expires. The token
+# endpoint is `<instance_url>/rest/api/token`.
+# ---------------------------------------------------------------------------
+
+
+def _get_oauth_adapter(provider: str) -> str:
+    """Read the persisted `oauth_adapter` for a provider from the company vault.
+
+    Mirrors the Node handler's getOAuthAdapter — the wizard persists the
+    registry's `oauthAdapter` onto the oauth-client company secret. Empty when
+    the provider uses the standard RFC-6749 path.
+    """
+    secrets = _get_consolidated_company_vault()
+    if not secrets:
+        return ""
+    platform = _OAUTH_PLATFORM_MAP.get(provider, provider)
+    for candidate in (f"oauth-client-{provider}", f"oauth-client-{platform}"):
+        entry = secrets.get(candidate)
+        if entry:
+            fields = entry.get("fields") or entry
+            adapter = str(fields.get("oauth_adapter") or "").strip()
+            if adapter:
+                return adapter
+    return ""
+
+
+def _isolved_token_url(creds: Dict[str, str]) -> Optional[str]:
+    """Build the isolved token endpoint from the company instance_url.
+
+    [VERIFY WITH PARTNER DOCS] — the token path (`/rest/api/token`) is the
+    design assumption; confirm against isolved's partner API docs. A vault
+    `token_url` (if present) wins so ops can correct it without a redeploy.
+    """
+    explicit = str(creds.get("token_url") or "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    host = str(creds.get("instance_url") or "").strip().rstrip("/")
+    if not host:
+        return None
+    # [VERIFY WITH PARTNER DOCS] token path
+    return f"{host}/rest/api/token"
+
+
+async def _mint_isolved_token(provider: str) -> Optional[dict]:
+    """Mint an isolved access token via the client-credentials grant.
+
+    Returns a dict shaped like a standard token response
+    ({access_token, expires_in}) or None. The company client_id/client_secret
+    and instance_url come from the COMPANY vault.
+    """
+    import httpx
+
+    creds = _get_provider_credentials(provider)
+    if not creds or not creds.get("client_id") or not creds.get("client_secret"):
+        logger.error(f"isolved: missing client credentials for {provider}")
+        return None
+
+    token_url = _isolved_token_url(creds)
+    if not token_url:
+        logger.error(f"isolved: no instance_url/token_url configured for {provider}")
+        return None
+
+    params = {
+        "grant_type": "client_credentials",
+        "client_id": creds["client_id"],
+        "client_secret": creds["client_secret"],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            response = await http_client.post(
+                token_url,
+                data=params,
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "Accept": "application/json",
+                },
+            )
+        if response.status_code != 200:
+            logger.warning(
+                f"isolved token mint failed for {provider}",
+                extra={
+                    "status_code": response.status_code,
+                    "response": response.text[:500],
+                },
+            )
+            return None
+        raw = response.json()
+        body = raw if isinstance(raw, dict) else {}
+        # Tolerate a nested envelope (d/data/result), like the Synergy path.
+        for _key in ("d", "data", "result"):
+            _nested = body.get(_key) if isinstance(body, dict) else None
+            if isinstance(_nested, dict) and (
+                _nested.get("access_token")
+                or _nested.get("access")
+                or _nested.get("Access")
+            ):
+                body = _nested
+                break
+        # [VERIFY WITH PARTNER DOCS] token field name — read defensively.
+        access = body.get("access_token") or body.get("access") or body.get("Access")
+        if not access:
+            logger.warning(
+                f"isolved token mint returned no access token for {provider}"
+            )
+            return None
+        # [VERIFY WITH PARTNER DOCS] expires_in field name + units (seconds).
+        # Coerce defensively: reject non-positive / absolute-epoch values.
+        _ten_years_seconds = 10 * 365 * 24 * 60 * 60
+        _exp_raw = body.get("expires_in")
+        if _exp_raw is None:
+            _exp_raw = body.get("expiresIn")
+        if _exp_raw is None:
+            _exp_raw = body.get("ExpiresIn")
+        try:
+            _expires_in = int(_exp_raw) if _exp_raw is not None else 3600
+        except (TypeError, ValueError):
+            _expires_in = 3600
+        if _expires_in <= 0 or _expires_in > _ten_years_seconds:
+            _expires_in = 3600
+        return {
+            "access_token": str(access),
+            "expires_in": _expires_in,
+        }
+    except Exception as e:
+        logger.error(
+            f"isolved token mint request failed for {provider}", extra={"error": str(e)}
+        )
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Token refresh
 # ---------------------------------------------------------------------------
 
@@ -321,6 +457,109 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
     if not token_url:
         logger.error(f"No token URL available for refresh: {provider}")
         return None
+
+    # ── Total Synergy adapter: vendor-custom refresh body + response casing ──
+    # The company vault entry carries oauth_adapter='totalsynergy' (persisted by
+    # the OAuth wizard from the registry). Synergy's refresh lives on
+    # .../Oauth2/RefreshAccessToken with applicationKey/ApplicationSecret/
+    # refreshToken/grant_type=authorization_code and returns custom-cased fields.
+    adapter = ""
+    if secrets:
+        for candidate in (f"oauth-client-{provider}", f"oauth-client-{platform}"):
+            entry = secrets.get(candidate)
+            if entry:
+                fields = entry.get("fields") or entry
+                adapter = str(fields.get("oauth_adapter") or "").strip()
+                if adapter:
+                    break
+
+    if adapter == "totalsynergy":
+        import re as _re
+
+        # Refresh lives on a DIFFERENT path from exchange (GetAccessToken ->
+        # RefreshAccessToken). Strip any query string and trailing slash first so
+        # the suffix match still anchors even if the stored token_url has a
+        # `?...` or trailing `/`. re.IGNORECASE mirrors the Node `/i`.
+        _base_url = _re.sub(r"[?#].*$", "", token_url)
+        _base_url = _re.sub(r"/+$", "", _base_url)
+        refresh_url = _re.sub(
+            r"GetAccessToken$", "RefreshAccessToken", _base_url, flags=_re.IGNORECASE
+        )
+        ts_params = {
+            "applicationKey": creds["client_id"],
+            "ApplicationSecret": creds.get("client_secret", ""),
+            "refreshToken": refresh_token,
+            "grant_type": "authorization_code",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as http_client:
+                ts_response = await http_client.post(
+                    refresh_url,
+                    data=ts_params,
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "Accept": "application/json",
+                    },
+                )
+            if ts_response.status_code == 200:
+                raw = ts_response.json()
+                # Tolerate a nested response envelope: some Synergy responses
+                # wrap the token payload under `d` / `data` / `result`. Pick the
+                # first object (including the top-level body) carrying a token.
+                _body = raw if isinstance(raw, dict) else {}
+                for _key in ("d", "data", "result"):
+                    _nested = _body.get(_key) if isinstance(_body, dict) else None
+                    if isinstance(_nested, dict) and (
+                        _nested.get("accessToken") or _nested.get("access_token")
+                    ):
+                        _body = _nested
+                        break
+                access = _body.get("accessToken") or _body.get("access_token") or ""
+                if not access:
+                    logger.warning(
+                        f"Total Synergy refresh returned no access token for {provider}"
+                    )
+                    return None
+                # Normalise to the snake_case shape get_oauth_token expects.
+                # Coerce expires_in to int: Synergy is a form-style API and may
+                # return the TTL as a string ("3600"); get_oauth_token does
+                # `now + expires_in`, which raises TypeError on a str and would
+                # silently turn a successful refresh into a failure. Only accept a
+                # plausible positive TTL (not <=0 and not an absolute unix-epoch
+                # timestamp > 10 years of seconds); otherwise default to 3600.
+                _ten_years_seconds = 10 * 365 * 24 * 60 * 60
+                _exp_raw = _body.get("expiresIn")
+                if _exp_raw is None:
+                    _exp_raw = _body.get("expires_in")
+                try:
+                    _expires_in = int(_exp_raw) if _exp_raw is not None else 3600
+                except (TypeError, ValueError):
+                    _expires_in = 3600
+                if _expires_in <= 0 or _expires_in > _ten_years_seconds:
+                    _expires_in = 3600
+                return {
+                    "access_token": access,
+                    "refresh_token": (
+                        _body.get("refreshToken")
+                        or _body.get("refresh_token")
+                        or refresh_token
+                    ),
+                    "expires_in": _expires_in,
+                }
+            logger.warning(
+                f"Total Synergy token refresh failed for {provider}",
+                extra={
+                    "status_code": ts_response.status_code,
+                    "response": ts_response.text[:500],
+                },
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                f"Total Synergy refresh request failed for {provider}",
+                extra={"error": str(e)},
+            )
+            return None
 
     params = {
         "grant_type": "refresh_token",
@@ -467,6 +706,78 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
         # Fallback: oauth-{provider} (OAuth tokens, or legacy single-token PAT).
         secret_key = f"oauth-{provider}"
         entry = secrets.get(secret_key)
+
+        # ── isolved adapter: CLIENT-CREDENTIALS — re-mint from the company
+        # credentials whenever the cached token is missing or expired. There is
+        # no per-user refresh token, so the standard refresh path below would
+        # bail; this short-circuit handles minting + caching instead. The cached
+        # token (with expires_at) is stored under the same oauth-{provider} entry
+        # so all the existing status/expiry plumbing keeps working. ──
+        if _get_oauth_adapter(provider) == "isolved":
+            cached_fields = (
+                (entry.get("fields") or entry) if isinstance(entry, dict) else {}
+            )
+            cached_token = (
+                cached_fields.get("access_token", "")
+                if isinstance(cached_fields, dict)
+                else ""
+            )
+            cached_expires_at = (
+                cached_fields.get("expires_at", "")
+                if isinstance(cached_fields, dict)
+                else ""
+            )
+            cached_expired = True
+            if cached_token and cached_expires_at:
+                try:
+                    _exp_dt = datetime.fromisoformat(
+                        cached_expires_at.replace("Z", "+00:00")
+                    )
+                    cached_expired = (
+                        _exp_dt - datetime.now(tz.utc)
+                    ).total_seconds() <= 5 * 60
+                except (ValueError, TypeError):
+                    cached_expired = True
+            if cached_token and not cached_expired:
+                _audit_oauth_fetch(user_sub, secret_key, provider)
+                return cached_token
+
+            logger.info(f"Minting isolved token (client-credentials) for {user_sub}")
+            minted = await _mint_isolved_token(provider)
+            if not minted or not minted.get("access_token"):
+                logger.warning(f"isolved token mint failed for user {user_sub}")
+                return None
+            new_access_token = minted["access_token"]
+            _expires_in = minted.get("expires_in", 3600)
+            _new_expires_at = datetime.fromtimestamp(
+                datetime.now(tz.utc).timestamp() + _expires_in, tz.utc
+            ).isoformat()
+            _now = datetime.now(tz.utc).isoformat()
+            new_entry = entry if isinstance(entry, dict) else {}
+            _raw_fields = new_entry.get("fields")
+            new_fields: Dict[str, Any] = (
+                dict(_raw_fields) if isinstance(_raw_fields, dict) else {}
+            )
+            new_fields.update(
+                {
+                    "provider": provider,
+                    "access_token": new_access_token,
+                    "expires_at": _new_expires_at,
+                    "connected_at": new_fields.get("connected_at") or _now,
+                }
+            )
+            new_entry["fields"] = new_fields
+            if "metadata" in new_entry and isinstance(new_entry["metadata"], dict):
+                new_entry["metadata"]["updated_at"] = _now
+            secrets[secret_key] = new_entry
+            vault_data["secrets"] = secrets
+            if "metadata" in vault_data and isinstance(vault_data["metadata"], dict):
+                vault_data["metadata"]["updated_at"] = _now
+            # Best-effort cache write — return the token even if persistence fails.
+            _put_user_consolidated_vault(user_sub, vault_data)
+            _audit_oauth_fetch(user_sub, secret_key, provider)
+            return new_access_token
+
         if not entry:
             logger.info(
                 f"No credential found for {provider} user {user_sub} "

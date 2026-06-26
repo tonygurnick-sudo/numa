@@ -2973,6 +2973,172 @@ def handle_connect_netsuite_mcp(params: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# AutoPlay SOAP token passthrough
+# ---------------------------------------------------------------------------
+#
+# AutoPlay's Lead API (`SaveLead`) is SOAP: the API credentials ride INSIDE the
+# SOAP envelope (an <Authentication> block with Key/Token), NOT as an HTTP
+# Authorization header. The generic `connect_request` path can only inject HTTP
+# auth headers, so it cannot authenticate a SOAP call — the agent has to build
+# the envelope itself, which means it needs the raw Key/Token in hand.
+#
+# These are COMPANY-level API credentials (one dealership account, shared by all
+# users), stored on the admin-managed `connector-config-autoplay` company vault
+# entry. We are deliberately exposing them to the LLM agent so it can embed them
+# in the SOAP body. That is a real, intentional credential disclosure, so it is
+# gated behind an explicit admin opt-in.
+
+
+# Vault entry prefixes that may carry the AutoPlay connector config. Mirrors the
+# `_connector_config` lookup order (admin wizard writes `connector-config-{id}`;
+# `connector-{id}` is the legacy fallback). We read raw here (rather than via
+# `_connector_config`) so we can also pick up the `oauth-client-autoplay` form
+# the wizard uses for some connectors.
+_AUTOPLAY_CONFIG_PREFIXES = ("connector-config-", "connector-", "oauth-client-")
+
+
+def get_soap_passthrough_credentials(connector: str, user_sub: str) -> Dict[str, Any]:
+    """Return AutoPlay's SOAP credentials + dealer IDs + endpoint, gated on the
+    admin opt-in toggle.
+
+    SECURITY — DELIBERATE CREDENTIAL EXPOSURE TO THE LLM AGENT.
+    AutoPlay's Lead API is SOAP: the API Key/Token must be embedded inside the
+    request body's <Authentication> element, not sent as an HTTP header. The
+    generic request path can only inject HTTP auth, so the agent has to build the
+    envelope itself and therefore needs the raw company `api_key`/`api_token`.
+    This function hands those company-level credentials to the model. Because
+    that is a real credential disclosure, it is hard-gated on TWO explicit admin
+    opt-ins stored on the company connector config (both as the string 'true'):
+
+      - ``soap_token_passthrough == 'true'`` — the admin has explicitly consented
+        to exposing the SOAP credentials to the agent.
+      - ``lead_api_enabled == 'true'``       — the Lead API surface (the only one
+        that needs the SOAP token) is enabled.
+
+    The connector is ALSO pinned to ``autoplay`` — no other connector can use
+    this path to siphon its company secret out to the model. If any gate fails,
+    we return a clear "not authorised" error and expose NOTHING (no api_key,
+    api_token, IDs or base_url leak into the result).
+
+    Args:
+        connector: connector slug the agent asked for — must be ``autoplay``.
+        user_sub:  the calling user's Cognito sub (presence-checked only; these
+                   are company-level credentials, not per-user).
+
+    Returns:
+        Standard ``{status, result, error}`` envelope. On success ``result`` is
+        ``{connector, base_url, api_key, api_token, dealership_id, yard_id}``.
+        On any gate failure ``status == 'error'``, ``result is None``.
+    """
+    if not user_sub:
+        return {"status": "error", "result": None, "error": "Missing user_sub"}
+
+    connector = (connector or "").strip().lower()
+    # Pin the connector: ONLY autoplay may ever reach the SOAP credential path.
+    # Without this, a request for connector='<anything>' that happened to carry a
+    # soap_token_passthrough field could exfiltrate that connector's secret.
+    if connector != "autoplay":
+        return {
+            "status": "error",
+            "result": None,
+            "error": (
+                "SOAP token passthrough is only available for the AutoPlay "
+                "connector."
+            ),
+        }
+
+    cfg = _connector_config(connector)
+
+    # Gate on the explicit admin opt-ins. Toggles are persisted as the strings
+    # 'true' / 'false'; treat anything that isn't exactly 'true' (after trim +
+    # lowercase) as OFF — fail closed. A missing field is OFF, never permissive.
+    def _flag(name: str) -> bool:
+        return str(cfg.get(name) or "").strip().lower() == "true"
+
+    passthrough_on = _flag("soap_token_passthrough")
+    lead_api_on = _flag("lead_api_enabled")
+
+    if not (passthrough_on and lead_api_on):
+        # Authorisation denied — expose NOTHING about the credentials. We log
+        # only the gate decision (booleans), never the secret values.
+        logger.info(
+            "autoplay_soap_passthrough_denied",
+            connector=connector,
+            soap_token_passthrough=passthrough_on,
+            lead_api_enabled=lead_api_on,
+        )
+        return {
+            "status": "error",
+            "result": None,
+            "error": (
+                "Not authorised: AutoPlay SOAP token passthrough is disabled. "
+                "Ask an admin to enable the 'soap_token_passthrough' toggle "
+                "(and 'lead_api_enabled') on the AutoPlay connector under "
+                "Settings -> Data Connectors."
+            ),
+            "error_code": "soap_passthrough_disabled",
+        }
+
+    api_key = str(cfg.get("api_key") or "").strip()
+    api_token = str(cfg.get("api_token") or "").strip()
+    if not (api_key and api_token):
+        return {
+            "status": "error",
+            "result": None,
+            "error": (
+                "AutoPlay connector is missing its API Key or API Token. Ask an "
+                "admin to re-save the connector under Settings -> Data Connectors."
+            ),
+        }
+
+    # baseUrl resolves through the shared helper (api_endpoint / instance_url /
+    # base_url on the company vault), falling back to AutoPlay's fixed Lead API
+    # SOAP endpoint when the admin didn't override it.
+    base_url = _resolve_connector_base_url(connector) or (
+        "https://lead-api.autoplay.co.nz/V2/LeadAPI.svc"
+    )
+
+    logger.info(
+        "autoplay_soap_passthrough_granted",
+        connector=connector,
+        user_sub=user_sub,
+        has_dealership_id=bool(cfg.get("dealership_id")),
+        has_yard_id=bool(cfg.get("yard_id")),
+    )
+
+    return {
+        "status": "success",
+        "result": {
+            "connector": connector,
+            "base_url": base_url,
+            "api_key": api_key,
+            "api_token": api_token,
+            "dealership_id": str(cfg.get("dealership_id") or "").strip(),
+            "yard_id": str(cfg.get("yard_id") or "").strip(),
+        },
+        "error": None,
+    }
+
+
+def handle_connect_soap_credentials(params: Dict[str, Any]) -> Dict[str, Any]:
+    """Tool handler: hand the agent AutoPlay's SOAP credentials, gated on the
+    admin opt-in (see ``get_soap_passthrough_credentials`` for the security
+    rationale — this deliberately exposes company API credentials to the LLM
+    because AutoPlay's SOAP auth must be embedded in the request body).
+
+    Params: ``connector`` (defaults to ``autoplay``) and the injected
+    ``user_sub``. Returns the standard ``{status, result, error}`` envelope.
+    """
+    user_sub = params.get("user_sub", "")
+    connector = (params.get("connector") or "autoplay").strip()
+    try:
+        return get_soap_passthrough_credentials(connector, user_sub)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Error in connect_soap_credentials", error=str(e), exc_info=True)
+        return {"status": "error", "result": None, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
 # Generic HTTP handler (for ad-hoc OAuth APIs)
 # ---------------------------------------------------------------------------
 
@@ -3106,7 +3272,13 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 # persists the expected prefix on the oauth-client vault entry so
                 # we don't have to hardcode a per-provider map here.
                 auth_scheme = _auth_header_scheme(connector) or "Bearer"
-                authorization = f"{auth_scheme} {access_token}"
+                if auth_scheme.lower() == "access-token":
+                    # SENTINEL (Total Synergy): the token rides in a header NAMED
+                    # `access-token`, NOT inside Authorization. Emit it as a custom
+                    # header and leave Authorization unset.
+                    custom_auth_headers = {"access-token": access_token}
+                else:
+                    authorization = f"{auth_scheme} {access_token}"
             else:
                 user_fields = _user_connector_fields(connector, user_sub)
                 header_map = _connector_header_map(connector)
@@ -3136,13 +3308,39 @@ def handle_connect_request(params: Dict[str, Any]) -> Dict[str, Any]:
                 **headers,
             }
 
-            async with httpx.AsyncClient(timeout=60) as client:
-                response = await client.request(
-                    method=method,
-                    url=url,
-                    headers=request_headers,
-                    json=body if body and method in ("POST", "PUT", "PATCH") else None,
+            # Body encoding: default is JSON (json=body forces
+            # Content-Type: application/json). But SOAP/XML connectors (e.g.
+            # AutoPlay's Lead API) need to POST a raw envelope with a non-JSON
+            # Content-Type. So we use the RAW path (httpx content=) — sending the
+            # body bytes verbatim and letting the caller's Content-Type stand —
+            # whenever the caller either (a) supplied a non-JSON Content-Type
+            # header, or (b) already passed the body as a raw string. Otherwise
+            # dict/list bodies keep the JSON path unchanged.
+            content_type = next(
+                (v for k, v in request_headers.items() if k.lower() == "content-type"),
+                None,
+            )
+            non_json_ct = bool(content_type and "json" not in content_type.lower())
+            send_body = bool(body) and method in ("POST", "PUT", "PATCH")
+            use_raw = send_body and (non_json_ct or isinstance(body, str))
+
+            request_kwargs: Dict[str, Any] = {
+                "method": method,
+                "url": url,
+                "headers": request_headers,
+            }
+            if use_raw:
+                # Raw passthrough: serialize a non-str body to text so httpx
+                # sends it as-is. Do NOT also set json= (that would clobber the
+                # caller's Content-Type back to application/json).
+                request_kwargs["content"] = (
+                    body if isinstance(body, str) else json.dumps(body)
                 )
+            elif send_body:
+                request_kwargs["json"] = body
+
+            async with httpx.AsyncClient(timeout=60) as client:
+                response = await client.request(**request_kwargs)
 
             # Try to parse response as JSON
             try:

@@ -3,7 +3,7 @@ api_name: GoHighLevel
 api_slug: gohighlevel
 base_url: https://services.leadconnectorhq.com
 path_version_segment: none (version is the Version header, never a path)
-auth: Bearer PIT (backend-injected); Version header mandatory every call
+auth: Bearer PIT (backend-injected); Version header backend-injected (2021-07-28 via static_headers) — agent need not set it
 field_casing: camelCase
 id_format: opaque strings (never parse/synthesize)
 tenant_key: locationId (required almost everywhere)

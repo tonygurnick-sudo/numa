@@ -39,9 +39,10 @@ File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` (entry 
   description: 'Flexible work management and collaboration platform',
   category: 'Project Management',
   authType: 'oauth2',
+  authHeaderScheme: 'OAuth2', // Podio rejects Bearer with 401 (TASK-108)
   oauth: {
     authUrl: 'https://podio.com/oauth/authorize',
-    tokenUrl: 'https://podio.com/oauth/token',
+    tokenUrl: 'https://api.podio.com/oauth/token/v2', // corrected (TASK-108)
     scopes: '',
     extraAuthParams: '{}',
   },
@@ -65,20 +66,20 @@ File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts` (entry 
 | `category`              | `Project Management`                                  | Same bucket as WorkflowMax, simPRO, Jobber                                                                                            |
 | `authType`              | `oauth2`                                              | Drives the generic `OAuthWizard.tsx`                                                                                                  |
 | `oauth.authUrl`         | `https://podio.com/oauth/authorize`                   | ✅ Matches Podio docs                                                                                                                 |
-| `oauth.tokenUrl`        | `https://podio.com/oauth/token`                       | ⚠️ **Discrepancy** — see §3. Documented endpoint is `https://api.podio.com/oauth/token/v2`                                            |
+| `oauth.tokenUrl`        | `https://api.podio.com/oauth/token/v2`                | ✅ Corrected (TASK-108) to Podio's documented token endpoint                                                                          |
 | `oauth.scopes`          | `''` (empty)                                          | ✅ Correct — Podio's scope model is coarse; server-side integrations omit `scope` (the token inherits the user's full permission set) |
 | `oauth.extraAuthParams` | `'{}'`                                                | ✅ Nothing extra needed (no `access_type`/`prompt` like Google/Zoho)                                                                  |
 | `oauthSetupSteps`       | 4-step list                                           | Rendered in the admin wizard as the "how to create the OAuth app" checklist                                                           |
 
 ### Fields NOT set (and whether they should be)
 
-| Optional field     | Currently | Recommendation                                                                                                                                                                                                                                                                          |
-| ------------------ | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `authHeaderScheme` | _(unset)_ | ⚠️ **Should be `'OAuth2'`.** Podio rejects `Bearer` with 401. The field defaults to `Bearer` when omitted, so the request path uses the wrong scheme unless set. Add `authHeaderScheme: 'OAuth2'`. (Persisted to the company vault at wizard-save time — picked up without a redeploy.) |
-| `surfaces`         | _(unset)_ | OK as-is. Default `['chat']` — correct for a Direct-API connector. Do **not** add `'files'`.                                                                                                                                                                                            |
-| `baseUrl`          | _(unset)_ | Not required for the registry; the API base (`https://api.podio.com`) is documented in 01-llm-api-rules.md for the agent                                                                                                                                                                |
-| `cachingPolicy`    | _(unset)_ | Optional. `CACHING_PRESETS.projectManagement` (1800s) would be reasonable, but caching is a Files-Remote-browse concern and Direct-API connectors don't use `useRemoteBrowse` — leaving it unset is fine                                                                                |
-| `eventTypes`       | _(unset)_ | Leave unset — webhooks aren't wired in Numa for this connector (see 01d / §webhooks)                                                                                                                                                                                                    |
+| Optional field     | Currently             | Recommendation                                                                                                                                                                                                                                                                                                        |
+| ------------------ | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `authHeaderScheme` | `'OAuth2'` (TASK-108) | ✅ **Set to `'OAuth2'`.** Podio rejects `Bearer` with 401; the field defaults to `Bearer` when omitted. The OAuthWizard persists it to the company vault (`oauth-client-podio.fields.auth_header_scheme`) at save time, and `connect_tools._auth_header_scheme()` reads it back at request time — no redeploy needed. |
+| `surfaces`         | _(unset)_             | OK as-is. Default `['chat']` — correct for a Direct-API connector. Do **not** add `'files'`.                                                                                                                                                                                                                          |
+| `baseUrl`          | _(unset)_             | Not required for the registry; the API base (`https://api.podio.com`) is documented in 01-llm-api-rules.md for the agent                                                                                                                                                                                              |
+| `cachingPolicy`    | _(unset)_             | Optional. `CACHING_PRESETS.projectManagement` (1800s) would be reasonable, but caching is a Files-Remote-browse concern and Direct-API connectors don't use `useRemoteBrowse` — leaving it unset is fine                                                                                                              |
+| `eventTypes`       | _(unset)_             | Leave unset — webhooks aren't wired in Numa for this connector (see 01d / §webhooks)                                                                                                                                                                                                                                  |
 
 The `ConnectorTemplate` interface (top of `connectorRegistry.ts`) defines every available field. The Zoho CRM entry is the reference for setting `authHeaderScheme` on a non-`Bearer` OAuth connector (`authHeaderScheme: 'Zoho-oauthtoken'`).
 
@@ -92,22 +93,23 @@ Registered redirect URI looks like: `https://{client-name}.numa.arcanum.ai/oauth
 
 The admin pastes **exactly** the string the wizard displays into the Podio API client's "Domain / Return URL" — Podio matches the redirect-URI **domain** against the domain registered with the API key (see 04 §1). HTTPS is required for production.
 
-## 3. tokenUrl discrepancy (action required)
+## 3. tokenUrl + auth scheme (FIXED — TASK-108)
 
-Registry sets `tokenUrl: 'https://podio.com/oauth/token'`. Podio's **documented** token endpoint (verified 2026-05-29 against developers.podio.com/authentication) is `https://api.podio.com/oauth/token/v2`. Historically `podio.com/oauth/token` aliased/redirected to v2, but the documented host is the safe one.
-**Recommended fix** (confirm on the first live connect before changing):
+The registry previously set `tokenUrl: 'https://podio.com/oauth/token'` with no `authHeaderScheme`. Podio's **documented** token endpoint (verified 2026-05-29 and re-confirmed 2026-06-24 against developers.podio.com/authentication) is `https://api.podio.com/oauth/token/v2`, and the API requires the `OAuth2` Authorization scheme (`Bearer` → 401). Both are now corrected in the registry:
 
 ```typescript
+authHeaderScheme: 'OAuth2',                            // ← added (Bearer → 401)
 oauth: {
   authUrl: 'https://podio.com/oauth/authorize',
-  tokenUrl: 'https://api.podio.com/oauth/token/v2',   // ← corrected
+  tokenUrl: 'https://api.podio.com/oauth/token/v2',   // ← corrected host + /v2 suffix
   scopes: '',
   extraAuthParams: '{}',
 },
-authHeaderScheme: 'OAuth2',                            // ← add this
 ```
 
-If the backend honours the current registry value and token exchange fails (unexpected redirect or 404 on the token POST), this discrepancy is the first thing to check.
+`tokenUrl` flows into the company vault `oauth-client-podio` entry at wizard-save time and is read by `oauth-auth-handler.getProviderConfig` (`fields.token_url`) at exchange/refresh time. `authHeaderScheme` is persisted as `auth_header_scheme` on the same entry and read by `connect_tools._auth_header_scheme()` at request time. Neither requires a Python/Node redeploy — admins re-saving the wizard (or a fresh connect) picks up the new values.
+
+If token exchange ever fails (unexpected redirect or 404 on the token POST) or live calls 401 with a fresh token, this is the first thing to re-check.
 
 ## 4. How the `ext-api-doc/podio/` files reach the agent
 
@@ -154,8 +156,8 @@ Direct-API connector — Files-Remote checklist items do not apply.
 **Registry / config:**
 
 - [x] Registry entry present (`id: 'podio'`); icon `bi-grid-3x3-gap`; `authType: 'oauth2'` with `oauth.authUrl`/`oauth.scopes`/`extraAuthParams` correct
-- [ ] **Add `authHeaderScheme: 'OAuth2'`** (Podio rejects `Bearer`) — §1, §3
-- [ ] **Correct `oauth.tokenUrl` to `https://api.podio.com/oauth/token/v2`** (confirm on first live connect) — §3
+- [x] **`authHeaderScheme: 'OAuth2'` added** (Podio rejects `Bearer`) — TASK-108, §1, §3
+- [x] **`oauth.tokenUrl` corrected to `https://api.podio.com/oauth/token/v2`** (confirm on first live connect) — TASK-108, §3
 - [x] `surfaces` left at default `['chat']` (do NOT add `'files'`)
 
 **Prompt docs (this folder):**

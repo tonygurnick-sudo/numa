@@ -11,6 +11,14 @@ companions: 02=dev spec, 04=connection/reauth
 
 # Connecteam (OAuth) — Connector & Integration Setup
 
+> ⚠️ **DISPOSITION (TASK-113): this connector is NOT self-service — see `05-disposition.md`.**
+> Connecteam's official OAuth 2.0 is **`client_credentials` only** (no consent endpoint, no
+> redirect, no refresh token); the registry's `authorization_code` `authUrl`/`tokenUrl` are
+> phantom endpoints that do not exist. The connector is being set to `selfService: false` and
+> removed from the self-service catalogs. **Use the API-key connector (`connecteam-api`) — the
+> same REST API, config-only, working today.** The wiring described below documents the _former_
+> (incorrect) self-service intent and is retained only for context.
+
 How the `connecteam-oauth` connector is wired into Numa. **This connector already exists** in the registry — this reproduces and explains the **actual** entry rather than proposing a new one.
 
 ## Integration Type

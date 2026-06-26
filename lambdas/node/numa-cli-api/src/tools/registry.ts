@@ -140,6 +140,11 @@ export const TOOL_REGISTRY: Record<string, ToolRoute> = {
   // doesn't have them — so they MUST be registered here explicitly).
   connect_status: { target: 'oauth_workspace_tools' },
   connect_request: { target: 'oauth_workspace_tools' },
+  // AutoPlay SOAP credential passthrough — hands the agent AutoPlay's gated
+  // SOAP creds (admin opt-in: soap_token_passthrough + lead_api_enabled).
+  // Like connect_status/connect_request, default-routes to workspace_chat_tools
+  // (no such handler) without this explicit entry → agent gets "not available".
+  connect_soap_credentials: { target: 'oauth_workspace_tools' },
 
   // Native-connector file browsing. These were the agent's only path to
   // connector files via the MCP `connect.py` tool, which the MCP→CLI

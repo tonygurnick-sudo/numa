@@ -3,6 +3,7 @@
 from .connect_tools import (
     handle_connect_netsuite_mcp,
     handle_connect_request,
+    handle_connect_soap_credentials,
     handle_connect_status,
     handle_connect_synergy_companies,
     handle_connect_synergy_contacts,
@@ -81,4 +82,6 @@ __all__ = [
     "handle_connect_synergy_resolve",
     "handle_connect_request",
     "handle_connect_netsuite_mcp",
+    # AutoPlay SOAP token passthrough (admin-gated company-credential exposure)
+    "handle_connect_soap_credentials",
 ]

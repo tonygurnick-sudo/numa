@@ -81,6 +81,9 @@ export type ConnectAction =
       displayName: string;
       fields: PATCredentialField[];
     }
+  // Client-credentials connectors (e.g. isolved) connect server-side with no
+  // redirect — the connection is established immediately, nothing to navigate to.
+  | { kind: 'connected' }
   | { kind: 'unsupported'; reason: string };
 
 // ---------------------------------------------------------------------------
@@ -210,6 +213,13 @@ export const ConnectorsService = {
       if (!result.success) {
         log('connect', connectorId, { result: 'oauth_failed', error: result.error });
         throw new Error(result.error || 'OAuth authorize failed');
+      }
+      // Client-credentials connectors (isolved) connect server-side with no
+      // redirect — OAuthProvidersService returns { connected: true } and does
+      // not navigate the window.
+      if (result.connected) {
+        log('connect', connectorId, { result: 'connected' });
+        return { kind: 'connected' };
       }
       log('connect', connectorId, { result: 'redirecting' });
       return { kind: 'redirecting' };

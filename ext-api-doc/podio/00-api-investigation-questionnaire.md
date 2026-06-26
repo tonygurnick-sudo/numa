@@ -1084,16 +1084,16 @@ Generating (all templates):
 
 ### 10.3 Confidence Report [REQUIRED]
 
-| Output Document              | Can Generate? | Confidence | Gaps                                                                                    |
-| ---------------------------- | ------------- | ---------- | --------------------------------------------------------------------------------------- |
-| 01-llm-api-rules             | yes           | medium     | Phase 2 gate not satisfied; dynamic schema must be stressed                             |
-| 01a-domain-model-reference   | yes           | medium     | Item fields are per-app — document the hierarchy + type shapes, not a fixed entity list |
-| 01b-query-patterns           | yes           | medium     | AND-only filters; filter is a heavy/rate-limited op                                     |
-| 01c-mutation-patterns        | yes           | medium     | Per-type write shapes; no bulk write; external_id is only dedupe                        |
-| 01d-event-and-error-handling | yes           | medium     | Unsigned webhooks; error catalogue partly inferred from SDKs                            |
-| 02-api-spec-investigation    | yes           | medium     | —                                                                                       |
-| 03-connector-setup           | n/a           | —          | Skipped — Direct API Only path                                                          |
-| 04-connection-and-reauth     | yes           | medium     | tokenUrl discrepancy + refresh rotation need live confirmation                          |
+| Output Document              | Can Generate? | Confidence | Gaps                                                                                      |
+| ---------------------------- | ------------- | ---------- | ----------------------------------------------------------------------------------------- |
+| 01-llm-api-rules             | yes           | medium     | Phase 2 gate not satisfied; dynamic schema must be stressed                               |
+| 01a-domain-model-reference   | yes           | medium     | Item fields are per-app — document the hierarchy + type shapes, not a fixed entity list   |
+| 01b-query-patterns           | yes           | medium     | AND-only filters; filter is a heavy/rate-limited op                                       |
+| 01c-mutation-patterns        | yes           | medium     | Per-type write shapes; no bulk write; external_id is only dedupe                          |
+| 01d-event-and-error-handling | yes           | medium     | Unsigned webhooks; error catalogue partly inferred from SDKs                              |
+| 02-api-spec-investigation    | yes           | medium     | —                                                                                         |
+| 03-connector-setup           | n/a           | —          | Skipped — Direct API Only path                                                            |
+| 04-connection-and-reauth     | yes           | medium     | tokenUrl + OAuth2 scheme fixed (TASK-108); refresh rotation still needs live confirmation |
 
 ---
 

@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Connector Registry — single source of truth for all 25+ platforms
-// MERGE: kept dev version — adds ConnectorEventType, eventTypes on Gmail,
-//   oauthSetupSteps, and enriched apiReference fields vs base wizard commit.
+// MERGE: kept dev version — adds oauthSetupSteps and enriched apiReference
+//   fields vs base wizard commit.
 // ---------------------------------------------------------------------------
 
 import type { ProviderTemplate } from './wizards/OAuthWizard';
@@ -15,7 +15,10 @@ export type ConnectorAuthType = 'oauth2' | 'api-key' | 'token' | 'username-passw
 export interface CredentialFieldDef {
   key: string;
   label: string;
-  type: 'text' | 'password' | 'url';
+  // 'checkbox' renders a boolean toggle (admin config only); the stored value
+  // is the string 'true' / 'false'. Used for per-connector capability switches
+  // (e.g. AutoPlay's Lead API / Listing API / token-passthrough toggles).
+  type: 'text' | 'password' | 'url' | 'checkbox';
   placeholder?: string;
   required: boolean;
   helpText?: string;
@@ -27,28 +30,18 @@ export interface CredentialFieldDef {
    * embed tenant identifiers in the hostname (e.g. NetSuite account IDs).
    */
   hostnameSafe?: boolean;
+  /**
+   * Small badge rendered next to a checkbox label (e.g. 'SOAP' on AutoPlay's
+   * Lead API toggle) to flag a non-standard protocol/behaviour to the admin.
+   */
+  tag?: string;
+  /**
+   * Checkbox-only: render disabled with a "Coming soon" note. Used for
+   * capabilities that are declared but not yet wired (e.g. AutoPlay's Listing
+   * API, pending the vendor's REST spec).
+   */
+  comingSoon?: boolean;
 }
-
-export interface ConnectorEventType {
-  id: string;
-  label: string;
-  description: string;
-  defaultTags: string[];
-  defaultEnabled: boolean;
-}
-
-// Per-connector cache TTL — controls how long the remote folder cache keeps a
-// folder listing in the in-memory + sessionStorage cache before refetching.
-// Picked per connector by data-change frequency.
-export interface CachingPolicy {
-  ttl: number; // seconds
-}
-
-export const CACHING_PRESETS: Record<string, CachingPolicy> = {
-  email: { ttl: 60 },
-  cloudStorage: { ttl: 300 },
-  projectManagement: { ttl: 1800 },
-};
 
 export interface ConnectorTemplate {
   id: string;
@@ -65,14 +58,27 @@ export interface ConnectorTemplate {
     scopes: string;
     extraAuthParams?: string;
     discoveryUrl?: string;
-    hideClientSecret?: boolean;
   };
 
   // Non-standard OAuth Authorization header scheme. Defaults to `Bearer`
   // when omitted. Zoho uses `Zoho-oauthtoken`; most providers use `Bearer`.
   // Persisted to the company vault at wizard save time so the backend
   // request path picks it up without a redeploy.
+  //
+  // SENTINEL: the literal value `access-token` means the OAuth access token is
+  // sent in a header NAMED `access-token` (not inside `Authorization` at all) —
+  // Total Synergy's custom scheme. The backend request path special-cases this.
   authHeaderScheme?: string;
+
+  // Selects a bespoke OAuth authorize/token-exchange/refresh adapter in the
+  // oauth-auth-handler Lambda when the provider's flow is NOT RFC-6749 standard
+  // (custom param/body names, non-standard token endpoint host/path, custom
+  // token-response field casing). `'totalsynergy'` builds the
+  // ApplicationKey/RedirectUri/tenant authorize URL and POSTs to
+  // api.totalsynergy.com/api/v2/Oauth2/GetAccessToken|RefreshAccessToken.
+  // Persisted to the company vault as `oauth_adapter` at wizard save time so
+  // the Lambda picks it up without a code change to the registry import.
+  oauthAdapter?: string;
 
   // Non-OAuth credential fields
   credentialFields?: CredentialFieldDef[];
@@ -114,6 +120,11 @@ export interface ConnectorTemplate {
   // on a blank value.
   instanceUrlRequired?: boolean;
 
+  // True = connector has a default baseUrl but ALSO supports an optional custom
+  // instance URL (e.g. GitLab self-managed). Keeps the wizard's Instance URL
+  // field visible even though baseUrl is set.
+  instanceUrlOptional?: boolean;
+
   // Common metadata
   baseUrl?: string;
   rateLimitRpm?: number;
@@ -122,14 +133,13 @@ export interface ConnectorTemplate {
   // OAuth-specific setup guidance
   oauthSetupSteps?: string[];
 
-  // Event types this connector can produce
-  eventTypes?: ConnectorEventType[];
+  // True = the admin may legitimately need to edit the authorize/token URLs
+  // (e.g. Zoho's per-region data-centre hosts). Keeps "Advanced OAuth Settings"
+  // visible for this connector; for all other known connectors it stays hidden.
+  editableOAuthUrls?: boolean;
 
   // OAuth platform family — connectors sharing the same OAuth client ('google' | 'microsoft')
   oauthPlatform?: string;
-
-  // Caching policy — sensible defaults per connector, admin can override in wizard
-  cachingPolicy?: CachingPolicy;
 
   // Where the connector surfaces in the UI. A file-browsing connector (e.g. Google Drive,
   // Dropbox, Gmail) shows up in Files > Remote; an API-only connector (e.g. Fergus, simPRO)
@@ -161,7 +171,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     featureFlag: 'SYNERGY',
     authType: 'token',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
+    instanceUrlRequired: true,
     // Per-user credential: just the PAT. instance_url is admin-level
     // (configured in ApiKeyWizard → connector-config-synergy.fields.instance_url)
     // because Synergy is customer-hosted and the URL is the same for every
@@ -171,8 +181,9 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         key: 'access_token',
         label: 'dataConnectors.fields.pat',
         type: 'password',
-        placeholder: 'Paste your Synergy personal access token',
+        placeholder: '',
         required: true,
+        helpText: 'dataConnectors.fields.synergyPatHint',
       },
     ],
   },
@@ -187,7 +198,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     oauthPlatform: 'google',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -196,11 +206,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
     },
     oauthSetupSteps: [
-      'Go to Google Cloud Console → APIs & Services → Credentials',
-      'Click "Create Credentials" → "OAuth Client ID"',
-      'Select "Web Application" as the application type',
-      'Add the redirect URI below under "Authorized redirect URIs"',
-      'Copy the Client ID and Client Secret',
+      'Go to Google Cloud Console → APIs & Services → Library and enable the Google Drive API',
+      'Go to APIs & Services → Credentials → Create Credentials → OAuth client ID',
+      "Choose 'Web application' as the application type",
+      "Under 'Authorized redirect URIs', add the redirect URI shown in this wizard (copy it verbatim — it must match exactly)",
+      "Copy the Client ID and Client Secret — you'll paste them on the next step (Credentials)",
     ],
   },
   {
@@ -212,7 +222,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     oauthPlatform: 'google',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.email,
     oauth: {
       authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
       tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -221,41 +230,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       discoveryUrl: 'https://accounts.google.com/.well-known/openid-configuration',
     },
     oauthSetupSteps: [
-      'Enable the Gmail API in Google Cloud Console → APIs & Services → Library',
-      'Go to Credentials → Create Credentials → OAuth Client ID',
-      'Select "Web Application" as the application type',
-      'Add the redirect URI below under "Authorized redirect URIs"',
-      'Copy the Client ID and Client Secret',
-    ],
-    eventTypes: [
-      {
-        id: 'new_email',
-        label: 'dataConnectors.events.newEmail',
-        description: 'dataConnectors.events.newEmailDesc',
-        defaultTags: ['email', 'incoming'],
-        defaultEnabled: true,
-      },
-      {
-        id: 'email_read',
-        label: 'dataConnectors.events.emailRead',
-        description: 'dataConnectors.events.emailReadDesc',
-        defaultTags: ['email', 'status'],
-        defaultEnabled: false,
-      },
-      {
-        id: 'label_changed',
-        label: 'dataConnectors.events.labelChanged',
-        description: 'dataConnectors.events.labelChangedDesc',
-        defaultTags: ['email', 'organization'],
-        defaultEnabled: false,
-      },
-      {
-        id: 'email_sent',
-        label: 'dataConnectors.events.emailSent',
-        description: 'dataConnectors.events.emailSentDesc',
-        defaultTags: ['email', 'outgoing'],
-        defaultEnabled: true,
-      },
+      'Go to Google Cloud Console → APIs & Services → Library and enable the Gmail API',
+      'Go to APIs & Services → Credentials → Create Credentials → OAuth client ID',
+      "Choose 'Web application' as the application type",
+      "Under 'Authorized redirect URIs', add the redirect URI shown in this wizard (copy it verbatim — it must match exactly)",
+      "Copy the Client ID and Client Secret — you'll paste them on the next step (Credentials)",
     ],
   },
   {
@@ -267,7 +246,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     oauthPlatform: 'microsoft',
     surfaces: ['files', 'chat'],
-    cachingPolicy: CACHING_PRESETS.cloudStorage,
     oauth: {
       authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
       tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
@@ -277,10 +255,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     },
     oauthSetupSteps: [
       'Go to Azure Portal → App registrations → New registration',
-      'Set a name and choose "Accounts in any organizational directory"',
+      'Set a name and choose "Accounts in any organizational directory and personal Microsoft accounts"',
       'Under "Redirect URIs", add the redirect URI shown below as type "Web"',
       'Go to Certificates & secrets → New client secret → copy the Value',
-      'Copy the Application (client) ID from the Overview page',
+      "Copy the Application (client) ID from the Azure app registration's Overview page (in Azure Portal)",
     ],
   },
   {
@@ -289,7 +267,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     icon: 'bi-dropbox',
     description: 'Access and browse Dropbox files',
     category: 'Cloud Storage',
-    cachingPolicy: CACHING_PRESETS.cloudStorage,
     authType: 'oauth2',
     surfaces: ['files', 'chat'],
     oauth: {
@@ -316,16 +293,22 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Project Management',
     authType: 'oauth2',
     oauth: {
+      // WorkflowMax by BlueRock — the live product since Xero retired the
+      // original Xero-hosted WorkflowMax on 26 Jun 2024. OAuth runs on
+      // BlueRock's own platform (oauth.workflowmax2.com), NOT Xero identity.
+      // offline_access is required to be issued a refresh token.
       authUrl: 'https://oauth.workflowmax2.com/oauth/authorize',
       tokenUrl: 'https://oauth.workflowmax2.com/oauth/token',
-      scopes: 'openid profile email workflowmax',
+      scopes: 'openid profile email workflowmax offline_access',
       extraAuthParams: '{"prompt":"consent"}',
     },
     oauthSetupSteps: [
-      'Log in to the Xero Developer portal (developer.xero.com)',
-      'Create a new app and select "Web app" as the integration type',
-      'Add the redirect URI below under "OAuth 2.0 redirect URIs"',
-      'Copy the Client ID and generate a Client Secret',
+      'Sign in to the Xero Developer Portal at developer.xero.com and open My Apps (WorkflowMax by BlueRock still registers OAuth apps here; the connection itself runs on workflowmax2.com)',
+      'Click "New app" and choose "Web app" as the integration type',
+      'Set the Company or application URL to your Numa address (e.g. https://yourco.numa.arcanum.ai)',
+      'Add the redirect URI shown below exactly as it appears under "OAuth 2.0 redirect URIs"',
+      'Copy the Client ID, then click "Generate a secret" and copy the Client Secret right away (it is shown only once)',
+      'Make sure the WorkflowMax user who connects has "Authorise 3rd Party Full Access" on their staff record, or the connection succeeds but every data request is rejected',
     ],
   },
   {
@@ -335,17 +318,22 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Flexible work management and collaboration platform',
     category: 'Project Management',
     authType: 'oauth2',
+    // Podio uses its own Authorization scheme — NOT Bearer (Bearer -> 401).
+    authHeaderScheme: 'OAuth2',
     oauth: {
       authUrl: 'https://podio.com/oauth/authorize',
-      tokenUrl: 'https://podio.com/oauth/token',
+      // Documented token endpoint is on api.podio.com with a /v2 suffix —
+      // different host from the authorize URL. https://developers.podio.com/authentication
+      tokenUrl: 'https://api.podio.com/oauth/token/v2',
       scopes: '',
       extraAuthParams: '{}',
     },
     oauthSetupSteps: [
-      'Go to Podio Developer Portal → API Keys',
-      'Create a new API client application',
-      'Set the redirect URI to the value shown below',
-      'Copy the Client ID and Client Secret',
+      'Sign in to Podio with an account that can create API keys and open podio.com/settings/api (the "API Keys" page)',
+      'Click "Generate API Key" to create a new API client application and name it (e.g. Numa Integration)',
+      'In the "Domain" / return-URL field, enter the domain of the redirect URI shown below (e.g. yourco.numa.arcanum.ai) — Podio matches on the domain, not the full URL, so the host must match exactly',
+      'Save, then copy the Client ID and copy the Client Secret right away (it is shown only once)',
+      'Paste both into this wizard',
     ],
   },
   {
@@ -356,15 +344,31 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Field Service',
     authType: 'oauth2',
     oauth: {
-      authUrl: 'https://login.simprogroup.com/oauth2/authorize',
-      tokenUrl: 'https://login.simprogroup.com/oauth2/token',
+      // simPRO OAuth runs on each customer's own build subdomain
+      // (https://<BUILD>.simprosuite.com), NOT a global host — the old
+      // login.simprogroup.com endpoint did not resolve. <BUILD> is interpolated
+      // from the build credentialField below (hostnameSafe).
+      authUrl: 'https://<BUILD>.simprosuite.com/oauth2/login',
+      tokenUrl: 'https://<BUILD>.simprosuite.com/oauth2/token',
       scopes: '',
     },
+    credentialFields: [
+      {
+        key: 'build',
+        label: 'simPRO build (subdomain)',
+        type: 'text',
+        placeholder: 'yourco',
+        required: true,
+        hostnameSafe: true,
+        helpText: 'dataConnectors.fields.simproBuildHint',
+      },
+    ],
     oauthSetupSteps: [
-      'Log in to the simPRO Developer Portal',
-      'Register a new application under your company',
-      'Add the redirect URI below to the application settings',
-      'Copy the Client ID and Client Secret from the app details',
+      'In simPRO go to System > Setup > API > Applications and click Add.',
+      'Set Access Type to OAuth 2.0 and Grant Type to Authorization Code.',
+      'Paste the redirect URI shown below into the Redirect URI field exactly as it appears, then Save.',
+      'simPRO shows the Client ID and Client Secret once — copy both now.',
+      'On the Credentials step, enter your build subdomain — the yourco in yourco.simprosuite.com.',
     ],
   },
   {
@@ -380,9 +384,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'read_clients read_jobs read_invoices',
     },
     oauthSetupSteps: [
-      'Go to Jobber Developer Portal → Create App',
-      'Fill in the app details and add the redirect URI below',
-      'Copy the Client ID and Client Secret from the app page',
+      'Sign in to the Jobber Developer Portal at developer.getjobber.com.',
+      'Click "Create App" and fill in an app name and description (both appear on the consent screen).',
+      'In the "OAuth callback URL" field, paste the redirect URI shown below exactly as it appears.',
+      'Copy the Client ID, then copy the Client Secret right away (it is shown only once).',
     ],
   },
   {
@@ -398,27 +403,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'wsReadOnly',
     },
     oauthSetupSteps: [
-      'Go to Wrike Developer Portal → Create App',
-      'Set the redirect URI to the value shown below',
-      'Copy the Client ID and Client Secret',
-    ],
-  },
-  {
-    id: 'connecteam-oauth',
-    displayName: 'Connecteam (OAuth)',
-    icon: 'bi-people',
-    description: 'Employee management — time clock, scheduling, and forms (OAuth)',
-    category: 'HR & Workforce',
-    authType: 'oauth2',
-    oauth: {
-      authUrl: 'https://app.connecteam.com/oauth/authorize',
-      tokenUrl: 'https://app.connecteam.com/oauth/token',
-      scopes: 'forms.read attachments.write',
-    },
-    oauthSetupSteps: [
-      'Go to Connecteam Developer Portal → Create an integration',
-      'Set the redirect URI to the value shown below',
-      'Copy the Client ID and Client Secret',
+      'Sign in to the Wrike App Console at www.wrike.com/appconsole.htm#/api with a Wrike admin account (or use the profile menu → Apps & Integrations → API).',
+      'Click "Create" / "New application" and name it (e.g. Numa Integration).',
+      'Add the redirect URI shown below exactly as it appears — Wrike requires a byte-for-byte match.',
+      'Copy the Client ID, then copy the Client Secret right away (it is shown only once).',
     ],
   },
   {
@@ -428,15 +416,25 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Architecture and engineering practice management (OAuth)',
     category: 'Project Management',
     authType: 'oauth2',
+    surfaces: ['chat'],
+    baseUrl: 'https://api.totalsynergy.com/api/v2',
+    // Total Synergy's OAuth flow is vendor-custom, NOT RFC-6749: the authorize
+    // URL uses ApplicationKey/RedirectUri/tenant (no response_type/scope/PKCE),
+    // the token endpoint lives on a different host+path, and the access token
+    // rides in a header literally named `access-token` (not Authorization).
+    // `oauthAdapter` selects the bespoke flow in oauth-auth-handler; the
+    // `access-token` sentinel on authHeaderScheme drives the outbound header.
+    oauthAdapter: 'totalsynergy',
+    authHeaderScheme: 'access-token',
     oauth: {
-      authUrl: 'https://app.totalsynergy.com/oauth2/authorize',
-      tokenUrl: 'https://app.totalsynergy.com/oauth2/token',
+      authUrl: 'https://app.totalsynergy.com/OAuth2/Authorize',
+      tokenUrl: 'https://api.totalsynergy.com/api/v2/Oauth2/GetAccessToken',
       scopes: '',
     },
     oauthSetupSteps: [
-      'Contact Total Synergy support to register an OAuth application',
-      'Provide them with the redirect URI shown below',
-      'They will supply you with a Client ID and Client Secret',
+      'Register an application at app.totalsynergy.com/Applications (or contact Total Synergy support if you cannot access it)',
+      "Copy the redirect URI shown in this wizard into the application's callback URI (it must match exactly)",
+      'Total Synergy gives you an ApplicationKey and an ApplicationSecret — paste the ApplicationKey as the Client ID and the ApplicationSecret as the Client Secret here',
     ],
   },
 
@@ -454,10 +452,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'openid profile email accounting.transactions.read accounting.contacts.read offline_access',
     },
     oauthSetupSteps: [
-      'Go to Xero Developer Portal (developer.xero.com) → My Apps',
-      'Click "New app" and select "Web app" as the integration type',
-      'Add the redirect URI below under "OAuth 2.0 redirect URIs"',
-      'Copy the Client ID and generate a Client Secret',
+      'Sign in to the Xero Developer Portal at developer.xero.com and open My Apps.',
+      'Click "New app" and choose "Web app" as the integration type.',
+      'Set the Company or application URL to your Numa address (e.g. https://yourco.numa.arcanum.ai).',
+      'Under "OAuth 2.0 redirect URIs", add the redirect URI shown below exactly as it appears (including any trailing slash).',
+      'Open the app\'s Configuration page, copy the Client ID, then click "Generate a secret" and copy the Client Secret right away (Xero shows it only once).',
     ],
   },
   {
@@ -473,10 +472,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'la',
     },
     oauthSetupSteps: [
-      'Go to my.myob.com and register for API keys',
-      'Create a new app under your MYOB developer account',
-      'Add the redirect URI below to the app settings',
-      'Copy the API Key (Client ID) and API Secret (Client Secret)',
+      "Go to developer.myob.com and submit 'Register for API Access' — MYOB emails you my.MYOB portal login details.",
+      'Sign in to my.MYOB, open the Developer tab, and click Register App.',
+      'Paste the redirect URI shown below into the Redirect URI field exactly as it appears (including any trailing slash).',
+      'Save — MYOB shows the API Key (Client ID) and API Secret (Client Secret); the secret is shown once, so copy both now.',
+      'Note: only a user with the Administrator role on the company file can complete the connection.',
     ],
   },
   {
@@ -487,12 +487,34 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'ERP',
     authType: 'oauth2',
     oauth: {
-      // Per-instance — admins configure their own endpoint via the wizard.
-      // These defaults are placeholders; auth/token URLs are instance-scoped.
-      authUrl: '',
-      tokenUrl: '',
-      scopes: 'api',
+      // Per-instance ERP — every customer is on their own host
+      // https://<INSTANCE_HOST>.myobadvanced.com. <INSTANCE_HOST> is
+      // interpolated from the instance_host credentialField below. MYOB
+      // Acumatica (Acumatica IdentityServer) serves OAuth2 at /identity/connect.
+      authUrl: 'https://<INSTANCE_HOST>.myobadvanced.com/identity/connect/authorize',
+      tokenUrl: 'https://<INSTANCE_HOST>.myobadvanced.com/identity/connect/token',
+      // offline_access is required for Acumatica to issue a refresh token;
+      // without it the connection silently expires when the access token does.
+      scopes: 'api offline_access',
     },
+    credentialFields: [
+      {
+        key: 'instance_host',
+        label: 'MYOB Acumatica instance',
+        type: 'text',
+        placeholder: 'yourco',
+        required: true,
+        hostnameSafe: true,
+        helpText: 'dataConnectors.fields.myobAcumaticaInstanceHint',
+      },
+    ],
+    oauthSetupSteps: [
+      'In your MYOB Acumatica instance open the Connected Applications screen (type SM303010 in the search box).',
+      'Click + to add a new application and set Flow Type to Authorization Code.',
+      'Paste the redirect URI shown below into the Redirect URI field exactly as it appears.',
+      'Save — Acumatica shows the Client ID and Client Secret; the secret is shown once, so copy both now. (The Client ID includes an @Company suffix — copy the whole value.)',
+      'On the Credentials step, enter your instance subdomain — the yourco in yourco.myobadvanced.com.',
+    ],
   },
   {
     id: 'zoho-crm',
@@ -502,7 +524,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'CRM',
     authType: 'oauth2',
     surfaces: ['chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
+    // Zoho's authorize/token hosts are per-region data centres (US / EU / IN /
+    // JP / CN / CA), so the admin may legitimately need to edit them — keep the
+    // wizard's Advanced OAuth Settings section visible for this connector.
+    editableOAuthUrls: true,
     // Zoho uses its own Authorization scheme — NOT Bearer.
     authHeaderScheme: 'Zoho-oauthtoken',
     oauth: {
@@ -515,11 +540,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       extraAuthParams: '{"access_type":"offline","prompt":"consent"}',
     },
     oauthSetupSteps: [
-      'Log in to the Zoho API Console for your data centre — AU: https://api-console.zoho.com.au/, US: https://api-console.zoho.com/, EU: https://api-console.zoho.eu/, IN: https://api-console.zoho.in/, JP: https://api-console.zoho.jp/, CN: https://api-console.zoho.com.cn/',
-      'Choose "Server-based Applications" as the client type and click Create Now',
-      'Enter a Client Name, set Homepage URL to your Numa URL, and paste the redirect URI shown below under "Authorized Redirect URIs"',
-      'Zoho returns a Client ID and Client Secret — copy both into this wizard',
-      'Non-AU customers: open Advanced below and replace `accounts.zoho.com.au` with your region host (e.g. `accounts.zoho.eu`). The API host changes in the same way — `www.zohoapis.{region}`.',
+      'Log in to the Zoho API Console for your data centre and click "Add Client" — AU: https://api-console.zoho.com.au/, US: https://api-console.zoho.com/, EU: https://api-console.zoho.eu/, IN: https://api-console.zoho.in/, JP: https://api-console.zoho.jp/, CN: https://api-console.zoho.com.cn/, CA: https://api-console.zohocloud.ca/',
+      'Choose "Server-based Applications" as the client type.',
+      'Set Client Name to a name your users will recognise, Homepage URL to your Numa address, and paste the redirect URI shown below under "Authorized Redirect URIs" exactly as it appears (one character off gives an "Invalid Redirect URI" error).',
+      'Save, then copy the Client ID and copy the Client Secret right away (the secret is shown only once).',
+      'Non-AU customers: on the Credentials step, open Advanced OAuth Settings and replace accounts.zoho.com.au in the Authorization and Token URLs with your region host (e.g. accounts.zoho.eu) — Canada is the exception: use accounts.zohocloud.ca, NOT accounts.zoho.ca.',
     ],
   },
   {
@@ -535,10 +560,11 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'com.intuit.quickbooks.accounting',
     },
     oauthSetupSteps: [
-      'Go to Intuit Developer Portal (developer.intuit.com) → Dashboard',
-      'Click "Create an app" and select "QuickBooks Online and Payments"',
-      'Under Keys & credentials → Redirect URIs, add the URI below',
-      'Copy the Client ID and Client Secret from the app dashboard',
+      'Sign in to the Intuit Developer Portal at developer.intuit.com and open your Dashboard.',
+      'Click "Create an app" and select "QuickBooks Online and Payments".',
+      'Open the app\'s "Keys & credentials" page and use Production keys for a live company (Development keys only hit the QuickBooks sandbox).',
+      'Under "Keys & credentials" → "Redirect URIs", add the redirect URI shown below exactly as it appears.',
+      'Copy the Client ID, then copy the Client Secret (treat it as secret; you can regenerate it later if needed).',
     ],
   },
 
@@ -551,7 +577,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Legal',
     authType: 'oauth2',
     surfaces: ['chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Global OAuth endpoints (production). Authorize is on go.actionstep.com;
     // the token exchange POSTs to api.actionstep.com. Scopes are space-separated
     // resource names — the scope picker (oauthScopeDefinitions.ts:actionstep)
@@ -575,15 +600,14 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'url',
         placeholder: 'https://ap-southeast-2.actionstep.com',
         required: true,
-        helpText:
-          'The region-specific REST base URL returned as api_endpoint in your Actionstep token response. All users in this workspace share one region.',
+        helpText: 'dataConnectors.fields.actionstepApiEndpointHint',
       },
     ],
     oauthSetupSteps: [
-      'Email api@actionstep.com (or your Actionstep account manager) to request API credentials for your firm',
-      'Provide them the redirect URI shown below; they issue a Client ID and Client Secret',
-      'Copy the Client ID and Client Secret into this wizard',
-      'After your first connection, paste your region API endpoint (e.g. https://ap-southeast-2.actionstep.com) into the API endpoint field above',
+      'Email api@actionstep.com (or your Actionstep account manager) and ask for API credentials for your firm.',
+      'Give them the redirect URI shown below; they register it and issue your Client ID and Client Secret.',
+      'Paste the Client ID and Client Secret into this wizard.',
+      'On the Credentials step, enter your regional API endpoint (e.g. https://ap-southeast-2.actionstep.com) — Actionstep provides this with your credentials.',
     ],
   },
 
@@ -598,7 +622,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'oauth2',
     selfService: false,
     surfaces: ['chat'],
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // PMO365 is a Microsoft Power Platform solution — it has no API of its
     // own; its data lives in the customer's Microsoft Dataverse environment
     // and is reached via the Dataverse Web API (OData v4, JSON) at
@@ -626,17 +649,16 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'url',
         placeholder: 'https://yourorg.crm.dynamics.com',
         required: true,
-        helpText:
-          'Your PMO365 environment Dataverse URL (Power Platform admin center → Environments → your environment → Environment URL). All users in this workspace share it; the Web API is served from {environment_url}/api/data/v9.2/.',
+        helpText: 'dataConnectors.fields.pmo365EnvironmentUrlHint',
       },
     ],
     oauthSetupSteps: [
-      'In the Microsoft Entra admin center → App registrations → New registration; choose "Accounts in any organizational directory".',
-      'Under Redirect URIs add the redirect URI shown below as type "Web".',
-      'API permissions → Add a permission → Dynamics CRM → Delegated → user_impersonation, then Grant admin consent.',
-      'Certificates & secrets → New client secret → copy the Value; copy the Application (client) ID from the Overview page.',
-      'In the Power Platform admin center, add an Application User for this app registration and give it a security role with read/write on the PMO365 tables.',
-      'Paste your environment URL above, then open Advanced and replace YOUR-ENV.crm.dynamics.com in the scope with your environment host.',
+      "In the Microsoft Entra admin center go to App registrations > New registration and choose 'Accounts in any organizational directory'.",
+      "Under Redirect URIs add the redirect URI shown below as type 'Web', exactly as it appears.",
+      'Go to API permissions > Add a permission > Dynamics CRM > Delegated > user_impersonation, then click Grant admin consent.',
+      'Go to Certificates & secrets > New client secret and copy the Value (shown once); copy the Application (client) ID from the Overview page.',
+      'In the Power Platform admin center add this app as an Application User and give it a security role with read/write on the PMO365 tables.',
+      'On the Credentials step, paste your Environment URL; then on the Permissions step edit the Scopes field and replace YOUR-ENV.crm.dynamics.com with your environment host (e.g. yourorg.crm.dynamics.com).',
     ],
   },
 
@@ -655,7 +677,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'password',
         placeholder: 'Paste your HireHop API token',
         required: true,
-        helpText: 'dataConnectors.fields.apiTokenHint',
+        helpText: 'dataConnectors.fields.hirehopApiTokenHint',
       },
       {
         key: 'base_url',
@@ -663,8 +685,13 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'url',
         placeholder: 'https://myhirehop.com',
         required: true,
-        helpText: 'dataConnectors.fields.baseUrlHint',
+        helpText: 'dataConnectors.fields.hirehopBaseUrlHint',
       },
+    ],
+    oauthSetupSteps: [
+      'In HireHop, switch to Admin mode → Settings → Users → your API user → open its Menu → API Token, and copy the token.',
+      'Your Base URL is the web address you log in to HireHop at (e.g. https://myhirehop.com) — not www.hirehop.com.',
+      'Each user enters their own HireHop API token (and base URL) when they first use HireHop in chat.',
     ],
   },
   {
@@ -674,14 +701,191 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Employee management — time clock, scheduling, and forms (API key)',
     category: 'HR & Workforce',
     authType: 'api-key',
+    baseUrl: 'https://api.connecteam.com',
+    // Connecteam authenticates with a static `X-API-KEY` header, NOT
+    // `Authorization: Bearer`. The map tells the generic request path
+    // (connect_tools.do_request → _headers_from_fields) which user credential
+    // field rides in which outbound header; ApiKeyWizard persists it as
+    // `credential_header_map` on the company vault — no backend redeploy.
+    credentialHeaderMap: { 'X-API-KEY': 'api_token' },
     credentialFields: [
       {
         key: 'api_token',
         label: 'dataConnectors.fields.apiToken',
         type: 'password',
-        placeholder: 'Paste your Connecteam API key',
+        placeholder: '',
         required: true,
+        helpText: 'dataConnectors.fields.connecteamApiKeyHint',
       },
+    ],
+  },
+  {
+    id: 'motion',
+    displayName: 'Motion',
+    icon: 'bi-calendar-check',
+    description: 'AI calendar, tasks, and project management',
+    category: 'Productivity',
+    authType: 'api-key',
+    baseUrl: 'https://api.usemotion.com/v1',
+    // Motion's individual plan caps at 12 requests/min (teams up to 120);
+    // surfaced so the request path can pace calls and back off on 429.
+    rateLimitRpm: 12,
+    // Motion authenticates with a per-user `X-API-Key` header (NOT Bearer).
+    // The field key is `api_token` (NOT `api_key`) on purpose — the backend
+    // get_oauth_token() probe grabs `api_key` as a bearer token and bypasses
+    // credentialHeaderMap; `api_token` (as connecteam-api uses) isn't in that
+    // probe, so the header-map branch fires. Each user supplies their own key.
+    credentialHeaderMap: { 'X-API-Key': 'api_token' },
+    credentialFields: [
+      {
+        key: 'api_token',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: '',
+        required: true,
+        helpText: 'dataConnectors.fields.motionApiKeyHint',
+      },
+    ],
+    oauthSetupSteps: [
+      'Log in to Motion (app.usemotion.com) and open Settings.',
+      'In the API / integrations area, create a new API key.',
+      'Copy the key immediately — Motion shows it only once.',
+      'Each user connects with their own key, entered in chat on first use.',
+    ],
+  },
+  {
+    id: 'isolved',
+    displayName: 'isolved',
+    icon: 'bi-people-fill',
+    description: 'HCM — employees, payroll, time and benefits (isolved People Cloud)',
+    category: 'HR & Workforce',
+    // isolved has a real REST API (per-tenant {tenant}.myisolved.com/rest/api).
+    // Auth is OAuth2 CLIENT-CREDENTIALS → Bearer — a company-level SERVICE
+    // credential (the admin's client_id/client_secret mint a token directly),
+    // NOT per-user authorization-code consent. There is no redirect/callback.
+    // Wired via the `isolved` adapter in oauth-auth-handler + oauth_tools.py:
+    // the authorize path mints a token (POST grant_type=client_credentials to
+    // <instance_url>/rest/api/token) and stores it as the user's connection;
+    // the request path re-mints on expiry. `instanceUrlRequired` makes the
+    // OAuthWizard collect the per-tenant host; the API base + token endpoint
+    // derive from it at runtime. authUrl is empty (no authorize redirect).
+    authType: 'oauth2',
+    oauthAdapter: 'isolved',
+    instanceUrlRequired: true,
+    surfaces: ['chat'],
+    oauth: {
+      authUrl: '',
+      tokenUrl: '',
+      scopes: '',
+    },
+    oauthSetupSteps: [
+      'Join the isolved Network Partner program and submit the API Questionnaire to register this integration; isolved issues an API Application client_id and client_secret.',
+      'Paste the client_id as Client ID and the client_secret as Client Secret here.',
+      'Enter your isolved Instance URL (e.g. https://yourco.myisolved.com) as the Instance URL — the API base is that host + /rest/api.',
+      'For each client, your isolved admin grants the partner user access: Security → Partner Users → Client Access → add the Client Code, then run Production Utilities → Refresh System Data.',
+    ],
+  },
+  {
+    id: 'net-inspect',
+    displayName: 'Net-Inspect',
+    icon: 'bi-clipboard-check',
+    description: 'Supplier quality & first-article inspection (AS9102 FAI, NCR, PPAP) for manufacturing supply chains',
+    category: 'Quality & Manufacturing',
+    // Net-Inspect operates a real API (api.net-inspect.com) + webhooks, but only
+    // under an enterprise/partner agreement — no self-serve portal and no public
+    // base URL / auth / endpoint spec. `contact-required` surfaces the connector
+    // with a "CONTACT REQUIRED" badge so customers can request access; the
+    // request-time auth + endpoints get wired once Net-Inspect supplies the spec.
+    authType: 'contact-required',
+    oauthSetupSteps: [
+      'Net-Inspect provides APIs and webhooks to enterprise customers under a partner agreement — there is no self-serve developer portal.',
+      'Contact Net-Inspect via your account rep (or net-inspect.com) and request API & Webhooks documentation plus integration credentials.',
+      'Once Net-Inspect supplies the base URL, auth scheme and endpoint spec, this connector is completed and enabled.',
+    ],
+  },
+  {
+    id: 'autoplay',
+    displayName: 'AutoPlay',
+    icon: 'bi-car-front',
+    description: 'Automotive dealership inventory, vehicle listings and lead management (AU/NZ)',
+    category: 'Automotive',
+    // AutoPlay is issued per dealer with a Key + Token. The Lead API (SaveLead)
+    // is SOAP — the credentials ride INSIDE the SOAP envelope, not as an HTTP
+    // header, so the generic request path can't inject them. The agent builds
+    // the envelope, which means the token has to be handed to it — gated by the
+    // `soap_token_passthrough` admin toggle. The Listing API (vehicle inventory
+    // pull) is declared but not yet wired (AutoPlay hasn't published a REST spec).
+    authType: 'api-key',
+    // Lead API SOAP endpoint (prod). Test: https://lead-api.aptest.co.nz/LeadAPI.svc
+    baseUrl: 'https://lead-api.autoplay.co.nz/V2/LeadAPI.svc',
+    adminFields: [
+      {
+        key: 'api_key',
+        label: 'dataConnectors.fields.apiKey',
+        type: 'password',
+        placeholder: '',
+        required: true,
+        helpText: 'dataConnectors.fields.autoplayApiKeyHint',
+      },
+      {
+        key: 'api_token',
+        label: 'dataConnectors.fields.apiToken',
+        type: 'password',
+        placeholder: '',
+        required: true,
+        helpText: 'dataConnectors.fields.autoplayApiTokenHint',
+      },
+      {
+        key: 'dealership_id',
+        label: 'dataConnectors.fields.autoplayDealershipId',
+        type: 'text',
+        placeholder: 'e.g. 1234',
+        required: true,
+        helpText: 'dataConnectors.fields.autoplayDealershipIdHint',
+      },
+      {
+        key: 'yard_id',
+        label: 'dataConnectors.fields.autoplayYardId',
+        type: 'text',
+        placeholder: 'e.g. 1',
+        required: false,
+        helpText: 'dataConnectors.fields.autoplayYardIdHint',
+      },
+      {
+        // SOAP — the agent builds a SaveLead envelope; flagged with a SOAP tag
+        // so the admin (and Numa) know this capability is not a REST call.
+        key: 'lead_api_enabled',
+        label: 'dataConnectors.fields.autoplayLeadApi',
+        type: 'checkbox',
+        required: false,
+        tag: 'SOAP',
+        helpText: 'dataConnectors.fields.autoplayLeadApiHint',
+      },
+      {
+        // Coming soon: AutoPlay hasn't published the Listing (inventory) REST spec.
+        key: 'listing_api_enabled',
+        label: 'dataConnectors.fields.autoplayListingApi',
+        type: 'checkbox',
+        required: false,
+        comingSoon: true,
+        helpText: 'dataConnectors.fields.autoplayListingApiHint',
+      },
+      {
+        // The SOAP credentials live in the request body, so the agent needs the
+        // token to build the envelope. This toggle is the admin's explicit
+        // authorisation to expose it to the agent.
+        key: 'soap_token_passthrough',
+        label: 'dataConnectors.fields.autoplaySoapPassthrough',
+        type: 'checkbox',
+        required: false,
+        helpText: 'dataConnectors.fields.autoplaySoapPassthroughHint',
+      },
+    ],
+    oauthSetupSteps: [
+      'In AutoPlay, go to Settings → Company Settings → API Management and create an API record — AutoPlay issues a unique Key + Token (and your Dealership / Yard IDs).',
+      'Paste the Key, Token and Dealership ID here, and tick "Lead API".',
+      'The Lead API is SOAP, so its credentials must travel inside the request envelope — tick "Authorise passing the API token to the agent" so Numa can build SaveLead calls.',
+      'The Listing API (vehicle inventory pull) is coming soon — pending AutoPlay publishing its REST spec.',
     ],
   },
   {
@@ -691,20 +895,24 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Architecture and engineering practice management (API key)',
     category: 'Project Management',
     authType: 'api-key',
+    baseUrl: 'https://api.totalsynergy.com/api/v2',
+    // Total Synergy's API-key auth uses a custom header literally named
+    // `access-token` (NOT Authorization: Bearer). The map tells the backend
+    // request path which user credential field rides in which outbound header;
+    // ApiKeyWizard persists it as `credential_header_map` on the company vault.
+    // NOTE: the field key is `api_token` (not `api_key`) on purpose — the backend
+    // get_oauth_token() probe list grabs `api_key` and treats it as an OAuth
+    // bearer token, bypassing credentialHeaderMap. `api_token` (as connecteam-api
+    // uses) isn't in that probe list, so the header-map branch fires correctly.
+    credentialHeaderMap: { 'access-token': 'api_token' },
     credentialFields: [
       {
-        key: 'api_key',
+        key: 'api_token',
         label: 'dataConnectors.fields.apiKey',
         type: 'password',
-        placeholder: 'Paste your Total Synergy API key',
+        placeholder: '',
         required: true,
-      },
-      {
-        key: 'instance_url',
-        label: 'dataConnectors.fields.instanceUrl',
-        type: 'url',
-        placeholder: 'https://yourcompany.totalsynergy.com',
-        required: true,
+        helpText: 'dataConnectors.fields.totalsynergyApiKeyHint',
       },
     ],
   },
@@ -717,6 +925,12 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Connect to Oracle NetSuite ERP for customers, orders, invoices, inventory, and financial reports',
     category: 'ERP',
     authType: 'oauth2',
+    // REST API base for data requests. <ACCOUNT_ID> is interpolated from the
+    // account_id credentialField at save time (sandbox `1234567_SB1` → host
+    // `1234567-sb1`). Without this the backend resolver finds no base_url and
+    // relative SuiteTalk REST paths can't resolve. (The MCP scope path reads
+    // account_id directly and doesn't use base_url.)
+    baseUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com',
     oauth: {
       authUrl: 'https://<ACCOUNT_ID>.app.netsuite.com/app/login/oauth2/authorize.nl',
       tokenUrl: 'https://<ACCOUNT_ID>.suitetalk.api.netsuite.com/services/rest/auth/oauth2/v1/token',
@@ -740,13 +954,21 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         key: 'account_id',
         label: 'NetSuite Account ID',
         type: 'text',
-        placeholder: 'e.g. 1234567 or 1234567_SB1',
+        placeholder: '1234567 or 1234567_SB1',
         required: true,
         hostnameSafe: true,
-        helpText: 'Your NetSuite Account ID. This is required for OAuth routing.',
+        helpText: 'dataConnectors.fields.netsuiteAccountIdHint',
       },
     ],
-    cachingPolicy: { ttl: 3600 },
+    oauthSetupSteps: [
+      'In NetSuite go to Setup > Integration > Manage Integrations > New, name it (e.g. Numa Integration), and set State to Enabled.',
+      "Check 'OAuth 2.0 Authorization Code Grant', then choose a Scope: REST Web Services for normal data access (or NetSuite AI Connector Service for MCP).",
+      'On the Permissions step of this wizard, tick the SAME scope you selected on the NetSuite integration record — REST Web Services for normal data access, or AI Connector (MCP) if you chose NetSuite AI Connector Service. MCP cannot be combined with the others.',
+      "Leave 'Public Client' UNCHECKED — this creates a Confidential Client so NetSuite issues a Client Secret (Numa requires it for the REST Web Services / RESTlets / SuiteAnalytics scopes).",
+      'Paste the redirect URI shown below into the Redirect URI field exactly as it appears.',
+      'Save — NetSuite shows BOTH the Client ID and the Client Secret once on the confirmation screen; copy both now (they are never shown again).',
+      'On the Credentials step, enter your Account ID — found in NetSuite at Setup > Company > Company Information > Account ID (a number like 1234567).',
+    ],
   },
   {
     id: 'workbench',
@@ -760,8 +982,9 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         key: 'bearer_token',
         label: 'dataConnectors.fields.bearerToken',
         type: 'password',
-        placeholder: 'Paste your Workbench bearer token',
+        placeholder: '',
         required: true,
+        helpText: 'dataConnectors.fields.workbenchBearerTokenHint',
       },
       {
         key: 'instance_url',
@@ -769,6 +992,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'url',
         placeholder: 'https://yourcompany.workbench.com',
         required: true,
+        helpText: 'dataConnectors.fields.workbenchInstanceUrlHint',
       },
     ],
   },
@@ -779,13 +1003,15 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     description: 'Job management for trade businesses',
     category: 'Field Service',
     authType: 'token',
+    baseUrl: 'https://api.fergus.com',
     credentialFields: [
       {
         key: 'api_key',
-        label: 'dataConnectors.fields.apiKey',
+        label: 'dataConnectors.fields.pat',
         type: 'password',
-        placeholder: 'Paste your Fergus API key',
+        placeholder: 'fergPAT_…',
         required: true,
+        helpText: 'dataConnectors.fields.fergusApiKeyHint',
       },
     ],
   },
@@ -806,6 +1032,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'url',
         placeholder: 'https://myserver.fmi.filemaker-cloud.com',
         required: true,
+        helpText: 'dataConnectors.fields.filemakerServerUrlHint',
       },
       {
         key: 'username',
@@ -813,6 +1040,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'text',
         placeholder: 'admin',
         required: true,
+        helpText: 'dataConnectors.fields.filemakerUsernameHint',
       },
       {
         key: 'password',
@@ -825,7 +1053,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         key: 'database',
         label: 'dataConnectors.fields.database',
         type: 'text',
-        placeholder: 'MyDatabase',
+        placeholder: 'Inventory',
         required: true,
         helpText: 'dataConnectors.fields.databaseHint',
       },
@@ -839,13 +1067,15 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Workflow',
     authType: 'username-password',
     selfService: false,
+    baseUrl: 'https://publicapi.flowingly.net',
     credentialFields: [
       {
         key: 'username',
         label: 'dataConnectors.fields.username',
         type: 'text',
-        placeholder: 'user@company.com',
+        placeholder: 'admin@company.com',
         required: true,
+        helpText: 'dataConnectors.fields.flowinglyUsernameHint',
       },
       {
         key: 'password',
@@ -866,11 +1096,20 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     selfService: false,
     credentialFields: [
       {
+        key: 'instance_url',
+        label: 'dataConnectors.fields.instanceUrl',
+        type: 'url',
+        placeholder: 'https://yourco.printiq.com',
+        required: true,
+        helpText: 'dataConnectors.fields.printiqInstanceUrlHint',
+      },
+      {
         key: 'username',
         label: 'dataConnectors.fields.username',
         type: 'text',
         placeholder: 'apiuser',
         required: true,
+        helpText: 'dataConnectors.fields.printiqUsernameHint',
       },
       {
         key: 'password',
@@ -885,6 +1124,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'text',
         placeholder: 'MyApp',
         required: true,
+        helpText: 'dataConnectors.fields.printiqAppNameHint',
       },
       {
         key: 'app_key',
@@ -892,6 +1132,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
         type: 'password',
         placeholder: 'Paste your app key',
         required: true,
+        helpText: 'dataConnectors.fields.printiqAppKeyHint',
       },
     ],
   },
@@ -904,7 +1145,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'username-password',
     baseUrl: 'https://api.proworkflow.net',
     rateLimitRpm: 1000, // API allows 500 requests per 30s per account API key
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // The API requires TWO auth mechanisms on every request: the account-level
     // API key (apikey header, admin-entered below) AND the user's own
     // ProWorkflow login as Basic auth — PWF enforces that user's permissions.
@@ -944,7 +1184,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'ERP',
     authType: 'username-password',
     instanceUrlRequired: true,
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Customer-hosted: the Greentree API is its own web server on the
     // customer's box (default port 9000), so the admin sets the instance URL
     // and the API must be internet-reachable over HTTPS. Every request needs
@@ -988,7 +1227,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'ERP',
     authType: 'token',
     instanceUrlRequired: true,
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Customer-hosted (self-hosted Windows service on the customer's own
     // infrastructure) — there is no fixed cloud base URL. The admin MUST set
     // the instance URL in the wizard, and the API must be reachable from the
@@ -1015,7 +1253,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     baseUrl: 'https://api.cin7.com/api',
     rateLimitRpm: 60, // 3/sec, 60/min, 5,000/day per API connection
     rateLimitDaily: 5000,
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Basic auth: API username + API key (created in Cin7 Omni Settings →
     // Integrations & API). Permissions are per-endpoint on the key — a 403
     // means the key lacks that endpoint's permission, not bad credentials.
@@ -1046,7 +1283,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     authType: 'api-key',
     baseUrl: 'https://inventory.dearsystems.com/externalapi/v2',
     rateLimitRpm: 60, // 60/min per application key
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Cin7 Core authenticates with TWO custom headers, not Authorization —
     // the map below tells the backend which user credential field rides in
     // which header on every request.
@@ -1080,7 +1316,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Volunteer Management',
     authType: 'username-password',
     baseUrl: 'https://api.betterimpact.com/v1',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // An admin-created API key yields a username + password pair sent as
     // HTTP Basic auth. Key scope is module-based — a key without the
     // Volunteer module checked returns no volunteers.
@@ -1110,7 +1345,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Rental Management',
     authType: 'token',
     baseUrl: 'https://api.rentman.net',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Workspace API token (Configuration → Account → Integrations → API →
     // Show token), sent as a Bearer token. Note: Rentman also runs a
     // first-party MCP server beta (mcp.rentman.net, OAuth 2.1 + PKCE) —
@@ -1134,7 +1368,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'Recruitment',
     authType: 'oauth2',
     baseUrl: 'https://api.jobadder.com/v2',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     oauth: {
       authUrl: 'https://id.jobadder.com/connect/authorize',
       tokenUrl: 'https://id.jobadder.com/connect/token',
@@ -1143,9 +1376,10 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
       scopes: 'read write offline_access',
     },
     oauthSetupSteps: [
-      'Go to the JobAdder Developer Centre (developers.jobadder.com) → register an application',
-      'Add the redirect URI below to the application',
-      'Copy the Client ID and Client Secret from the application page',
+      'Sign in to the JobAdder Developer Centre at developers.jobadder.com as an administrator',
+      'Register a new application',
+      "Copy the redirect URI shown in this wizard into the application's redirect URIs (it must match exactly)",
+      'Copy the Client ID and Client Secret from the application page, then paste them on the next step (Credentials).',
     ],
   },
   {
@@ -1156,7 +1390,6 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     category: 'CRM',
     authType: 'token',
     baseUrl: 'https://services.leadconnectorhq.com',
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Private Integration Token ("pit-..."), created per sub-account in
     // HighLevel → Settings → Private Integrations. Sent as a Bearer token.
     // Every request additionally needs a constant `Version` header — injected
@@ -1166,7 +1399,7 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     credentialFields: [
       {
         key: 'api_key',
-        label: 'dataConnectors.fields.pat',
+        label: 'dataConnectors.fields.privateIntegrationToken',
         type: 'password',
         placeholder: 'pit-…',
         required: true,
@@ -1187,9 +1420,9 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     // wizard to their own API root (e.g. https://gitlab.example.com/api/v4) —
     // the backend resolver prefers the vault instance_url over this base_url.
     baseUrl: 'https://gitlab.com/api/v4',
+    instanceUrlOptional: true,
     surfaces: ['chat'],
     rateLimitRpm: 2000, // GitLab.com authenticated default is ~2,000 req/min/user
-    cachingPolicy: CACHING_PRESETS.projectManagement,
     // Per-user Personal Access Token (glpat-…), sent as a Bearer token — GitLab
     // accepts a PAT in the Authorization: Bearer header just like an OAuth
     // token. The token carries that user's own GitLab permissions.

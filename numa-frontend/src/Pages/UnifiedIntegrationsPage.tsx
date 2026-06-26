@@ -597,6 +597,18 @@ export const UnifiedIntegrationsPage = () => {
     if (action.kind === 'redirecting') {
       return; // window will navigate
     }
+    if (action.kind === 'connected') {
+      // Client-credentials connector (isolved) connected server-side — no
+      // redirect, no modal. Clear the marker and refresh so the card shows
+      // connected.
+      try {
+        sessionStorage.removeItem('integrations-return-path');
+      } catch {
+        /* ignore */
+      }
+      await reload({ forceRefresh: true });
+      return;
+    }
     // PAT flow doesn't redirect → clear the marker we just set.
     try {
       sessionStorage.removeItem('integrations-return-path');

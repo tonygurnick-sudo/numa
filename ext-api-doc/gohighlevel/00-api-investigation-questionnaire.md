@@ -22,6 +22,21 @@ generated_date: '2026-06-10'
 > the official npm SDK README (`@gohighlevel/api-client`), and community pagination references.
 > Reformatted into the standard pack structure on 2026-06-10 — no new HTTP research was done.
 >
+> 🔄 **2026-06-24 docs re-verification (supersedes two claims below, [DOCS marketplace.gohighlevel.com]):**
+>
+> 1. **Rate limits ARE published** — the original investigation marked them `[UNKNOWN]`, but the
+>    HighLevel docs state a **burst limit of 100 requests / 10 seconds** and a **daily limit of
+>    200,000 requests / day**, each **per resource (Location or Company), per Marketplace app**.
+>    Responses carry `X-RateLimit-Max`, `X-RateLimit-Remaining`, `X-RateLimit-Interval-Milliseconds`,
+>    `X-RateLimit-Limit-Daily`, `X-RateLimit-Daily-Remaining`. 429 remains the authoritative live
+>    signal. Wherever this file says "rate limits unknown/unpublished," read the numbers above.
+> 2. **The `Version` header is now backend-injected** — the connector registry carries
+>    `staticHeaders: { Version: '2021-07-28' }`, the admin wizard persists it as `static_headers`,
+>    and `_connector_static_headers` merges it into every request. Wherever this file says the agent
+>    "must set the Version header on every call," that is now wrong: the backend supplies it and the
+>    agent only overrides it (`--headers '{"Version":"2023-02-21"}'`) to pin the newest contacts schema.
+>    Error-body shape and live auth behaviour remain unverified (still no credentials).
+>
 > ⚠️ **NO AUTHENTICATED CALL has been made.** The API host blocks headless/scripted GETs,
 > `/swagger.json` returned empty, and no credentials were available. Every claim below is
 > docs-derived; auth behaviour, error bodies, and rate limits are NOT live-verified.
@@ -59,17 +74,17 @@ generated_date: '2026-06-10'
 
 ### 1.3 Documentation Quality Assessment [REQUIRED]
 
-| Area                      | Rating | Notes                                                                       |
-| ------------------------- | ------ | ---------------------------------------------------------------------------- |
-| Authentication            | 5      | PIT + OAuth both documented with token samples and step-by-step flows [DOCS] |
-| Endpoint reference        | 4      | Per-module pages, 28+ endpoint families; no machine-readable spec            |
+| Area                      | Rating | Notes                                                                          |
+| ------------------------- | ------ | ------------------------------------------------------------------------------ |
+| Authentication            | 5      | PIT + OAuth both documented with token samples and step-by-step flows [DOCS]   |
+| Endpoint reference        | 4      | Per-module pages, 28+ endpoint families; no machine-readable spec              |
 | Request/response examples | 3      | Endpoint pages carry examples; full response bodies hard to extract headlessly |
-| Error documentation       | 2      | Status codes listed per endpoint; raw error JSON shape nowhere [UNKNOWN]     |
-| Rate limit documentation  | 1      | **No numeric thresholds published anywhere** — 429 behaviour only [UNKNOWN]  |
-| Pagination documentation  | 3      | startAfter/startAfterId cursors documented; corroborated by community guides |
-| Webhook documentation     | 5      | Excellent — 50+ events, payloads, signatures, retries, circuit breaker [DOCS] |
-| SDKs / code examples      | 5      | Official TS + Python SDKs with full service coverage and README [DOCS]       |
-| Changelog / versioning    | 3      | Version header documented; changelog page exists but was not fetched          |
+| Error documentation       | 2      | Status codes listed per endpoint; raw error JSON shape nowhere [UNKNOWN]       |
+| Rate limit documentation  | 1      | **No numeric thresholds published anywhere** — 429 behaviour only [UNKNOWN]    |
+| Pagination documentation  | 3      | startAfter/startAfterId cursors documented; corroborated by community guides   |
+| Webhook documentation     | 5      | Excellent — 50+ events, payloads, signatures, retries, circuit breaker [DOCS]  |
+| SDKs / code examples      | 5      | Official TS + Python SDKs with full service coverage and README [DOCS]         |
+| Changelog / versioning    | 3      | Version header documented; changelog page exists but was not fetched           |
 
 **Overall documentation quality:** good (auth/webhooks/SDKs excellent; rate limits and error bodies are the holes)
 
@@ -113,23 +128,23 @@ e.g. GET /contacts/{contactId} · GET /opportunities/search · POST /conversatio
 - **Versioning strategy: REQUIRED `Version` request header on every call** — this is the single
   most common cause of failed first calls [DOCS]:
 
-| Header value  | Status                                                          |
-| ------------- | ---------------------------------------------------------------- |
-| `2023-02-21`  | Current — documented on contacts endpoints [DOCS]                |
-| `2021-07-28`  | Supported — used in OAuth/locationToken and MCP examples [DOCS]  |
-| `2021-04-15`  | Supported (legacy) [DOCS]                                        |
+| Header value | Status                                                          |
+| ------------ | --------------------------------------------------------------- |
+| `2023-02-21` | Current — documented on contacts endpoints [DOCS]               |
+| `2021-07-28` | Supported — used in OAuth/locationToken and MCP examples [DOCS] |
+| `2021-04-15` | Supported (legacy) [DOCS]                                       |
 
-  The `Version` header determines the response shape — different versions may return different
-  field names/structures [DOCS]. It is a constant, **not a secret**: in Numa the agent sets it
-  per request (the backend injects only `Authorization`).
+The `Version` header determines the response shape — different versions may return different
+field names/structures [DOCS]. It is a constant, **not a secret**: in Numa the agent sets it
+per request (the backend injects only `Authorization`).
 
 - **Required headers (all requests):**
 
-| Header          | Value                       | Purpose                                        |
-| --------------- | --------------------------- | ----------------------------------------------- |
-| `Authorization` | `Bearer <token>`            | PIT or OAuth access token [DOCS]                |
-| `Version`       | e.g. `2021-07-28`           | API version selection — **mandatory** [DOCS]    |
-| `Content-Type`  | `application/json`          | POST/PUT/PATCH bodies [DOCS]                    |
+| Header          | Value              | Purpose                                      |
+| --------------- | ------------------ | -------------------------------------------- |
+| `Authorization` | `Bearer <token>`   | PIT or OAuth access token [DOCS]             |
+| `Version`       | e.g. `2021-07-28`  | API version selection — **mandatory** [DOCS] |
+| `Content-Type`  | `application/json` | POST/PUT/PATCH bodies [DOCS]                 |
 
 - **CORS policy:** [UNVERIFIED] — irrelevant for Numa (server-side proxy)
 
@@ -137,10 +152,10 @@ e.g. GET /contacts/{contactId} · GET /opportunities/search · POST /conversatio
 
 Two distinct methods [DOCS — https://marketplace.gohighlevel.com/docs/Authorization/authorization_doc]:
 
-| Method                                  | Use case                                                   | Numa relevance        |
-| --------------------------------------- | ----------------------------------------------------------- | --------------------- |
-| **Private Integration Token (PIT)**     | Internal/single sub-account use; no webhooks needed         | **Primary — v1 path** |
-| **OAuth 2.0 (Authorization Code)**      | Public marketplace apps, multi-account installs, webhooks   | Documented alternative — out of scope for the Numa connector v1 |
+| Method                              | Use case                                                  | Numa relevance                                                  |
+| ----------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------- |
+| **Private Integration Token (PIT)** | Internal/single sub-account use; no webhooks needed       | **Primary — v1 path**                                           |
+| **OAuth 2.0 (Authorization Code)**  | Public marketplace apps, multi-account installs, webhooks | Documented alternative — out of scope for the Numa connector v1 |
 
 **Auth header format (both methods):** `Authorization: Bearer <token>` [DOCS]
 
@@ -238,15 +253,15 @@ Accept: application/json
 
 #### Other entities (summary) [DOCS]
 
-| Entity        | Key fields                                            | Notes                                |
-| ------------- | ----------------------------------------------------- | ------------------------------------ |
-| Invoice       | `id`, `locationId`, `contactId`, `status`, `total`    | Full lifecycle endpoints             |
+| Entity              | Key fields                                         | Notes                                             |
+| ------------------- | -------------------------------------------------- | ------------------------------------------------- |
+| Invoice             | `id`, `locationId`, `contactId`, `status`, `total` | Full lifecycle endpoints                          |
 | Order / Transaction | `id`, `locationId`, `contactId`, `total`, `status` | `/payments/orders/{id}`, `/payments/transactions` |
-| Workflow      | `id`, `locationId`, `name`, `status`                  | Get + trigger                        |
-| User          | `id`, `companyId`, `email`, `name`, `role`            | Agency/location users                |
-| Company       | `id`, `name`                                          | Agency (top level)                   |
-| Custom Field  | `id`, `locationId`, `name`, `fieldKey`, `dataType`    | Per-location definitions             |
-| Form / Survey | —                                                     | Read-only submission sources         |
+| Workflow            | `id`, `locationId`, `name`, `status`               | Get + trigger                                     |
+| User                | `id`, `companyId`, `email`, `name`, `role`         | Agency/location users                             |
+| Company             | `id`, `name`                                       | Agency (top level)                                |
+| Custom Field        | `id`, `locationId`, `name`, `fieldKey`, `dataType` | Per-location definitions                          |
+| Form / Survey       | —                                                  | Read-only submission sources                      |
 
 ### 3.2 Entity Relationships [IMPORTANT]
 
@@ -273,21 +288,21 @@ Company (Agency)
 ### 3.4 Business Rules [IMPORTANT]
 
 - **`locationId` is required on almost every API call** — it scopes all data [DOCS]
-- **Upsert duplicate logic:** `POST /contacts/upsert` behaviour depends on the per-location "Allow Duplicate Contact" setting — if both email and phone match *different* existing contacts, the API updates the one matching the first field in the configured priority sequence [DOCS]
+- **Upsert duplicate logic:** `POST /contacts/upsert` behaviour depends on the per-location "Allow Duplicate Contact" setting — if both email and phone match _different_ existing contacts, the API updates the one matching the first field in the configured priority sequence [DOCS]
 - **`country` field** requires specific accepted values (see `/docs/other/country`) [DOCS]
 - **Phone numbers:** normalize to E.164 before sending [INFERRED — community best practice]
 - **Scope gating:** every endpoint family maps to a scope chosen at PIT/app creation; calls outside the granted scopes return 403 [DOCS]
 
 ### 3.5 Field Format Reference [IMPORTANT]
 
-| Format    | Pattern                          | Example                       | Notes                                        |
-| --------- | -------------------------------- | ----------------------------- | --------------------------------------------- |
-| DateTime  | ISO-8601 with ms, UTC            | `2025-06-25T06:57:06.225Z`    | Observed in webhook payloads [DOCS]           |
-| Cursor    | epoch milliseconds               | `1718000000000`               | `startAfter` pagination cursor [DOCS]         |
-| ID        | opaque string                    | `ve9EPM428h8vShlRW1KT`        | Alphanumeric record ids [INFERRED — SDK examples] |
-| Phone     | E.164                            | `+6421555000`                 | [INFERRED]                                    |
-| Token     | `pit-` prefix                    | `pit-12345...`                | PIT format [DOCS]                             |
-| Enums     | —                                | —                             | Status enums not enumerated [UNKNOWN]         |
+| Format   | Pattern               | Example                    | Notes                                             |
+| -------- | --------------------- | -------------------------- | ------------------------------------------------- |
+| DateTime | ISO-8601 with ms, UTC | `2025-06-25T06:57:06.225Z` | Observed in webhook payloads [DOCS]               |
+| Cursor   | epoch milliseconds    | `1718000000000`            | `startAfter` pagination cursor [DOCS]             |
+| ID       | opaque string         | `ve9EPM428h8vShlRW1KT`     | Alphanumeric record ids [INFERRED — SDK examples] |
+| Phone    | E.164                 | `+6421555000`              | [INFERRED]                                        |
+| Token    | `pit-` prefix         | `pit-12345...`             | PIT format [DOCS]                                 |
+| Enums    | —                     | —                          | Status enums not enumerated [UNKNOWN]             |
 
 ---
 
@@ -341,24 +356,24 @@ Version: 2023-02-21
 
 28+ endpoint families confirmed from the SDK service list + docs nav [DOCS]:
 
-| Module | Notes |
-| ------ | ----- |
-| Contacts | CRUD, upsert, search, tags, tasks, notes, bulk, followers |
-| Conversations | Messages (SMS/email/call), send, search |
-| Calendars | Events, groups, resources, appointments |
-| Opportunities | Pipelines, CRUD, stage transitions |
-| Payments | Orders, transactions, integrations, subscriptions |
-| Locations | Get, search, create, update, custom fields/values |
-| Users / Companies | CRUD / agency level |
-| Workflows | Get, trigger |
-| Forms / Surveys / Funnels | Read |
-| Invoices | CRUD, lifecycle |
-| Blogs / Social Planner / Emails | Blog CRUD; posts, accounts, statistics; email template CRUD |
-| Courses / Snapshots / Campaigns | Read |
-| Media Storage | Upload/manage |
-| Objects / Associations | Custom objects; contact relationships |
-| AI Agent Studio / Voice AI / Phone System | Agents CRUD, execute |
-| Products / Proposals / SaaS | Read/manage |
+| Module                                    | Notes                                                       |
+| ----------------------------------------- | ----------------------------------------------------------- |
+| Contacts                                  | CRUD, upsert, search, tags, tasks, notes, bulk, followers   |
+| Conversations                             | Messages (SMS/email/call), send, search                     |
+| Calendars                                 | Events, groups, resources, appointments                     |
+| Opportunities                             | Pipelines, CRUD, stage transitions                          |
+| Payments                                  | Orders, transactions, integrations, subscriptions           |
+| Locations                                 | Get, search, create, update, custom fields/values           |
+| Users / Companies                         | CRUD / agency level                                         |
+| Workflows                                 | Get, trigger                                                |
+| Forms / Surveys / Funnels                 | Read                                                        |
+| Invoices                                  | CRUD, lifecycle                                             |
+| Blogs / Social Planner / Emails           | Blog CRUD; posts, accounts, statistics; email template CRUD |
+| Courses / Snapshots / Campaigns           | Read                                                        |
+| Media Storage                             | Upload/manage                                               |
+| Objects / Associations                    | Custom objects; contact relationships                       |
+| AI Agent Studio / Voice AI / Phone System | Agents CRUD, execute                                        |
+| Products / Proposals / SaaS               | Read/manage                                                 |
 
 ### 4.3 Deprecated endpoints
 
@@ -371,15 +386,15 @@ Version: 2023-02-21
 
 ### 5.1 Query Capabilities Summary [REQUIRED]
 
-| Capability                      | Supported?       | Syntax                                   | Notes                                       |
-| ------------------------------- | ---------------- | ----------------------------------------- | -------------------------------------------- |
-| Scope to a sub-account          | **required**     | `locationId={id}`                         | On most list endpoints [DOCS]                |
-| Per-resource search             | yes              | `/contacts/search`, `/opportunities/search`, `/conversations/search` | Search/filter/sort per module [DOCS] |
-| Filter by field value           | partial          | query params per endpoint                 | Exact grammar per endpoint [UNKNOWN]         |
-| Filter by date range            | partial          | endpoint-specific params                  | [UNKNOWN — needs portal/live check]          |
-| Full-text search                | per-resource     | search endpoints above                    | No global search endpoint found [UNKNOWN]    |
-| Sort                            | partial          | conversations search documents sort       | Grammar not retrievable headlessly [UNKNOWN] |
-| Field selection / aggregate     | not found        | —                                         | `meta` may include totals [UNVERIFIED]       |
+| Capability                  | Supported?   | Syntax                                                               | Notes                                        |
+| --------------------------- | ------------ | -------------------------------------------------------------------- | -------------------------------------------- |
+| Scope to a sub-account      | **required** | `locationId={id}`                                                    | On most list endpoints [DOCS]                |
+| Per-resource search         | yes          | `/contacts/search`, `/opportunities/search`, `/conversations/search` | Search/filter/sort per module [DOCS]         |
+| Filter by field value       | partial      | query params per endpoint                                            | Exact grammar per endpoint [UNKNOWN]         |
+| Filter by date range        | partial      | endpoint-specific params                                             | [UNKNOWN — needs portal/live check]          |
+| Full-text search            | per-resource | search endpoints above                                               | No global search endpoint found [UNKNOWN]    |
+| Sort                        | partial      | conversations search documents sort                                  | Grammar not retrievable headlessly [UNKNOWN] |
+| Field selection / aggregate | not found    | —                                                                    | `meta` may include totals [UNVERIFIED]       |
 
 ### 5.2 Common Query Patterns [REQUIRED]
 
@@ -418,12 +433,12 @@ opportunities historically uses `location_id` [INFERRED — SDK]; verify per end
 
 **Request parameters:**
 
-| Parameter      | Type    | Description                                            |
-| -------------- | ------- | ------------------------------------------------------- |
-| `limit`        | integer | Records per page; default 20, max 100 [DOCS]            |
-| `startAfter`   | numeric | Epoch-ms cursor from previous `meta.startAfter` [DOCS]  |
+| Parameter      | Type    | Description                                               |
+| -------------- | ------- | --------------------------------------------------------- |
+| `limit`        | integer | Records per page; default 20, max 100 [DOCS]              |
+| `startAfter`   | numeric | Epoch-ms cursor from previous `meta.startAfter` [DOCS]    |
 | `startAfterId` | string  | Record-id cursor from previous `meta.startAfterId` [DOCS] |
-| `locationId`   | string  | Required on most list endpoints [DOCS]                  |
+| `locationId`   | string  | Required on most list endpoints [DOCS]                    |
 
 **Response structure:** `{ <collection>: [...], meta: { startAfter, startAfterId, ... } }` [DOCS]
 
@@ -450,10 +465,10 @@ Page N: meta cursors absent/null (or empty array) → stop
 
 ### 7.1 Event-Driven Support Summary [REQUIRED]
 
-| Mechanism | Supported?                  | Notes                                                            |
-| --------- | --------------------------- | ----------------------------------------------------------------- |
-| Webhooks  | **yes — OAuth marketplace apps ONLY** | 50+ event types [DOCS]. **NOT available to Private Integration tokens** — so not available to the Numa connector. |
-| WebSocket / SSE / long polling | no         | Not documented                                                    |
+| Mechanism                      | Supported?                            | Notes                                                                                                             |
+| ------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Webhooks                       | **yes — OAuth marketplace apps ONLY** | 50+ event types [DOCS]. **NOT available to Private Integration tokens** — so not available to the Numa connector. |
+| WebSocket / SSE / long polling | no                                    | Not documented                                                                                                    |
 
 > ⚠️ **Consequence for Numa:** the connector authenticates with a PIT, so **polling is the only
 > event pattern** (7.4). Real-time events would require building and getting approval for an
@@ -478,9 +493,9 @@ Page N: meta cursors absent/null (or empty array) → stop
 
 ### 8.1 Rate Limits [REQUIRED]
 
-| Scope  | Limit          | Window | Notes                                          |
-| ------ | -------------- | ------ | ----------------------------------------------- |
-| Global | **[UNKNOWN]**  | —      | No numeric thresholds in any official or community source searched. 429 returned on breach [DOCS — SDK + webhook retry logic]. |
+| Scope  | Limit         | Window | Notes                                                                                                                          |
+| ------ | ------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| Global | **[UNKNOWN]** | —      | No numeric thresholds in any official or community source searched. 429 returned on breach [DOCS — SDK + webhook retry logic]. |
 
 - **Rate limit headers:** [UNKNOWN] — check for `X-RateLimit-*` on the first credentialed call
 - **Retry-After:** [UNKNOWN]
@@ -496,15 +511,15 @@ defensively: status code first, then try JSON, fall back to raw text.
 
 **Status codes observed in docs/SDK** [DOCS]:
 
-| HTTP Status | Meaning                                              | Retryable? | Recovery                                                    |
-| ----------- | ----------------------------------------------------- | ---------- | ------------------------------------------------------------ |
-| 400         | Bad request (documented on contact endpoints)         | No         | Fix the payload                                              |
-| 401         | Invalid/missing token (PIT rotated/revoked); possibly missing `Version` [UNVERIFIED] | No | Re-enter the PIT via the chat card |
-| 403         | **PIT/app lacks the required scope**                  | No         | Fix scopes in HighLevel (Private Integrations) — not in Numa |
-| 404         | Not found (SDK error example)                         | No         | Verify id/path                                               |
-| 422         | Unprocessable entity (contact endpoints)              | No         | Fix field values                                             |
-| 429         | Rate limited                                          | Yes        | Backoff per 8.1                                              |
-| 5xx         | Server error                                          | Cautiously | Retry once with backoff                                      |
+| HTTP Status | Meaning                                                                              | Retryable? | Recovery                                                     |
+| ----------- | ------------------------------------------------------------------------------------ | ---------- | ------------------------------------------------------------ |
+| 400         | Bad request (documented on contact endpoints)                                        | No         | Fix the payload                                              |
+| 401         | Invalid/missing token (PIT rotated/revoked); possibly missing `Version` [UNVERIFIED] | No         | Re-enter the PIT via the chat card                           |
+| 403         | **PIT/app lacks the required scope**                                                 | No         | Fix scopes in HighLevel (Private Integrations) — not in Numa |
+| 404         | Not found (SDK error example)                                                        | No         | Verify id/path                                               |
+| 422         | Unprocessable entity (contact endpoints)                                             | No         | Fix field values                                             |
+| 429         | Rate limited                                                                         | Yes        | Backoff per 8.1                                              |
+| 5xx         | Server error                                                                         | Cautiously | Retry once with backoff                                      |
 
 ### 8.3 Idempotency [IMPORTANT]
 
@@ -573,19 +588,19 @@ Not a file connector — `list_files`/`download_file` mapping N/A.
 
 **Default parameters:**
 
-| Parameter    | Default                       | Reason                                  |
-| ------------ | ----------------------------- | ---------------------------------------- |
-| `Version`    | `2021-07-28` (`2023-02-21` on contacts) | Documented working versions    |
-| `limit`      | 20–100                        | Default 20; 100 for deliberate walks     |
-| `locationId` | resolved once per conversation | Required almost everywhere              |
+| Parameter    | Default                                 | Reason                               |
+| ------------ | --------------------------------------- | ------------------------------------ |
+| `Version`    | `2021-07-28` (`2023-02-21` on contacts) | Documented working versions          |
+| `limit`      | 20–100                                  | Default 20; 100 for deliberate walks |
+| `locationId` | resolved once per conversation          | Required almost everywhere           |
 
 ### 9.4 SDK / MCP Assessment [NICE-TO-HAVE]
 
-| Surface | Quality | Worth using? | Notes |
-| ------- | ------- | ------------ | ----- |
-| `@gohighlevel/api-client` (TS, v3.0.0) | good [DOCS] | No — raw HTTP via the generic `request` proxy suffices | Useful as endpoint reference |
-| `gohighlevel-api-client` (Python, 1.0.0b1) | beta | No | Same |
-| **Official MCP server** (`/mcp/`, Bearer PIT, HTTP-streamable, 36 tools, roadmap 250+) [DOCS] | promising | **Future second surface** — could ride Numa's `mcp_call` with the same PIT; out of scope for v1 | Same credential, richer tool semantics |
+| Surface                                                                                       | Quality     | Worth using?                                                                                    | Notes                                  |
+| --------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `@gohighlevel/api-client` (TS, v3.0.0)                                                        | good [DOCS] | No — raw HTTP via the generic `request` proxy suffices                                          | Useful as endpoint reference           |
+| `gohighlevel-api-client` (Python, 1.0.0b1)                                                    | beta        | No                                                                                              | Same                                   |
+| **Official MCP server** (`/mcp/`, Bearer PIT, HTTP-streamable, 36 tools, roadmap 250+) [DOCS] | promising   | **Future second surface** — could ride Numa's `mcp_call` with the same PIT; out of scope for v1 | Same credential, richer tool semantics |
 
 ---
 
@@ -631,16 +646,16 @@ lifecycle: long-lived PIT, rotation/revocation → 401 → chat card, 403 = scop
 
 ### 10.3 Confidence Report [REQUIRED]
 
-| Output Document              | Can Generate? | Confidence  | Gaps                                                       |
-| ---------------------------- | ------------- | ----------- | ----------------------------------------------------------- |
-| 01-llm-api-rules             | yes           | medium      | Error bodies + rate limits unknown                          |
-| 01a-domain-model-reference   | yes           | medium      | Field-level schemas thin; enums missing                     |
+| Output Document              | Can Generate? | Confidence  | Gaps                                                         |
+| ---------------------------- | ------------- | ----------- | ------------------------------------------------------------ |
+| 01-llm-api-rules             | yes           | medium      | Error bodies + rate limits unknown                           |
+| 01a-domain-model-reference   | yes           | medium      | Field-level schemas thin; enums missing                      |
 | 01b-query-patterns           | yes           | medium      | Cursor pagination solid; filter grammar per endpoint unknown |
-| 01c-mutation-patterns        | yes           | medium      | Upsert rules documented; validation error shapes unknown    |
-| 01d-event-and-error-handling | yes           | medium-high | Webhook exclusion + polling clear; error bodies unknown     |
-| 02-api-spec-investigation    | yes           | medium      | Module-level catalog only — no machine-readable spec        |
-| 03-connector-setup           | yes           | high        | Standard token connector; wiring is real code               |
-| 04-connection-and-reauth     | yes           | high        | PIT lifecycle simple and fully documented                   |
+| 01c-mutation-patterns        | yes           | medium      | Upsert rules documented; validation error shapes unknown     |
+| 01d-event-and-error-handling | yes           | medium-high | Webhook exclusion + polling clear; error bodies unknown      |
+| 02-api-spec-investigation    | yes           | medium      | Module-level catalog only — no machine-readable spec         |
+| 03-connector-setup           | yes           | high        | Standard token connector; wiring is real code                |
+| 04-connection-and-reauth     | yes           | high        | PIT lifecycle simple and fully documented                    |
 
 ---
 

@@ -270,22 +270,6 @@ export const PROVIDER_SCOPES: Record<string, ScopeOption[]> = {
       default: false,
     },
   ],
-  'connecteam-oauth': [
-    {
-      id: 'forms_read',
-      label: 'Read forms',
-      scope: 'forms.read',
-      description: 'View form submissions and templates',
-      default: true,
-    },
-    {
-      id: 'attachments_write',
-      label: 'Write attachments',
-      scope: 'attachments.write',
-      description: 'Upload and manage attachments',
-      default: false,
-    },
-  ],
   'totalsynergy-oauth': [
     {
       id: 'default',

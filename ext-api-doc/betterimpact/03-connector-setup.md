@@ -73,7 +73,7 @@ Single company vault secret (category "Connector Config"):
 | `display_name` | `Better Impact` (or admin override) |
 | `icon`, `description` | Registry defaults / admin overrides |
 | `connector_type` | `username-password` |
-| `base_url` | `https://api.betterimpact.com/v1` — from the registry when no instance URL entered (an admin-entered `instance_url` takes precedence) |
+| `base_url` | `https://api.betterimpact.com/v1` — persisted verbatim from the registry `baseUrl` (ApiKeyWizard always writes `base_url` when `connector.baseUrl` is set). The wizard also shows an optional **Instance URL** field; Better Impact is a single fixed SaaS host so admins leave it blank, and the wizard then writes `instance_url=""`. The backend resolver (`_resolve_connector_base_url`) skips the empty `instance_url` and falls back to `base_url`. If an admin ever did enter an Instance URL, it would take precedence — but there is no reason to for this connector. |
 | `credential_fields` | JSON snapshot of the per-user fields (`username` text + `password` password, with "API key username/password" placeholders) — drives the inline chat credential card |
 
 No `api_key`/`api_key_header`/`credential_header_map` (no admin credential or static account header). Re-running the wizard updates this same secret; a legacy `connector-betterimpact` **company** secret, if present, is deleted on save (per-user vault secrets untouched).

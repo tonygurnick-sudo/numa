@@ -42,27 +42,37 @@ File: `numa-frontend/src/Components/DataConnectors/connectorRegistry.ts`. Verbat
   description: 'Employee management — time clock, scheduling, and forms (API key)',
   category: 'HR & Workforce',
   authType: 'api-key',
+  baseUrl: 'https://api.connecteam.com',
+  // Connecteam authenticates with a static X-API-KEY header, NOT
+  // Authorization: Bearer. The map tells the generic request path
+  // (connect_tools.do_request → _headers_from_fields) which user field
+  // rides in which header. Persisted by ApiKeyWizard as credential_header_map.
+  credentialHeaderMap: { 'X-API-KEY': 'api_token' },
   credentialFields: [
     { key: 'api_token', label: 'dataConnectors.fields.apiToken', type: 'password', placeholder: 'Paste your Connecteam API key', required: true },
   ],
 },
 ```
 
-| Field                             | Value                                                               | Notes                                                                        |
-| --------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `id`                              | `connecteam-api`                                                    | Connector slug; matches this folder name + S3 key prefix                     |
-| `displayName`                     | `Connecteam (API Key)`                                              | Distinguishes from sibling `Connecteam (OAuth)` (`connecteam-oauth`)         |
-| `icon`                            | `bi-people`                                                         | Bootstrap Icons class (same as `connecteam-oauth`)                           |
-| `description`                     | `Employee management — time clock, scheduling, and forms (API key)` | Shown in the connector picker                                                |
-| `category`                        | `HR & Workforce`                                                    | Picker grouping                                                              |
-| `authType`                        | `api-key`                                                           | Drives the credential-field wizard (password inputs), **not** OAuth redirect |
-| `credentialFields[0].key`         | `api_token`                                                         | Vault key the relay reads + injects as `X-API-KEY`                           |
-| `credentialFields[0].label`       | `dataConnectors.fields.apiToken`                                    | i18n key (reused generic label)                                              |
-| `credentialFields[0].type`        | `password`                                                          | Masked input — never displayed back                                          |
-| `credentialFields[0].placeholder` | `Paste your Connecteam API key`                                     | Inline hint                                                                  |
-| `credentialFields[0].required`    | `true`                                                              | Mandatory; cannot save without it                                            |
+| Field                             | Value                                                               | Notes                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `id`                              | `connecteam-api`                                                    | Connector slug; matches this folder name + S3 key prefix                                  |
+| `displayName`                     | `Connecteam (API Key)`                                              | Distinguishes from sibling `Connecteam (OAuth)` (`connecteam-oauth`)                      |
+| `icon`                            | `bi-people`                                                         | Bootstrap Icons class (same as `connecteam-oauth`)                                        |
+| `description`                     | `Employee management — time clock, scheduling, and forms (API key)` | Shown in the connector picker                                                             |
+| `category`                        | `HR & Workforce`                                                    | Picker grouping                                                                           |
+| `authType`                        | `api-key`                                                           | Drives the credential-field wizard (password inputs), **not** OAuth redirect              |
+| `baseUrl`                         | `https://api.connecteam.com`                                        | Fixed single host; persisted to vault `base_url` so relative-path `request` calls resolve |
+| `credentialHeaderMap`             | `{ 'X-API-KEY': 'api_token' }`                                      | Outbound-header → user-field map; backend builds `X-API-KEY: <api_token>` per request     |
+| `credentialFields[0].key`         | `api_token`                                                         | Vault key the backend reads + injects as `X-API-KEY`                                      |
+| `credentialFields[0].label`       | `dataConnectors.fields.apiToken`                                    | i18n key (reused generic label)                                                           |
+| `credentialFields[0].type`        | `password`                                                          | Masked input — never displayed back                                                       |
+| `credentialFields[0].placeholder` | `Paste your Connecteam API key`                                     | Inline hint                                                                               |
+| `credentialFields[0].required`    | `true`                                                              | Mandatory; cannot save without it                                                         |
 
-> **No `oauth` block, no `base_url`/`instance_url` field.** Unlike the sibling `connecteam-oauth` (which carries an `oauth` block) and unlike HireHop / Total Synergy API-key entries (which add a `base_url`/`instance_url` field), this connector needs **only** the single `api_token`. Base URL **fixed** at `https://api.connecteam.com` — a single shared host, no per-tenant instance URL.
+> **`credentialHeaderMap` is load-bearing.** Connecteam's auth header is `X-API-KEY` (verified: official docs, `curl --header 'X-API-KEY: YOUR_API_KEY'` against `https://api.connecteam.com/me`) — NOT `Authorization: Bearer`. Without `credentialHeaderMap`, the generic request path falls through to the token branch and emits `Authorization: Bearer <token>`, which Connecteam rejects (it only honours `X-API-KEY`). The map is config-only: `ApiKeyWizard` persists it as `credential_header_map` JSON on the `connector-config-connecteam-api` company secret, and `do_request` (`connect_tools.py` ~3112-3117) reads it at request time — **no backend redeploy needed**.
+>
+> **`baseUrl` is required for relative-path calls.** Base URL is **fixed** at `https://api.connecteam.com` — a single shared host, no per-tenant instance URL. The registry `baseUrl` is persisted to the vault as `base_url` by the wizard (`ApiKeyWizard.tsx:189`), so the agent can call `numa integrations request --connector connecteam-api --url /users/v1/users`. Without it, `_resolve_connector_base_url` returns `""` and relative paths error with "No base URL is configured"; the agent would have to pass an absolute URL on every call.
 
 ## 2. Sibling connector for cross-reference
 

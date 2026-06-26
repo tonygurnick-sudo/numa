@@ -143,7 +143,9 @@ export class OAuthProvidersService {
     }
   }
 
-  static async connect(provider: OAuthConnectorId): Promise<{ success: boolean; authUrl?: string; error?: string }> {
+  static async connect(
+    provider: OAuthConnectorId
+  ): Promise<{ success: boolean; authUrl?: string; connected?: boolean; error?: string }> {
     assertOAuthAtRuntime(provider, 'connect');
     try {
       const endpoint = getApiEndpoint();
@@ -164,8 +166,19 @@ export class OAuthProvidersService {
         success: boolean;
         auth_url?: string;
         session_id?: string;
+        connected?: boolean;
+        status?: string;
         error?: string;
       }>(response);
+
+      // Client-credentials connectors (e.g. isolved) mint the token server-side
+      // from the company credentials and report an IMMEDIATE connection with NO
+      // auth_url — there is no per-user redirect/consent. Treat that as connected,
+      // not as a failed OAuth start.
+      if (data.success && !data.auth_url && (data.connected || data.status === 'connected')) {
+        delete statusCache[provider];
+        return { success: true, connected: true };
+      }
 
       if (data.success && data.auth_url) {
         delete statusCache[provider];

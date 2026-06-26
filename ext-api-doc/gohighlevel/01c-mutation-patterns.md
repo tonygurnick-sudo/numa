@@ -4,9 +4,9 @@ api_slug: gohighlevel
 base_url: https://services.leadconnectorhq.com
 path_version_segment: none (version is the Version header, never a path)
 auth: Bearer PIT (backend-injected); NEVER set Authorization
-required_on_every_write: Version header (default 2021-07-28; 2023-02-21 for contacts) + Content-Type application/json + locationId in body of most creates
+required_on_every_write: Version header — BACKEND-INJECTED (2021-07-28 via static_headers; override to 2023-02-21 only for newest contacts schema) + Content-Type application/json (added by the request op) + locationId in body of most creates
 field_casing: camelCase; body = single JSON object (no arrays)
-call_surface: HTTP via `numa integrations request gohighlevel <METHOD> <URL> --headers '{"Version":"..."}' --body '{...}'`. NOT a file-store connector.
+call_surface: HTTP via `numa integrations request gohighlevel <METHOD> <URL> --body '{...}'` (Version is backend-injected; add `--headers '{"Version":"2023-02-21"}'` only to override). NOT a file-store connector.
 confidence: docs-derived [DOCS], NOT live-validated. Endpoint paths documented; body shapes largely [UNVERIFIED] — canonical safe pattern is GET a real record first and mirror its field names. Markers [UNVERIFIED]/[INFERRED] inline.
 companions: 01=api-rules, 01a=domain-model, 01b=query-patterns, 01d=events+errors
 ---
@@ -49,7 +49,7 @@ Writes succeed only if the PIT carries the matching Edit/write scope — else 40
 ### 1: Create a contact
 
 ```
-numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"2021-07-28"}' --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","lastName":"Smith","email":"jane.smith@acme.co.nz","phone":"+6495551234","tags":["numa-created"]}' -m "create contact"
+numa integrations request gohighlevel POST /contacts/ --body '{"locationId":"ve9EPM428h8vShlRW1KT","firstName":"Jane","lastName":"Smith","email":"jane.smith@acme.co.nz","phone":"+6495551234","tags":["numa-created"]}' -m "create contact"
 ```
 
 - `POST /contacts/` documented; required-field set beyond `locationId` [UNVERIFIED] — email or phone is the practical minimum.
@@ -60,7 +60,7 @@ numa integrations request gohighlevel POST /contacts/ --headers '{"Version":"202
 ### 2: Upsert a contact (the safe re-runnable write)
 
 ```
-numa integrations request gohighlevel POST /contacts/upsert --headers '{"Version":"2021-07-28"}' --body '{"locationId":"ve9EPM428h8vShlRW1KT","email":"jane.smith@acme.co.nz","phone":"+6495551234","firstName":"Jane","lastName":"Smith"}' -m "upsert contact"
+numa integrations request gohighlevel POST /contacts/upsert --body '{"locationId":"ve9EPM428h8vShlRW1KT","email":"jane.smith@acme.co.nz","phone":"+6495551234","firstName":"Jane","lastName":"Smith"}' -m "upsert contact"
 ```
 
 - Documented. Creates if no match, updates if matched.
@@ -70,8 +70,8 @@ numa integrations request gohighlevel POST /contacts/upsert --headers '{"Version
 ### 3: Add / remove tags
 
 ```
-numa integrations request gohighlevel POST /contacts/{contactId}/tags --headers '{"Version":"2021-07-28"}' --body '{"tags":["vip","newsletter"]}' -m "add tags"
-numa integrations request gohighlevel DELETE /contacts/{contactId}/tags --headers '{"Version":"2021-07-28"}' --body '{"tags":["newsletter"]}' -m "remove tag"
+numa integrations request gohighlevel POST /contacts/{contactId}/tags --body '{"tags":["vip","newsletter"]}' -m "add tags"
+numa integrations request gohighlevel DELETE /contacts/{contactId}/tags --body '{"tags":["newsletter"]}' -m "remove tag"
 ```
 
 Endpoints documented (MCP exposes add/remove); `{"tags":[...]}` body shape [UNVERIFIED] — if rejected, GET the contact and fall back to PUT with the full merged `tags` array.
@@ -80,7 +80,7 @@ Endpoints documented (MCP exposes add/remove); `{"tags":[...]}` body shape [UNVE
 ### 4: Send a message into a conversation
 
 ```
-numa integrations request gohighlevel POST /conversations/messages --headers '{"Version":"2021-07-28"}' --body '{"type":"SMS","contactId":"{contactId}","message":"Hi Jane — confirming Thursday 2pm."}' -m "send SMS"
+numa integrations request gohighlevel POST /conversations/messages --body '{"type":"SMS","contactId":"{contactId}","message":"Hi Jane — confirming Thursday 2pm."}' -m "send SMS"
 ```
 
 - Endpoint documented; body field names [UNVERIFIED] — `type`/`contactId`/`message` is the common community shape; expect the 400/422 to name what's missing.
@@ -94,7 +94,7 @@ SDK's `opportunities` service supports CRUD, but only search/get/update paths we
 ```
 # 1. GET /opportunities/pipelines?locationId={loc}  → pick pipelineId + stageId
 # 2. GET one existing opportunity                   → copy its field names
-numa integrations request gohighlevel POST /opportunities/ --headers '{"Version":"2021-07-28"}' --body '{"locationId":"{loc}","pipelineId":"{pid}","pipelineStageId":"{sid}","contactId":"{contactId}","name":"Acme renewal","status":"open"}' -m "create opportunity"
+numa integrations request gohighlevel POST /opportunities/ --body '{"locationId":"{loc}","pipelineId":"{pid}","pipelineStageId":"{sid}","contactId":"{contactId}","name":"Acme renewal","status":"open"}' -m "create opportunity"
 ```
 
 If 404/405, tell the user opportunity creation isn't available through this connector yet rather than guessing further paths.
@@ -104,7 +104,7 @@ If 404/405, tell the user opportunity creation isn't available through this conn
 Tasks are a documented contact sub-resource (`GET /contacts/{id}/tasks` pinned); create is the natural REST sibling:
 
 ```
-numa integrations request gohighlevel POST /contacts/{contactId}/tasks --headers '{"Version":"2021-07-28"}' --body '{"title":"Call about renewal","dueDate":"2026-06-12T09:00:00Z","completed":false}' -m "create task"
+numa integrations request gohighlevel POST /contacts/{contactId}/tasks --body '{"title":"Call about renewal","dueDate":"2026-06-12T09:00:00Z","completed":false}' -m "create task"
 ```
 
 Body names [UNVERIFIED] — `title`/`dueDate`/`completed` is the common shape; GET the contact's existing tasks first and mirror. Low-risk write: tasks don't message anyone.
@@ -112,7 +112,7 @@ Body names [UNVERIFIED] — `title`/`dueDate`/`completed` is the common shape; G
 ### 7: Create a note on a contact ([UNVERIFIED path])
 
 ```
-numa integrations request gohighlevel POST /contacts/{contactId}/notes --headers '{"Version":"2021-07-28"}' --body '{"body":"Spoke with Jane — wants the proposal by Friday."}' -m "create note"
+numa integrations request gohighlevel POST /contacts/{contactId}/notes --body '{"body":"Spoke with Jane — wants the proposal by Friday."}' -m "create note"
 ```
 
 Notes family in the contacts docs nav; path and body [UNVERIFIED]. Low-risk — ideal as the FIRST mutation in a new session to validate the write path cheaply before anything consequential.
@@ -123,8 +123,8 @@ Notes family in the contacts docs nav; path and body [UNVERIFIED]. Low-risk — 
 
 ```
 # Read first — mirror field names, know what you're changing
-numa integrations request gohighlevel GET /contacts/{contactId} --headers '{"Version":"2021-07-28"}' -m "get contact"
-numa integrations request gohighlevel PUT /contacts/{contactId} --headers '{"Version":"2021-07-28"}' --body '{"firstName":"Jane","phone":"+6421555123"}' -m "update contact"
+numa integrations request gohighlevel GET /contacts/{contactId} -m "get contact"
+numa integrations request gohighlevel PUT /contacts/{contactId} --body '{"firstName":"Jane","phone":"+6421555123"}' -m "update contact"
 ```
 
 - `PUT /contacts/{contactId}` documented.
@@ -135,8 +135,8 @@ numa integrations request gohighlevel PUT /contacts/{contactId} --headers '{"Ver
 
 ```
 # stage ids come from /opportunities/pipelines (cache them)
-numa integrations request gohighlevel PUT /opportunities/{opportunityId} --headers '{"Version":"2021-07-28"}' --body '{"pipelineStageId":"{newStageId}"}' -m "move stage"
-numa integrations request gohighlevel PUT /opportunities/{opportunityId} --headers '{"Version":"2021-07-28"}' --body '{"status":"won"}' -m "mark won"
+numa integrations request gohighlevel PUT /opportunities/{opportunityId} --body '{"pipelineStageId":"{newStageId}"}' -m "move stage"
+numa integrations request gohighlevel PUT /opportunities/{opportunityId} --body '{"status":"won"}' -m "mark won"
 ```
 
 - `PUT /opportunities/{id}` documented; body names (`pipelineStageId` vs `stageId`, status enum values) [UNVERIFIED] — GET the opportunity first and mirror its keys exactly.
@@ -145,7 +145,7 @@ numa integrations request gohighlevel PUT /opportunities/{opportunityId} --heade
 ## Delete
 
 ```
-numa integrations request gohighlevel DELETE /contacts/{contactId} --headers '{"Version":"2021-07-28"}' -m "delete contact"
+numa integrations request gohighlevel DELETE /contacts/{contactId} -m "delete contact"
 ```
 
 - `DELETE /contacts/{contactId}` documented. No restore/trash endpoint found [UNVERIFIED] — treat as **permanent**; deleting a contact likely cascades visibility of their conversations, opportunities, appointments [UNVERIFIED].

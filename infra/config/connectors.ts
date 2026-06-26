@@ -25,7 +25,6 @@ export const NATIVE_CONNECTORS = [
   'simpro',
   'getjobber',
   'wrike',
-  'connecteam-oauth',
   'totalsynergy-oauth',
   'xero',
   'myob-account-right',
@@ -39,6 +38,9 @@ export const NATIVE_CONNECTORS = [
   // API key
   'hirehop',
   'connecteam-api',
+  'motion',
+  'isolved',
+  'autoplay',
   'totalsynergy-api',
 
   // Token
