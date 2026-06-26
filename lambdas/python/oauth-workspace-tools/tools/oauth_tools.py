@@ -401,7 +401,7 @@ async def _mint_isolved_token(provider: str) -> Optional[dict]:
         if _exp_raw is None:
             _exp_raw = body.get("ExpiresIn")
         try:
-            _expires_in = int(_exp_raw)
+            _expires_in = int(_exp_raw) if _exp_raw is not None else 3600
         except (TypeError, ValueError):
             _expires_in = 3600
         if _expires_in <= 0 or _expires_in > _ten_years_seconds:
@@ -532,7 +532,7 @@ async def _refresh_access_token(provider: str, refresh_token: str) -> Optional[d
                 if _exp_raw is None:
                     _exp_raw = _body.get("expires_in")
                 try:
-                    _expires_in = int(_exp_raw)
+                    _expires_in = int(_exp_raw) if _exp_raw is not None else 3600
                 except (TypeError, ValueError):
                     _expires_in = 3600
                 if _expires_in <= 0 or _expires_in > _ten_years_seconds:
@@ -754,12 +754,10 @@ async def get_oauth_token(provider: str, user_sub: str) -> Optional[str]:
             ).isoformat()
             _now = datetime.now(tz.utc).isoformat()
             new_entry = entry if isinstance(entry, dict) else {}
-            new_fields = (
-                new_entry.get("fields")
-                if isinstance(new_entry.get("fields"), dict)
-                else {}
+            _raw_fields = new_entry.get("fields")
+            new_fields: Dict[str, Any] = (
+                dict(_raw_fields) if isinstance(_raw_fields, dict) else {}
             )
-            new_fields = dict(new_fields)
             new_fields.update(
                 {
                     "provider": provider,
