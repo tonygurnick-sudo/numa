@@ -745,17 +745,25 @@ export const CONNECTOR_REGISTRY: ConnectorTemplate[] = [
     icon: 'bi-people-fill',
     description: 'HCM — employees, payroll, time and benefits (isolved People Cloud)',
     category: 'HR & Workforce',
-    // isolved has a real REST API (per-tenant {tenant}.myisolved.com/rest/api;
-    // OAuth2 CLIENT-CREDENTIALS → Bearer — a company-level service credential,
-    // not per-user consent). It is `contact-required` for now: access needs the
-    // isolved Network Partner program (client_id/secret + per-client grant), and
-    // the exact token path / endpoint specs sit behind isolved's partner docs.
-    // The full design + the two wiring tasks (a client-credentials adapter in
-    // oauth-auth-handler/oauth_tools, and OAuthWizard instance_url capture) are
-    // in ext-api-doc/isolved/. Flip to authType 'oauth2' + oauthAdapter
-    // 'isolved' + instanceUrlRequired once the adapter is built and partner
-    // credentials are in hand.
-    authType: 'contact-required',
+    // isolved has a real REST API (per-tenant {tenant}.myisolved.com/rest/api).
+    // Auth is OAuth2 CLIENT-CREDENTIALS → Bearer — a company-level SERVICE
+    // credential (the admin's client_id/client_secret mint a token directly),
+    // NOT per-user authorization-code consent. There is no redirect/callback.
+    // Wired via the `isolved` adapter in oauth-auth-handler + oauth_tools.py:
+    // the authorize path mints a token (POST grant_type=client_credentials to
+    // <instance_url>/rest/api/token) and stores it as the user's connection;
+    // the request path re-mints on expiry. `instanceUrlRequired` makes the
+    // OAuthWizard collect the per-tenant host; the API base + token endpoint
+    // derive from it at runtime. authUrl is empty (no authorize redirect).
+    authType: 'oauth2',
+    oauthAdapter: 'isolved',
+    instanceUrlRequired: true,
+    surfaces: ['chat'],
+    oauth: {
+      authUrl: '',
+      tokenUrl: '',
+      scopes: '',
+    },
     oauthSetupSteps: [
       'Join the isolved Network Partner program and submit the API Questionnaire to register this integration; isolved issues an API Application client_id and client_secret.',
       'Paste the client_id as Client ID and the client_secret as Client Secret here.',

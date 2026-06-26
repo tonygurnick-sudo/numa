@@ -49,6 +49,11 @@ interface OAuthFormState {
   clientSecret: string;
   customHeaders: CustomHeader[];
   customCredentials: Record<string, string>;
+  /** Per-tenant API host for customer-hosted connectors (instanceUrlRequired,
+   *  e.g. isolved's {tenant}.myisolved.com). Persisted as `instance_url` to the
+   *  oauth-client company secret; the backend derives the API base + token
+   *  endpoint from it at runtime. Empty for fixed-host SaaS OAuth connectors. */
+  instanceUrl: string;
 }
 
 interface OAuthWizardProps {
@@ -134,6 +139,7 @@ export const OAuthWizard = ({
     clientSecret: '',
     customHeaders: [],
     customCredentials: {},
+    instanceUrl: '',
   };
 
   const [form, setForm] = useState<OAuthFormState>(emptyForm);
@@ -230,6 +236,7 @@ export const OAuthWizard = ({
             description: full.fields?.description || baseForm.description || '',
             customHeaders: parseCustomHeaders(full.fields?.custom_headers),
             customCredentials: loadedCustomCredentials,
+            instanceUrl: full.fields?.instance_url || '',
           });
         })
         .catch(() => {
@@ -303,6 +310,31 @@ export const OAuthWizard = ({
   const oauthSecretId = effectiveProviderId ? getOAuthSecretId(effectiveProviderId) : '';
   const secretName = oauthSecretId ? `oauth-client-${oauthSecretId}` : '';
   const registryEntry = getConnectorById(effectiveProviderId);
+
+  // Instance URL — only for customer-hosted OAuth connectors that have no fixed
+  // host (instanceUrlRequired, e.g. isolved's {tenant}.myisolved.com). The
+  // backend derives the API base + token endpoint from this value at runtime.
+  // Mirrors ApiKeyWizard's showInstanceUrl/instanceUrlError/handleSave logic.
+  const showInstanceUrl = Boolean(registryEntry?.instanceUrlRequired || registryEntry?.instanceUrlOptional);
+  const instanceUrlError = ((): string | null => {
+    const v = form.instanceUrl.trim();
+    if (!v) return null;
+    try {
+      const u = new URL(v);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return t('dataConnectors.apiKeyWizard.instanceUrlInvalidProtocol', {
+          defaultValue: 'Must start with http:// or https://',
+        });
+      }
+      if (!u.host) {
+        return t('dataConnectors.apiKeyWizard.instanceUrlInvalid', { defaultValue: 'Invalid URL' });
+      }
+      return null;
+    } catch {
+      return t('dataConnectors.apiKeyWizard.instanceUrlInvalid', { defaultValue: 'Invalid URL' });
+    }
+  })();
+  const instanceUrlMissing = Boolean(registryEntry?.instanceUrlRequired) && !form.instanceUrl.trim();
 
   // ---------------------------------------------------------------------------
   // Steps — dynamic based on isNew vs known template
@@ -387,6 +419,10 @@ export const OAuthWizard = ({
       case 'guide':
         return true;
       case 'credentials':
+        // Instance URL is required up-front for customer-hosted connectors even
+        // when the secret already exists (it can be re-entered/corrected), and a
+        // malformed value always blocks. Only enforce when the field is shown.
+        if (showInstanceUrl && (instanceUrlError !== null || instanceUrlMissing)) return false;
         if (!secretExists) {
           if (form.clientId.trim().length === 0) return false;
           if (form.clientSecret.trim().length === 0) return false;
@@ -554,6 +590,14 @@ export const OAuthWizard = ({
       // api_endpoint/instance_url values still win — base_url is checked last.
       fields.base_url = registryEntry?.baseUrl ? finalBaseUrl : '';
 
+      // Per-tenant API host for customer-hosted OAuth connectors
+      // (instanceUrlRequired, e.g. isolved). The backend derives the API base
+      // (<instance_url>/rest/api) and the token endpoint
+      // (<instance_url>/rest/api/token) from this. Written on EVERY save (value,
+      // or '' to clear when the field doesn't apply) so vault MERGE writes can't
+      // leave a stale host behind — mirrors ApiKeyWizard's handleSave.
+      fields.instance_url = showInstanceUrl ? form.instanceUrl.trim() : '';
+
       const connector = getConnectorById(pid);
       if (connector?.oauthPlatform) {
         // Platform connector: scopes at top level, fall back to registry if empty
@@ -633,7 +677,9 @@ export const OAuthWizard = ({
       // endpoint which navigates the browser on success, so we never actually
       // see 'success' here unless classification fails.
       const action = await ConnectorsService.connect(effectiveProviderId);
-      if (action.kind === 'redirecting') {
+      // 'redirecting' = standard OAuth (browser navigates); 'connected' =
+      // client-credentials connector (isolved) connected server-side, no redirect.
+      if (action.kind === 'redirecting' || action.kind === 'connected') {
         setTestResult('success');
       } else {
         setTestResult('failed');
@@ -882,6 +928,46 @@ export const OAuthWizard = ({
     </Col>
   );
 
+  // Instance URL field for customer-hosted OAuth connectors (instanceUrlRequired,
+  // e.g. isolved). Renders on the Credentials step alongside client_id/secret.
+  const renderInstanceUrl = () =>
+    showInstanceUrl ? (
+      <Col md={12}>
+        <Form.Group>
+          <Form.Label className="small fw-semibold">
+            {t('dataConnectors.apiKeyWizard.instanceUrlLabel', { defaultValue: 'Instance URL' })}
+            {!registryEntry?.instanceUrlRequired && (
+              <span className="text-muted ms-2" style={{ fontWeight: 400 }}>
+                ({t('dataConnectors.apiKeyWizard.optional', { defaultValue: 'optional' })})
+              </span>
+            )}
+          </Form.Label>
+          <Form.Control
+            type="url"
+            placeholder={t('dataConnectors.apiKeyWizard.instanceUrlPlaceholder', {
+              defaultValue: 'https://your-instance.example.com',
+            })}
+            value={form.instanceUrl}
+            onChange={(e) => updateForm({ instanceUrl: e.target.value })}
+            isInvalid={instanceUrlError !== null}
+            autoComplete="off"
+          />
+          {instanceUrlError && <Form.Control.Feedback type="invalid">{instanceUrlError}</Form.Control.Feedback>}
+          <Form.Text className="text-muted small">
+            {registryEntry?.instanceUrlRequired
+              ? t('dataConnectors.apiKeyWizard.instanceUrlHelpRequired', {
+                  defaultValue:
+                    'Required — this connector is hosted at your own address with no default. Enter your full API URL.',
+                })
+              : t('dataConnectors.apiKeyWizard.instanceUrlHelp', {
+                  defaultValue:
+                    "Only set this if your connector is hosted at your own (customer-specific) address. Leave empty to use the connector's built-in default.",
+                })}
+          </Form.Text>
+        </Form.Group>
+      </Col>
+    ) : null;
+
   const renderRedirectUri = () => (
     <Col md={12}>
       <Form.Group>
@@ -1035,6 +1121,10 @@ export const OAuthWizard = ({
         <Row className="g-3">
           {/* Credentials */}
           {renderCredentialsSection()}
+
+          {/* Instance URL — customer-hosted connectors only (isolved). Shown
+              before the redirect URI since the host scopes everything else. */}
+          {renderInstanceUrl()}
 
           {/* Redirect URI */}
           {renderRedirectUri()}

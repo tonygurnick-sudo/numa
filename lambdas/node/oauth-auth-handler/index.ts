@@ -1042,6 +1042,113 @@ const normaliseTotalSynergyTokens = (raw: Record<string, unknown>): OAuthTokens 
   };
 };
 
+// ---------------------------------------------------------------------------
+// isolved adapter — OAuth2 CLIENT-CREDENTIALS (no redirect/consent)
+//
+// isolved People Cloud is per-tenant ({instance}.myisolved.com). The admin's
+// company-level client_id + client_secret mint a Bearer token directly via a
+// `grant_type=client_credentials` POST — there is NO authorization-code flow,
+// no per-user consent, and no refresh token (re-mint on expiry). The token
+// endpoint is built from the company `instance_url` stored on the oauth-client
+// vault entry: `<instance_url>/rest/api/token`.
+// ---------------------------------------------------------------------------
+
+/** Trim a trailing slash off the configured instance host. */
+const isolvedInstanceHost = (config: FullProviderConfig): string =>
+  String((config.rawFields?.instance_url as string | undefined) || '')
+    .trim()
+    .replace(/\/+$/, '');
+
+/**
+ * Build the isolved token endpoint from the company instance_url.
+ * [VERIFY WITH PARTNER DOCS] — the exact token path (`/rest/api/token`) is the
+ * design assumption; confirm against isolved's partner API documentation.
+ */
+const isolvedTokenUrl = (config: FullProviderConfig): string | null => {
+  // A vault-supplied token_url wins (lets ops correct the path without a deploy).
+  const explicit = String(config.tokenUrl || '').trim();
+  if (explicit) return explicit.replace(/\/+$/, '');
+  const host = isolvedInstanceHost(config);
+  if (!host) return null;
+  // [VERIFY WITH PARTNER DOCS] token path
+  return `${host}/rest/api/token`;
+};
+
+/**
+ * Normalise an isolved client-credentials token response. The exact response
+ * field name is not confirmed, so read defensively across common casings.
+ * [VERIFY WITH PARTNER DOCS] — the token field (`access_token`) and the TTL
+ * field (`expires_in`) below are defensive guesses; confirm casing/shape.
+ */
+const normaliseIsolvedTokens = (raw: Record<string, unknown>): OAuthTokens | null => {
+  const hasToken = (o: unknown): o is Record<string, unknown> =>
+    !!o &&
+    typeof o === 'object' &&
+    (!!(o as Record<string, unknown>).access_token ||
+      !!(o as Record<string, unknown>).access ||
+      !!(o as Record<string, unknown>).Access);
+  const candidates = [raw, raw.d, raw.data, raw.result];
+  const body = (candidates.find(hasToken) as Record<string, unknown> | undefined) ?? raw;
+
+  // [VERIFY WITH PARTNER DOCS] token field name
+  const accessToken = String(body.access_token || body.access || body.Access || '');
+  if (!accessToken) return null;
+
+  // [VERIFY WITH PARTNER DOCS] expires_in field name + units (seconds assumed).
+  // Defensive: coerce, reject <=0 / NaN / absolute-epoch values, default 3600.
+  const TEN_YEARS_SECONDS = 10 * 365 * 24 * 60 * 60;
+  const expiresInNum = Number(body.expires_in ?? body.expiresIn ?? body.ExpiresIn);
+  const expiresIn =
+    Number.isFinite(expiresInNum) && expiresInNum > 0 && expiresInNum <= TEN_YEARS_SECONDS ? expiresInNum : 3600;
+  return {
+    access_token: accessToken,
+    refresh_token: undefined, // client-credentials: no refresh token, re-mint instead
+    expires_in: expiresIn,
+    token_type: String(body.token_type || body.tokenType || 'Bearer'),
+    scope: '',
+  };
+};
+
+/**
+ * Mint an isolved access token via the client-credentials grant. POSTs
+ * grant_type=client_credentials + client_id + client_secret to the per-tenant
+ * token endpoint. Returns normalised tokens or null on any failure.
+ */
+const mintIsolvedToken = async (config: FullProviderConfig): Promise<OAuthTokens | null> => {
+  const tokenUrl = isolvedTokenUrl(config);
+  if (!tokenUrl) {
+    console.error('isolved: cannot mint token — no instance_url/token_url configured on company vault');
+    return null;
+  }
+  const params = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+  });
+  // If the vault carries a scopes value, include it (isolved may scope tokens).
+  if (config.scopes) params.set('scope', config.scopes);
+  try {
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: params.toString(),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('isolved client-credentials token mint failed:', response.status, errorText.slice(0, 500));
+      return null;
+    }
+    const raw = (await response.json()) as Record<string, unknown>;
+    return normaliseIsolvedTokens(raw);
+  } catch (error) {
+    console.error('isolved token mint request failed:', error);
+    return null;
+  }
+};
+
 const exchangeCodeForTokens = async (
   provider: OAuthProvider,
   code: string,
@@ -1130,6 +1237,13 @@ const refreshTokens = async (provider: OAuthProvider, refreshToken: string): Pro
   if (!config) {
     console.error(`Missing configuration for ${provider}`);
     return null;
+  }
+
+  // ── isolved adapter: client-credentials has no refresh token — re-mint a
+  // fresh token from the company client_id/client_secret + instance_url. The
+  // refreshToken arg is ignored (there is none). ──
+  if (getOAuthAdapter(config) === 'isolved') {
+    return mintIsolvedToken(config);
   }
 
   // ── Total Synergy adapter: custom refresh endpoint + body field names ──
@@ -1324,6 +1438,58 @@ const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext, query
 
   if (!config) {
     return errorResponse(500, `OAuth not configured for ${provider}`);
+  }
+
+  // ── isolved adapter: OAuth2 CLIENT-CREDENTIALS — NO redirect/consent. There
+  // is no authorize URL to send the browser to; instead mint a token now from
+  // the company client_id/client_secret + instance_url, store it as THIS user's
+  // connection, and return a "connected" result. (All users of the tenant share
+  // the one company service credential, so "connected" = the company is
+  // configured; we still persist per-user so status/request paths are uniform.)
+  if (getOAuthAdapter(config) === 'isolved') {
+    if (!config.clientId || !config.clientSecret) {
+      return errorResponse(400, 'isolved is not fully configured — admin must set client_id and client_secret');
+    }
+    if (!isolvedTokenUrl(config)) {
+      return errorResponse(400, 'isolved is not fully configured — admin must set the Instance URL');
+    }
+    const tokens = await mintIsolvedToken(config);
+    if (!tokens) {
+      return errorResponse(
+        502,
+        'Failed to obtain an isolved access token — check the client credentials / instance URL'
+      );
+    }
+    const safeSub = auth.sub.replace(/[^a-zA-Z0-9_-]/g, '');
+    // Store under the original connector id when called via a platform alias
+    // (isolved has none today, but keep the pattern consistent with callback).
+    const tokenProvider = queryParams?.connector || provider;
+    const vaultSecret: VaultOAuthSecret = {
+      provider: tokenProvider,
+      access_token: tokens.access_token,
+      refresh_token: undefined, // client-credentials: re-minted on expiry
+      expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      scope: tokens.scope || config.scopes || '',
+      connected_at: new Date().toISOString(),
+      user_email: auth.email,
+    };
+    const stored = await putUserOAuthSecret(safeSub, tokenProvider, vaultSecret);
+    if (!stored) {
+      return errorResponse(500, 'Failed to store isolved connection');
+    }
+    // NO auth_url — signals the frontend that the connection is already live.
+    // [FRAMEWORK LIMITATION] The current OAuthProvidersService.connect() expects
+    // an auth_url and treats its absence as failure; see the report for the
+    // exact FE change needed to honour this "connected, no redirect" response.
+    return jsonResponse(200, {
+      success: true,
+      connected: true,
+      status: 'connected',
+      provider: tokenProvider,
+      connected_at: vaultSecret.connected_at,
+      expires_at: vaultSecret.expires_at,
+      message: `Successfully connected ${provider}`,
+    });
   }
 
   // Platform connectors pass the original connector ID and connector-specific scopes
