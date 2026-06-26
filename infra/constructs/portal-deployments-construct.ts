@@ -523,7 +523,15 @@ export class PortalDeploymentsConstruct extends Construct {
           Next: 'RecordLockFailureEnd',
         },
         RecordLockFailureEnd: {
-          Type: 'Succeed',
+          // Emit result:'failed' (not a bare Succeed) so the group orchestrator's
+          // CheckChildResult counts a lock-blocked deploy as a failure. A bare
+          // Succeed produced no `result` field, which crashed that Choice on the
+          // missing path ($.child.Output.result) — the child execution failed
+          // uncaught and the client was silently dropped from the group counters
+          // (group Summary showed 0 failures while the row list showed 1).
+          Type: 'Pass',
+          Result: { result: 'failed' },
+          End: true,
         },
         RecordStart: {
           Type: 'Task',
