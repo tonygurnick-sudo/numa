@@ -127,7 +127,6 @@ _NATIVE_CONNECTOR_SLUGS = {
     "connecteam-api",
     "motion",
     "isolved",
-    "net-inspect",
     "autoplay",
     "totalsynergy-api",
     "synergy",

@@ -40,7 +40,6 @@ export const NATIVE_CONNECTORS = [
   'connecteam-api',
   'motion',
   'isolved',
-  'net-inspect',
   'autoplay',
   'totalsynergy-api',
 
