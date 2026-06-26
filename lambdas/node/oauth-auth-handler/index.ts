@@ -400,6 +400,17 @@ const generatePKCE = () => {
 
 const generateState = () => randomBytes(16).toString('base64url');
 
+// Providers whose OAuth app is a confidential client that does NOT use PKCE.
+// JobAdder (id.jobadder.com) authenticates purely with client_id + client_secret
+// per its published docs — its app issues authorization codes WITHOUT binding a
+// code_challenge, so sending code_challenge (authorize) + code_verifier (token)
+// makes the exchange fail with `invalid_grant`. Skip PKCE for these providers so
+// the flow matches the vendor's documented confidential-client exchange.
+// (Diagnosed on momentum: every JobAdder connect returned invalid_grant despite
+// a valid client_id/secret and a registered, exact-matching redirect_uri.)
+const NON_PKCE_PROVIDERS = new Set<OAuthProvider>(['jobadder']);
+const providerUsesPkce = (provider: OAuthProvider): boolean => !NON_PKCE_PROVIDERS.has(provider);
+
 // ---------------------------------------------------------------------------
 // User Consolidated Vault — one SM secret per user at {CLIENT_NAME}/vault/users/{sub}
 // ---------------------------------------------------------------------------
@@ -1200,8 +1211,12 @@ const exchangeCodeForTokens = async (
     client_id: config.clientId,
     code,
     redirect_uri: redirectUri,
-    code_verifier: codeVerifier,
   });
+  // PKCE verifier — omitted for confidential providers that don't use PKCE
+  // (e.g. JobAdder), whose token endpoint rejects it with invalid_grant.
+  if (providerUsesPkce(provider)) {
+    params.set('code_verifier', codeVerifier);
+  }
 
   // Some providers (e.g. Dropbox) require client_secret in the token exchange
   if (config.clientSecret) {
@@ -1566,8 +1581,11 @@ const handleAuthorize = async (provider: OAuthProvider, auth: AuthContext, query
   console.log('OAuth authorize', { provider, scopeOverride, effectiveScopes, finalScopes, connector });
   authUrl.searchParams.set('scope', finalScopes);
   authUrl.searchParams.set('state', `${state}:${sessionId}`);
-  authUrl.searchParams.set('code_challenge', codeChallenge);
-  authUrl.searchParams.set('code_challenge_method', 'S256');
+  // Skip PKCE for confidential providers that don't honour it (e.g. JobAdder).
+  if (providerUsesPkce(provider)) {
+    authUrl.searchParams.set('code_challenge', codeChallenge);
+    authUrl.searchParams.set('code_challenge_method', 'S256');
+  }
 
   // Apply dynamic extra auth parameters from vault config
   if (config.extraAuthParams) {
