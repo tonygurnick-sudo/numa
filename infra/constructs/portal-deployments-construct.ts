@@ -13,8 +13,9 @@ import { SecurityGroupRule } from '@cdktf/provider-aws/lib/security-group-rule';
 import { DataAwsVpc } from '@cdktf/provider-aws/lib/data-aws-vpc';
 import { DataAwsSubnets } from '@cdktf/provider-aws/lib/data-aws-subnets';
 import { DataAwsRegion } from '@cdktf/provider-aws/lib/data-aws-region';
+import { DataAwsCallerIdentity } from '@cdktf/provider-aws/lib/data-aws-caller-identity';
 import { Fn } from 'cdktf';
-import type { StateMachine } from 'asl-types';
+import type { StateMachine, State } from 'asl-types';
 import path from 'node:path';
 
 export interface PortalDeploymentsConstructProps {
@@ -62,17 +63,21 @@ export class PortalDeploymentsConstruct extends Construct {
     super(scope, name);
 
     const region = new DataAwsRegion(this, 'region', {}).region;
+    const accountId = new DataAwsCallerIdentity(this, 'caller-id', {}).accountId;
+    // Group SM name pinned as a const so the Distributed Map IAM (which grants
+    // states:StartExecution on the SM's own ARN) and the SfnStateMachine
+    // resource below can't drift apart.
+    const groupStateMachineName = 'NumaPortalGroupDeployment';
     const defaultGroupConcurrency = 10;
-    // Ceiling on parallel client deploys in a group run. The BINDING limit is
-    // NOT Fargate (deployer account has 4000 vCPU quota = 2000 tasks, and 100/s
-    // burst launch rate) — it's that the per-batch deploy fan-out below uses an
-    // INLINE Step Functions Map (the `Iterator` form), which AWS caps at 40
-    // concurrent iterations. Setting this above 40 would silently still run 40.
-    // To go higher (e.g. 150 to deploy the whole fleet in one wave) the inner
-    // `ProcessBatch` Map must be converted to a Distributed Map
-    // (ItemProcessor + ProcessorConfig.Mode: DISTRIBUTED, up to 10,000). 40 is
-    // the honest inline ceiling.
-    const maxGroupConcurrency = 40;
+    // Ceiling on parallel client deploys in a group run. The per-client deploy
+    // fan-out below is a DISTRIBUTED Step Functions Map (child workflow
+    // executions), which supports up to 10,000 concurrent — so this is no
+    // longer bounded by the inline-Map 40 limit. The real headroom is the
+    // deployer account's Fargate quota (4000 On-Demand vCPU = 2000 × 2-vCPU
+    // tasks) and the 100/s burst launch rate. 200 keeps the whole fleet in a
+    // single wave with comfortable margin; raise further only with a matching
+    // blast-radius discussion (a bad image hits this many clients at once).
+    const maxGroupConcurrency = 200;
     this.groupDefaultConcurrency = defaultGroupConcurrency;
     this.groupMaxConcurrency = maxGroupConcurrency;
     const backendRoleArn =
@@ -1473,6 +1478,20 @@ export class PortalDeploymentsConstruct extends Construct {
             actions: ['states:StartExecution', 'states:DescribeExecution'],
             resources: [this.stateMachine.arn],
           },
+          // Distributed Map runs the per-client deploy as child workflow
+          // executions of THIS group state machine, so the role must be able to
+          // start/observe/stop executions of its own ARN. (Built from name +
+          // account so there's no policy<->state-machine dependency cycle.)
+          {
+            effect: 'Allow',
+            actions: ['states:StartExecution'],
+            resources: [`arn:aws:states:${region}:${accountId}:stateMachine:${groupStateMachineName}`],
+          },
+          {
+            effect: 'Allow',
+            actions: ['states:DescribeExecution', 'states:StopExecution', 'states:RedriveExecution'],
+            resources: [`arn:aws:states:${region}:${accountId}:execution:${groupStateMachineName}/*`],
+          },
           // Allow registering a Task Definition once per group run
           {
             effect: 'Allow',
@@ -1648,219 +1667,188 @@ export class PortalDeploymentsConstruct extends Construct {
             ],
           },
           ResultPath: '$.GroupTaskDef',
-          Next: 'PrepareClientBatches',
+          Next: 'DeployClients',
         },
-        PrepareClientBatches: {
-          Type: 'Pass',
-          Parameters: {
+        // Distributed Map: one child workflow execution per client, up to
+        // $.maxConcurrency (clamped to maxGroupConcurrency above) in parallel.
+        // Replaces the previous ArrayPartition batching + nested inline Maps,
+        // which were hard-capped at 40 concurrent by the inline-Map limit.
+        // Per-client outcome is recorded into DynamoDB counters inside each
+        // iteration (read back by FetchSummary), so the Map result itself is
+        // discarded (ResultPath: null) and never hits the aggregation limit.
+        // ToleratedFailurePercentage 100: an unexpected child failure must not
+        // abort the rest of the fleet — the final status is derived from the
+        // counters, and each iteration already catches its own errors.
+        DeployClients: {
+          Type: 'Map',
+          ItemsPath: '$.clients',
+          ItemSelector: {
+            'clientName.$': '$$.Map.Item.Value',
             'groupRunId.$': '$.groupRunId',
             'groupName.$': '$.groupName',
-            'clients.$': '$.clients',
-            'clientBatches.$': 'States.ArrayPartition($.clients, $.maxConcurrency)',
             'imageTag.$': '$.imageTag',
             'repository.$': '$.repository',
             'initiatedBy.$': '$.initiatedBy',
             'mode.$': '$.mode',
-            'startedAt.$': '$.startedAt',
-            'maxConcurrency.$': '$.maxConcurrency',
-            'deploymentLabel.$': '$.deploymentLabel',
             'taskDefinitionArn.$': '$.GroupTaskDef.TaskDefinition.TaskDefinitionArn',
           },
-          ResultPath: '$',
-          Next: 'DeployClientBatches',
-        },
-        DeployClientBatches: {
-          Type: 'Map',
-          ItemsPath: '$.clientBatches',
-          MaxConcurrency: 1,
-          Parameters: {
-            'groupRunId.$': '$.groupRunId',
-            'groupName.$': '$.groupName',
-            'imageTag.$': '$.imageTag',
-            'repository.$': '$.repository',
-            'initiatedBy.$': '$.initiatedBy',
-            'mode.$': '$.mode',
-            'startedAt.$': '$.startedAt',
-            'deploymentLabel.$': '$.deploymentLabel',
-            'batchIndex.$': '$$.Map.Item.Index',
-            'batch.$': '$$.Map.Item.Value',
-            'taskDefinitionArn.$': '$.taskDefinitionArn',
-          },
-          Iterator: {
-            StartAt: 'ProcessBatch',
+          MaxConcurrencyPath: '$.maxConcurrency',
+          ToleratedFailurePercentage: 100,
+          ItemProcessor: {
+            ProcessorConfig: { Mode: 'DISTRIBUTED', ExecutionType: 'STANDARD' },
+            StartAt: 'PrepareDeployment',
             States: {
-              ProcessBatch: {
-                Type: 'Map',
-                ItemsPath: '$.batch',
-                MaxConcurrency: maxGroupConcurrency,
+              PrepareDeployment: {
+                Type: 'Pass',
                 Parameters: {
-                  'clientName.$': '$$.Map.Item.Value',
+                  'clientName.$': '$.clientName',
                   'groupRunId.$': '$.groupRunId',
                   'groupName.$': '$.groupName',
                   'imageTag.$': '$.imageTag',
                   'repository.$': '$.repository',
                   'initiatedBy.$': '$.initiatedBy',
                   'mode.$': '$.mode',
-                  'deploymentLabel.$': '$.deploymentLabel',
-                  'startedAt.$': '$.startedAt',
+                  'deploymentLabel.$': "States.Format('{} / {}', $.groupName, $.clientName)",
+                  'deploymentId.$': "States.Format('{}#{}', $.groupRunId, $.clientName)",
+                  'startedAt.$': '$$.State.EnteredTime',
                   'taskDefinitionArn.$': '$.taskDefinitionArn',
                 },
-                Iterator: {
-                  StartAt: 'PrepareDeployment',
-                  States: {
-                    PrepareDeployment: {
-                      Type: 'Pass',
-                      Parameters: {
-                        'clientName.$': '$.clientName',
-                        'groupRunId.$': '$.groupRunId',
-                        'groupName.$': '$.groupName',
-                        'imageTag.$': '$.imageTag',
-                        'repository.$': '$.repository',
-                        'initiatedBy.$': '$.initiatedBy',
-                        'mode.$': '$.mode',
-                        'deploymentLabel.$': "States.Format('{} / {}', $.groupName, $.clientName)",
-                        'deploymentId.$': "States.Format('{}#{}', $.groupRunId, $.clientName)",
-                        'startedAt.$': '$$.State.EnteredTime',
-                        'taskDefinitionArn.$': '$.taskDefinitionArn',
-                      },
-                      Next: 'StartChildExecution',
-                    },
-                    StartChildExecution: {
-                      Type: 'Task',
-                      Resource: 'arn:aws:states:::states:startExecution.sync:2',
-                      Parameters: {
-                        StateMachineArn: this.stateMachine.arn,
-                        Input: {
-                          'clientName.$': '$.clientName',
-                          'groupRunId.$': '$.groupRunId',
-                          'groupName.$': '$.groupName',
-                          'deploymentId.$': '$.deploymentId',
-                          'imageTag.$': '$.imageTag',
-                          'repository.$': '$.repository',
-                          'initiatedBy.$': '$.initiatedBy',
-                          'mode.$': '$.mode',
-                          'deploymentLabel.$': '$.deploymentLabel',
-                          'startedAt.$': '$.startedAt',
-                          'taskDefinitionArn.$': '$.taskDefinitionArn',
-                        },
-                      },
-                      ResultPath: '$.child',
-                      Next: 'CheckChildResult',
-                      Catch: [
-                        {
-                          ErrorEquals: ['States.ALL'],
-                          ResultPath: '$.error',
-                          Next: 'UpdateSummaryFailureFromCatch',
-                        },
-                      ],
-                    },
-                    CheckChildResult: {
-                      Type: 'Choice',
-                      Choices: [
-                        { Variable: '$.child.Output.result', StringEquals: 'success', Next: 'UpdateSummarySuccess' },
-                        {
-                          Variable: '$.child.Output.result',
-                          StringEquals: 'failed',
-                          Next: 'UpdateSummaryFailureFromResult',
-                        },
-                      ],
-                      Default: 'UpdateSummarySuccess',
-                    },
-                    UpdateSummarySuccess: {
-                      Type: 'Task',
-                      Resource: 'arn:aws:states:::aws-sdk:dynamodb:updateItem',
-                      Parameters: {
-                        TableName: this.table.name,
-                        Key: { deploymentId: { 'S.$': '$.groupRunId' } },
-                        UpdateExpression: 'ADD clientsCompleted :one, clientsSucceeded :one SET lastActivityAt = :now',
-                        ExpressionAttributeValues: {
-                          ':one': { N: '1' },
-                          ':now': { 'S.$': '$$.State.EnteredTime' },
-                        },
-                      },
-                      ResultPath: null,
-                      Next: 'SuccessResult',
-                    },
-                    SuccessResult: {
-                      Type: 'Pass',
-                      Parameters: {
-                        'clientName.$': '$.clientName',
-                        status: 'success',
-                        'deploymentId.$': '$.deploymentId',
-                        'executionArn.$': '$.child.ExecutionArn',
-                      },
-                      ResultPath: '$',
-                      End: true,
-                    },
-                    UpdateSummaryFailureFromCatch: {
-                      Type: 'Task',
-                      Resource: 'arn:aws:states:::aws-sdk:dynamodb:updateItem',
-                      Parameters: {
-                        TableName: this.table.name,
-                        Key: { deploymentId: { 'S.$': '$.groupRunId' } },
-                        UpdateExpression:
-                          'ADD clientsCompleted :one, clientsFailed :one SET lastActivityAt = :now, lastError = :err, lastFailedClient = :client',
-                        ExpressionAttributeValues: {
-                          ':one': { N: '1' },
-                          ':now': { 'S.$': '$$.State.EnteredTime' },
-                          ':err': { 'S.$': '$.error.Cause' },
-                          ':client': { 'S.$': '$.clientName' },
-                        },
-                      },
-                      ResultPath: null,
-                      Next: 'FailureResultFromCatch',
-                    },
-                    UpdateSummaryFailureFromResult: {
-                      Type: 'Task',
-                      Resource: 'arn:aws:states:::aws-sdk:dynamodb:updateItem',
-                      Parameters: {
-                        TableName: this.table.name,
-                        Key: { deploymentId: { 'S.$': '$.groupRunId' } },
-                        UpdateExpression:
-                          'ADD clientsCompleted :one, clientsFailed :one SET lastActivityAt = :now, lastError = :err, lastFailedClient = :client',
-                        ExpressionAttributeValues: {
-                          ':one': { N: '1' },
-                          ':now': { 'S.$': '$$.State.EnteredTime' },
-                          ':err': { 'S.$': "States.Format('Child result: {}', $.child.Output.result)" },
-                          ':client': { 'S.$': '$.clientName' },
-                        },
-                      },
-                      ResultPath: null,
-                      Next: 'FailureResultFromResult',
-                    },
-                    FailureResultFromCatch: {
-                      Type: 'Pass',
-                      Parameters: {
-                        'clientName.$': '$.clientName',
-                        status: 'failed',
-                        'deploymentId.$': '$.deploymentId',
-                        'error.$': '$.error',
-                      },
-                      ResultPath: '$',
-                      End: true,
-                    },
-                    FailureResultFromResult: {
-                      Type: 'Pass',
-                      Parameters: {
-                        'clientName.$': '$.clientName',
-                        status: 'failed',
-                        'deploymentId.$': '$.deploymentId',
-                        'executionArn.$': '$.child.ExecutionArn',
-                        'error.$': "States.Format('Child result: {}', $.child.Output.result)",
-                      },
-                      ResultPath: '$',
-                      End: true,
-                    },
+                Next: 'StartChildExecution',
+              },
+              StartChildExecution: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::states:startExecution.sync:2',
+                Parameters: {
+                  StateMachineArn: this.stateMachine.arn,
+                  Input: {
+                    'clientName.$': '$.clientName',
+                    'groupRunId.$': '$.groupRunId',
+                    'groupName.$': '$.groupName',
+                    'deploymentId.$': '$.deploymentId',
+                    'imageTag.$': '$.imageTag',
+                    'repository.$': '$.repository',
+                    'initiatedBy.$': '$.initiatedBy',
+                    'mode.$': '$.mode',
+                    'deploymentLabel.$': '$.deploymentLabel',
+                    'startedAt.$': '$.startedAt',
+                    'taskDefinitionArn.$': '$.taskDefinitionArn',
                   },
+                },
+                ResultPath: '$.child',
+                Next: 'CheckChildResult',
+                Catch: [
+                  {
+                    ErrorEquals: ['States.ALL'],
+                    ResultPath: '$.error',
+                    Next: 'UpdateSummaryFailureFromCatch',
+                  },
+                ],
+              },
+              CheckChildResult: {
+                Type: 'Choice',
+                Choices: [
+                  { Variable: '$.child.Output.result', StringEquals: 'success', Next: 'UpdateSummarySuccess' },
+                  {
+                    Variable: '$.child.Output.result',
+                    StringEquals: 'failed',
+                    Next: 'UpdateSummaryFailureFromResult',
+                  },
+                ],
+                Default: 'UpdateSummarySuccess',
+              },
+              UpdateSummarySuccess: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::aws-sdk:dynamodb:updateItem',
+                Parameters: {
+                  TableName: this.table.name,
+                  Key: { deploymentId: { 'S.$': '$.groupRunId' } },
+                  UpdateExpression: 'ADD clientsCompleted :one, clientsSucceeded :one SET lastActivityAt = :now',
+                  ExpressionAttributeValues: {
+                    ':one': { N: '1' },
+                    ':now': { 'S.$': '$$.State.EnteredTime' },
+                  },
+                },
+                ResultPath: null,
+                Next: 'SuccessResult',
+              },
+              SuccessResult: {
+                Type: 'Pass',
+                Parameters: {
+                  'clientName.$': '$.clientName',
+                  status: 'success',
+                  'deploymentId.$': '$.deploymentId',
+                  'executionArn.$': '$.child.ExecutionArn',
+                },
+                ResultPath: '$',
+                End: true,
+              },
+              UpdateSummaryFailureFromCatch: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::aws-sdk:dynamodb:updateItem',
+                Parameters: {
+                  TableName: this.table.name,
+                  Key: { deploymentId: { 'S.$': '$.groupRunId' } },
+                  UpdateExpression:
+                    'ADD clientsCompleted :one, clientsFailed :one SET lastActivityAt = :now, lastError = :err, lastFailedClient = :client',
+                  ExpressionAttributeValues: {
+                    ':one': { N: '1' },
+                    ':now': { 'S.$': '$$.State.EnteredTime' },
+                    ':err': { 'S.$': '$.error.Cause' },
+                    ':client': { 'S.$': '$.clientName' },
+                  },
+                },
+                ResultPath: null,
+                Next: 'FailureResultFromCatch',
+              },
+              UpdateSummaryFailureFromResult: {
+                Type: 'Task',
+                Resource: 'arn:aws:states:::aws-sdk:dynamodb:updateItem',
+                Parameters: {
+                  TableName: this.table.name,
+                  Key: { deploymentId: { 'S.$': '$.groupRunId' } },
+                  UpdateExpression:
+                    'ADD clientsCompleted :one, clientsFailed :one SET lastActivityAt = :now, lastError = :err, lastFailedClient = :client',
+                  ExpressionAttributeValues: {
+                    ':one': { N: '1' },
+                    ':now': { 'S.$': '$$.State.EnteredTime' },
+                    ':err': { 'S.$': "States.Format('Child result: {}', $.child.Output.result)" },
+                    ':client': { 'S.$': '$.clientName' },
+                  },
+                },
+                ResultPath: null,
+                Next: 'FailureResultFromResult',
+              },
+              FailureResultFromCatch: {
+                Type: 'Pass',
+                Parameters: {
+                  'clientName.$': '$.clientName',
+                  status: 'failed',
+                  'deploymentId.$': '$.deploymentId',
+                  'error.$': '$.error',
+                },
+                ResultPath: '$',
+                End: true,
+              },
+              FailureResultFromResult: {
+                Type: 'Pass',
+                Parameters: {
+                  'clientName.$': '$.clientName',
+                  status: 'failed',
+                  'deploymentId.$': '$.deploymentId',
+                  'executionArn.$': '$.child.ExecutionArn',
+                  'error.$': "States.Format('Child result: {}', $.child.Output.result)",
                 },
                 ResultPath: '$',
                 End: true,
               },
             },
           },
-          ResultPath: '$.groupExecutions',
+          ResultPath: null,
           Next: 'FetchSummary',
-        },
+          // asl-types@1.2.1 predates Distributed Map: its Map type requires
+          // `Iterator` and has no ItemProcessor/ItemSelector/MaxConcurrencyPath.
+          // Cast this one state; the rest of the definition stays type-checked.
+        } as unknown as State,
         FetchSummary: {
           Type: 'Task',
           Resource: 'arn:aws:states:::aws-sdk:dynamodb:getItem',

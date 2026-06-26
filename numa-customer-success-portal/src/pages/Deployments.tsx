@@ -94,7 +94,10 @@ export default function Deployments() {
   const navigate = useNavigate();
   const concurrencyBounds = useMemo(() => getGroupConcurrencyBounds(), []);
   const defaultGroupConcurrency = concurrencyBounds.default ?? 10;
-  const absoluteMaxGroupConcurrency = concurrencyBounds.max ?? 30;
+  // Fallback only when config is absent (local dev). Real value comes from
+  // DEPLOYMENT_GROUP_MAX_CONCURRENCY, generated from the construct's
+  // maxGroupConcurrency. Kept in sync so the slider/help text read correctly.
+  const absoluteMaxGroupConcurrency = concurrencyBounds.max ?? 200;
   const clampGroupConcurrencyValue = useCallback(
     (value: number) => Math.max(1, Math.min(value, absoluteMaxGroupConcurrency)),
     [absoluteMaxGroupConcurrency]
