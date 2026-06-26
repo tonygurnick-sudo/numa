@@ -63,7 +63,16 @@ export class PortalDeploymentsConstruct extends Construct {
 
     const region = new DataAwsRegion(this, 'region', {}).region;
     const defaultGroupConcurrency = 10;
-    const maxGroupConcurrency = 30;
+    // Ceiling on parallel client deploys in a group run. The BINDING limit is
+    // NOT Fargate (deployer account has 4000 vCPU quota = 2000 tasks, and 100/s
+    // burst launch rate) — it's that the per-batch deploy fan-out below uses an
+    // INLINE Step Functions Map (the `Iterator` form), which AWS caps at 40
+    // concurrent iterations. Setting this above 40 would silently still run 40.
+    // To go higher (e.g. 150 to deploy the whole fleet in one wave) the inner
+    // `ProcessBatch` Map must be converted to a Distributed Map
+    // (ItemProcessor + ProcessorConfig.Mode: DISTRIBUTED, up to 10,000). 40 is
+    // the honest inline ceiling.
+    const maxGroupConcurrency = 40;
     this.groupDefaultConcurrency = defaultGroupConcurrency;
     this.groupMaxConcurrency = maxGroupConcurrency;
     const backendRoleArn =
