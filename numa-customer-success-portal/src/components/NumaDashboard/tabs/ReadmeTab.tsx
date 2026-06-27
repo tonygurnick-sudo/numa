@@ -72,7 +72,7 @@ DashboardWindowView = {
   cost_composition, by_category,
   by_user_top, by_agent_top, by_tool, by_model,
   top_conversations, top_scheduled_runs,
-  by_client?   // _FLEET / _CLIENTS only
+  by_client?   // aggregate views only (_FLEET / _CLIENTS / _ARCANUM)
 }
 \`\`\`
 
@@ -445,7 +445,14 @@ chat: {
   daily_cost_by_category, daily_messages_by_category, daily_convs_by_category,
   daily_turns_by_category, daily_tool_calls_by_category,
 
-  // Snapshot-wide tool/model aggregates
+  // Per-day per-model — powers the window-aware "Models in use" table.
+  // (Absent on snapshots generated before this shipped; consumers fall back
+  // to the snapshot-wide model_totals below.)
+  daily_cost_by_model:  { [model_id]: { [day]: number } },
+  daily_convs_by_model: { [model_id]: { [day]: number } },
+
+  // Snapshot-wide tool/model aggregates. model_totals is the 90d roll-up;
+  // for window-scoped per-model use daily_cost_by_model / daily_convs_by_model.
   tool_totals:   { [tool_name]: total_use_count },
   model_totals:  { [model_id]:  { cost, convs } },
   scheduled_vs_adhoc: { scheduled: agg, adhoc: agg }

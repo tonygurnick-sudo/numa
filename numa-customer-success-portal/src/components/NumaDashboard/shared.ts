@@ -163,6 +163,38 @@ export function sumByKeyInWindow(
 }
 
 /**
+ * Window-scoped per-model cost + conversation count for the "Models in use"
+ * table. Sums the per-day `daily_cost_by_model` / `daily_convs_by_model` maps
+ * over the window. Snapshots generated before those maps shipped don't carry
+ * them — in that case we fall back to the snapshot-wide `model_totals` (which
+ * ignores the window) so old snapshots still render something rather than
+ * showing nothing.
+ */
+export function modelTotalsInWindow(
+  chat: ChatBlock | undefined,
+  win: WindowState
+): Record<string, { cost: number; convs: number }> {
+  const costByModel = chat?.daily_cost_by_model;
+  const convsByModel = chat?.daily_convs_by_model;
+  // Absent OR empty per-day maps → legacy / not-yet-repopulated snapshot (incl.
+  // aggregates rolled up before the rollup redeploy, which seed an empty {}).
+  // Fall back to the snapshot-wide totals so the table shows the 90d split
+  // rather than nothing. Populated maps with no in-window activity correctly
+  // return an empty result (handled below).
+  const hasDaily = Object.keys(costByModel || {}).length > 0 || Object.keys(convsByModel || {}).length > 0;
+  if (!hasDaily) {
+    return chat?.model_totals || {};
+  }
+  const cost = sumByKeyInWindow(costByModel, win);
+  const convs = sumByKeyInWindow(convsByModel, win);
+  const out: Record<string, { cost: number; convs: number }> = {};
+  for (const m of new Set([...Object.keys(cost), ...Object.keys(convs)])) {
+    out[m] = { cost: cost[m] || 0, convs: convs[m] || 0 };
+  }
+  return out;
+}
+
+/**
  * Should this conversation appear in the window?
  *
  * A multi-day conv whose started_at is BEFORE the window but last_request_at
@@ -309,6 +341,38 @@ export function isRandDDevStack(clientName: string | undefined, devInstance: boo
 export function isInternalClient(clientName: string | undefined): boolean {
   if (!clientName) return false;
   return INTERNAL_CLIENT_NAMES.has(clientName);
+}
+
+/**
+ * Snapshot pool backing each browser-derived aggregate. Single source of
+ * truth so the aggregate's KPIs (computed by aggregateSnapshots) and every
+ * per-stack table (Overview "By client", Chat "Per-stack", export by_client)
+ * pick the same stacks.
+ *
+ *   - fleet      → every stack
+ *   - clients    → real external customers (not R&D dev, not internal hq)
+ *   - nextgen    → account_org === 'nextgen'
+ *   - standalone → account_org === 'standalone'
+ *   - arcanum    → every Arcanum-owned account (account_org !== 'standalone'):
+ *                  HQ + dev/demo + all NextGen. i.e. everything Arcanum pays
+ *                  the AWS bill for. Excludes customer-owned standalone accounts.
+ */
+export function poolForAggregate(snapshots: ClientSnapshot[], aggregateKind: string | undefined): ClientSnapshot[] {
+  switch (aggregateKind) {
+    case 'clients':
+      return snapshots.filter(
+        (s) => !isRandDDevStack(s.client, s.client_config?.dev_instance) && !isInternalClient(s.client)
+      );
+    case 'nextgen':
+      return snapshots.filter((s) => s.client_config?.account_org === 'nextgen');
+    case 'standalone':
+      return snapshots.filter((s) => s.client_config?.account_org === 'standalone');
+    case 'arcanum':
+      return snapshots.filter((s) => s.client_config?.account_org !== 'standalone');
+    case 'fleet':
+    default:
+      return snapshots;
+  }
 }
 
 // ─── Numa-attributable cost filter (standalone customer accounts) ───────
@@ -646,12 +710,19 @@ function rollupChat(snapshots: ClientSnapshot[]): ChatBlock {
       }
     }
   };
+  // Per-day per-model — same merge shape as category (day collisions across
+  // stacks are real and must be summed). Powers the window-aware Models table
+  // for aggregate views (_FLEET / _CLIENTS / _ARCANUM / …).
+  const daily_cost_by_model: Record<string, Record<string, number>> = {};
+  const daily_convs_by_model: Record<string, Record<string, number>> = {};
   for (const s of snapshots) {
     mergeIntoCat(daily_cost_by_category, s.chat?.daily_cost_by_category);
     mergeIntoCat(daily_messages_by_category, s.chat?.daily_messages_by_category);
     mergeIntoCat(daily_convs_by_category, s.chat?.daily_convs_by_category);
     mergeIntoCat(daily_turns_by_category, s.chat?.daily_turns_by_category);
     mergeIntoCat(daily_tool_calls_by_category, s.chat?.daily_tool_calls_by_category);
+    mergeIntoCat(daily_cost_by_model, s.chat?.daily_cost_by_model);
+    mergeIntoCat(daily_convs_by_model, s.chat?.daily_convs_by_model);
   }
 
   // tool / model totals — sum the maps
@@ -721,6 +792,8 @@ function rollupChat(snapshots: ClientSnapshot[]): ChatBlock {
     daily_convs_by_category,
     daily_turns_by_category,
     daily_tool_calls_by_category,
+    daily_cost_by_model,
+    daily_convs_by_model,
     by_category,
     tool_totals,
     model_totals,

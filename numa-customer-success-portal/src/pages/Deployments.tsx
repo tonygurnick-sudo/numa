@@ -32,6 +32,7 @@ import {
   listDeploymentsByTimeRange,
   listDeploymentGroups,
   saveDeploymentGroup,
+  renameDeploymentGroup,
   deleteDeploymentGroup,
   startGroupDeployment,
   buildCloudwatchLogsUrl,
@@ -93,7 +94,10 @@ export default function Deployments() {
   const navigate = useNavigate();
   const concurrencyBounds = useMemo(() => getGroupConcurrencyBounds(), []);
   const defaultGroupConcurrency = concurrencyBounds.default ?? 10;
-  const absoluteMaxGroupConcurrency = concurrencyBounds.max ?? 30;
+  // Fallback only when config is absent (local dev). Real value comes from
+  // DEPLOYMENT_GROUP_MAX_CONCURRENCY, generated from the construct's
+  // maxGroupConcurrency. Kept in sync so the slider/help text read correctly.
+  const absoluteMaxGroupConcurrency = concurrencyBounds.max ?? 200;
   const clampGroupConcurrencyValue = useCallback(
     (value: number) => Math.max(1, Math.min(value, absoluteMaxGroupConcurrency)),
     [absoluteMaxGroupConcurrency]
@@ -758,8 +762,12 @@ export default function Deployments() {
       setGroupModalError('Select at least one client');
       return;
     }
-    const existingName = groups.find((g) => g.groupName.toLowerCase() === trimmedName.toLowerCase());
-    if (!editingGroup && existingName) {
+    // Collision check excludes the group being edited so a no-op save (or an
+    // unrelated field edit) on an existing group doesn't trip "already exists".
+    const collision = groups.find(
+      (g) => g.groupName.toLowerCase() === trimmedName.toLowerCase() && g.groupName !== editingGroup?.groupName
+    );
+    if (collision) {
       setGroupModalError('A group with this name already exists');
       return;
     }
@@ -770,8 +778,14 @@ export default function Deployments() {
         clients: Array.from(new Set(groupForm.clients.map((c) => c.trim()).filter(Boolean))).sort(),
         description: groupForm.description?.trim() || undefined,
         maxConcurrency: groupForm.maxConcurrency ? clampGroupConcurrencyValue(groupForm.maxConcurrency) : undefined,
+        createdAt: editingGroup?.createdAt,
       };
-      await saveDeploymentGroup(payload);
+      // groupName is the table PK, so a rename is copy-to-new-key + delete-old.
+      if (editingGroup && editingGroup.groupName !== trimmedName) {
+        await renameDeploymentGroup(editingGroup.groupName, payload);
+      } else {
+        await saveDeploymentGroup(payload);
+      }
       await loadGroups();
       setSelectedGroupName(trimmedName);
       setGroupModalOpen(false);
@@ -1728,9 +1742,15 @@ export default function Deployments() {
                 value={groupForm.groupName}
                 onChange={handleGroupFieldChange('groupName')}
                 placeholder="e.g. Tier-1 customers"
-                disabled={Boolean(editingGroup) || groupModalBusy}
+                disabled={groupModalBusy || Boolean(editingGroup?.managed)}
               />
-              {!editingGroup && <Form.Text>Group names must be unique.</Form.Text>}
+              <Form.Text>
+                {editingGroup?.managed
+                  ? 'This group is automatically managed and cannot be renamed.'
+                  : editingGroup
+                    ? 'Renaming moves the group to the new name (must be unique). Past deployment history keeps the old name.'
+                    : 'Group names must be unique.'}
+              </Form.Text>
             </Form.Group>
             <Form.Group className="mb-3">
               <div className="d-flex align-items-center gap-2 mb-2">

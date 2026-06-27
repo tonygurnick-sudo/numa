@@ -650,6 +650,18 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
         lambda: defaultdict(int)
     )
 
+    # ── Per-day per-model buckets ───────────────────────────────────────
+    # Powers the window-aware "Models in use" table. Keyed by model id
+    # (e.g. us.anthropic.claude-sonnet-4-6, numa-standard-model). Without
+    # these the dashboard's per-model split silently fell back to the full
+    # snapshot window regardless of the window picker.
+    daily_cost_by_model: dict[str, dict[str, float]] = defaultdict(
+        lambda: defaultdict(float)
+    )
+    daily_convs_by_model: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+
     # Per-day buckets are MERGED from each conv's per-event daily dicts
     # (built in compute_trace_analytics). A multi-day chat contributes to
     # every day it had activity, not just its last_request_at day — so the
@@ -668,6 +680,7 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
 
     for c in in_window:
         u = c["user_id"] or "unknown"
+        model = c.get("model")
         bu = by_user[u]
         bu["cost"] += c["total_cost_usd"]
         bu["convs"] += 1
@@ -723,9 +736,9 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
 
         for name, n in (c.get("tool_use_counts") or {}).items():
             tool_totals[name] += n
-        if c.get("model"):
-            model_totals[c["model"]]["cost"] += c["total_cost_usd"]
-            model_totals[c["model"]]["convs"] += 1
+        if model:
+            model_totals[model]["cost"] += c["total_cost_usd"]
+            model_totals[model]["convs"] += 1
 
         # ── Per-day buckets ─────────────────────────────────────────────
         # Use the trace's per-event dicts. Fall back to last_request_at
@@ -741,6 +754,8 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
                 daily_cost[d] += v
                 daily_cost_by_user[u][d] += v
                 daily_cost_by_category[category][d] += v
+                if model:
+                    daily_cost_by_model[model][d] += v
                 if aid:
                     daily_cost_by_agent[aid][d] += v
                     if c["is_scheduled"]:
@@ -760,6 +775,8 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
             for d in active_days:
                 daily_convs[d] += 1
                 daily_convs_by_category[category][d] += 1
+                if model:
+                    daily_convs_by_model[model][d] += 1
                 daily_users[d].add(u)
                 if c["is_scheduled"]:
                     daily_scheduled_count[d] += 1
@@ -773,6 +790,8 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
                 daily_cost[day] += c["total_cost_usd"]
                 daily_cost_by_user[u][day] += c["total_cost_usd"]
                 daily_cost_by_category[category][day] += c["total_cost_usd"]
+                if model:
+                    daily_cost_by_model[model][day] += c["total_cost_usd"]
                 if aid:
                     daily_cost_by_agent[aid][day] += c["total_cost_usd"]
                     if c["is_scheduled"]:
@@ -784,6 +803,8 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
                 daily_messages_by_category[category][day] += c["user_messages"]
                 daily_convs[day] += 1
                 daily_convs_by_category[category][day] += 1
+                if model:
+                    daily_convs_by_model[model][day] += 1
                 daily_turns[day] += c["total_turns"]
                 daily_turns_by_category[category][day] += c["total_turns"]
                 daily_tool_calls[day] += c["tool_call_count"]
@@ -933,4 +954,9 @@ def _summarise(in_window: list[dict], days: int, all_time_count: int) -> dict:
         "daily_tool_calls_by_category": {
             k: dict(d) for k, d in daily_tool_calls_by_category.items()
         },
+        # Per-day per-model buckets — the "Models in use" table window-filters
+        # from these (cost + conv count per model id). Mirrors model_totals but
+        # bucketed by day so the window picker actually re-filters.
+        "daily_cost_by_model": {m: dict(d) for m, d in daily_cost_by_model.items()},
+        "daily_convs_by_model": {m: dict(d) for m, d in daily_convs_by_model.items()},
     }

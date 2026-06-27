@@ -178,6 +178,12 @@ export interface ChatBlock {
   daily_turns_by_category?: Record<string, Record<string, number>>;
   /** Per-day tool-call count keyed by category. */
   daily_tool_calls_by_category?: Record<string, Record<string, number>>;
+  /** Per-day cost keyed by model id. Enables the window-aware "Models in use"
+   *  table. Absent on snapshots generated before this field shipped — consumers
+   *  fall back to the snapshot-wide `model_totals`. */
+  daily_cost_by_model?: Record<string, Record<string, number>>;
+  /** Per-day conversation count keyed by model id. */
+  daily_convs_by_model?: Record<string, Record<string, number>>;
   tool_totals: Record<string, number>;
   model_totals: Record<string, { cost: number; convs: number }>;
   scheduled_vs_adhoc: {

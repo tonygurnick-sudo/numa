@@ -502,11 +502,35 @@ export async function saveDeploymentGroup(group: DeploymentGroup): Promise<void>
     clients: Array.from(new Set(group.clients.map((c) => c.trim()).filter(Boolean))).sort(),
     description: group.description?.trim() || undefined,
     maxConcurrency: group.maxConcurrency,
-    createdAt: existing?.createdAt || now,
+    // Honour an explicitly-passed createdAt (a rename writes under a NEW key, so
+    // `existing` is null there — without this the original creation date would
+    // reset). Falls back to the existing item's date, then now.
+    createdAt: group.createdAt || existing?.createdAt || now,
     updatedAt: now,
   };
 
   await ddb.send(new PutCommand({ TableName: table, Item: item }));
+}
+
+/**
+ * Rename a deployment group. The group name is the table's primary key, so a
+ * rename is a copy-to-new-key followed by a delete of the old key. We write the
+ * new item FIRST and only delete the old once that succeeds — a failed delete
+ * leaves a recoverable duplicate rather than losing the group. The original
+ * createdAt is carried over; deployment history (keyed by groupRunId) keeps the
+ * old name as its label, which is correct for audit.
+ */
+export async function renameDeploymentGroup(oldName: string, group: DeploymentGroup): Promise<void> {
+  const newName = group.groupName.trim();
+  if (!newName) throw new Error('Group name is required');
+  if (newName === oldName) {
+    await saveDeploymentGroup(group);
+    return;
+  }
+  const clash = await getDeploymentGroup(newName);
+  if (clash) throw new Error(`A group named "${newName}" already exists`);
+  await saveDeploymentGroup({ ...group, groupName: newName });
+  await deleteDeploymentGroup(oldName);
 }
 
 export async function deleteDeploymentGroup(groupName: string): Promise<void> {

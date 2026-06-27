@@ -12,6 +12,7 @@ import {
   fmtUSDc,
   isAggregate,
   pct,
+  poolForAggregate,
   sumByKeyInWindow,
   sumDailyInWindow,
   topConvInWindow,
@@ -120,11 +121,12 @@ export function ChatTab({ data, window, snapshots }: Props) {
 
   // Per-stack breakdown — aggregate-only. Re-derive from raw snapshots so
   // the columns track the active window (matches the Overview > By client
-  // table). For _CLIENTS the aggregate pool excludes dev stacks.
+  // table). Pool membership matches the selected aggregate via
+  // poolForAggregate (clients excludes dev + hq; arcanum excludes standalone).
   const agg = isAggregate(data) ? data : null;
   const aggSorted = useMemo(() => {
     if (!agg) return [];
-    const pool = agg.aggregate_kind === 'clients' ? snapshots.filter((s) => !s.client_config?.dev_instance) : snapshots;
+    const pool = poolForAggregate(snapshots, agg.aggregate_kind);
     return buildByClientRowsWindowed(pool, window).sort((a, b) => b.chat_cost - a.chat_cost);
   }, [agg, snapshots, window]);
   const aggTotCost = useMemo(() => aggSorted.reduce((s, r) => s + r.chat_cost, 0), [aggSorted]);
