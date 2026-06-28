@@ -73,6 +73,11 @@
     "visibleOnBoards": "Visible on: {{boards}}",
     "linkedTickets": "Tickets",
     "noLinkedTickets": "No tickets linked to this project yet.",
+    "simpleState": {
+      "notStarted": "Not started",
+      "started": "Started",
+      "done": "Done"
+    },
     "moreTickets": "+{{count}} more tickets",
     "ticketCount": "{{count}} tickets",
     "ticketCount_one": "{{count}} ticket",

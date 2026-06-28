@@ -12,6 +12,7 @@ import * as OpsService from '../../../Services/OpsService';
 import { RichTextEditor } from '../Shared/RichTextEditor';
 import type { RichTextEditorHandle } from '../Shared/RichTextEditor';
 import { CreateTicketModal } from '../Modals/CreateTicketModal';
+import { TicketDetailModal } from '../Modals/TicketDetailModal';
 import ProjectProgressBar from './ProjectProgressBar';
 import type { Project, Ticket } from '../../../types/ops';
 
@@ -68,6 +69,20 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
   const [showMeta, setShowMeta] = useState(false);
   const [showBoardPicker, setShowBoardPicker] = useState(false);
   const [showCreateTicket, setShowCreateTicket] = useState(false);
+  const [detailTicketId, setDetailTicketId] = useState<string | null>(null);
+  const [detailBoardId, setDetailBoardId] = useState<string | null>(null);
+
+  const openTicket = useCallback((ticket: Ticket) => {
+    setDetailTicketId(ticket.id);
+    setDetailBoardId(ticket.boardId ?? null);
+  }, []);
+
+  const closeTicket = useCallback(() => {
+    setDetailTicketId(null);
+    setDetailBoardId(null);
+    // Reflect any status/stage change made in the modal back into the row dots + progress bar
+    void refreshTickets();
+  }, [refreshTickets]);
 
   // ── Linked tickets ────────────────────────────────────────────────────
 
@@ -81,6 +96,26 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
     () => projectTickets.filter((tk) => tk.statusType === 'completed' || tk.statusType === 'ended').length,
     [projectTickets]
   );
+
+  // Group linked tickets into the simplified tri-state -- an abstraction over board columns.
+  const { ticketSections, overflow } = useMemo(() => {
+    const order: SimpleState[] = ['notStarted', 'started', 'done'];
+    const grouped: Record<SimpleState, Ticket[]> = { notStarted: [], started: [], done: [] };
+    for (const tk of projectTickets) {
+      grouped[SIMPLE_STATE[tk.statusType] ?? 'notStarted'].push(tk);
+    }
+    const MAX_ROWS = 24;
+    let budget = MAX_ROWS;
+    const sections = order
+      .map((state) => {
+        const all = grouped[state];
+        const rows = all.slice(0, Math.max(0, budget));
+        budget -= rows.length;
+        return { state, count: all.length, rows };
+      })
+      .filter((section) => section.count > 0);
+    return { ticketSections: sections, overflow: Math.max(0, projectTickets.length - MAX_ROWS) };
+  }, [projectTickets]);
 
   // ── Board visibility description ──────────────────────────────────────
 
@@ -613,13 +648,35 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
                   {t('projects.noLinkedTickets', 'No tickets linked to this project yet.')}
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {projectTickets.slice(0, 20).map((ticket) => (
-                    <TicketRow key={ticket.id} ticket={ticket} config={config} boards={boards} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {ticketSections.map(({ state, count, rows }) => (
+                    <div key={state} style={{ borderLeft: `3px solid ${SIMPLE_STATE_COLORS[state]}`, paddingLeft: 12 }}>
+                      <div className="d-flex align-items-center gap-2" style={{ marginBottom: 6 }}>
+                        <span
+                          style={{
+                            color: SIMPLE_STATE_COLORS[state],
+                            fontWeight: 700,
+                            fontSize: 'var(--ops-font-xs, 0.7rem)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
+                          {t(`projects.simpleState.${state}`)}
+                        </span>
+                        <span style={{ color: '#9ca3af', fontSize: 'var(--ops-font-xs, 0.7rem)', fontWeight: 600 }}>
+                          {count}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {rows.map((ticket) => (
+                          <TicketRow key={ticket.id} ticket={ticket} boards={boards} onOpen={openTicket} />
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                  {projectTickets.length > 20 && (
+                  {overflow > 0 && (
                     <div style={{ fontSize: 'var(--ops-font-xs, 0.7rem)', color: '#9ca3af', paddingTop: 4 }}>
-                      {t('projects.moreTickets', { count: projectTickets.length - 20 })}
+                      {t('projects.moreTickets', { count: overflow })}
                     </div>
                   )}
                 </div>
@@ -710,53 +767,73 @@ export function ProjectDetailView({ projectId, onBack }: ProjectDetailViewProps)
         }}
         prefilledProjectId={projectId}
       />
+
+      {/* Ticket detail -- open a linked ticket to view / change its status */}
+      <TicketDetailModal
+        show={detailTicketId !== null}
+        ticketId={detailTicketId}
+        boardIdOverride={detailBoardId}
+        onHide={closeTicket}
+        onDeleted={() => {
+          closeTicket();
+          void refreshTickets();
+        }}
+      />
     </>
   );
 }
 
 // ─── TicketRow ──────────────────────────────────────────────────────────────
 
-const STATUS_TYPE_COLORS: Record<string, string> = {
-  backlog: '#9ca3af',
-  scoped: '#60a5fa',
-  queued: '#a78bfa',
-  active: '#f59e0b',
-  completed: '#22c55e',
-  ended: '#6b7280',
+// Simplified tri-state derived from the ticket's statusType -- an abstraction over board columns.
+type SimpleState = 'notStarted' | 'started' | 'done';
+
+const SIMPLE_STATE: Record<string, SimpleState> = {
+  backlog: 'notStarted',
+  scoped: 'notStarted',
+  queued: 'notStarted',
+  active: 'started',
+  completed: 'done',
+  ended: 'done',
+};
+
+const SIMPLE_STATE_COLORS: Record<SimpleState, string> = {
+  notStarted: '#9ca3af',
+  started: '#f59e0b',
+  done: '#22c55e',
 };
 
 function TicketRow({
   ticket,
-  config,
   boards,
+  onOpen,
 }: {
   ticket: Ticket;
-  config: { statuses?: { id: string; name: string; statusType?: string }[] } | null;
   boards: { id: string; name: string }[];
+  onOpen: (ticket: Ticket) => void;
 }): React.JSX.Element {
-  const status = config?.statuses?.find((s) => s.id === ticket.stageId);
-  const statusColor = STATUS_TYPE_COLORS[status?.statusType ?? 'backlog'] ?? '#9ca3af';
-  const boardName = boards.find((t) => t.id === ticket.boardId)?.name;
+  const boardName = boards.find((b) => b.id === ticket.boardId)?.name;
 
   return (
     <div
-      className="d-flex align-items-center gap-2"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(ticket)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(ticket);
+        }
+      }}
+      className="d-flex align-items-center gap-2 ops-project-ticket-row"
       style={{
         fontSize: 'var(--ops-font-sm, 0.8rem)',
         padding: '6px 8px',
         borderRadius: 'var(--ops-radius-sm, 4px)',
         backgroundColor: '#f9fafb',
+        cursor: 'pointer',
       }}
     >
-      <span
-        style={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          backgroundColor: statusColor,
-          flexShrink: 0,
-        }}
-      />
       {ticket.displayId && (
         <span style={{ color: '#9ca3af', fontWeight: 500, fontSize: 'var(--ops-font-xs, 0.7rem)' }}>
           {ticket.displayId}

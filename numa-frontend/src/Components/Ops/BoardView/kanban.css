@@ -577,6 +577,20 @@
   transform: translateY(-1px);
 }
 
+/* Linked-ticket rows inside the project detail view */
+.ops-project-ticket-row {
+  transition: background-color 0.12s ease;
+}
+
+.ops-project-ticket-row:hover {
+  background-color: #f1f5f9 !important;
+}
+
+.ops-project-ticket-row:focus-visible {
+  outline: 2px solid var(--ops-border-strong, #94a3b8);
+  outline-offset: 1px;
+}
+
 .ticket-card:not(.ticket-card--dragging):hover .ticket-card-actions {
   opacity: 1;
 }
